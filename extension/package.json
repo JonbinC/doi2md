@@ -1,0 +1,9 @@
+{
+  "name": "@mdtero/extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "test": "vitest run"
+  }
+}

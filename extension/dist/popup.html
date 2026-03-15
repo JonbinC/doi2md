@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mdtero</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="panel panel-popup">
+    <main class="shell">
+      <section class="hero">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true">M</div>
+          <div class="brand-copy">
+            <h1 id="app-title">Mdtero</h1>
+            <p id="app-subtitle">Markdown-first paper workflow</p>
+          </div>
+          <button id="language-toggle" type="button" class="ghost-chip">中文</button>
+        </div>
+        <div class="account-bar">
+          <div>
+            <p id="account-email" class="meta-label">Guest mode</p>
+            <p id="usage-status" class="meta-value">Checking account...</p>
+          </div>
+          <p id="free-hint" class="meta-pill">PDF/XML free</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <label id="paper-input-label" for="paper-input">DOI or supported page</label>
+        <input id="paper-input" type="text" placeholder="10.1016/..." />
+        <p id="status" class="status-line">Detecting paper input...</p>
+      </section>
+
+      <section class="card action-card">
+        <div class="button-row">
+          <button id="parse-button" type="button" class="primary-button">Parse Paper</button>
+          <button id="open-settings" type="button" class="secondary-button">Settings</button>
+        </div>
+        <label id="translate-language-label" for="translate-language">Translate to</label>
+        <div class="inline-row">
+          <select id="translate-language">
+            <option value="zh">Chinese</option>
+            <option value="en">English</option>
+          </select>
+          <button id="translate-button" type="button" class="secondary-button" disabled>
+            Translate
+          </button>
+        </div>
+        <p id="result" class="result-line"></p>
+      </section>
+
+      <section id="artifact-actions" class="card" hidden>
+        <div class="artifact-main">
+          <button id="download-link" type="button" class="primary-button" hidden>
+            Download ZIP
+          </button>
+          <div id="secondary-downloads" class="stack-list"></div>
+        </div>
+        <details id="source-files" hidden>
+          <summary id="source-files-summary">Source files</summary>
+          <div id="source-downloads" class="stack-list"></div>
+        </details>
+      </section>
+
+      <details id="recent-tasks" class="card">
+        <summary id="recent-tasks-summary">Recent items</summary>
+        <div id="recent-task-list" class="recent-list"></div>
+      </details>
+    </main>
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

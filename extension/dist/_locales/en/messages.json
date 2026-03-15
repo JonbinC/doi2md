@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Mdtero",
+    "description": "The name of the extension"
+  },
+  "extDescription": {
+    "message": "Markdown-first paper parsing workflow extension.",
+    "description": "The description of the extension"
+  }
+}
