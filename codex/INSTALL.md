@@ -9,8 +9,7 @@ This guide allows an AI coding agent or a standalone script to interact with the
 
 ## 1. Authentication
 
-You must provide an API key. This key belongs to your Mdtero account and deducts your parse quota. 
-Alternatively, if you are running the backend **locally**, you can pass your personal Elsevier API Key directly.
+You must provide an API key. This key belongs to your Mdtero account and deducts your parse quota.
 
 ```bash
 export MDTERO_API_KEY="mdt_live_..."
@@ -55,12 +54,3 @@ curl -H "ApiKey: $MDTERO_API_KEY" \
   -o local_image.jpg \
   https://api.mdtero.com/api/v1/downloads/.../image.jpg
 ```
-
----
-
-## 3. Local Execution Guide (Self-Hosted)
-If you wish to run the engine locally entirely omitting the central API:
-1. Clone the `Mdtero` repository.
-2. Provide your Elsevier developer key in the `/private/backend/.env` file: `ELSEVIER_API_KEY=YOUR_API_KEY`.
-3. Run `poetry run uvicorn service.main:app --port 8000`.
-4. Point the above `curl` scripts to `localhost:8000` (no `ApiKey` header needed if auth is disabled locally).
