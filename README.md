@@ -1,135 +1,102 @@
 <div align="center">
-  <img src="./extension/src/assets/icon-128.png" alt="Mdtero Logo" width="120"/>
+  <img src="./extension/src/assets/icon-128.png" alt="Mdtero logo" width="120" />
 
-  # Mdtero: Academic Markdown & Translation Engine
-  
-  *Transform dense academic PDFs and webpages into fully structured, strictly accurate Markdown.*
+  # Mdtero Browser Extension
 
-  [![Website Status](https://img.shields.io/website?url=https%3A%2F%2Fmdtero.com&label=website)](https://mdtero.com)
-  [![API Status](https://img.shields.io/badge/API-Live-success?style=flat&logo=serverless)](https://api.mdtero.com)
-  [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-  
-  <br/>
-  
-  [🌎 Visit Our Official Dashboard](https://mdtero.com) • [📖 API Documentation](https://mdtero.com/api)
-
-  <br/>
-  
-  [**English Installation Guide**](#english) &nbsp;|&nbsp; [**中文安装说明**](#chinese)
+  *Parse supported paper pages into research-ready Markdown bundles with optional translation.*
 </div>
 
----
+Mdtero is a browser-first academic workflow built around clean Markdown outputs.
 
-<br/>
+This public repository contains:
 
-<a name="english"></a>
-## 🇬🇧 English: Mdtero Extension & Open API
+- the browser extension source in [`extension`](./extension)
+- the sideloadable ZIP used for direct download installs
+- public integration guides for agent and API workflows
 
-**Mdtero** is a powerful web platform, Chrome Extension, and API toolkit designed to comprehensively render academic journal articles, saving researchers hours of manual extraction and translation time. 
+## Repo Map
 
-This repository hosts our **public open-source Chrome extension** and our **developer API integration guides**, establishing total transparency regarding what runs in your browser, and empowering the developer community to build custom MCP Agent workflows.
+- [`extension`](./extension): extension source, tests, build output, and manifest
+- [`shared`](./shared): local public TypeScript contract used by the extension client
+- [`openclaw`](./openclaw): OpenClaw-facing install guide
+- [`codex`](./codex): Codex-facing install guide
+- [`mcp`](./mcp): public MCP bridge material for agent integrations
+- `mdtero-extension-beta.zip`: current sideload ZIP for direct installs
 
-### ✨ Key Capabilities
+The Edge Add-ons listing is already live. Each store update still needs a fresh reviewed submission, so this repository keeps the release package and the unpacked source aligned.
 
-| Feature | Description |
-| :--- | :--- |
-| **🌍 Unified Web Dashboard** | Manage parsed papers, account credits, and view authentic demos natively on our [official website](https://mdtero.com). |
-| **🖱️ One-Click Extraction** | Detects DOIs from science publishers (e.g., ScienceDirect) and extracts the full paper payload directly in-browser. |
-| **🔬 True Scientific Rigor** | Perfectly preserves LaTeX equations, multi-cell data tables, and authentic figure references—elements regular LLMs destroy. |
-| **🤖 Native AI Translations** | Deeply integrated English-to-Chinese academic translations using optimized LLM prompts *(Without losing Markdown markup)*. |
-| **🔌 MCP Agent Integrations** | Built-in API compatibility for Claude Code, OpenClaw, Cursor, and other Model Context Protocol agents. |
+## English
 
----
+### What it does
 
-### 📦 Quick Start (Chrome Extension)
+- detects supported ScienceDirect and arXiv pages
+- submits parse and translation jobs directly to `https://api.mdtero.com`
+- stores its own API URL, sign-in token, email, and optional Elsevier key in browser storage
+- lets you download ZIP bundles, `paper.md`, translated Markdown, and image assets from task history
 
-1. Download the latest `mdtero-extension-beta.zip` from our [Homepage](https://mdtero.com/demo) or clone this repo.
-2. Unzip the archive to a permanent folder.
-3. Open Google Chrome and enter `chrome://extensions` in your URL bar.
-4. Toggle **Developer mode** ON (top-right corner).
-5. Click **Load unpacked** and select the unzipped folder.
-6. Click the newly added **Mdtero icon** in your extensions toolbar. 
-7. Enter your highly secure API Key (generated via your [Account Dashboard](https://mdtero.com/account)), and you're ready to parse!
+### Install
 
-<br/>
+1. Download `mdtero-extension-beta.zip` from [mdtero.com/guide](https://mdtero.com/guide), or build the package from this repository.
+2. Unzip it into a stable local folder.
+3. Open `edge://extensions` or `chrome://extensions`.
+4. Turn on `Developer mode`.
+5. Click `Load unpacked` and choose the unzipped folder.
+6. Open Mdtero settings, sign in with your email verification code, and keep the default API URL unless you are testing locally.
+7. Add your Elsevier API key only when you need publisher retrieval on supported Elsevier pages.
 
-### 💻 Developer API & Agent Workflows
+### Local development
 
-Mdtero is engineered for researchers who code. After generating your API key at [mdtero.com/account](https://mdtero.com/account), you can bypass the extension entirely:
+```bash
+npm install
+npm test
+npm run build
+```
 
-- 🧠 **OpenClaw / MCP Integration**: Grant your local AI Assistant (like Cursor) the ability to parse and read full papers natively. 👉 [View OpenClaw Guide](./openclaw/INSTALL.md).
-- 🤖 **Claude Code Integration**: Pass papers directly into Anthropic's CLI. 👉 [View Claude Code Guide](./codex/INSTALL.md).
-- ⚡ **Direct REST API**: Use standard `cURL` or Python to trigger remote parsing jobs against `api.mdtero.com`. See our full [API Documentation](https://mdtero.com/api).
+Build output lives in [`extension/dist`](./extension/dist).
 
----
+### Architecture and privacy
 
-<br/><br/>
+- the extension and the website are decoupled clients; both default to `https://api.mdtero.com`
+- the extension does not need the website UI to stay open in order to parse papers
+- this repository contains public browser-side code; the production backend remains private
+- the content script only reads supported pages when you actively use the Mdtero workflow
+- publisher-side acquisition that needs local handling should stay on the user machine through the extension or helper flow
 
-<a name="chinese"></a>
-## 🇨🇳 中文：Mdtero 浏览器插件与开放 API
+### Release notes for maintainers
 
-<div align="center">
-  *"让顶刊文献的解析、排版与翻译成为一键式享受"*
-</div>
+- keep the unpacked `extension/dist` build and `mdtero-extension-beta.zip` in sync before release
+- keep store packages separate from the direct sideload ZIP so Edge and Chrome review cycles do not block installs
+- avoid documenting internal backend-only behavior here; keep this repository public-safe
 
-**Mdtero** 是一款专为科研工作者打造的全栈学术处理平台、Chrome 浏览器插件与开放 API 工具箱。它被精心设计用于将密集的学术论文无缝转换为结构清晰、排版极其精美的 Markdown 格式，同时绝对保证科研数据的严谨性。
+### Developer links
 
-本仓库托管了我们 **开源的 Chrome 浏览器客户端代码** 以及 **开发者 API 接入指南**。我们致力于保障学术记录的隐私安全，并支持开发者在我们的核心解析引擎之上，使用大语言模型构建属于自己的自动化科研工作流。
+- [OpenClaw guide](./openclaw/INSTALL.md)
+- [Codex guide](./codex/INSTALL.md)
+- [Public API docs](https://mdtero.com/api)
 
-### ✨ 核心功能亮点
+## 中文
 
-| 功能模块 | 详细说明 |
-| :--- | :--- |
-| **🌍 网页端控制台** | 在我们的 [官方主页](https://mdtero.com) 统一管理您的解析历史、账户余额，并深度体验无损渲染。 |
-| **🖱️ 一键极速解析** | 自动检测学术出版商（如 ScienceDirect）页面上的 DOI，并在浏览器内一键触发长文本全文获取。 |
-| **🔬 真正的科研级精度** | 完美保留原本会被普通 LLM 或爬虫彻底破坏的 **LaTeX 数学公式**、复杂数据表格以及真实的图表文献引用体系。 |
-| **🤖 深度学术翻译** | 原生集成极高标准的英文至中文大模型翻译，应用前沿的 Prompt 矩阵，保证 Markdown 排版结构 100% 不丢失。 |
-| **🔌 前沿 Agent 接入** | 内置对 Claude Code, OpenClaw 以及各种 Model Context Protocol (MCP) 智能助手的 API 原生读取支持。 |
+### 这个插件现在做什么
 
----
+- 识别 ScienceDirect、arXiv 等已支持页面
+- 直接把解析和翻译任务提交到 `https://api.mdtero.com`
+- 在浏览器本地保存自己的 API 地址、登录 token、邮箱和可选 Elsevier key
+- 从历史任务里下载 ZIP、`paper.md`、译文 Markdown 和图片资源
 
-### 📝 Why Markdown? (为什么选择 Markdown？)
+### 安装方式
 
-Markdown is a lightweight plaintext formatting syntax designed to be completely platform-independent. We chose Markdown as the universal output format for Mdtero because it is the ultimate bridge between human readability and machine parsability (**机读人读都顺心**).
+1. 从 [mdtero.com/guide](https://mdtero.com/guide) 下载 `mdtero-extension-beta.zip`，或直接在本仓库构建。
+2. 解压到一个长期保留的本地目录。
+3. 打开 `edge://extensions` 或 `chrome://extensions`。
+4. 开启“开发者模式”。
+5. 点击“加载已解压的扩展程序”，选择刚才解压出来的目录。
+6. 打开 Mdtero 设置页，用邮箱验证码登录；如果不是本地联调，保留默认 API 地址即可。
+7. 只有在需要 Elsevier 正文抓取时，再额外填写自己的 Elsevier API Key。
 
-- **Structurally Intact Translations (保留完整结构)**: Our contextual AI translation engine preserves the exact Markdown formatting of the original English text—ensuring headers, lists, and LaTeX equations remain perfectly styled in the translated Chinese output.
-- **Context-Aware Navigation (解析保留上下文跳转)**: Mdtero meticulously extracts internal document anchors. Clicking on a reference like `[Fig. 1]` or `[31]` in your generated Markdown will instantly jump to the corresponding image or citation, retaining the full context of the paper.
-- **Future-Proof**: Markdown files are simple `.md` text files. They will never become corrupted, require expensive proprietary software to open, or suffer from formatting glitches like PDFs or Word Documents.
+### 架构与隐私
 
-**💡 Recommended Editor (推荐编辑器):**
-If you are new to Markdown, we highly recommend **[Typora](https://typora.io/)**. Typora is a seamless, distraction-free Markdown editor that provides real-time previewing—meaning you see formatted text, rendered math equations, and tables instantly as you type or read the papers parsed by Mdtero.
-
----
-
-### 📦 Quick Start (Chrome Extension)
-### 📦 插件安装说明 (面向普通用户)
-
-1. 从我们的 [主页 Demo](https://mdtero.com/demo) 下载最新的 `mdtero-extension-beta.zip`，或直接使用本仓库源码编译。
-2. 将 ZIP 文件解压到一个您不会删除的固定目录。
-3. 打开 Google Chrome 浏览器并跳转至 `chrome://extensions`。
-4. 打开页面右上角的 **“开发者模式 (Developer mode)”** 开关。
-5. 点击左上角的 **“加载已解压的扩展程序 (Load unpacked)”**，并选中您刚才解压的文件夹。
-6. 点击浏览器地址栏右侧的 **Mdtero 图标**。
-7. 粘贴您在 [账户后台](https://mdtero.com/account) 安全生成的 API 密钥，即可立即开启学术解析之旅！
-
-<br/>
-
-### 💻 开发者 API 与 Agent 接入指南 (面向极客)
-
-Mdtero 生来拥抱开发者生态。在您的 [个人 Dashboard](https://mdtero.com/account) 中生成 API 密钥后，即可参阅 [API 官方文档](https://mdtero.com/api) 获取所有后台能力接口：
-
-- 🧠 **OpenClaw / MCP 协议接入**: 赋予您本地的 AI 编程助手（如 Cursor）原生阅读顶级学术论文的能力。 👉 [点此查看 OpenClaw 配置说明](./openclaw/INSTALL.md)。
-- 🤖 **Claude Code 接入**: 将解析能力注入 Anthropic 官方控制台。 👉 [点此查看 Claude Code 说明](./codex/INSTALL.md)。
-- ⚡ **原生 REST API**: 您完全可以通过终端 `cURL` 或是 Python 脚本直接向云端 `api.mdtero.com` 提交高并发解析及翻译任务。
-
----
-
-<br/>
-
-### 🔒 隐私与系统架构设计 (Privacy Architecture)
-
-本仓库公开的仅为**前端客户端与插件的开源源码**，目的是供学术机构和用户进行极高标准的安全与隐私审计。
-
-我们需要明确说明：您设备上的插件绝对不会监控您的日常浏览。它仅仅包含一个按钮，只有当您主动要求解析时，才会短暂读取当前页面的 DOI 元素。
-
-真正极其繁重的计算密集型任务——**专有 Markdown 结构化防断版算法、多路并发 LLM 翻译流水线、Stripe 安全计费扣款系统、以及核心的 LaTeX 解析与重建智能引擎**——均受到最高级别的商业保护，稳定运行在我们完全闭源的云端专属服务器上。
+- 网站和插件现在是解耦的两个客户端，默认都直接访问 `https://api.mdtero.com`
+- 不需要同时打开网站，插件也能独立完成解析流程
+- 本仓库公开的是浏览器端代码，生产后端仍然保持私有
+- 插件只会在你主动使用时读取受支持页面的必要信息
+- 需要本地处理的出版社获取链路，仍然应保留在用户自己的浏览器或本地 helper 一侧

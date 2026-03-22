@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { TaskRecord } from "@mdtero/shared";
 import { createApiClient } from "../src/lib/api";
 
 describe("createApiClient", () => {
@@ -59,9 +60,9 @@ describe("createApiClient", () => {
     );
   });
 
-  it("creates translation tasks against the private API", async () => {
+  it("uploads local XML as multipart parse input", async () => {
     const fetchMock = vi.mocked(fetch);
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ task_id: "task-456", status: "queued" }), { status: 200 }));
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ task_id: "task-upload", status: "queued" }), { status: 200 }));
 
     const client = createApiClient(() =>
       Promise.resolve({
@@ -70,17 +71,82 @@ describe("createApiClient", () => {
       })
     );
 
-    await client.createTranslateTask({
-      source_markdown_path: "/tmp/zhou2025performance/paper.md",
-      target_language: "zh",
-      mode: "standard"
+    await client.createUploadedParseTask({
+      xmlFile: new Blob(["<xml />"], { type: "application/xml" }),
+      filename: "paper.xml",
+      sourceDoi: "10.1016/j.energy.2026.140192",
+      sourceInput: "10.1016/j.energy.2026.140192"
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/tasks/translate",
+      "http://127.0.0.1:8000/tasks/parse-upload",
       expect.objectContaining({
-        method: "POST"
+        method: "POST",
+        body: expect.any(FormData)
       })
     );
+  });
+
+  it("returns typed task metadata for history and detail endpoints", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const fetchResponses = [
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              task_id: "task-1",
+              status: "succeeded",
+              task_kind: "parse",
+              input_summary: "10.1000/example",
+              stage: "completed",
+              progress_percent: 100,
+              created_at: "2026-03-16T12:00:00+00:00",
+              result: null,
+              error_code: null,
+              error_message: null
+            }
+          ]
+        }),
+        { status: 200 }
+      ),
+      new Response(
+        JSON.stringify({
+          task_id: "task-2",
+          status: "running",
+          task_kind: "translate",
+          input_summary: "zhou2025performance",
+          stage: "translating",
+          progress_percent: 50,
+          created_at: "2026-03-16T12:05:00+00:00",
+          result: null,
+          error_code: null,
+          error_message: null
+        }),
+        { status: 200 }
+      )
+    ];
+    fetchMock.mockImplementation(async () => fetchResponses.shift() as Response);
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const history = await client.getMyTasks();
+    const firstTask: TaskRecord = history.items[0];
+    const detail: TaskRecord = await client.getTask("task-2");
+
+    expect(firstTask.task_kind).toBe("parse");
+    expect(firstTask.input_summary).toBe("10.1000/example");
+    expect(firstTask.stage).toBe("completed");
+    expect(firstTask.progress_percent).toBe(100);
+    expect(firstTask.created_at).toBe("2026-03-16T12:00:00+00:00");
+    expect(detail.task_kind).toBe("translate");
+    expect(detail.input_summary).toBe("zhou2025performance");
+    expect(detail.stage).toBe("translating");
+    expect(detail.progress_percent).toBe(50);
+    expect(detail.created_at).toBe("2026-03-16T12:05:00+00:00");
   });
 });

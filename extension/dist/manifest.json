@@ -1,11 +1,19 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
   "permissions": ["storage", "activeTab", "scripting", "downloads"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "*://*.arxiv.org/*",
+    "*://*.sciencedirect.com/*",
+    "https://api.elsevier.com/*",
+    "*://mdtero.com/*",
+    "*://*.mdtero.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -26,7 +34,20 @@
   "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://mdtero.com/*",
+        "*://*.mdtero.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.arxiv.org/*",
+        "*://*.sciencedirect.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

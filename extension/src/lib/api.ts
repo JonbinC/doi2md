@@ -11,13 +11,22 @@ export interface ApiClientSettings {
   token?: string;
 }
 
+export interface UploadedParseTaskPayload {
+  xmlFile: Blob;
+  filename?: string;
+  sourceDoi?: string;
+  sourceInput?: string;
+}
+
 export function createApiClient(
   getSettings: () => Promise<ApiClientSettings>
 ) {
   async function request(path: string, init?: RequestInit) {
     const settings = await getSettings();
     const headers = new Headers(init?.headers ?? {});
-    headers.set("Content-Type", "application/json");
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
     if (settings.token) {
       headers.set("Authorization", `Bearer ${settings.token}`);
     }
@@ -59,6 +68,20 @@ export function createApiClient(
       return request("/tasks/parse", {
         method: "POST",
         body: JSON.stringify(payload)
+      }).then((response) => response.json());
+    },
+    createUploadedParseTask(payload: UploadedParseTaskPayload) {
+      const body = new FormData();
+      body.set("xml_file", payload.xmlFile, payload.filename ?? "paper.xml");
+      if (payload.sourceDoi) {
+        body.set("source_doi", payload.sourceDoi);
+      }
+      if (payload.sourceInput) {
+        body.set("source_input", payload.sourceInput);
+      }
+      return request("/tasks/parse-upload", {
+        method: "POST",
+        body
       }).then((response) => response.json());
     },
     createTranslateTask(payload: TranslateTaskRequest) {

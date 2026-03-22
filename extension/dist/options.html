@@ -8,7 +8,7 @@
   </head>
   <body class="panel panel-options">
     <main class="shell shell-wide">
-      <section class="hero">
+      <section class="hero" id="settings-overview-card">
         <div class="brand-row">
           <div class="brand-mark" aria-hidden="true">M</div>
           <div class="brand-copy">
@@ -23,6 +23,11 @@
             <p id="usage-status" class="meta-value">Usage not loaded.</p>
           </div>
         </div>
+        <div class="support-row support-row-tight">
+          <span class="support-chip"><span class="support-icon support-icon-elsevier">E</span>Elsevier</span>
+          <span class="support-chip"><span class="support-icon support-icon-arxiv">arX</span>arXiv</span>
+        </div>
+        <p id="support-summary" class="meta-label support-summary">Use the same extension surface for publisher pages, preprints, and account-linked downloads.</p>
       </section>
 
       <section class="card">
@@ -58,13 +63,13 @@
         <button id="save-settings" type="button" class="secondary-button">Save</button>
       </details>
 
-      <section class="card" id="history-section" style="display: none;">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
-          <h2 id="history-title" style="margin: 0;">Document History</h2>
+      <section class="card history-card" id="history-section" hidden>
+        <div class="history-header">
+          <h2 id="history-title">Document History</h2>
           <button id="refresh-history" type="button" class="ghost-chip">Refresh</button>
         </div>
         <p id="history-note" class="meta-label">Downloads from your history are always free.</p>
-        <div id="history-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem;">
+        <div id="history-list" class="history-list">
           <p class="meta-label">Loading history...</p>
         </div>
       </section>

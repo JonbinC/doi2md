@@ -15,33 +15,33 @@ describe("workspace", () => {
 
     expect(popupHtml).toContain('href="./styles.css"');
     expect(popupHtml).toContain('src="./popup.js"');
+    expect(popupHtml).toContain('id="supported-sources-inline"');
+    expect(popupHtml).toContain("Elsevier");
+    expect(popupHtml).toContain("arXiv");
     expect(optionsHtml).toContain('href="./styles.css"');
     expect(optionsHtml).toContain('src="./options.js"');
+    expect(optionsHtml).toContain('id="settings-overview-card"');
   });
 
-  it("keeps a separate launch-site workspace with built html entrypoints", () => {
-    const sitePackage = readFileSync(resolve("../site/package.json"), "utf-8");
-    const siteIndexHtml = readFileSync(resolve("../site/src/index.html"), "utf-8");
-    const siteGuideHtml = readFileSync(resolve("../site/src/guide.html"), "utf-8");
-    const siteAccountHtml = readFileSync(resolve("../site/src/account.html"), "utf-8");
-    const siteDemoHtml = readFileSync(resolve("../site/src/demo.html"), "utf-8");
+  it("keeps public install guides beside the extension package", () => {
+    const readme = readFileSync(resolve("../README.md"), "utf-8");
+    const codexInstall = readFileSync(resolve("../codex/INSTALL.md"), "utf-8");
+    const openClawInstall = readFileSync(resolve("../openclaw/INSTALL.md"), "utf-8");
 
-    expect(sitePackage).toContain('"name": "@mdtero/site"');
-    expect(siteIndexHtml).toContain('href="./styles.css"');
-    expect(siteIndexHtml).toContain('src="./main.js"');
-    expect(siteGuideHtml).toContain('src="./guide.js"');
-    expect(siteAccountHtml).toContain('src="./account.js"');
-    expect(siteDemoHtml).toContain('src="./demo.js"');
+    expect(readme).toContain("mdtero-extension-beta.zip");
+    expect(readme).toContain("./openclaw/INSTALL.md");
+    expect(codexInstall).toContain("https://api.mdtero.com/helpers/install_mdtero_helper.sh");
+    expect(openClawInstall).toContain("https://api.mdtero.com/helpers/install_mdtero_helper.sh");
   });
 
-  it("declares warm brand assets for the extension and the launch site", () => {
+  it("declares release assets and icons for the public extension repo", () => {
     const manifest = readFileSync(resolve("manifest.json"), "utf-8");
-    const siteBuildConfig = readFileSync(resolve("../site/esbuild.config.mjs"), "utf-8");
+    const readme = readFileSync(resolve("../README.md"), "utf-8");
 
     expect(manifest).toContain('"icons"');
     expect(manifest).toContain('"16": "assets/icon-16.png"');
     expect(manifest).toContain('"128": "assets/icon-128.png"');
     expect(manifest).toContain('"default_icon"');
-    expect(siteBuildConfig).toContain('copyFile("src/assets/brand-mark.svg", "dist/assets/brand-mark.svg")');
+    expect(readme).toContain("Edge Add-ons");
   });
 });

@@ -1,6 +1,7 @@
 import type { TaskRecord } from "@mdtero/shared";
 
 import { createApiClient } from "../lib/api";
+import { requiresElsevierLocalAcquire } from "../lib/elsevier";
 import { createDetectMessage, createParseMessage, createTranslateMessage } from "../lib/runtime";
 import {
   readPopupState,
@@ -32,6 +33,7 @@ const COPY = {
     credits: (amount: number) => `Credits: ${amount}`,
     signInHint: "Sign in to unlock parse bundles and translation.",
     freeHint: "PDF/XML free",
+    supportSummary: "One extension flow for publisher pages, preprints, and Markdown-ready outputs.",
     inputLabel: "DOI or supported page",
     inputPlaceholder: "10.1016/...",
     parseButton: "Parse Paper",
@@ -42,6 +44,14 @@ const COPY = {
     translatingButton: "Translating...",
     chinese: "Chinese",
     english: "English",
+    spanish: "Spanish",
+    french: "French",
+    german: "German",
+    japanese: "Japanese",
+    korean: "Korean",
+    russian: "Russian",
+    turkish: "Turkish",
+    arabic: "Arabic",
     sourceFiles: "Source files",
     recentTasks: "Recent items",
     noRecentTasks: "No recent papers yet.",
@@ -56,7 +66,8 @@ const COPY = {
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
     downloadFailed: "Download failed. Please try again.",
-    campusHint: "Note: Campus network IP required for non-open access full-text."
+    campusHint: "Note: Campus network IP required for non-open access full-text.",
+    elsevierKeyRequired: "ScienceDirect link detected. Please configure Elsevier API Key in settings first."
   },
   zh: {
     title: "Mdtero",
@@ -66,6 +77,7 @@ const COPY = {
     credits: (amount: number) => `额度：${amount}`,
     signInHint: "登录后可使用压缩包解析和翻译。",
     freeHint: "PDF/XML 免费",
+    supportSummary: "一个扩展界面，同时覆盖出版社页面、预印本与 Markdown 就绪产物。",
     inputLabel: "DOI 或当前页面",
     inputPlaceholder: "10.1016/...",
     parseButton: "解析论文",
@@ -76,6 +88,14 @@ const COPY = {
     translatingButton: "翻译中...",
     chinese: "中文",
     english: "英文",
+    spanish: "西班牙文",
+    french: "法文",
+    german: "德文",
+    japanese: "日文",
+    korean: "韩文",
+    russian: "俄文",
+    turkish: "土耳其文",
+    arabic: "阿拉伯文",
     sourceFiles: "源文件",
     recentTasks: "最近处理",
     noRecentTasks: "还没有最近论文。",
@@ -90,7 +110,8 @@ const COPY = {
     noDoi: "未识别到 DOI，请手动粘贴。",
     noActiveTab: "当前没有可用标签页。",
     downloadFailed: "下载失败，请重试。",
-    campusHint: "提示：需要校园网或机构 IP 才能获取非开源全文，否则仅解析摘要。"
+    campusHint: "提示：需要校园网或机构 IP 才能获取非开源全文，否则仅解析摘要。",
+    elsevierKeyRequired: "检测到 ScienceDirect 链接，请先在设置中配置 Elsevier API Key。"
   }
 } satisfies Record<UiLanguage, Record<string, string | ((...args: any[]) => string)>>;
 
@@ -100,6 +121,7 @@ const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-to
 const accountEmailEl = document.querySelector<HTMLParagraphElement>("#account-email");
 const usageStatusEl = document.querySelector<HTMLParagraphElement>("#usage-status");
 const freeHintEl = document.querySelector<HTMLParagraphElement>("#free-hint");
+const supportSummaryEl = document.querySelector<HTMLParagraphElement>("#support-summary");
 const inputLabelEl = document.querySelector<HTMLLabelElement>("#paper-input-label");
 const inputEl = document.querySelector<HTMLInputElement>("#paper-input");
 const statusEl = document.querySelector<HTMLParagraphElement>("#status");
@@ -198,14 +220,32 @@ function applyLanguage() {
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (freeHintEl) freeHintEl.textContent = copy.freeHint;
+  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
   if (campusHintEl) campusHintEl.textContent = copy.campusHint;
   if (translateLanguageLabelEl) translateLanguageLabelEl.textContent = copy.translateLabel;
   if (sourceFilesSummaryEl) sourceFilesSummaryEl.textContent = copy.sourceFiles;
   if (recentTasksSummaryEl) recentTasksSummaryEl.textContent = copy.recentTasks;
-  if (translateLanguageEl?.options[0]) translateLanguageEl.options[0].text = copy.chinese;
-  if (translateLanguageEl?.options[1]) translateLanguageEl.options[1].text = copy.english;
+  if (translateLanguageEl) {
+    for (let i = 0; i < translateLanguageEl.options.length; i++) {
+      const option = translateLanguageEl.options[i];
+      if (option) {
+        switch (option.value) {
+          case "zh": option.text = copy.chinese; break;
+          case "en": option.text = copy.english; break;
+          case "es": option.text = copy.spanish; break;
+          case "fr": option.text = copy.french; break;
+          case "de": option.text = copy.german; break;
+          case "ja": option.text = copy.japanese; break;
+          case "ko": option.text = copy.korean; break;
+          case "ru": option.text = copy.russian; break;
+          case "tr": option.text = copy.turkish; break;
+          case "ar": option.text = copy.arabic; break;
+        }
+      }
+    }
+  }
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   renderActionButtons();
 }
@@ -521,11 +561,16 @@ parseButton?.addEventListener("click", async () => {
   setResult(getActionStatusText("queued_parse", uiLanguage));
 
   const settings = await readSettings();
-  if (!input.includes("arxiv.org") && !settings.elsevierApiKey) {
-    void chrome.runtime.openOptionsPage();
+  if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(getCurrentCopy().elsevierKeyRequired as string);
+    setTimeout(() => {
+      void chrome.runtime.openOptionsPage();
+    }, 2000);
     return;
   }
-  
+
   const response = await chrome.runtime.sendMessage(createParseMessage(input, settings.elsevierApiKey));
   if (!response?.ok) {
     isParsing = false;
@@ -592,16 +637,6 @@ languageToggleEl?.addEventListener("click", async () => {
 
 void (async () => {
   await initializeLanguage();
-  
-  const settings = await readSettings();
-  if (!settings.token) {
-    void chrome.runtime.openOptionsPage();
-  } else if (!settings.elsevierApiKey) {
-    // If logged in but no Elsevier API key, maybe open options too.
-    // However, arxiv users might not have/need one. Let's redirect if they are not in the act of pasting an arxiv link.
-    // For now we just open it on boot if they have no API key.
-    void chrome.runtime.openOptionsPage();
-  }
 
   await refreshUsage();
   await renderRecentTasks();

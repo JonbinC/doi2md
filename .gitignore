@@ -1,0 +1,6 @@
+.DS_Store
+mdtero-edge-store-*.zip
+extension/node_modules/
+extension/node_modules/.vite/
+extension/.vite/
+extension/.vitest/

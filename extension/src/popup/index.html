@@ -26,11 +26,19 @@
         </div>
       </section>
 
+      <section class="card" id="supported-sources-inline">
+        <div class="support-row">
+          <span class="support-chip"><span class="support-icon support-icon-elsevier">E</span>Elsevier</span>
+          <span class="support-chip"><span class="support-icon support-icon-arxiv">arX</span>arXiv</span>
+        </div>
+        <p id="support-summary" class="meta-label support-summary">One extension flow for publisher pages, preprints, and Markdown-ready outputs.</p>
+      </section>
+
       <section class="card">
         <label id="paper-input-label" for="paper-input">DOI or supported page</label>
         <input id="paper-input" type="text" placeholder="10.1016/..." />
         <p id="status" class="status-line">Detecting paper input...</p>
-        <p id="campus-hint" class="meta-label" style="margin-top: 8px; font-size: 11px; color: var(--text-tertiary);">Note: Campus network IP required for Elsevier full-text access.</p>
+        <p id="campus-hint" class="meta-label campus-hint">Note: Campus network IP required for Elsevier full-text access.</p>
       </section>
 
       <section class="card action-card">
@@ -43,6 +51,14 @@
           <select id="translate-language">
             <option value="zh">Chinese</option>
             <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="ru">Russian</option>
+            <option value="tr">Turkish</option>
+            <option value="ar">Arabic</option>
           </select>
           <button id="translate-button" type="button" class="secondary-button" disabled>
             Translate

@@ -3,7 +3,9 @@ function createApiClient(getSettings) {
   async function request(path, init) {
     const settings = await getSettings();
     const headers = new Headers(init?.headers ?? {});
-    headers.set("Content-Type", "application/json");
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
     if (settings.token) {
       headers.set("Authorization", `Bearer ${settings.token}`);
     }
@@ -45,6 +47,20 @@ function createApiClient(getSettings) {
         body: JSON.stringify(payload)
       }).then((response) => response.json());
     },
+    createUploadedParseTask(payload) {
+      const body = new FormData();
+      body.set("xml_file", payload.xmlFile, payload.filename ?? "paper.xml");
+      if (payload.sourceDoi) {
+        body.set("source_doi", payload.sourceDoi);
+      }
+      if (payload.sourceInput) {
+        body.set("source_input", payload.sourceInput);
+      }
+      return request("/tasks/parse-upload", {
+        method: "POST",
+        body
+      }).then((response) => response.json());
+    },
     createTranslateTask(payload) {
       return request("/tasks/translate", {
         method: "POST",
@@ -62,6 +78,37 @@ function createApiClient(getSettings) {
       }));
     }
   };
+}
+
+// src/lib/elsevier.ts
+var LOCAL_XML_DOI_PREFIXES = ["10.1016/"];
+var DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
+var PII_PATTERN = /^S[0-9A-Z]{16,}$/i;
+var SCIENCEDIRECT_PII_PATTERN = /sciencedirect\.com\/science\/article\/pii\/(S[0-9A-Z]{16,})/i;
+function usesLocalXmlAcquire(doi) {
+  const lowered = doi.toLowerCase();
+  return LOCAL_XML_DOI_PREFIXES.some((prefix) => lowered.startsWith(prefix));
+}
+function normalizeElsevierInput(input) {
+  const trimmed = input.trim();
+  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN);
+  if (doiUrlMatch && usesLocalXmlAcquire(doiUrlMatch[1])) {
+    return { kind: "doi", value: doiUrlMatch[1] };
+  }
+  if (usesLocalXmlAcquire(trimmed)) {
+    return { kind: "doi", value: trimmed };
+  }
+  const piiUrlMatch = trimmed.match(SCIENCEDIRECT_PII_PATTERN);
+  if (piiUrlMatch) {
+    return { kind: "pii", value: piiUrlMatch[1] };
+  }
+  if (PII_PATTERN.test(trimmed)) {
+    return { kind: "pii", value: trimmed };
+  }
+  return null;
+}
+function requiresElsevierLocalAcquire(input) {
+  return normalizeElsevierInput(input) !== null;
 }
 
 // src/lib/runtime.ts
@@ -86,7 +133,7 @@ function createDetectMessage() {
   };
 }
 
-// ../../packages/shared/src/api-contract.ts
+// ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
 // src/lib/storage.ts
@@ -239,6 +286,7 @@ var COPY = {
     credits: (amount) => `Credits: ${amount}`,
     signInHint: "Sign in to unlock parse bundles and translation.",
     freeHint: "PDF/XML free",
+    supportSummary: "One extension flow for publisher pages, preprints, and Markdown-ready outputs.",
     inputLabel: "DOI or supported page",
     inputPlaceholder: "10.1016/...",
     parseButton: "Parse Paper",
@@ -249,6 +297,14 @@ var COPY = {
     translatingButton: "Translating...",
     chinese: "Chinese",
     english: "English",
+    spanish: "Spanish",
+    french: "French",
+    german: "German",
+    japanese: "Japanese",
+    korean: "Korean",
+    russian: "Russian",
+    turkish: "Turkish",
+    arabic: "Arabic",
     sourceFiles: "Source files",
     recentTasks: "Recent items",
     noRecentTasks: "No recent papers yet.",
@@ -262,7 +318,9 @@ var COPY = {
     detected: (kind) => `Detected ${kind}.`,
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
-    downloadFailed: "Download failed. Please try again."
+    downloadFailed: "Download failed. Please try again.",
+    campusHint: "Note: Campus network IP required for non-open access full-text.",
+    elsevierKeyRequired: "ScienceDirect link detected. Please configure Elsevier API Key in settings first."
   },
   zh: {
     title: "Mdtero",
@@ -272,6 +330,7 @@ var COPY = {
     credits: (amount) => `\u989D\u5EA6\uFF1A${amount}`,
     signInHint: "\u767B\u5F55\u540E\u53EF\u4F7F\u7528\u538B\u7F29\u5305\u89E3\u6790\u548C\u7FFB\u8BD1\u3002",
     freeHint: "PDF/XML \u514D\u8D39",
+    supportSummary: "\u4E00\u4E2A\u6269\u5C55\u754C\u9762\uFF0C\u540C\u65F6\u8986\u76D6\u51FA\u7248\u793E\u9875\u9762\u3001\u9884\u5370\u672C\u4E0E Markdown \u5C31\u7EEA\u4EA7\u7269\u3002",
     inputLabel: "DOI \u6216\u5F53\u524D\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
@@ -282,6 +341,14 @@ var COPY = {
     translatingButton: "\u7FFB\u8BD1\u4E2D...",
     chinese: "\u4E2D\u6587",
     english: "\u82F1\u6587",
+    spanish: "\u897F\u73ED\u7259\u6587",
+    french: "\u6CD5\u6587",
+    german: "\u5FB7\u6587",
+    japanese: "\u65E5\u6587",
+    korean: "\u97E9\u6587",
+    russian: "\u4FC4\u6587",
+    turkish: "\u571F\u8033\u5176\u6587",
+    arabic: "\u963F\u62C9\u4F2F\u6587",
     sourceFiles: "\u6E90\u6587\u4EF6",
     recentTasks: "\u6700\u8FD1\u5904\u7406",
     noRecentTasks: "\u8FD8\u6CA1\u6709\u6700\u8FD1\u8BBA\u6587\u3002",
@@ -295,7 +362,9 @@ var COPY = {
     detected: (kind) => `\u5DF2\u8BC6\u522B${kind}\u3002`,
     noDoi: "\u672A\u8BC6\u522B\u5230 DOI\uFF0C\u8BF7\u624B\u52A8\u7C98\u8D34\u3002",
     noActiveTab: "\u5F53\u524D\u6CA1\u6709\u53EF\u7528\u6807\u7B7E\u9875\u3002",
-    downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002"
+    downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
+    campusHint: "\u63D0\u793A\uFF1A\u9700\u8981\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u624D\u80FD\u83B7\u53D6\u975E\u5F00\u6E90\u5168\u6587\uFF0C\u5426\u5219\u4EC5\u89E3\u6790\u6458\u8981\u3002",
+    elsevierKeyRequired: "\u68C0\u6D4B\u5230 ScienceDirect \u94FE\u63A5\uFF0C\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E Elsevier API Key\u3002"
   }
 };
 var titleEl = document.querySelector("#app-title");
@@ -304,9 +373,11 @@ var languageToggleEl = document.querySelector("#language-toggle");
 var accountEmailEl = document.querySelector("#account-email");
 var usageStatusEl = document.querySelector("#usage-status");
 var freeHintEl = document.querySelector("#free-hint");
+var supportSummaryEl = document.querySelector("#support-summary");
 var inputLabelEl = document.querySelector("#paper-input-label");
 var inputEl = document.querySelector("#paper-input");
 var statusEl = document.querySelector("#status");
+var campusHintEl = document.querySelector("#campus-hint");
 var parseButton = document.querySelector("#parse-button");
 var openSettingsButton = document.querySelector("#open-settings");
 var translateLanguageLabelEl = document.querySelector("#translate-language-label");
@@ -386,13 +457,52 @@ function applyLanguage() {
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (freeHintEl) freeHintEl.textContent = copy.freeHint;
+  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
+  if (campusHintEl) campusHintEl.textContent = copy.campusHint;
   if (translateLanguageLabelEl) translateLanguageLabelEl.textContent = copy.translateLabel;
   if (sourceFilesSummaryEl) sourceFilesSummaryEl.textContent = copy.sourceFiles;
   if (recentTasksSummaryEl) recentTasksSummaryEl.textContent = copy.recentTasks;
-  if (translateLanguageEl?.options[0]) translateLanguageEl.options[0].text = copy.chinese;
-  if (translateLanguageEl?.options[1]) translateLanguageEl.options[1].text = copy.english;
+  if (translateLanguageEl) {
+    for (let i = 0; i < translateLanguageEl.options.length; i++) {
+      const option = translateLanguageEl.options[i];
+      if (option) {
+        switch (option.value) {
+          case "zh":
+            option.text = copy.chinese;
+            break;
+          case "en":
+            option.text = copy.english;
+            break;
+          case "es":
+            option.text = copy.spanish;
+            break;
+          case "fr":
+            option.text = copy.french;
+            break;
+          case "de":
+            option.text = copy.german;
+            break;
+          case "ja":
+            option.text = copy.japanese;
+            break;
+          case "ko":
+            option.text = copy.korean;
+            break;
+          case "ru":
+            option.text = copy.russian;
+            break;
+          case "tr":
+            option.text = copy.turkish;
+            break;
+          case "ar":
+            option.text = copy.arabic;
+            break;
+        }
+      }
+    }
+  }
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   renderActionButtons();
 }
@@ -670,6 +780,15 @@ parseButton?.addEventListener("click", async () => {
   renderActionButtons();
   setResult(getActionStatusText("queued_parse", uiLanguage));
   const settings = await readSettings();
+  if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(getCurrentCopy().elsevierKeyRequired);
+    setTimeout(() => {
+      void chrome.runtime.openOptionsPage();
+    }, 2e3);
+    return;
+  }
   const response = await chrome.runtime.sendMessage(createParseMessage(input, settings.elsevierApiKey));
   if (!response?.ok) {
     isParsing = false;

@@ -11,6 +11,7 @@ const COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Connect email, check credits, and tune preferences.",
+    supportSummary: "Use the same extension surface for publisher pages, preprints, and account-linked downloads.",
     notSignedIn: "Not signed in.",
     usagePending: "Usage available after sign-in.",
     signedIn: (email: string) => `Signed in as ${email}`,
@@ -28,11 +29,14 @@ const COPY = {
     historyTitle: "Document History",
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
-    historyError: "Failed to load history: "
+    historyError: "Failed to load history: ",
+    historyRefresh: "Refresh",
+    historyRefreshing: "Refreshing..."
   },
   zh: {
     title: "Mdtero 账户",
     subtitle: "登录邮箱、查看额度，并管理偏好设置。",
+    supportSummary: "用同一套扩展界面处理出版社页面、预印本和与你账户关联的下载内容。",
     notSignedIn: "尚未登录。",
     usagePending: "登录后可查看额度。",
     signedIn: (email: string) => `已登录：${email}`,
@@ -50,12 +54,15 @@ const COPY = {
     historyTitle: "历史文档",
     historyNote: "从历史记录下载内容永远免费，不扣除额度。",
     historyEmpty: "暂无解析或翻译记录。",
-    historyError: "加载历史文档失败："
+    historyError: "加载历史文档失败：",
+    historyRefresh: "刷新",
+    historyRefreshing: "刷新中..."
   }
 } as const;
 
 const titleEl = document.querySelector<HTMLHeadingElement>("#settings-title");
 const subtitleEl = document.querySelector<HTMLParagraphElement>("#settings-subtitle");
+const supportSummaryEl = document.querySelector<HTMLParagraphElement>("#support-summary");
 const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-toggle");
 const elsevierApiKeyInput = document.querySelector<HTMLInputElement>("#elsevier-api-key");
 const apiBaseUrlInput = document.querySelector<HTMLInputElement>("#api-base-url");
@@ -95,6 +102,7 @@ function applyLanguage() {
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
+  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (emailLabel) emailLabel.textContent = copy.email;
   if (sendCodeButton) sendCodeButton.textContent = copy.sendCode;
@@ -107,6 +115,7 @@ function applyLanguage() {
   if (saveButton) saveButton.textContent = copy.save;
   if (historyTitle) historyTitle.textContent = (copy as any).historyTitle || "Document History";
   if (historyNote) historyNote.textContent = (copy as any).historyNote || "Downloads from your history are always free.";
+  if (refreshHistoryBtn) refreshHistoryBtn.textContent = (copy as any).historyRefresh || "Refresh";
 }
 
 async function refreshHistory() {
@@ -216,11 +225,17 @@ async function refreshView() {
     if (usageStatus) {
       usageStatus.textContent = copyFor(uiLanguage).usagePending;
     }
-    if (historySection) historySection.style.display = "none";
+    if (historySection) {
+      historySection.hidden = true;
+      historySection.style.display = "none";
+    }
     return;
   }
 
-  if (historySection) historySection.style.display = "block";
+  if (historySection) {
+    historySection.hidden = false;
+    historySection.style.display = "block";
+  }
 
   try {
     const usage = await client.getUsage();
@@ -238,9 +253,9 @@ async function refreshView() {
 
 if (refreshHistoryBtn) {
   refreshHistoryBtn.addEventListener("click", () => {
-    refreshHistoryBtn.textContent = "...";
+    refreshHistoryBtn.textContent = (copyFor(uiLanguage) as any).historyRefreshing || "...";
     refreshHistory().then(() => {
-      refreshHistoryBtn.textContent = "Refresh";
+      refreshHistoryBtn.textContent = (copyFor(uiLanguage) as any).historyRefresh || "Refresh";
     });
   });
 }

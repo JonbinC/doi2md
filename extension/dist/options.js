@@ -3,7 +3,9 @@ function createApiClient(getSettings) {
   async function request(path, init) {
     const settings = await getSettings();
     const headers = new Headers(init?.headers ?? {});
-    headers.set("Content-Type", "application/json");
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
     if (settings.token) {
       headers.set("Authorization", `Bearer ${settings.token}`);
     }
@@ -45,6 +47,20 @@ function createApiClient(getSettings) {
         body: JSON.stringify(payload)
       }).then((response) => response.json());
     },
+    createUploadedParseTask(payload) {
+      const body = new FormData();
+      body.set("xml_file", payload.xmlFile, payload.filename ?? "paper.xml");
+      if (payload.sourceDoi) {
+        body.set("source_doi", payload.sourceDoi);
+      }
+      if (payload.sourceInput) {
+        body.set("source_input", payload.sourceInput);
+      }
+      return request("/tasks/parse-upload", {
+        method: "POST",
+        body
+      }).then((response) => response.json());
+    },
     createTranslateTask(payload) {
       return request("/tasks/translate", {
         method: "POST",
@@ -64,7 +80,7 @@ function createApiClient(getSettings) {
   };
 }
 
-// ../../packages/shared/src/api-contract.ts
+// ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
 // src/lib/storage.ts
@@ -101,6 +117,7 @@ var COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Connect email, check credits, and tune preferences.",
+    supportSummary: "Use the same extension surface for publisher pages, preprints, and account-linked downloads.",
     notSignedIn: "Not signed in.",
     usagePending: "Usage available after sign-in.",
     signedIn: (email) => `Signed in as ${email}`,
@@ -118,11 +135,14 @@ var COPY = {
     historyTitle: "Document History",
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
-    historyError: "Failed to load history: "
+    historyError: "Failed to load history: ",
+    historyRefresh: "Refresh",
+    historyRefreshing: "Refreshing..."
   },
   zh: {
     title: "Mdtero \u8D26\u6237",
     subtitle: "\u767B\u5F55\u90AE\u7BB1\u3001\u67E5\u770B\u989D\u5EA6\uFF0C\u5E76\u7BA1\u7406\u504F\u597D\u8BBE\u7F6E\u3002",
+    supportSummary: "\u7528\u540C\u4E00\u5957\u6269\u5C55\u754C\u9762\u5904\u7406\u51FA\u7248\u793E\u9875\u9762\u3001\u9884\u5370\u672C\u548C\u4E0E\u4F60\u8D26\u6237\u5173\u8054\u7684\u4E0B\u8F7D\u5185\u5BB9\u3002",
     notSignedIn: "\u5C1A\u672A\u767B\u5F55\u3002",
     usagePending: "\u767B\u5F55\u540E\u53EF\u67E5\u770B\u989D\u5EA6\u3002",
     signedIn: (email) => `\u5DF2\u767B\u5F55\uFF1A${email}`,
@@ -140,11 +160,14 @@ var COPY = {
     historyTitle: "\u5386\u53F2\u6587\u6863",
     historyNote: "\u4ECE\u5386\u53F2\u8BB0\u5F55\u4E0B\u8F7D\u5185\u5BB9\u6C38\u8FDC\u514D\u8D39\uFF0C\u4E0D\u6263\u9664\u989D\u5EA6\u3002",
     historyEmpty: "\u6682\u65E0\u89E3\u6790\u6216\u7FFB\u8BD1\u8BB0\u5F55\u3002",
-    historyError: "\u52A0\u8F7D\u5386\u53F2\u6587\u6863\u5931\u8D25\uFF1A"
+    historyError: "\u52A0\u8F7D\u5386\u53F2\u6587\u6863\u5931\u8D25\uFF1A",
+    historyRefresh: "\u5237\u65B0",
+    historyRefreshing: "\u5237\u65B0\u4E2D..."
   }
 };
 var titleEl = document.querySelector("#settings-title");
 var subtitleEl = document.querySelector("#settings-subtitle");
+var supportSummaryEl = document.querySelector("#support-summary");
 var languageToggleEl = document.querySelector("#language-toggle");
 var elsevierApiKeyInput = document.querySelector("#elsevier-api-key");
 var apiBaseUrlInput = document.querySelector("#api-base-url");
@@ -180,6 +203,7 @@ function applyLanguage() {
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
+  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (emailLabel) emailLabel.textContent = copy.email;
   if (sendCodeButton) sendCodeButton.textContent = copy.sendCode;
@@ -192,6 +216,7 @@ function applyLanguage() {
   if (saveButton) saveButton.textContent = copy.save;
   if (historyTitle) historyTitle.textContent = copy.historyTitle || "Document History";
   if (historyNote) historyNote.textContent = copy.historyNote || "Downloads from your history are always free.";
+  if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh || "Refresh";
 }
 async function refreshHistory() {
   if (!historyList) return;
@@ -285,10 +310,16 @@ async function refreshView() {
     if (usageStatus) {
       usageStatus.textContent = copyFor(uiLanguage).usagePending;
     }
-    if (historySection) historySection.style.display = "none";
+    if (historySection) {
+      historySection.hidden = true;
+      historySection.style.display = "none";
+    }
     return;
   }
-  if (historySection) historySection.style.display = "block";
+  if (historySection) {
+    historySection.hidden = false;
+    historySection.style.display = "block";
+  }
   try {
     const usage = await client.getUsage();
     if (usageStatus) {
@@ -303,9 +334,9 @@ async function refreshView() {
 }
 if (refreshHistoryBtn) {
   refreshHistoryBtn.addEventListener("click", () => {
-    refreshHistoryBtn.textContent = "...";
+    refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefreshing || "...";
     refreshHistory().then(() => {
-      refreshHistoryBtn.textContent = "Refresh";
+      refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefresh || "Refresh";
     });
   });
 }
