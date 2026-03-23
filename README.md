@@ -3,8 +3,18 @@
 
   # Mdtero Browser Extension
 
-  *The secondary Mdtero entry path for local paper capture during beta.*
+  *The public extension mirror for Mdtero's local capture path.*
 </div>
+
+This repository is the public home for the browser extension only.
+
+The active product SSOT lives in [`JonbinC/mdtero`](https://github.com/JonbinC/mdtero):
+
+- website, guide, dashboard, and API docs: `apps/site`
+- active extension source of truth: `apps/extension`
+- shared client contract: `packages/shared`
+
+This repo stays focused on extension distribution and extension-facing public code.
 
 Mdtero is currently agent-first:
 
@@ -16,8 +26,9 @@ Use this repository when you specifically need the browser extension for local c
 
 ## This Repo Contains
 
-- the browser extension source in [`extension`](./extension)
-- the current sideload ZIP
+- the public extension mirror in [`extension`](./extension)
+- the mirrored shared contract in [`shared`](./shared)
+- the current sideload ZIP for manual install
 - public install guides for Codex and OpenClaw
 
 ## When To Use The Extension
@@ -28,9 +39,15 @@ Use this repository when you specifically need the browser extension for local c
 
 PDF is optional input. The default handoff format remains the Markdown package.
 
+## Repo Boundary
+
+- use this repo for extension packaging, public extension code, and manual sideload distribution
+- do not treat this repo as the source of truth for website flows, dashboard UX, or backend behavior
+- when extension behavior changes in `JonbinC/mdtero`, sync the same change here in the same round
+
 ## Install
 
-1. Download `mdtero-extension-beta.zip` from [mdtero.com/guide](https://mdtero.com/guide), or build it here.
+1. Download `mdtero-extension-beta.zip` from [mdtero.com/guide](https://mdtero.com/guide), or use the mirrored ZIP in this repository.
 2. Unzip it into a stable local folder.
 3. Open `edge://extensions` or `chrome://extensions`.
 4. Turn on `Developer mode`.
@@ -44,6 +61,12 @@ PDF is optional input. The default handoff format remains the Markdown package.
 - [`shared`](./shared): public client contract used by the extension
 - [`codex`](./codex): Codex-facing install guidance
 - [`openclaw`](./openclaw): OpenClaw-facing install guidance
+
+## Public Links
+
+- Edge Add-ons: [Mdtero on Microsoft Edge](https://microsoftedge.microsoft.com/addons/detail/mdtero/bgikfidgigjnkgfdhhopojgpckilknic)
+- OpenClaw install guide: [`./openclaw/INSTALL.md`](./openclaw/INSTALL.md)
+- Codex install guide: [`./codex/INSTALL.md`](./codex/INSTALL.md)
 
 ## Local Development
 
@@ -60,3 +83,4 @@ Build output lives in [`extension/dist`](./extension/dist).
 - the extension and website are public clients; the production backend stays private
 - the extension does not need the website UI open to parse papers
 - local helper or extension should handle publisher-side local acquisition when required
+- if repo responsibilities ever conflict, `JonbinC/mdtero` wins as product SSOT

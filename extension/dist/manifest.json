@@ -1,18 +1,13 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "activeTab", "scripting", "downloads"],
+  "permissions": ["storage", "downloads"],
   "host_permissions": [
-    "*://*.arxiv.org/*",
-    "*://*.sciencedirect.com/*",
-    "https://api.elsevier.com/*",
-    "*://mdtero.com/*",
-    "*://*.mdtero.com/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "https://api.mdtero.com/*",
+    "https://api.elsevier.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -35,10 +30,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://mdtero.com/*",
-        "*://*.mdtero.com/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*"
+        "https://mdtero.com/*",
+        "https://*.mdtero.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
@@ -46,7 +39,7 @@
     {
       "matches": [
         "*://*.arxiv.org/*",
-        "*://*.sciencedirect.com/*"
+        "*://*.sciencedirect.com/science/article/pii/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
