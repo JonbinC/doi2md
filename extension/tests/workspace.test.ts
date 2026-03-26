@@ -28,20 +28,28 @@ describe("workspace", () => {
     const codexInstall = readFileSync(resolve("../codex/INSTALL.md"), "utf-8");
     const openClawInstall = readFileSync(resolve("../openclaw/INSTALL.md"), "utf-8");
 
-    expect(readme).toContain("mdtero-extension-beta.zip");
+    expect(readme).toContain("Chrome Web Store");
+    expect(readme).toContain("Edge Add-ons");
+    expect(readme).not.toContain("mdtero-extension-beta.zip");
     expect(readme).toContain("./openclaw/INSTALL.md");
-    expect(codexInstall).toContain("https://api.mdtero.com/helpers/install_mdtero_helper.sh");
-    expect(openClawInstall).toContain("https://api.mdtero.com/helpers/install_mdtero_helper.sh");
+    expect(codexInstall).toContain("inspect it locally, then run it");
+    expect(codexInstall).not.toContain("| sh");
+    expect(openClawInstall).toContain("inspect it locally, then run it");
+    expect(openClawInstall).not.toContain("| sh");
   });
 
   it("declares release assets and icons for the public extension repo", () => {
     const manifest = readFileSync(resolve("manifest.json"), "utf-8");
     const readme = readFileSync(resolve("../README.md"), "utf-8");
+    const englishMessages = readFileSync(resolve("_locales/en/messages.json"), "utf-8");
 
     expect(manifest).toContain('"icons"');
     expect(manifest).toContain('"16": "assets/icon-16.png"');
     expect(manifest).toContain('"128": "assets/icon-128.png"');
     expect(manifest).toContain('"default_icon"');
+    expect(englishMessages).toContain("Local paper capture");
+    expect(englishMessages).toContain("Markdown-first");
+    expect(readme).toContain("Chrome Web Store");
     expect(readme).toContain("Edge Add-ons");
   });
 });

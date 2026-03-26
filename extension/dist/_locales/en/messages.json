@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "Markdown-first paper parsing workflow extension.",
+    "message": "Local paper capture and Markdown-first parsing for Mdtero.",
     "description": "The description of the extension"
   }
 }

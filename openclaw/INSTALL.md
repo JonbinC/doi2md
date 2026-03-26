@@ -5,7 +5,7 @@ description: Install Mdtero into OpenClaw and keep local acquisition on the righ
 
 # Mdtero For OpenClaw
 
-Use the beta path in this order:
+Use the normal path in this order:
 
 1. Start from [mdtero.com/account](https://mdtero.com/account)
 2. Create or select an API key
@@ -19,7 +19,7 @@ If OpenClaw is running on a server, do not force campus-only or institutional ac
 
 - keep Elsevier and ScienceDirect local acquisition on the user's own machine
 - use the Mdtero local helper when you need scripted local acquisition:
-  `curl -fsSL https://api.mdtero.com/helpers/install_mdtero_helper.sh | sh`
+  download `https://api.mdtero.com/helpers/install_mdtero_helper.sh`, inspect it locally, then run it
 - use the browser extension when the user is already reading the paper locally in the browser
 - then hand the Markdown package or bundle back to OpenClaw
 

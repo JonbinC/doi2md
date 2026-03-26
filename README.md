@@ -28,7 +28,7 @@ Use this repository when you specifically need the browser extension for local c
 
 - the public extension mirror in [`extension`](./extension)
 - the mirrored shared contract in [`shared`](./shared)
-- the current sideload ZIP for manual install
+- the packaged extension source and build output for manual testing
 - public install guides for Codex and OpenClaw
 
 ## When To Use The Extension
@@ -41,19 +41,16 @@ PDF is optional input. The default handoff format remains the Markdown package.
 
 ## Repo Boundary
 
-- use this repo for extension packaging, public extension code, and manual sideload distribution
+- use this repo for extension packaging, public extension code, and browser-side local capture guidance
 - do not treat this repo as the source of truth for website flows, dashboard UX, or backend behavior
 - when extension behavior changes in `JonbinC/mdtero`, sync the same change here in the same round
 
 ## Install
 
-1. Download `mdtero-extension-beta.zip` from [mdtero.com/guide](https://mdtero.com/guide), or use the mirrored ZIP in this repository.
-2. Unzip it into a stable local folder.
-3. Open `edge://extensions` or `chrome://extensions`.
-4. Turn on `Developer mode`.
-5. Click `Load unpacked` and choose the unzipped folder.
-6. Sign in inside Mdtero settings and keep the default API URL unless you are testing locally.
-7. Add your own Elsevier API key only when you need enhanced Elsevier retrieval.
+1. Install Mdtero from the Chrome Web Store or Edge Add-ons.
+2. Sign in inside Mdtero settings and keep the default API URL unless you are testing locally.
+3. Add your own Elsevier API key only when you need enhanced Elsevier retrieval.
+4. Use manual unpacked loading only for development or review builds.
 
 ## Repo Map
 
@@ -64,7 +61,9 @@ PDF is optional input. The default handoff format remains the Markdown package.
 
 ## Public Links
 
+- Chrome Web Store: [Mdtero on Google Chrome](https://chromewebstore.google.com/detail/mdtero/knpihhcooldgedbklgjghebijcpejibp)
 - Edge Add-ons: [Mdtero on Microsoft Edge](https://microsoftedge.microsoft.com/addons/detail/mdtero/bgikfidgigjnkgfdhhopojgpckilknic)
+- Product guide: [mdtero.com/guide](https://mdtero.com/guide)
 - OpenClaw install guide: [`./openclaw/INSTALL.md`](./openclaw/INSTALL.md)
 - Codex install guide: [`./codex/INSTALL.md`](./codex/INSTALL.md)
 
@@ -83,4 +82,5 @@ Build output lives in [`extension/dist`](./extension/dist).
 - the extension and website are public clients; the production backend stays private
 - the extension does not need the website UI open to parse papers
 - local helper or extension should handle publisher-side local acquisition when required
+- for the local helper, download the installer, inspect it locally, then run it
 - if repo responsibilities ever conflict, `JonbinC/mdtero` wins as product SSOT

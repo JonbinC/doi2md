@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "将网页论文解析并导出为干净Markdown的辅助工具。",
+    "message": "Mdtero 的本地论文抓取与 Markdown 优先解析扩展。",
     "description": "The description of the extension"
   }
 }

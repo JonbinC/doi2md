@@ -5,7 +5,7 @@ description: Install Mdtero into Codex and keep the extension as the local captu
 
 # Mdtero For Codex
 
-Use the beta path in this order:
+Use the normal path in this order:
 
 1. Start from [mdtero.com/account](https://mdtero.com/account)
 2. Create or select an API key
@@ -19,7 +19,7 @@ Use the browser extension only when a live paper page needs local capture on the
 
 - Elsevier and ScienceDirect local acquisition should stay on the user's own machine
 - the local helper is preferred for scripted local acquisition:
-  `curl -fsSL https://api.mdtero.com/helpers/install_mdtero_helper.sh | sh`
+  download `https://api.mdtero.com/helpers/install_mdtero_helper.sh`, inspect it locally, then run it
 - the browser extension is the fallback local capture path when the user is already in the browser
 
 ## Output Rule
