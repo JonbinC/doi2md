@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "将网页论文解析并导出为干净Markdown的辅助工具。",
+    "message": "在你自己的设备上抓取论文，并整理成可复用的 Markdown 文献包。",
     "description": "The description of the extension"
   }
 }

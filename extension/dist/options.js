@@ -186,10 +186,383 @@ function triggerBlobDownload(blob, filename, deps = defaultDeps) {
   }
 }
 
-// ../shared/src/api-contract.ts
+// ../../packages/shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
-// ../shared/src/shadow-status.ts
+// ../../packages/shared/src/publisher-capability-matrix.ts
+var GROUPS = [
+  {
+    id: "helper_only",
+    label: {
+      en: "Helper only",
+      zh: "\u53EA\u9700\u672C\u5730 helper"
+    },
+    description: {
+      en: "Install the local helper and parse directly from supported open full-text sources.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper \u540E\uFF0C\u76F4\u63A5\u4ECE\u53D7\u652F\u6301\u7684\u5F00\u653E\u5168\u6587\u6765\u6E90\u89E3\u6790\u3002"
+    }
+  },
+  {
+    id: "api_key",
+    label: {
+      en: "Helper + API key",
+      zh: "\u9700\u8981 helper \u548C API key"
+    },
+    description: {
+      en: "Install the local helper and add the required publisher key in settings.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u8BBE\u7F6E\u91CC\u586B\u5199\u6240\u9700\u7684\u51FA\u7248\u793E key\u3002"
+    }
+  },
+  {
+    id: "browser_assisted",
+    label: {
+      en: "Helper + browser extension",
+      zh: "\u9700\u8981 helper \u548C\u6D4F\u89C8\u5668\u6269\u5C55"
+    },
+    description: {
+      en: "Keep the article page open locally when Mdtero needs browser-assisted capture.",
+      zh: "\u5F53 Mdtero \u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u65F6\uFF0C\u8BF7\u5728\u672C\u5730\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002"
+    }
+  }
+];
+function localize(text, language) {
+  return text[language];
+}
+function link(href, en, zh) {
+  return {
+    href,
+    label: { en, zh }
+  };
+}
+var PUBLISHER_CAPABILITY_MATRIX = [
+  {
+    id: "arxiv",
+    label: { en: "arXiv", zh: "arXiv" },
+    variantOf: "arxiv",
+    accessVariant: "open_repository",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Direct open full-text retrieval from arXiv.",
+      zh: "\u76F4\u63A5\u4ECE arXiv \u83B7\u53D6\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-arxiv-html-live-1",
+    links: []
+  },
+  {
+    id: "pmc_europe_pmc",
+    label: { en: "PMC / Europe PMC", zh: "PMC / Europe PMC" },
+    variantOf: "pmc",
+    accessVariant: "open_access",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Structured open-access full text from PMC routes.",
+      zh: "\u901A\u8FC7 PMC \u8DEF\u7EBF\u83B7\u53D6\u7ED3\u6784\u5316\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:pmc-open-access",
+    links: []
+  },
+  {
+    id: "plos",
+    label: { en: "PLOS", zh: "PLOS" },
+    variantOf: "plos",
+    accessVariant: "open_access",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Structured open-access full text from PLOS.",
+      zh: "\u4ECE PLOS \u83B7\u53D6\u7ED3\u6784\u5316\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:plos-open-access",
+    links: []
+  },
+  {
+    id: "biorxiv_medrxiv",
+    label: { en: "bioRxiv / medRxiv", zh: "bioRxiv / medRxiv" },
+    variantOf: "biorxiv_medrxiv",
+    accessVariant: "preprint_server",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Preprint full text from the source site.",
+      zh: "\u4ECE\u9884\u5370\u672C\u6E90\u7AD9\u83B7\u53D6\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:biorxiv-medrxiv-open",
+    links: []
+  },
+  {
+    id: "chemrxiv",
+    label: { en: "ChemRxiv", zh: "ChemRxiv" },
+    variantOf: "chemrxiv",
+    accessVariant: "preprint_server",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Preprint full text from ChemRxiv when available.",
+      zh: "\u5728\u53EF\u7528\u65F6\u4ECE ChemRxiv \u83B7\u53D6\u9884\u5370\u672C\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "demo",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:chemrxiv-demo",
+    links: []
+  },
+  {
+    id: "mdpi",
+    label: { en: "MDPI", zh: "MDPI" },
+    variantOf: "mdpi",
+    accessVariant: "publisher_open_page",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Open publisher full text from MDPI pages.",
+      zh: "\u4ECE MDPI \u9875\u9762\u83B7\u53D6\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "demo",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:mdpi-demo",
+    links: []
+  },
+  {
+    id: "elsevier",
+    label: { en: "Elsevier", zh: "Elsevier" },
+    variantOf: "elsevier",
+    accessVariant: "api",
+    presentationGroup: "api_key",
+    rightsMode: "licensed",
+    acquisitionMode: "official_api",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: true,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and add your Elsevier API key. Some papers may still require institutional access.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Official full-text API for structured publisher retrieval.",
+      zh: "\u901A\u8FC7\u5B98\u65B9\u5168\u6587 API \u83B7\u53D6\u7ED3\u6784\u5316\u51FA\u7248\u793E\u5185\u5BB9\u3002"
+    },
+    configureTarget: "connector_keys",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:elsevier-local-api",
+    links: [
+      link("https://dev.elsevier.com/", "Get Elsevier API key", "\u7533\u8BF7 Elsevier API key")
+    ]
+  },
+  {
+    id: "springer_oa",
+    label: { en: "Springer Open Access", zh: "Springer Open Access" },
+    variantOf: "springer",
+    accessVariant: "open_access",
+    presentationGroup: "api_key",
+    rightsMode: "open",
+    acquisitionMode: "hybrid",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: true,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper. Add your Springer OA API key for the best XML path.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Springer OA XML when available, otherwise open full text.",
+      zh: "\u4F18\u5148\u83B7\u53D6 Springer OA XML\uFF0C\u5426\u5219\u8D70\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "connector_keys",
+    status: "stable",
+    fallbacks: ["browser_page_capture", "pdf"],
+    validationRef: "acceptance:task-springer-s12011-04820-w",
+    links: [
+      link("https://dev.springernature.com/", "Get Springer Nature API key", "\u7533\u8BF7 Springer Nature API key")
+    ]
+  },
+  {
+    id: "springer_subscription",
+    label: { en: "Springer subscription pages", zh: "Springer \u8BA2\u9605\u9875\u9762" },
+    variantOf: "springer",
+    accessVariant: "subscription_page",
+    presentationGroup: "browser_assisted",
+    rightsMode: "licensed",
+    acquisitionMode: "browser_page_capture",
+    requiresHelper: true,
+    requiresBrowser: true,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Browser-assisted page capture from the live article page.",
+      zh: "\u901A\u8FC7\u5B9E\u65F6\u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+    },
+    configureTarget: "browser_assisted_sources",
+    status: "demo",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-springer-s12011-04820-w",
+    links: []
+  },
+  {
+    id: "wiley",
+    label: { en: "Wiley", zh: "Wiley" },
+    variantOf: "wiley",
+    accessVariant: "publisher_page",
+    presentationGroup: "browser_assisted",
+    rightsMode: "licensed",
+    acquisitionMode: "browser_page_capture",
+    requiresHelper: true,
+    requiresBrowser: true,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Browser-assisted page capture from Wiley article pages.",
+      zh: "\u901A\u8FC7 Wiley \u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+    },
+    configureTarget: "browser_assisted_sources",
+    status: "experimental",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-wiley-validation-1",
+    links: []
+  },
+  {
+    id: "taylor_francis",
+    label: { en: "Taylor & Francis", zh: "Taylor & Francis" },
+    variantOf: "taylor_francis",
+    accessVariant: "publisher_page",
+    presentationGroup: "browser_assisted",
+    rightsMode: "licensed",
+    acquisitionMode: "browser_page_capture",
+    requiresHelper: true,
+    requiresBrowser: true,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Browser-assisted page capture from Taylor & Francis pages.",
+      zh: "\u901A\u8FC7 Taylor & Francis \u9875\u9762\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+    },
+    configureTarget: "browser_assisted_sources",
+    status: "experimental",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-tf-html-live-3",
+    links: []
+  }
+];
+function localizePublisherCapabilityEntry(entry, language) {
+  return {
+    id: entry.id,
+    label: localize(entry.label, language),
+    variantOf: entry.variantOf,
+    accessVariant: entry.accessVariant,
+    presentationGroup: entry.presentationGroup,
+    rightsMode: entry.rightsMode,
+    acquisitionMode: entry.acquisitionMode,
+    requiresHelper: entry.requiresHelper,
+    requiresBrowser: entry.requiresBrowser,
+    requiresApiKey: entry.requiresApiKey,
+    mayNeedInstitutionAccess: entry.mayNeedInstitutionAccess,
+    whatYouNeed: localize(entry.whatYouNeed, language),
+    howMdteroGetsIt: localize(entry.howMdteroGetsIt, language),
+    configureTarget: entry.configureTarget,
+    status: entry.status,
+    fallbacks: [...entry.fallbacks],
+    validationRef: entry.validationRef,
+    links: entry.links.map((item) => ({
+      href: item.href,
+      label: localize(item.label, language)
+    }))
+  };
+}
+function getPublisherCapabilityGroups(language) {
+  return GROUPS.map((group) => ({
+    id: group.id,
+    label: localize(group.label, language),
+    description: localize(group.description, language),
+    entries: PUBLISHER_CAPABILITY_MATRIX.filter((entry) => entry.presentationGroup === group.id).map(
+      (entry) => localizePublisherCapabilityEntry(entry, language)
+    )
+  })).filter((group) => group.entries.length > 0);
+}
+
+// ../../packages/shared/src/shadow-status.ts
 var CONNECTOR_LABELS = {
   springer_subscription_connector: {
     en: "Springer subscription",
@@ -259,18 +632,73 @@ async function writeSettings(next) {
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
 }
 
+// src/lib/publisher-capability-view.ts
+var STATUS_LABELS = {
+  stable: { en: "Stable", zh: "\u7A33\u5B9A" },
+  demo: { en: "Demo", zh: "\u6F14\u793A" },
+  experimental: { en: "Experimental", zh: "\u5B9E\u9A8C" }
+};
+var FALLBACK_LABELS = {
+  pdf: { en: "PDF", zh: "PDF" },
+  browser_page_capture: { en: "Browser page capture", zh: "\u6D4F\u89C8\u5668\u9875\u9762\u6293\u53D6" },
+  no_fallback_yet: { en: "No fallback yet", zh: "\u6682\u672A\u63D0\u4F9B\u515C\u5E95" }
+};
+var READINESS_LABELS = {
+  ready: { en: "Ready now", zh: "\u73B0\u5728\u53EF\u7528" },
+  needs_helper: { en: "Install helper", zh: "\u9700\u8981\u5B89\u88C5 helper" },
+  needs_api_key: { en: "Add API key", zh: "\u9700\u8981\u586B\u5199 API key" },
+  browser_required: { en: "Open in browser when needed", zh: "\u9700\u8981\u65F6\u5728\u6D4F\u89C8\u5668\u4E2D\u6253\u5F00" },
+  institution_access: { en: "Institution sign-in may be required", zh: "\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55" }
+};
+function formatCapabilityStatusLabel(status, language) {
+  return STATUS_LABELS[status][language];
+}
+function formatCapabilityFallbacks(fallbacks, language) {
+  return fallbacks.map((item) => FALLBACK_LABELS[item][language]).join(" \u2192 ");
+}
+function hasRequiredApiKey(entry, context) {
+  if (!entry.requiresApiKey) {
+    return true;
+  }
+  if (entry.id === "elsevier") {
+    return context.hasElsevierApiKey;
+  }
+  if (entry.id === "springer_oa") {
+    return context.hasSpringerOpenAccessApiKey;
+  }
+  return false;
+}
+function resolveCapabilityReadiness(entry, context) {
+  if (context.helperState !== "connected" && context.helperState !== "busy") {
+    return "needs_helper";
+  }
+  if (!hasRequiredApiKey(entry, context)) {
+    return "needs_api_key";
+  }
+  if (entry.requiresBrowser) {
+    return "browser_required";
+  }
+  if (entry.mayNeedInstitutionAccess) {
+    return "institution_access";
+  }
+  return "ready";
+}
+function describeCapabilityReadiness(readiness, language) {
+  return READINESS_LABELS[readiness][language];
+}
+
 // src/options/index.ts
 var COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Sign in faster, check balance and quota, and tune preferences.",
-    supportSummary: "Configure the helper-first browser surface for publisher-page capture, preprints, and account-linked downloads.",
-    supportStableTitle: "Stable mainline",
-    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.",
-    supportShadowTitle: "Bridge-assisted",
-    supportShadowItems: "Springer subscription pages already use helper + browser capture when a live HTML page is available.",
-    supportExperimentalTitle: "Experimental",
-    supportExperimentalItems: "Wiley and Taylor & Francis can run through helper + browser capture, but challenge and login variance is still higher.",
+    supportSummary: "Keep browser capture on your own machine and see which sources are ready with your current setup.",
+    browserAssistedNote: "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest.",
+    connectorKeysTitle: "Connector keys",
+    connectorKeysNote: "Only fill the keys you actually need. Everything stays on your own machine.",
+    capabilityNeed: "What you need",
+    capabilityRoute: "How Mdtero gets it",
+    capabilityFallback: "Fallback",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
     permissionsDownloads: "`downloads` saves Markdown bundles, translations, and source files back to your own machine.",
@@ -314,13 +742,13 @@ var COPY = {
   zh: {
     title: "Mdtero \u8D26\u6237",
     subtitle: "\u4F18\u5148\u7528\u5BC6\u7801\u767B\u5F55\uFF0C\u518D\u67E5\u770B\u4F59\u989D\u3001\u989D\u5EA6\u4E0E\u504F\u597D\u8BBE\u7F6E\u3002",
-    supportSummary: "\u5728\u8FD9\u91CC\u914D\u7F6E helper-first \u6D41\u7A0B\u91CC\u7684\u6D4F\u89C8\u5668\u4FA7\u5165\u53E3\uFF0C\u7528\u4E8E\u51FA\u7248\u793E\u9875\u9762\u6293\u53D6\u3001\u9884\u5370\u672C\u548C\u4E0E\u4F60\u8D26\u6237\u5173\u8054\u7684\u4E0B\u8F7D\u5185\u5BB9\u3002",
-    supportStableTitle: "\u7A33\u5B9A\u4E3B\u7EBF",
-    supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access\uFF0C\u4EE5\u53CA\u5E26\u6709\u4F60\u672C\u5730\u6743\u9650\u7684 Elsevier\u3002",
-    supportShadowTitle: "\u6D4F\u89C8\u5668\u534F\u540C",
-    supportShadowItems: "Springer \u8BA2\u9605\u9875\u5DF2\u7ECF\u53EF\u4EE5\u5728\u5B9E\u65F6 HTML \u9875\u9762\u6761\u4EF6\u4E0B\u8D70 helper + \u6D4F\u89C8\u5668\u6293\u53D6\u3002",
-    supportExperimentalTitle: "\u5B9E\u9A8C\u652F\u6301",
-    supportExperimentalItems: "Wiley \u4E0E Taylor & Francis \u5DF2\u53EF\u901A\u8FC7 helper + \u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u4F46\u88AB challenge \u6216\u767B\u5F55\u9875\u62E6\u4F4F\u7684\u6CE2\u52A8\u4ECD\u66F4\u9AD8\u3002",
+    supportSummary: "\u628A\u6D4F\u89C8\u5668\u6293\u53D6\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\uFF0C\u5E76\u67E5\u770B\u5F53\u524D\u8FD9\u5957\u914D\u7F6E\u5DF2\u7ECF\u9002\u5408\u54EA\u4E9B\u6765\u6E90\u3002",
+    browserAssistedNote: "\u5982\u679C\u67D0\u4E2A\u6765\u6E90\u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9\uFF0C\u53EA\u8981\u5728\u672C\u5730\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\uFF0C\u5269\u4E0B\u7684\u4EA4\u7ED9 Mdtero \u5F15\u5BFC\u5373\u53EF\u3002",
+    connectorKeysTitle: "Connector keys",
+    connectorKeysNote: "\u53EA\u586B\u5199\u4F60\u5B9E\u9645\u9700\u8981\u7684 key\uFF1B\u8FD9\u4E9B\u4FE1\u606F\u90FD\u4FDD\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u673A\u5668\u4E0A\u3002",
+    capabilityNeed: "\u4F60\u9700\u8981\u51C6\u5907\u4EC0\u4E48",
+    capabilityRoute: "Mdtero \u600E\u4E48\u83B7\u53D6",
+    capabilityFallback: "\u515C\u5E95\u65B9\u5F0F",
     permissionsTitle: "\u4E3A\u4EC0\u4E48 Mdtero \u9700\u8981\u8FD9\u4E9B\u6743\u9650",
     permissionsTabs: "`tabs` \u7528\u6765\u590D\u7528\u6216\u6253\u5F00\u53D7\u652F\u6301\u7684\u8BBA\u6587\u9875\u9762\uFF0C\u4EE5\u4FBF\u5728\u672C\u673A\u5B8C\u6210\u6293\u53D6\u3002",
     permissionsDownloads: "`downloads` \u7528\u6765\u628A Markdown \u538B\u7F29\u5305\u3001\u8BD1\u6587\u548C\u6E90\u6587\u4EF6\u4FDD\u5B58\u56DE\u4F60\u7684\u7535\u8111\u3002",
@@ -365,12 +793,10 @@ var COPY = {
 var titleEl = document.querySelector("#settings-title");
 var subtitleEl = document.querySelector("#settings-subtitle");
 var supportSummaryEl = document.querySelector("#support-summary");
-var supportStableTitleEl = document.querySelector("#settings-support-stable-title");
-var supportStableItemsEl = document.querySelector("#settings-support-stable-items");
-var supportShadowTitleEl = document.querySelector("#settings-support-shadow-title");
-var supportShadowItemsEl = document.querySelector("#settings-support-shadow-items");
-var supportExperimentalTitleEl = document.querySelector("#settings-support-experimental-title");
-var supportExperimentalItemsEl = document.querySelector("#settings-support-experimental-items");
+var browserAssistedNoteEl = document.querySelector("#browser-assisted-note");
+var publisherCapabilityGroupsEl = document.querySelector("#publisher-capability-groups");
+var connectorKeysTitleEl = document.querySelector("#connector-keys-title");
+var connectorKeysNoteEl = document.querySelector("#connector-keys-note");
 var permissionsTitleEl = document.querySelector("#permissions-title");
 var permissionsTabsEl = document.querySelector("#permissions-tabs");
 var permissionsDownloadsEl = document.querySelector("#permissions-downloads");
@@ -413,6 +839,7 @@ var codeAuthPanel = document.querySelector("#code-auth-panel");
 var client = createApiClient(readSettings);
 var uiLanguage = "en";
 var authMode = "password";
+var currentHelperState = "unavailable";
 function copyFor(language) {
   return COPY[language];
 }
@@ -432,18 +859,100 @@ function formatUsageSummary(usage) {
   const translation = Number.isFinite(usage.translation_quota_remaining) ? Number(usage.translation_quota_remaining) : 0;
   return copyFor(uiLanguage).usageSummary(wallet, parse, translation);
 }
+function renderPublisherCapabilityMatrix() {
+  if (!publisherCapabilityGroupsEl) {
+    return;
+  }
+  const copy = copyFor(uiLanguage);
+  const groups = getPublisherCapabilityGroups(uiLanguage);
+  const settingsSnapshot = {
+    helperState: currentHelperState,
+    hasElsevierApiKey: Boolean(elsevierApiKeyInput?.value.trim()),
+    hasSpringerOpenAccessApiKey: Boolean(springerOpenAccessApiKeyInput?.value.trim())
+  };
+  publisherCapabilityGroupsEl.innerHTML = "";
+  for (const group of groups) {
+    const section = document.createElement("section");
+    section.className = "capability-group-card";
+    const head = document.createElement("div");
+    head.className = "capability-group-head";
+    const title = document.createElement("h3");
+    title.className = "capability-group-title";
+    title.textContent = group.label;
+    const description = document.createElement("p");
+    description.className = "meta-label";
+    description.textContent = group.description;
+    head.appendChild(title);
+    head.appendChild(description);
+    section.appendChild(head);
+    const list = document.createElement("div");
+    list.className = "capability-entry-list";
+    for (const entry of group.entries) {
+      const readiness = resolveCapabilityReadiness(entry, settingsSnapshot);
+      const card = document.createElement("article");
+      card.className = "capability-entry-card";
+      const row = document.createElement("div");
+      row.className = "capability-entry-top";
+      const label = document.createElement("h4");
+      label.className = "capability-entry-title";
+      label.textContent = entry.label;
+      const badges = document.createElement("div");
+      badges.className = "capability-badges";
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `capability-badge capability-badge-${entry.status}`;
+      statusBadge.textContent = formatCapabilityStatusLabel(entry.status, uiLanguage);
+      const readinessBadge = document.createElement("span");
+      readinessBadge.className = `capability-badge capability-badge-${readiness}`;
+      readinessBadge.textContent = describeCapabilityReadiness(readiness, uiLanguage);
+      badges.appendChild(statusBadge);
+      badges.appendChild(readinessBadge);
+      row.appendChild(label);
+      row.appendChild(badges);
+      card.appendChild(row);
+      const need = document.createElement("p");
+      need.className = "capability-copy";
+      need.innerHTML = `<strong>${copy.capabilityNeed}:</strong> ${entry.whatYouNeed}`;
+      card.appendChild(need);
+      const route = document.createElement("p");
+      route.className = "capability-copy";
+      route.innerHTML = `<strong>${copy.capabilityRoute}:</strong> ${entry.howMdteroGetsIt}`;
+      card.appendChild(route);
+      const fallback = document.createElement("p");
+      fallback.className = "capability-copy capability-copy-muted";
+      fallback.innerHTML = `<strong>${copy.capabilityFallback}:</strong> ${formatCapabilityFallbacks(
+        entry.fallbacks,
+        uiLanguage
+      )}`;
+      card.appendChild(fallback);
+      if (entry.links.length > 0) {
+        const links = document.createElement("div");
+        links.className = "capability-links";
+        for (const item of entry.links) {
+          const anchor = document.createElement("a");
+          anchor.href = item.href;
+          anchor.target = "_blank";
+          anchor.rel = "noopener noreferrer";
+          anchor.className = "guide-doc-link capability-link";
+          anchor.textContent = item.label;
+          links.appendChild(anchor);
+        }
+        card.appendChild(links);
+      }
+      list.appendChild(card);
+    }
+    section.appendChild(list);
+    publisherCapabilityGroupsEl.appendChild(section);
+  }
+}
 function applyLanguage() {
   const copy = copyFor(uiLanguage);
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
-  if (supportStableTitleEl) supportStableTitleEl.textContent = copy.supportStableTitle;
-  if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
-  if (supportShadowTitleEl) supportShadowTitleEl.textContent = copy.supportShadowTitle;
-  if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
-  if (supportExperimentalTitleEl) supportExperimentalTitleEl.textContent = copy.supportExperimentalTitle;
-  if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
+  if (browserAssistedNoteEl) browserAssistedNoteEl.textContent = copy.browserAssistedNote;
+  if (connectorKeysTitleEl) connectorKeysTitleEl.textContent = copy.connectorKeysTitle;
+  if (connectorKeysNoteEl) connectorKeysNoteEl.textContent = copy.connectorKeysNote;
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
   if (permissionsTabsEl) permissionsTabsEl.textContent = copy.permissionsTabs;
   if (permissionsDownloadsEl) permissionsDownloadsEl.textContent = copy.permissionsDownloads;
@@ -469,6 +978,7 @@ function applyLanguage() {
   if (historyNote) historyNote.textContent = copy.historyNote || "Downloads from your history are always free.";
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh || "Refresh";
   applyAuthMode();
+  renderPublisherCapabilityMatrix();
 }
 async function refreshBridgeStatus() {
   if (!helperStatus) {
@@ -482,21 +992,30 @@ async function refreshBridgeStatus() {
     const state = response?.result?.state;
     const runnerState = response?.result?.runnerState;
     if (state === "connected" && runnerState === "busy") {
+      currentHelperState = "busy";
       helperStatus.textContent = copy.helperBusy;
+      renderPublisherCapabilityMatrix();
       return;
     }
     if (state === "connected") {
+      currentHelperState = "connected";
       helperStatus.textContent = copy.helperReady;
+      renderPublisherCapabilityMatrix();
       return;
     }
     if (state === "disconnected") {
+      currentHelperState = "disconnected";
       helperStatus.textContent = copy.helperDisconnected;
+      renderPublisherCapabilityMatrix();
       return;
     }
+    currentHelperState = "unavailable";
     helperStatus.textContent = copy.helperUnavailable;
   } catch {
+    currentHelperState = "unavailable";
     helperStatus.textContent = copy.helperUnknown;
   }
+  renderPublisherCapabilityMatrix();
 }
 async function refreshShadowDiagnostics() {
   if (!shadowStatus) {
@@ -597,6 +1116,7 @@ async function refreshView() {
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
   if (emailInput) emailInput.value = settings.email ?? "";
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
+  renderPublisherCapabilityMatrix();
   if (accountStatus) {
     accountStatus.textContent = settings.email ? copyFor(uiLanguage).signedIn(settings.email) : copyFor(uiLanguage).notSignedIn;
   }

@@ -1,6 +1,10 @@
 import { createApiClient } from "../lib/api";
 import { triggerBlobDownload } from "../lib/download";
 import {
+  getPublisherCapabilityGroups,
+  type PublisherCapabilityLanguage
+} from "@mdtero/shared";
+import {
   mergeSettings,
   readSettings,
   resolveUiLanguage,
@@ -8,18 +12,27 @@ import {
   type UiLanguage
 } from "../lib/storage";
 import { summarizeParserV2ShadowDiagnostics } from "@mdtero/shared";
+import {
+  describeCapabilityReadiness,
+  formatCapabilityFallbacks,
+  formatCapabilityStatusLabel,
+  resolveCapabilityReadiness,
+  type CapabilityHelperState
+} from "../lib/publisher-capability-view";
 
 const COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Sign in faster, check balance and quota, and tune preferences.",
-    supportSummary: "Configure the helper-first browser surface for publisher-page capture, preprints, and account-linked downloads.",
-    supportStableTitle: "Stable mainline",
-    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.",
-    supportShadowTitle: "Bridge-assisted",
-    supportShadowItems: "Springer subscription pages already use helper + browser capture when a live HTML page is available.",
-    supportExperimentalTitle: "Experimental",
-    supportExperimentalItems: "Wiley and Taylor & Francis can run through helper + browser capture, but challenge and login variance is still higher.",
+    supportSummary: "Keep browser capture on your own machine and see which sources are ready with your current setup.",
+    browserAssistedNote:
+      "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest.",
+    connectorKeysTitle: "Connector keys",
+    connectorKeysNote:
+      "Only fill the keys you actually need. Everything stays on your own machine.",
+    capabilityNeed: "What you need",
+    capabilityRoute: "How Mdtero gets it",
+    capabilityFallback: "Fallback",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
     permissionsDownloads: "`downloads` saves Markdown bundles, translations, and source files back to your own machine.",
@@ -64,13 +77,14 @@ const COPY = {
   zh: {
     title: "Mdtero 账户",
     subtitle: "优先用密码登录，再查看余额、额度与偏好设置。",
-    supportSummary: "在这里配置 helper-first 流程里的浏览器侧入口，用于出版社页面抓取、预印本和与你账户关联的下载内容。",
-    supportStableTitle: "稳定主线",
-    supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access，以及带有你本地权限的 Elsevier。",
-    supportShadowTitle: "浏览器协同",
-    supportShadowItems: "Springer 订阅页已经可以在实时 HTML 页面条件下走 helper + 浏览器抓取。",
-    supportExperimentalTitle: "实验支持",
-    supportExperimentalItems: "Wiley 与 Taylor & Francis 已可通过 helper + 浏览器抓取，但被 challenge 或登录页拦住的波动仍更高。",
+    supportSummary: "把浏览器抓取留在你自己的设备上，并查看当前这套配置已经适合哪些来源。",
+    browserAssistedNote:
+      "如果某个来源需要浏览器辅助，只要在本地保持文章页面打开，剩下的交给 Mdtero 引导即可。",
+    connectorKeysTitle: "Connector keys",
+    connectorKeysNote: "只填写你实际需要的 key；这些信息都保留在你自己的机器上。",
+    capabilityNeed: "你需要准备什么",
+    capabilityRoute: "Mdtero 怎么获取",
+    capabilityFallback: "兜底方式",
     permissionsTitle: "为什么 Mdtero 需要这些权限",
     permissionsTabs: "`tabs` 用来复用或打开受支持的论文页面，以便在本机完成抓取。",
     permissionsDownloads: "`downloads` 用来把 Markdown 压缩包、译文和源文件保存回你的电脑。",
@@ -117,12 +131,10 @@ const COPY = {
 const titleEl = document.querySelector<HTMLHeadingElement>("#settings-title");
 const subtitleEl = document.querySelector<HTMLParagraphElement>("#settings-subtitle");
 const supportSummaryEl = document.querySelector<HTMLParagraphElement>("#support-summary");
-const supportStableTitleEl = document.querySelector<HTMLParagraphElement>("#settings-support-stable-title");
-const supportStableItemsEl = document.querySelector<HTMLParagraphElement>("#settings-support-stable-items");
-const supportShadowTitleEl = document.querySelector<HTMLParagraphElement>("#settings-support-shadow-title");
-const supportShadowItemsEl = document.querySelector<HTMLParagraphElement>("#settings-support-shadow-items");
-const supportExperimentalTitleEl = document.querySelector<HTMLParagraphElement>("#settings-support-experimental-title");
-const supportExperimentalItemsEl = document.querySelector<HTMLParagraphElement>("#settings-support-experimental-items");
+const browserAssistedNoteEl = document.querySelector<HTMLParagraphElement>("#browser-assisted-note");
+const publisherCapabilityGroupsEl = document.querySelector<HTMLDivElement>("#publisher-capability-groups");
+const connectorKeysTitleEl = document.querySelector<HTMLHeadingElement>("#connector-keys-title");
+const connectorKeysNoteEl = document.querySelector<HTMLParagraphElement>("#connector-keys-note");
 const permissionsTitleEl = document.querySelector<HTMLHeadingElement>("#permissions-title");
 const permissionsTabsEl = document.querySelector<HTMLParagraphElement>("#permissions-tabs");
 const permissionsDownloadsEl = document.querySelector<HTMLParagraphElement>("#permissions-downloads");
@@ -166,6 +178,7 @@ const codeAuthPanel = document.querySelector<HTMLElement>("#code-auth-panel");
 const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
 let authMode: "password" | "code" = "password";
+let currentHelperState: CapabilityHelperState = "unavailable";
 
 function copyFor(language: UiLanguage) {
   return COPY[language] as any;
@@ -196,18 +209,123 @@ function formatUsageSummary(usage: {
   return copyFor(uiLanguage).usageSummary(wallet, parse, translation);
 }
 
+function renderPublisherCapabilityMatrix() {
+  if (!publisherCapabilityGroupsEl) {
+    return;
+  }
+
+  const copy = copyFor(uiLanguage);
+  const groups = getPublisherCapabilityGroups(uiLanguage as PublisherCapabilityLanguage);
+  const settingsSnapshot = {
+    helperState: currentHelperState,
+    hasElsevierApiKey: Boolean(elsevierApiKeyInput?.value.trim()),
+    hasSpringerOpenAccessApiKey: Boolean(springerOpenAccessApiKeyInput?.value.trim())
+  };
+
+  publisherCapabilityGroupsEl.innerHTML = "";
+
+  for (const group of groups) {
+    const section = document.createElement("section");
+    section.className = "capability-group-card";
+
+    const head = document.createElement("div");
+    head.className = "capability-group-head";
+
+    const title = document.createElement("h3");
+    title.className = "capability-group-title";
+    title.textContent = group.label;
+
+    const description = document.createElement("p");
+    description.className = "meta-label";
+    description.textContent = group.description;
+
+    head.appendChild(title);
+    head.appendChild(description);
+    section.appendChild(head);
+
+    const list = document.createElement("div");
+    list.className = "capability-entry-list";
+
+    for (const entry of group.entries) {
+      const readiness = resolveCapabilityReadiness(entry, settingsSnapshot);
+
+      const card = document.createElement("article");
+      card.className = "capability-entry-card";
+
+      const row = document.createElement("div");
+      row.className = "capability-entry-top";
+
+      const label = document.createElement("h4");
+      label.className = "capability-entry-title";
+      label.textContent = entry.label;
+
+      const badges = document.createElement("div");
+      badges.className = "capability-badges";
+
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `capability-badge capability-badge-${entry.status}`;
+      statusBadge.textContent = formatCapabilityStatusLabel(entry.status, uiLanguage as PublisherCapabilityLanguage);
+
+      const readinessBadge = document.createElement("span");
+      readinessBadge.className = `capability-badge capability-badge-${readiness}`;
+      readinessBadge.textContent = describeCapabilityReadiness(readiness, uiLanguage as PublisherCapabilityLanguage);
+
+      badges.appendChild(statusBadge);
+      badges.appendChild(readinessBadge);
+      row.appendChild(label);
+      row.appendChild(badges);
+      card.appendChild(row);
+
+      const need = document.createElement("p");
+      need.className = "capability-copy";
+      need.innerHTML = `<strong>${copy.capabilityNeed}:</strong> ${entry.whatYouNeed}`;
+      card.appendChild(need);
+
+      const route = document.createElement("p");
+      route.className = "capability-copy";
+      route.innerHTML = `<strong>${copy.capabilityRoute}:</strong> ${entry.howMdteroGetsIt}`;
+      card.appendChild(route);
+
+      const fallback = document.createElement("p");
+      fallback.className = "capability-copy capability-copy-muted";
+      fallback.innerHTML = `<strong>${copy.capabilityFallback}:</strong> ${formatCapabilityFallbacks(
+        entry.fallbacks,
+        uiLanguage as PublisherCapabilityLanguage
+      )}`;
+      card.appendChild(fallback);
+
+      if (entry.links.length > 0) {
+        const links = document.createElement("div");
+        links.className = "capability-links";
+        for (const item of entry.links) {
+          const anchor = document.createElement("a");
+          anchor.href = item.href;
+          anchor.target = "_blank";
+          anchor.rel = "noopener noreferrer";
+          anchor.className = "guide-doc-link capability-link";
+          anchor.textContent = item.label;
+          links.appendChild(anchor);
+        }
+        card.appendChild(links);
+      }
+
+      list.appendChild(card);
+    }
+
+    section.appendChild(list);
+    publisherCapabilityGroupsEl.appendChild(section);
+  }
+}
+
 function applyLanguage() {
   const copy = copyFor(uiLanguage);
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
-  if (supportStableTitleEl) supportStableTitleEl.textContent = copy.supportStableTitle;
-  if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
-  if (supportShadowTitleEl) supportShadowTitleEl.textContent = copy.supportShadowTitle;
-  if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
-  if (supportExperimentalTitleEl) supportExperimentalTitleEl.textContent = copy.supportExperimentalTitle;
-  if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
+  if (browserAssistedNoteEl) browserAssistedNoteEl.textContent = copy.browserAssistedNote;
+  if (connectorKeysTitleEl) connectorKeysTitleEl.textContent = copy.connectorKeysTitle;
+  if (connectorKeysNoteEl) connectorKeysNoteEl.textContent = copy.connectorKeysNote;
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
   if (permissionsTabsEl) permissionsTabsEl.textContent = copy.permissionsTabs;
   if (permissionsDownloadsEl) permissionsDownloadsEl.textContent = copy.permissionsDownloads;
@@ -233,6 +351,7 @@ function applyLanguage() {
   if (historyNote) historyNote.textContent = (copy as any).historyNote || "Downloads from your history are always free.";
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = (copy as any).historyRefresh || "Refresh";
   applyAuthMode();
+  renderPublisherCapabilityMatrix();
 }
 
 async function refreshBridgeStatus() {
@@ -247,21 +366,30 @@ async function refreshBridgeStatus() {
     const state = response?.result?.state;
     const runnerState = response?.result?.runnerState;
     if (state === "connected" && runnerState === "busy") {
+      currentHelperState = "busy";
       helperStatus.textContent = copy.helperBusy;
+      renderPublisherCapabilityMatrix();
       return;
     }
     if (state === "connected") {
+      currentHelperState = "connected";
       helperStatus.textContent = copy.helperReady;
+      renderPublisherCapabilityMatrix();
       return;
     }
     if (state === "disconnected") {
+      currentHelperState = "disconnected";
       helperStatus.textContent = copy.helperDisconnected;
+      renderPublisherCapabilityMatrix();
       return;
     }
+    currentHelperState = "unavailable";
     helperStatus.textContent = copy.helperUnavailable;
   } catch {
+    currentHelperState = "unavailable";
     helperStatus.textContent = copy.helperUnknown;
   }
+  renderPublisherCapabilityMatrix();
 }
 
 async function refreshShadowDiagnostics() {
@@ -378,6 +506,7 @@ async function refreshView() {
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
   if (emailInput) emailInput.value = settings.email ?? "";
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
+  renderPublisherCapabilityMatrix();
   if (accountStatus) {
     accountStatus.textContent = settings.email
       ? copyFor(uiLanguage).signedIn(settings.email)

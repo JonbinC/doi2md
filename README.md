@@ -3,7 +3,7 @@
 
   # Mdtero Browser Extension
 
-  *The public extension mirror for Mdtero's local capture path.*
+  *The public extension mirror for Mdtero's browser extension.*
 </div>
 
 This repository is the public home for the browser extension only.
@@ -16,13 +16,9 @@ The active product SSOT lives in [`JonbinC/mdtero`](https://github.com/JonbinC/m
 
 This repo stays focused on extension distribution and extension-facing public code.
 
-Mdtero is currently agent-first:
+Mdtero turns papers into reusable Markdown research packages.
 
-1. Open [mdtero.com/account](https://mdtero.com/account)
-2. Create or select an API key
-3. Install Mdtero into OpenClaw, Claude Code, Codex, or Gemini CLI
-
-Use this repository when you specifically need the browser extension for local capture from a live paper page.
+Use this repository when you specifically need the browser extension for local capture from a live paper page or from local files on your own machine.
 
 ## This Repo Contains
 
@@ -34,9 +30,9 @@ Use this repository when you specifically need the browser extension for local c
 ## When To Use The Extension
 
 - you are already reading a supported paper page locally
-- publisher-side acquisition must stay on the user machine
-- you want the fastest path to a local Markdown package and bundle download
-- you already have a local PDF or EPUB and want it to enter the same helper-first parse route
+- the paper page needs to stay on your own machine
+- you want a quick path to `paper.md`, figures, and a reusable bundle
+- you already have a local PDF or EPUB and want to keep the same package flow
 
 PDF is optional input. The default handoff format remains the Markdown package.
 
@@ -50,7 +46,7 @@ PDF is optional input. The default handoff format remains the Markdown package.
 
 1. Install Mdtero from the Chrome Web Store or Edge Add-ons.
 2. Sign in inside Mdtero settings and keep the default API URL unless you are testing locally.
-3. Add your own Elsevier API key only when you need enhanced Elsevier retrieval.
+3. Open the article locally or start from your own PDF/EPUB when needed.
 4. Use manual unpacked loading only for development or review builds.
 
 ## Repo Map

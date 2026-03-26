@@ -33,18 +33,31 @@
           <span class="support-chip"><span class="support-icon support-icon-plos">PL</span>PLOS</span>
         </div>
         <p id="support-summary" class="meta-label support-summary">Configure the helper-first browser surface for publisher-page capture, preprints, and account-linked downloads.</p>
-        <div class="support-stack">
-          <div class="support-group">
-            <p id="settings-support-stable-title" class="meta-label support-group-title">Stable mainline</p>
-            <p id="settings-support-stable-items" class="meta-label">arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.</p>
+        <div id="publisher-capability-groups" class="capability-groups" aria-live="polite"></div>
+        <p id="browser-assisted-note" class="meta-label support-summary">
+          Browser-assisted sources use the same shared matrix, but you still need the article page open locally when Mdtero asks for browser capture.
+        </p>
+      </section>
+
+      <section class="card" id="connector-keys-section">
+        <h2 id="connector-keys-title">Connector keys</h2>
+        <p id="connector-keys-note" class="meta-label">
+          Only fill the keys you actually need. Everything stays on your own machine.
+        </p>
+        <div class="capability-config-grid">
+          <div class="capability-config-card">
+            <label id="elsevier-api-key-label" for="elsevier-api-key">Elsevier API Key</label>
+            <input id="elsevier-api-key" type="password" placeholder="Key (optional)" />
+            <p class="meta-label">
+              <a href="https://dev.elsevier.com/" target="_blank" rel="noopener noreferrer">Get your API key</a> to unlock the official Elsevier route.
+            </p>
           </div>
-        <div class="support-group">
-            <p id="settings-support-shadow-title" class="meta-label support-group-title">Bridge-assisted</p>
-            <p id="settings-support-shadow-items" class="meta-label">Springer subscription pages already use helper + browser capture when a live HTML page is available.</p>
-          </div>
-          <div class="support-group">
-            <p id="settings-support-experimental-title" class="meta-label support-group-title">Experimental</p>
-            <p id="settings-support-experimental-items" class="meta-label">Wiley and Taylor &amp; Francis can run through helper + browser capture, but challenge and login variance is still higher.</p>
+          <div class="capability-config-card">
+            <label id="springer-oa-api-key-label" for="springer-oa-api-key">Springer OA API Key</label>
+            <input id="springer-oa-api-key" type="password" placeholder="Key (optional)" />
+            <p class="meta-label">
+              <a href="https://dev.springernature.com/" target="_blank" rel="noopener noreferrer">Get your Springer Nature API key</a> for local OA XML retrieval.
+            </p>
           </div>
         </div>
       </section>
@@ -85,18 +98,6 @@
 
       <details class="card">
         <summary id="advanced-summary">Advanced</summary>
-        <label id="elsevier-api-key-label" for="elsevier-api-key">Elsevier API Key</label>
-        <input id="elsevier-api-key" type="password" placeholder="Key (optional)" />
-        <p class="meta-label">
-          <a href="https://dev.elsevier.com/" target="_blank" rel="noopener noreferrer">Get your API key</a> to bypass rate limits.
-        </p>
-
-        <label id="springer-oa-api-key-label" for="springer-oa-api-key">Springer OA API Key</label>
-        <input id="springer-oa-api-key" type="password" placeholder="Key (optional)" />
-        <p class="meta-label">
-          <a href="https://dev.springernature.com/" target="_blank" rel="noopener noreferrer">Get your Springer Nature API key</a> for local OA JATS retrieval.
-        </p>
-
         <label id="api-base-url-label" for="api-base-url">API URL</label>
         <input id="api-base-url" type="url" placeholder="http://127.0.0.1:8000" />
         <button id="save-settings" type="button" class="secondary-button">Save</button>

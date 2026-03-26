@@ -258,8 +258,308 @@ function createDetectMessage() {
   };
 }
 
-// ../shared/src/api-contract.ts
+// ../../packages/shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
+
+// ../../packages/shared/src/publisher-capability-matrix.ts
+function link(href, en, zh) {
+  return {
+    href,
+    label: { en, zh }
+  };
+}
+var PUBLISHER_CAPABILITY_MATRIX = [
+  {
+    id: "arxiv",
+    label: { en: "arXiv", zh: "arXiv" },
+    variantOf: "arxiv",
+    accessVariant: "open_repository",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Direct open full-text retrieval from arXiv.",
+      zh: "\u76F4\u63A5\u4ECE arXiv \u83B7\u53D6\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-arxiv-html-live-1",
+    links: []
+  },
+  {
+    id: "pmc_europe_pmc",
+    label: { en: "PMC / Europe PMC", zh: "PMC / Europe PMC" },
+    variantOf: "pmc",
+    accessVariant: "open_access",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Structured open-access full text from PMC routes.",
+      zh: "\u901A\u8FC7 PMC \u8DEF\u7EBF\u83B7\u53D6\u7ED3\u6784\u5316\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:pmc-open-access",
+    links: []
+  },
+  {
+    id: "plos",
+    label: { en: "PLOS", zh: "PLOS" },
+    variantOf: "plos",
+    accessVariant: "open_access",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Structured open-access full text from PLOS.",
+      zh: "\u4ECE PLOS \u83B7\u53D6\u7ED3\u6784\u5316\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:plos-open-access",
+    links: []
+  },
+  {
+    id: "biorxiv_medrxiv",
+    label: { en: "bioRxiv / medRxiv", zh: "bioRxiv / medRxiv" },
+    variantOf: "biorxiv_medrxiv",
+    accessVariant: "preprint_server",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Preprint full text from the source site.",
+      zh: "\u4ECE\u9884\u5370\u672C\u6E90\u7AD9\u83B7\u53D6\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:biorxiv-medrxiv-open",
+    links: []
+  },
+  {
+    id: "chemrxiv",
+    label: { en: "ChemRxiv", zh: "ChemRxiv" },
+    variantOf: "chemrxiv",
+    accessVariant: "preprint_server",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Preprint full text from ChemRxiv when available.",
+      zh: "\u5728\u53EF\u7528\u65F6\u4ECE ChemRxiv \u83B7\u53D6\u9884\u5370\u672C\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "demo",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:chemrxiv-demo",
+    links: []
+  },
+  {
+    id: "mdpi",
+    label: { en: "MDPI", zh: "MDPI" },
+    variantOf: "mdpi",
+    accessVariant: "publisher_open_page",
+    presentationGroup: "helper_only",
+    rightsMode: "open",
+    acquisitionMode: "direct_open_fulltext",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Open publisher full text from MDPI pages.",
+      zh: "\u4ECE MDPI \u9875\u9762\u83B7\u53D6\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "none",
+    status: "demo",
+    fallbacks: ["pdf"],
+    validationRef: "checklist:mdpi-demo",
+    links: []
+  },
+  {
+    id: "elsevier",
+    label: { en: "Elsevier", zh: "Elsevier" },
+    variantOf: "elsevier",
+    accessVariant: "api",
+    presentationGroup: "api_key",
+    rightsMode: "licensed",
+    acquisitionMode: "official_api",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: true,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and add your Elsevier API key. Some papers may still require institutional access.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Official full-text API for structured publisher retrieval.",
+      zh: "\u901A\u8FC7\u5B98\u65B9\u5168\u6587 API \u83B7\u53D6\u7ED3\u6784\u5316\u51FA\u7248\u793E\u5185\u5BB9\u3002"
+    },
+    configureTarget: "connector_keys",
+    status: "stable",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:elsevier-local-api",
+    links: [
+      link("https://dev.elsevier.com/", "Get Elsevier API key", "\u7533\u8BF7 Elsevier API key")
+    ]
+  },
+  {
+    id: "springer_oa",
+    label: { en: "Springer Open Access", zh: "Springer Open Access" },
+    variantOf: "springer",
+    accessVariant: "open_access",
+    presentationGroup: "api_key",
+    rightsMode: "open",
+    acquisitionMode: "hybrid",
+    requiresHelper: true,
+    requiresBrowser: false,
+    requiresApiKey: true,
+    mayNeedInstitutionAccess: false,
+    whatYouNeed: {
+      en: "Install the local helper. Add your Springer OA API key for the best XML path.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Springer OA XML when available, otherwise open full text.",
+      zh: "\u4F18\u5148\u83B7\u53D6 Springer OA XML\uFF0C\u5426\u5219\u8D70\u5F00\u653E\u5168\u6587\u3002"
+    },
+    configureTarget: "connector_keys",
+    status: "stable",
+    fallbacks: ["browser_page_capture", "pdf"],
+    validationRef: "acceptance:task-springer-s12011-04820-w",
+    links: [
+      link("https://dev.springernature.com/", "Get Springer Nature API key", "\u7533\u8BF7 Springer Nature API key")
+    ]
+  },
+  {
+    id: "springer_subscription",
+    label: { en: "Springer subscription pages", zh: "Springer \u8BA2\u9605\u9875\u9762" },
+    variantOf: "springer",
+    accessVariant: "subscription_page",
+    presentationGroup: "browser_assisted",
+    rightsMode: "licensed",
+    acquisitionMode: "browser_page_capture",
+    requiresHelper: true,
+    requiresBrowser: true,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Browser-assisted page capture from the live article page.",
+      zh: "\u901A\u8FC7\u5B9E\u65F6\u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+    },
+    configureTarget: "browser_assisted_sources",
+    status: "demo",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-springer-s12011-04820-w",
+    links: []
+  },
+  {
+    id: "wiley",
+    label: { en: "Wiley", zh: "Wiley" },
+    variantOf: "wiley",
+    accessVariant: "publisher_page",
+    presentationGroup: "browser_assisted",
+    rightsMode: "licensed",
+    acquisitionMode: "browser_page_capture",
+    requiresHelper: true,
+    requiresBrowser: true,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Browser-assisted page capture from Wiley article pages.",
+      zh: "\u901A\u8FC7 Wiley \u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+    },
+    configureTarget: "browser_assisted_sources",
+    status: "experimental",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-wiley-validation-1",
+    links: []
+  },
+  {
+    id: "taylor_francis",
+    label: { en: "Taylor & Francis", zh: "Taylor & Francis" },
+    variantOf: "taylor_francis",
+    accessVariant: "publisher_page",
+    presentationGroup: "browser_assisted",
+    rightsMode: "licensed",
+    acquisitionMode: "browser_page_capture",
+    requiresHelper: true,
+    requiresBrowser: true,
+    requiresApiKey: false,
+    mayNeedInstitutionAccess: true,
+    whatYouNeed: {
+      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
+      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+    },
+    howMdteroGetsIt: {
+      en: "Browser-assisted page capture from Taylor & Francis pages.",
+      zh: "\u901A\u8FC7 Taylor & Francis \u9875\u9762\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+    },
+    configureTarget: "browser_assisted_sources",
+    status: "experimental",
+    fallbacks: ["pdf"],
+    validationRef: "acceptance:task-tf-html-live-3",
+    links: []
+  }
+];
 
 // src/lib/storage.ts
 var SETTINGS_KEY = "mdtero_settings";
@@ -521,13 +821,13 @@ var COPY = {
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
     signInHint: "Sign in to unlock parse bundles and translation.",
     freeHint: "PDF/XML free",
-    supportSummary: "Browser-managed local capture for helper-first publisher routes, preprints, and Markdown-ready outputs.",
-    supportStableTitle: "Stable mainline",
-    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.",
-    supportShadowTitle: "Bridge-assisted",
-    supportShadowItems: "Springer subscription pages already use helper + browser capture when a live HTML page is available.",
-    supportExperimentalTitle: "Experimental",
-    supportExperimentalItems: "Wiley and Taylor & Francis are available through helper + browser capture, but blocked-page variance is still higher.",
+    supportSummary: "Open papers on your own machine and turn them into reusable Markdown packages.",
+    supportStableTitle: "Ready now",
+    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
+    supportShadowTitle: "Use your own access",
+    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself.",
+    supportExperimentalTitle: "Browser help may be needed",
+    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary by login and challenge flow.",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
@@ -579,13 +879,13 @@ var COPY = {
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
     signInHint: "\u767B\u5F55\u540E\u53EF\u4F7F\u7528\u538B\u7F29\u5305\u89E3\u6790\u548C\u7FFB\u8BD1\u3002",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u4F5C\u4E3A helper-first \u6D41\u7A0B\u91CC\u7684\u6D4F\u89C8\u5668\u4FA7\u6293\u53D6\u5165\u53E3\uFF0C\u8986\u76D6\u51FA\u7248\u793E\u9875\u9762\u3001\u9884\u5370\u672C\u4E0E Markdown \u5C31\u7EEA\u4EA7\u7269\u3002",
-    supportStableTitle: "\u7A33\u5B9A\u4E3B\u7EBF",
-    supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access\uFF0C\u4EE5\u53CA\u5E26\u6709\u4F60\u672C\u5730\u6743\u9650\u7684 Elsevier\u3002",
-    supportShadowTitle: "\u6D4F\u89C8\u5668\u534F\u540C",
-    supportShadowItems: "Springer \u8BA2\u9605\u9875\u5DF2\u7ECF\u53EF\u4EE5\u5728\u5B9E\u65F6 HTML \u9875\u9762\u6761\u4EF6\u4E0B\u8D70 helper + \u6D4F\u89C8\u5668\u6293\u53D6\u3002",
-    supportExperimentalTitle: "\u5B9E\u9A8C\u652F\u6301",
-    supportExperimentalItems: "Wiley \u4E0E Taylor & Francis \u5DF2\u53EF\u901A\u8FC7 helper + \u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u4F46\u88AB challenge \u6216\u6743\u9650\u9875\u62E6\u4F4F\u7684\u6CE2\u52A8\u4ECD\u66F4\u9AD8\u3002",
+    supportSummary: "\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\u6253\u5F00\u8BBA\u6587\uFF0C\u5E76\u6574\u7406\u6210\u53EF\u590D\u7528\u7684 Markdown \u6587\u732E\u5305\u3002",
+    supportStableTitle: "\u73B0\u5728\u5C31\u80FD\u7528",
+    supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
+    supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
+    supportShadowItems: "Elsevier\u3001Springer \u7B49\u51FA\u7248\u793E\u9875\u9762\uFF0C\u5728\u4F60\u81EA\u5DF1\u5DF2\u7ECF\u80FD\u6253\u5F00\u5168\u6587\u65F6\u901A\u5E38\u6548\u679C\u6700\u597D\u3002",
+    supportExperimentalTitle: "\u6709\u65F6\u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9",
+    supportExperimentalItems: "\u90E8\u5206 Wiley \u4E0E Taylor & Francis \u9875\u9762\u4ECD\u4F1A\u53D7\u767B\u5F55\u6001\u6216\u6311\u6218\u9875\u5F71\u54CD\u3002",
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",

@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "Local paper acquisition and browser-capture bridge for Markdown-ready research workflows.",
+    "message": "Capture papers on your own machine and turn them into reusable Markdown research packages.",
     "description": "The description of the extension"
   }
 }
