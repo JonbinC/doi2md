@@ -1,6 +1,24 @@
 // src/lib/detect.ts
 var DOI_PATTERN = /10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i;
-var ARXIV_PATTERN = /arxiv\.org\/(abs|pdf|html)\/([a-z\-]+\/\d{7}|[0-9]{4}\.[0-9]{4,5})/i;
+var ARXIV_PATTERN = /arxiv\.org\/(abs|pdf|html)\/([a-z\-]+\/\d{7}|[0-9]{4}\.[0-9]{4,5})(?:\.pdf)?/i;
+function matchMetaContent(html, metaNames) {
+  for (const metaName of metaNames) {
+    const escaped = metaName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patterns = [
+      new RegExp(`<meta[^>]+name=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+      new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${escaped}["']`, "i"),
+      new RegExp(`<meta[^>]+property=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+      new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${escaped}["']`, "i")
+    ];
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+  }
+  return null;
+}
 function detectPaperInput(input) {
   const arxivMatch = input.url.match(ARXIV_PATTERN);
   if (arxivMatch) {
@@ -10,9 +28,12 @@ function detectPaperInput(input) {
   if (urlMatch) {
     return { kind: "doi", value: urlMatch[0] };
   }
-  const metaDoiMatch = input.html.match(/citation_doi"\s+content="([^"]+)"/i);
-  if (metaDoiMatch) {
-    return { kind: "doi", value: metaDoiMatch[1] };
+  const metaDoi = matchMetaContent(input.html, ["citation_doi", "prism.doi", "dc.identifier"]);
+  if (metaDoi && DOI_PATTERN.test(metaDoi)) {
+    const match = metaDoi.match(DOI_PATTERN);
+    if (match) {
+      return { kind: "doi", value: match[0] };
+    }
   }
   if (input.url.includes("sciencedirect.com/science/article/pii/")) {
     return { kind: "sciencedirect", value: input.url };
@@ -22,6 +43,299 @@ function detectPaperInput(input) {
     return { kind: "doi", value: htmlMatch[0] };
   }
   return null;
+}
+
+// src/lib/page-capture.ts
+function decodeHtmlAttribute(value) {
+  return String(value || "").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">");
+}
+function matchMetaContent2(html, metaNames) {
+  for (const metaName of metaNames) {
+    const variants = Array.from(
+      new Set([
+        metaName,
+        metaName.replace(/\./g, ":"),
+        metaName.replace(/:/g, ".")
+      ].filter(Boolean))
+    );
+    for (const variant of variants) {
+      const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const patterns = [
+        new RegExp(`<meta[^>]+name=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+        new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${escaped}["']`, "i")
+      ];
+      for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match?.[1]) {
+          return decodeHtmlAttribute(match[1]);
+        }
+      }
+    }
+  }
+  return null;
+}
+function pushUniqueCandidate(target, candidate) {
+  const normalized = String(candidate || "").trim();
+  if (!normalized || target.includes(normalized)) {
+    return;
+  }
+  target.push(normalized);
+}
+function normalizeXmlCandidateUrl(params) {
+  let candidate = String(params.candidate || "").trim();
+  if (!candidate) {
+    return null;
+  }
+  if (candidate.startsWith("http://")) {
+    candidate = `https://${candidate.slice("http://".length)}`;
+  }
+  try {
+    const parsed = new URL(candidate);
+    const isLegacySpringerJats = parsed.hostname === "api.springer.com" && parsed.pathname.replace(/\/+$/, "") === "/xmldata/jats";
+    if (params.springerOpenAccessApiKey) {
+      if (parsed.searchParams.has("api_key")) {
+        parsed.searchParams.set("api_key", params.springerOpenAccessApiKey);
+      }
+      return parsed.toString();
+    }
+    if (isLegacySpringerJats) {
+      const apiKey = parsed.searchParams.get("api_key") || "";
+      if (!apiKey.trim()) {
+        return null;
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return candidate;
+  }
+}
+function extractXmlCandidateUrls(params) {
+  const html = String(params.html || "");
+  const pageUrl = String(params.pageUrl || "");
+  const candidates = [];
+  const doi = matchMetaContent2(html, ["citation_doi", "prism.doi", "prism:doi", "dc.identifier", "dc:identifier"])?.match(
+    /10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i
+  )?.[0];
+  if (doi && params.springerOpenAccessApiKey && /springer/i.test(pageUrl)) {
+    pushUniqueCandidate(
+      candidates,
+      `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(doi)}&api_key=${encodeURIComponent(params.springerOpenAccessApiKey)}`
+    );
+  }
+  const explicitXml = matchMetaContent2(html, ["citation_xml_url", "citation_springer_api_url"]);
+  if (explicitXml) {
+    const normalized = normalizeXmlCandidateUrl({
+      candidate: explicitXml,
+      springerOpenAccessApiKey: params.springerOpenAccessApiKey
+    });
+    if (normalized) {
+      pushUniqueCandidate(candidates, normalized);
+    }
+  }
+  return candidates;
+}
+var CHALLENGE_MARKERS = [
+  "just a moment",
+  "access denied",
+  "captcha",
+  "cf-browser-verification",
+  "window._cf_chl_opt",
+  "__cf_chl_tk=",
+  "/cdn-cgi/challenge-platform/",
+  "ctype: 'managed'",
+  "verify you are human",
+  "checking if the site connection is secure",
+  "enable javascript and cookies to continue",
+  "pardon the interruption"
+];
+var LOGIN_MARKERS = [
+  "sign in",
+  "institutional access",
+  "shibboleth",
+  "openathens",
+  "access through your institution",
+  "login via your institution",
+  "institutional login",
+  "institutional sign in",
+  "your institution does not have access",
+  "purchase a subscription to gain access"
+];
+var PDF_SHELL_MARKERS = [
+  'id="pdf-iframe"',
+  'type="application/pdf"',
+  "/doi/pdfdirect/",
+  "/epdf",
+  "/doi/pdf/",
+  "download pdf"
+];
+var METADATA_MARKERS = [
+  "citation_title",
+  "citation_doi",
+  "dc.identifier",
+  "dc:identifier",
+  "dc.title",
+  "dc:title",
+  "prism.doi",
+  "prism:doi"
+];
+var BODY_MARKERS = [
+  "<main",
+  "<article",
+  "article-section__content",
+  "article__body",
+  "article-body",
+  "article-content",
+  "article__content",
+  "fulltext-view",
+  "hlfld-fulltext",
+  "main-content",
+  "main-content__body",
+  "c-article-body",
+  "c-article-section",
+  "article-section",
+  "references-list",
+  "reference-section",
+  "references",
+  "ltx_document",
+  "ltx_abstract"
+];
+var ARTICLE_XML_MARKERS = [
+  "<article",
+  "<body",
+  "<sec",
+  "<jats:",
+  "full-text-retrieval-response",
+  "originaltext"
+];
+function classifyAccessShell(html) {
+  const lowered = String(html || "").toLowerCase();
+  if (CHALLENGE_MARKERS.some((marker) => lowered.includes(marker))) {
+    return "challenge";
+  }
+  if (LOGIN_MARKERS.some((marker) => lowered.includes(marker)) || lowered.includes("password") && lowered.includes("sign in")) {
+    return "login";
+  }
+  return null;
+}
+function isLikelyChallengeOrLoginShell(html) {
+  return classifyAccessShell(html) !== null;
+}
+function isLikelyHtmlDocument(text) {
+  const lowered = String(text || "").trim().toLowerCase();
+  return lowered.startsWith("<!doctype html") || lowered.startsWith("<html") || lowered.includes("<html");
+}
+function hasAnyMarker(text, markers) {
+  return markers.some((marker) => text.includes(marker));
+}
+function isLikelyStructuredArticleXml(text) {
+  const lowered = String(text || "").trim().toLowerCase();
+  if (!lowered.startsWith("<") && !lowered.startsWith("<?xml")) {
+    return false;
+  }
+  if (isLikelyHtmlDocument(lowered) || isLikelyChallengeOrLoginShell(lowered)) {
+    return false;
+  }
+  return hasAnyMarker(lowered, ARTICLE_XML_MARKERS);
+}
+function buildPageCaptureResult(input) {
+  const html = String(input.html || "");
+  const accessShell = classifyAccessShell(`${input.title}
+${html}`);
+  if (accessShell === "challenge") {
+    return {
+      ok: false,
+      failureCode: "challenge_page_detected",
+      failureMessage: "Page loaded but did not expose article content."
+    };
+  }
+  if (accessShell === "login") {
+    return {
+      ok: false,
+      failureCode: "login_required",
+      failureMessage: "Page loaded but still requires user sign-in or institutional access."
+    };
+  }
+  const lowered = html.toLowerCase();
+  const isPdfEmbedShell = hasAnyMarker(lowered, PDF_SHELL_MARKERS);
+  const hasMetadataSignals = hasAnyMarker(lowered, METADATA_MARKERS);
+  const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS) || lowered.includes("abstract");
+  const hasArticleSignals = hasMetadataSignals && hasBodySignals;
+  if (isPdfEmbedShell || !hasArticleSignals) {
+    return {
+      ok: false,
+      failureCode: "article_body_missing",
+      failureMessage: "Page loaded but no article body markers were detected."
+    };
+  }
+  return {
+    ok: true,
+    html,
+    payloadName: "paper.html",
+    sourceUrl: input.url,
+    pageTitle: input.title
+  };
+}
+async function downloadEpubArtifact(artifactUrl) {
+  const response = await fetch(artifactUrl, {
+    credentials: "include"
+  });
+  if (!response.ok) {
+    return {
+      ok: false,
+      failureCode: "artifact_download_missing",
+      failureMessage: `Browser page context could not download the EPUB artifact (${response.status}).`
+    };
+  }
+  return {
+    ok: true,
+    payloadBase64: arrayBufferToBase64(await response.arrayBuffer()),
+    payloadName: "paper.epub",
+    sourceUrl: artifactUrl
+  };
+}
+async function fetchXmlArtifact(candidateUrls) {
+  for (const candidate of candidateUrls.map((item) => String(item || "").trim()).filter(Boolean)) {
+    const response = await fetch(candidate, {
+      credentials: "include"
+    });
+    if (!response.ok) {
+      continue;
+    }
+    const text = await response.text();
+    const normalized = text.trim();
+    if (!normalized) {
+      continue;
+    }
+    if (!normalized.startsWith("<")) {
+      continue;
+    }
+    if (isLikelyHtmlDocument(normalized) || isLikelyChallengeOrLoginShell(normalized)) {
+      continue;
+    }
+    if (isLikelyStructuredArticleXml(normalized)) {
+      return {
+        ok: true,
+        payloadText: normalized,
+        payloadName: "paper.xml",
+        sourceUrl: candidate
+      };
+    }
+  }
+  return {
+    ok: false,
+    failureCode: "artifact_download_missing",
+    failureMessage: "Browser page context could not download an XML payload."
+  };
+}
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 32768;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
 }
 
 // src/lib/auth-bridge.ts
@@ -53,8 +367,109 @@ function shouldAcceptMdteroAuthMessage(event) {
   return isMdteroAuthTokenPayload(event.data);
 }
 
+// src/lib/bridge-wake.ts
+var BRIDGE_SUPPORTED_URL_PATTERNS = [
+  "arxiv.org",
+  "sciencedirect.com/science/article/pii/",
+  "link.springer.com",
+  "springer.com",
+  "springernature.com",
+  "onlinelibrary.wiley.com",
+  "tandfonline.com"
+];
+function isBridgeSupportedPage(url) {
+  const normalized = String(url || "").trim().toLowerCase();
+  return BRIDGE_SUPPORTED_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+function announceBridgePageReady(runtime, url) {
+  if (!runtime?.sendMessage || !url || !isBridgeSupportedPage(url)) {
+    return;
+  }
+  void runtime.sendMessage({
+    type: "mdtero.bridge.page_ready",
+    url
+  }).catch(() => {
+  });
+}
+
 // src/content.ts
+announceBridgePageReady(chrome.runtime, window.location.href);
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "mdtero.download_epub.request") {
+    downloadEpubArtifact(String(message.artifactUrl || "")).then((download) => sendResponse({ ok: true, download })).catch(
+      (error) => sendResponse({
+        ok: true,
+        download: {
+          ok: false,
+          failureCode: "artifact_download_missing",
+          failureMessage: error.message
+        }
+      })
+    );
+    return true;
+  }
+  if (message?.type === "mdtero.fetch_xml.request") {
+    const candidates = [
+      String(message.artifactUrl || ""),
+      String(message.sourceUrl || ""),
+      window.location.href
+    ].filter(Boolean);
+    fetchXmlArtifact(candidates).then((xml) => sendResponse({ ok: true, xml })).catch(
+      (error) => sendResponse({
+        ok: true,
+        xml: {
+          ok: false,
+          failureCode: "artifact_download_missing",
+          failureMessage: error.message
+        }
+      })
+    );
+    return true;
+  }
+  if (message?.type === "mdtero.capture_html.request") {
+    sendResponse({
+      ok: true,
+      capture: buildPageCaptureResult({
+        url: window.location.href,
+        title: document.title,
+        html: document.documentElement.outerHTML
+      })
+    });
+    return false;
+  }
+  if (message?.type === "mdtero.capture_current_tab.request") {
+    const html = document.documentElement.outerHTML;
+    const capture = buildPageCaptureResult({
+      url: window.location.href,
+      title: document.title,
+      html
+    });
+    const xmlCandidates = extractXmlCandidateUrls({
+      html,
+      pageUrl: window.location.href,
+      springerOpenAccessApiKey: String(message.springerOpenAccessApiKey || "")
+    });
+    if (xmlCandidates.length === 0) {
+      sendResponse({
+        ok: true,
+        capture
+      });
+      return false;
+    }
+    fetchXmlArtifact(xmlCandidates).then(
+      (xml) => sendResponse({
+        ok: true,
+        capture,
+        xml
+      })
+    ).catch(
+      () => sendResponse({
+        ok: true,
+        capture
+      })
+    );
+    return true;
+  }
   if (message?.type !== "mdtero.detect.request") {
     return false;
   }

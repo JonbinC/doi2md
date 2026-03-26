@@ -36,6 +36,7 @@ Use this repository when you specifically need the browser extension for local c
 - you are already reading a supported paper page locally
 - publisher-side acquisition must stay on the user machine
 - you want the fastest path to a local Markdown package and bundle download
+- you already have a local PDF or EPUB and want it to enter the same helper-first parse route
 
 PDF is optional input. The default handoff format remains the Markdown package.
 
@@ -82,5 +83,6 @@ Build output lives in [`extension/dist`](./extension/dist).
 - the extension and website are public clients; the production backend stays private
 - the extension does not need the website UI open to parse papers
 - local helper or extension should handle publisher-side local acquisition when required
+- permissions stay scoped to local downloads, supported paper tabs, native helper messaging, and the supported publisher/API host list
 - for the local helper, download the installer, inspect it locally, then run it
 - if repo responsibilities ever conflict, `JonbinC/mdtero` wins as product SSOT

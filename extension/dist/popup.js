@@ -1,7 +1,37 @@
 // src/lib/api.ts
+function buildHelperFirstParseBody(params) {
+  const body = new FormData();
+  body.set(params.fileField, params.file, params.filename);
+  if (params.sourceDoi) {
+    body.set("source_doi", params.sourceDoi);
+  }
+  if (params.sourceInput) {
+    body.set("source_input", params.sourceInput);
+  }
+  return body;
+}
+function fallbackArtifactFilename(artifact) {
+  if (artifact === "paper_bundle") return "paper_bundle.zip";
+  if (artifact === "paper_md") return "paper.md";
+  if (artifact === "paper_pdf") return "paper.pdf";
+  if (artifact === "paper_xml") return "paper.xml";
+  if (artifact === "translated_md") return "translated.md";
+  return `${artifact}.bin`;
+}
 function createApiClient(getSettings) {
-  async function request(path, init) {
+  async function requireSignedInSettings() {
     const settings = await getSettings();
+    if (!settings.token) {
+      throw new Error("Sign in required before parsing or translating.");
+    }
+    return settings;
+  }
+  function getRuntimeVersion() {
+    const runtimeVersion = globalThis.chrome?.runtime?.getManifest?.().version;
+    return runtimeVersion ? `extension-${runtimeVersion}` : "extension-dev";
+  }
+  async function request(path, init, options) {
+    const settings = options?.requireAuth ? await requireSignedInSettings() : await getSettings();
     const headers = new Headers(init?.headers ?? {});
     if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
@@ -9,12 +39,20 @@ function createApiClient(getSettings) {
     if (settings.token) {
       headers.set("Authorization", `Bearer ${settings.token}`);
     }
+    headers.set("X-Client-Channel", "extension");
+    headers.set("X-Client-Version", getRuntimeVersion());
     const response = await fetch(`${settings.apiBaseUrl}${path}`, {
       ...init,
       headers
     });
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`);
+      const detail = await response.clone().json().then((payload) => {
+        if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
+          return payload.detail.trim();
+        }
+        return "";
+      }).catch(() => "");
+      throw new Error(detail || `API request failed: ${response.status}`);
     }
     return response;
   }
@@ -35,17 +73,31 @@ function createApiClient(getSettings) {
         body: JSON.stringify(payload)
       }).then((response) => response.json());
     },
+    loginWithPassword(payload) {
+      return request("/auth/password/login", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }).then((response) => response.json());
+    },
     getUsage() {
-      return request("/me/usage").then((response) => response.json());
+      return request("/me/usage", void 0, { requireAuth: true }).then((response) => response.json());
+    },
+    getParserV2ShadowDiagnostics() {
+      return request("/diagnostics/parser-v2/shadow", void 0, { requireAuth: true }).then(
+        (response) => response.json()
+      );
+    },
+    getClientConfig() {
+      return request("/client-config").then((response) => response.json());
     },
     getMyTasks() {
-      return request("/me/tasks").then((response) => response.json());
+      return request("/me/tasks", void 0, { requireAuth: true }).then((response) => response.json());
     },
     createParseTask(payload) {
       return request("/tasks/parse", {
         method: "POST",
         body: JSON.stringify(payload)
-      }).then((response) => response.json());
+      }, { requireAuth: true }).then((response) => response.json());
     },
     createUploadedParseTask(payload) {
       const body = new FormData();
@@ -59,25 +111,79 @@ function createApiClient(getSettings) {
       return request("/tasks/parse-upload", {
         method: "POST",
         body
-      }).then((response) => response.json());
+      }, { requireAuth: true }).then((response) => response.json());
+    },
+    createParseFulltextV2Task(payload) {
+      const body = buildHelperFirstParseBody({
+        fileField: "fulltext_file",
+        file: payload.fulltextFile,
+        filename: payload.filename ?? "paper.fulltext",
+        sourceDoi: payload.sourceDoi,
+        sourceInput: payload.sourceInput
+      });
+      return request("/tasks/parse-fulltext-v2", {
+        method: "POST",
+        body
+      }, { requireAuth: true }).then((response) => response.json());
+    },
+    createParseHelperBundleV2Task(payload) {
+      const body = buildHelperFirstParseBody({
+        fileField: "helper_bundle",
+        file: payload.helperBundleFile,
+        filename: payload.filename ?? "helper-bundle.zip",
+        sourceDoi: payload.sourceDoi,
+        sourceInput: payload.sourceInput
+      });
+      if (payload.pdfEngine) {
+        body.set("pdf_engine", payload.pdfEngine);
+      }
+      return request("/tasks/parse-helper-bundle-v2", {
+        method: "POST",
+        body
+      }, { requireAuth: true }).then((response) => response.json());
     },
     createTranslateTask(payload) {
       return request("/tasks/translate", {
         method: "POST",
         body: JSON.stringify(payload)
-      }).then((response) => response.json());
+      }, { requireAuth: true }).then((response) => response.json());
     },
     getTask(taskId) {
-      return request(`/tasks/${taskId}`).then((response) => response.json());
+      return request(`/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
     },
     downloadArtifact(taskId, artifact) {
-      return request(`/tasks/${taskId}/download/${artifact}`).then(async (response) => ({
+      return request(`/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
-        filename: extractFilename(response.headers.get("Content-Disposition"), `${artifact}.bin`),
+        filename: extractFilename(response.headers.get("Content-Disposition"), fallbackArtifactFilename(artifact)),
         mediaType: response.headers.get("Content-Type") ?? "application/octet-stream"
       }));
     }
   };
+}
+
+// src/lib/download.ts
+var defaultDeps = {
+  createObjectURL(blob) {
+    return URL.createObjectURL(blob);
+  },
+  revokeObjectURL(url) {
+    URL.revokeObjectURL(url);
+  },
+  createAnchor() {
+    return document.createElement("a");
+  }
+};
+function triggerBlobDownload(blob, filename, deps = defaultDeps) {
+  const objectUrl = deps.createObjectURL(blob);
+  try {
+    const anchor = deps.createAnchor();
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.click();
+    anchor.remove?.();
+  } finally {
+    deps.revokeObjectURL(objectUrl);
+  }
 }
 
 // src/lib/elsevier.ts
@@ -112,12 +218,31 @@ function requiresElsevierLocalAcquire(input) {
 }
 
 // src/lib/runtime.ts
-function createParseMessage(input, elsevierApiKey) {
-  return {
+function createParseMessage(input, elsevierApiKey, pageContext) {
+  const message = {
     type: "mdtero.parse.request",
-    input,
-    elsevierApiKey
+    input
   };
+  if (elsevierApiKey) {
+    message.elsevierApiKey = elsevierApiKey;
+  }
+  if (pageContext) {
+    message.pageContext = pageContext;
+  }
+  return message;
+}
+function createFileParseMessage(file, artifactKind, pdfEngine) {
+  const message = {
+    type: "mdtero.parse.file.request",
+    file,
+    filename: file.name,
+    mediaType: file.type,
+    artifactKind
+  };
+  if (artifactKind === "pdf" && pdfEngine) {
+    message.pdfEngine = pdfEngine;
+  }
+  return message;
 }
 function createTranslateMessage(sourceMarkdownPath, targetLanguage, mode) {
   return {
@@ -154,6 +279,7 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     elsevierApiKey: current.elsevierApiKey,
+    springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
 }
@@ -177,6 +303,39 @@ async function writeRecentTasks(next) {
 function upsertRecentTasks(current, next, limit = 5) {
   const deduped = current.filter((item) => item.input !== next.input);
   return [next, ...deduped].slice(0, limit);
+}
+function getPendingPopupTask(state, detectedInput) {
+  if (!state || state.input !== detectedInput || !state.pendingTaskId || !state.pendingTaskKind) {
+    return void 0;
+  }
+  return {
+    taskId: state.pendingTaskId,
+    kind: state.pendingTaskKind
+  };
+}
+function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkdownPath) {
+  if (!state || state.input !== detectedInput || state.pendingTaskKind !== "translate" || !state.pendingTaskId || state.parseMarkdownPath !== parseMarkdownPath) {
+    return void 0;
+  }
+  return {
+    taskId: state.pendingTaskId,
+    kind: "translate"
+  };
+}
+
+// src/lib/bridge-wake.ts
+var BRIDGE_SUPPORTED_URL_PATTERNS = [
+  "arxiv.org",
+  "sciencedirect.com/science/article/pii/",
+  "link.springer.com",
+  "springer.com",
+  "springernature.com",
+  "onlinelibrary.wiley.com",
+  "tandfonline.com"
+];
+function isBridgeSupportedPage(url) {
+  const normalized = String(url || "").trim().toLowerCase();
+  return BRIDGE_SUPPORTED_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 
 // src/popup/task-view.ts
@@ -268,6 +427,73 @@ function getActionStatusText(kind, language = "en") {
   }
   return "Something went wrong. Please try again.";
 }
+function getUsageStatusText(usage, language = "en", errorMessage) {
+  if (errorMessage?.trim()) {
+    return errorMessage.trim();
+  }
+  const wallet = usage?.wallet_balance_display?.trim() || (language === "zh" ? "\xA50.00" : "$0.00");
+  const parse = Number.isFinite(usage?.parse_quota_remaining) ? Number(usage?.parse_quota_remaining) : 0;
+  const translation = Number.isFinite(usage?.translation_quota_remaining) ? Number(usage?.translation_quota_remaining) : 0;
+  return language === "zh" ? `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}` : `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`;
+}
+function getBridgeStatusText(status, language = "en") {
+  const state = String(status?.state || "").trim().toLowerCase();
+  const runnerState = String(status?.runnerState || "").trim().toLowerCase();
+  if (language === "zh") {
+    if (state === "connected" && runnerState === "busy") {
+      return "\u672C\u5730 helper \u5DF2\u8FDE\u63A5\uFF0C\u6B63\u5728\u5904\u7406\u6D4F\u89C8\u5668\u4EFB\u52A1\u3002";
+    }
+    if (state === "connected") {
+      return "\u672C\u5730 helper \u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5904\u7406\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002";
+    }
+    if (state === "disconnected") {
+      return "\u672C\u5730 helper \u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero-local \u6216\u91CD\u8F7D\u6269\u5C55\u3002";
+    }
+    if (state === "unavailable") {
+      return "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730 helper\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u52A8 mdtero-local\u3002";
+    }
+    return "\u672C\u5730 helper \u72B6\u6001\u672A\u77E5\u3002";
+  }
+  if (state === "connected" && runnerState === "busy") {
+    return "Local helper is connected and handling a browser task.";
+  }
+  if (state === "connected") {
+    return "Local helper ready for browser-assisted capture.";
+  }
+  if (state === "disconnected") {
+    return "Local helper disconnected. Restart mdtero-local or reload the extension.";
+  }
+  if (state === "unavailable") {
+    return "Local helper not detected. Install or start mdtero-local.";
+  }
+  return "Local helper status unknown.";
+}
+function getPreflightHintText(params, language = "en") {
+  const input = String(params.input || "").trim();
+  const pageUrl = String(params.pageUrl || "").trim();
+  const bridgeState = String(params.bridgeStatus?.state || "").trim().toLowerCase();
+  const bridgeReady = bridgeState === "connected";
+  const bridgeMissing = bridgeState === "unavailable" || bridgeState === "disconnected";
+  const candidate = pageUrl || input;
+  const livePageSupported = isBridgeSupportedPage(candidate);
+  const looksLikePdfShell = candidate.includes("/pdf") || candidate.includes("/epdf") || candidate.includes("download=true") || candidate.includes("/epub/");
+  if (looksLikePdfShell) {
+    return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\uFF0C\u518D\u8FDB\u884C\u672C\u5730\u6293\u53D6\u3002" : "This looks like a PDF/EPUB page. Open the HTML full-text page first for better local capture.";
+  }
+  if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
+    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u8BF7\u5148\u5728\u8BBE\u7F6E\u91CC\u586B\u5199 Elsevier API Key\u3002" : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first.";
+  }
+  if (!livePageSupported) {
+    return "";
+  }
+  if (bridgeMissing) {
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\uFF0C\u4F46\u8FD8\u6CA1\u68C0\u6D4B\u5230 helper\u3002\u8BF7\u5148\u542F\u52A8 `mdtero-local`\u3002" : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero-local` first.";
+  }
+  if (bridgeReady) {
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5DF2\u6EE1\u8DB3\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\u6761\u4EF6\uFF0C\u53EF\u4F18\u5148\u8D70 helper-first \u91C7\u96C6\u3002" : "This page is ready for browser-managed local capture through the helper-first path.";
+  }
+  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4 helper \u5DF2\u8FDE\u63A5\u3002" : "This page supports browser-managed local capture. Confirm the local helper is connected before parsing.";
+}
 function getSavedResultSummary(state, language = "en") {
   const filename = state?.translatedFilename ?? state?.parseFilename;
   if (!filename) {
@@ -275,20 +501,43 @@ function getSavedResultSummary(state, language = "en") {
   }
   return language === "zh" ? `\u5DF2\u5C31\u7EEA\uFF1A${filename}` : `Ready: ${filename}`;
 }
+function getResultWarningText(result, language = "en") {
+  if (!result) {
+    return "";
+  }
+  if (result.warning_code === "elsevier_abstract_only") {
+    return language === "zh" ? "Elsevier \u4EC5\u8FD4\u56DE\u4E86\u6458\u8981\u3002\u8BF7\u786E\u8BA4\u4F60\u5F53\u524D\u662F\u5426\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u73AF\u5883\u3002" : "Elsevier only returned the abstract. Are you on a campus or institutional network IP?";
+  }
+  return result.warning_message ?? "";
+}
 
 // src/popup/index.ts
 var COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Markdown-first paper workflow",
+    subtitle: "Helper-first local paper workflow",
     guest: "Guest mode",
     signedIn: (email) => email,
-    credits: (amount) => `Credits: ${amount}`,
+    usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
     signInHint: "Sign in to unlock parse bundles and translation.",
     freeHint: "PDF/XML free",
-    supportSummary: "One extension flow for publisher pages, preprints, and Markdown-ready outputs.",
-    inputLabel: "DOI or supported page",
+    supportSummary: "Browser-managed local capture for helper-first publisher routes, preprints, and Markdown-ready outputs.",
+    supportStableTitle: "Stable mainline",
+    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.",
+    supportShadowTitle: "Bridge-assisted",
+    supportShadowItems: "Springer subscription pages already use helper + browser capture when a live HTML page is available.",
+    supportExperimentalTitle: "Experimental",
+    supportExperimentalItems: "Wiley and Taylor & Francis are available through helper + browser capture, but blocked-page variance is still higher.",
+    inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
+    fileIntakeTitle: "Local file intake",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB and want the same Markdown package flow.",
+    pickPdfButton: "Use PDF",
+    pickEpubButton: "Use EPUB",
+    fileNameEmpty: "No local file selected.",
+    pdfEngineLabel: "PDF engine",
+    localFileParsing: (filename) => `Uploading ${filename} for helper-first parsing...`,
+    localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
     parsingButton: "Parsing...",
     settingsButton: "Settings",
@@ -324,15 +573,29 @@ var COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "\u9762\u5411 Markdown \u7684\u8BBA\u6587\u5DE5\u4F5C\u6D41",
+    subtitle: "helper-first \u672C\u5730\u8BBA\u6587\u5DE5\u4F5C\u6D41",
     guest: "\u6E38\u5BA2\u6A21\u5F0F",
     signedIn: (email) => email,
-    credits: (amount) => `\u989D\u5EA6\uFF1A${amount}`,
+    usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
     signInHint: "\u767B\u5F55\u540E\u53EF\u4F7F\u7528\u538B\u7F29\u5305\u89E3\u6790\u548C\u7FFB\u8BD1\u3002",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u4E00\u4E2A\u6269\u5C55\u754C\u9762\uFF0C\u540C\u65F6\u8986\u76D6\u51FA\u7248\u793E\u9875\u9762\u3001\u9884\u5370\u672C\u4E0E Markdown \u5C31\u7EEA\u4EA7\u7269\u3002",
-    inputLabel: "DOI \u6216\u5F53\u524D\u9875\u9762",
+    supportSummary: "\u4F5C\u4E3A helper-first \u6D41\u7A0B\u91CC\u7684\u6D4F\u89C8\u5668\u4FA7\u6293\u53D6\u5165\u53E3\uFF0C\u8986\u76D6\u51FA\u7248\u793E\u9875\u9762\u3001\u9884\u5370\u672C\u4E0E Markdown \u5C31\u7EEA\u4EA7\u7269\u3002",
+    supportStableTitle: "\u7A33\u5B9A\u4E3B\u7EBF",
+    supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access\uFF0C\u4EE5\u53CA\u5E26\u6709\u4F60\u672C\u5730\u6743\u9650\u7684 Elsevier\u3002",
+    supportShadowTitle: "\u6D4F\u89C8\u5668\u534F\u540C",
+    supportShadowItems: "Springer \u8BA2\u9605\u9875\u5DF2\u7ECF\u53EF\u4EE5\u5728\u5B9E\u65F6 HTML \u9875\u9762\u6761\u4EF6\u4E0B\u8D70 helper + \u6D4F\u89C8\u5668\u6293\u53D6\u3002",
+    supportExperimentalTitle: "\u5B9E\u9A8C\u652F\u6301",
+    supportExperimentalItems: "Wiley \u4E0E Taylor & Francis \u5DF2\u53EF\u901A\u8FC7 helper + \u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u4F46\u88AB challenge \u6216\u6743\u9650\u9875\u62E6\u4F4F\u7684\u6CE2\u52A8\u4ECD\u66F4\u9AD8\u3002",
+    inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
+    fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
+    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF \u6216 EPUB\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u6253\u5305\u94FE\u3002",
+    pickPdfButton: "\u9009\u62E9 PDF",
+    pickEpubButton: "\u9009\u62E9 EPUB",
+    fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
+    pdfEngineLabel: "PDF \u5F15\u64CE",
+    localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u5E76\u8D70 helper-first \u89E3\u6790...`,
+    localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
     parsingButton: "\u89E3\u6790\u4E2D...",
     settingsButton: "\u8BBE\u7F6E",
@@ -372,12 +635,28 @@ var subtitleEl = document.querySelector("#app-subtitle");
 var languageToggleEl = document.querySelector("#language-toggle");
 var accountEmailEl = document.querySelector("#account-email");
 var usageStatusEl = document.querySelector("#usage-status");
+var helperStatusEl = document.querySelector("#helper-status");
 var freeHintEl = document.querySelector("#free-hint");
 var supportSummaryEl = document.querySelector("#support-summary");
+var supportStableTitleEl = document.querySelector("#support-stable-title");
+var supportStableItemsEl = document.querySelector("#support-stable-items");
+var supportShadowTitleEl = document.querySelector("#support-shadow-title");
+var supportShadowItemsEl = document.querySelector("#support-shadow-items");
+var supportExperimentalTitleEl = document.querySelector("#support-experimental-title");
+var supportExperimentalItemsEl = document.querySelector("#support-experimental-items");
 var inputLabelEl = document.querySelector("#paper-input-label");
 var inputEl = document.querySelector("#paper-input");
 var statusEl = document.querySelector("#status");
+var preflightHintEl = document.querySelector("#preflight-hint");
 var campusHintEl = document.querySelector("#campus-hint");
+var fileIntakeTitleEl = document.querySelector("#file-intake-title");
+var fileIntakeNoteEl = document.querySelector("#file-intake-note");
+var pickPdfButton = document.querySelector("#pick-pdf-button");
+var pickEpubButton = document.querySelector("#pick-epub-button");
+var localFileInputEl = document.querySelector("#local-file-input");
+var localFileNameEl = document.querySelector("#local-file-name");
+var pdfEngineLabelEl = document.querySelector("#pdf-engine-label");
+var pdfEngineSelectEl = document.querySelector("#pdf-engine-select");
 var parseButton = document.querySelector("#parse-button");
 var openSettingsButton = document.querySelector("#open-settings");
 var translateLanguageLabelEl = document.querySelector("#translate-language-label");
@@ -399,6 +678,8 @@ var currentInput = null;
 var uiLanguage = "en";
 var isParsing = false;
 var isTranslating = false;
+var detectedPageContext = null;
+var currentBridgeStatus = null;
 function copyFor(language) {
   return COPY[language];
 }
@@ -412,8 +693,30 @@ function setStatus(message) {
     statusEl.textContent = message;
   }
 }
+function setPreflightHint(message) {
+  if (preflightHintEl) {
+    preflightHintEl.textContent = message;
+    preflightHintEl.hidden = !message.trim();
+  }
+}
 function getCurrentCopy() {
   return copyFor(uiLanguage);
+}
+async function updatePreflightHint() {
+  const settings = await readSettings();
+  const input = inputEl?.value.trim() || currentInput || "";
+  const pageUrl = detectedPageContext?.tabUrl || "";
+  setPreflightHint(
+    getPreflightHintText(
+      {
+        input,
+        pageUrl,
+        bridgeStatus: currentBridgeStatus,
+        hasElsevierApiKey: Boolean(settings.elsevierApiKey)
+      },
+      uiLanguage
+    )
+  );
 }
 function toggleLanguageLabel(language) {
   return language === "en" ? "\u4E2D\u6587" : "EN";
@@ -440,12 +743,7 @@ function createRecentTaskSummary(state) {
 async function saveArtifact(taskId, artifactKey) {
   try {
     const artifact = await client.downloadArtifact(taskId, artifactKey);
-    const objectUrl = URL.createObjectURL(artifact.blob);
-    chrome.downloads.download({
-      url: objectUrl,
-      filename: artifact.filename,
-      saveAs: true
-    });
+    triggerBlobDownload(artifact.blob, artifact.filename);
   } catch {
     setResult(getCurrentCopy().downloadFailed);
   }
@@ -458,8 +756,22 @@ function applyLanguage() {
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (freeHintEl) freeHintEl.textContent = copy.freeHint;
   if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
+  if (supportStableTitleEl) supportStableTitleEl.textContent = copy.supportStableTitle;
+  if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
+  if (supportShadowTitleEl) supportShadowTitleEl.textContent = copy.supportShadowTitle;
+  if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
+  if (supportExperimentalTitleEl) supportExperimentalTitleEl.textContent = copy.supportExperimentalTitle;
+  if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
+  if (fileIntakeTitleEl) fileIntakeTitleEl.textContent = copy.fileIntakeTitle;
+  if (fileIntakeNoteEl) fileIntakeNoteEl.textContent = copy.fileIntakeNote;
+  if (pickPdfButton) pickPdfButton.textContent = copy.pickPdfButton;
+  if (pickEpubButton) pickEpubButton.textContent = copy.pickEpubButton;
+  if (pdfEngineLabelEl) pdfEngineLabelEl.textContent = copy.pdfEngineLabel;
+  if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
+    localFileNameEl.textContent = copy.fileNameEmpty;
+  }
   if (campusHintEl) campusHintEl.textContent = copy.campusHint;
   if (translateLanguageLabelEl) translateLanguageLabelEl.textContent = copy.translateLabel;
   if (sourceFilesSummaryEl) sourceFilesSummaryEl.textContent = copy.sourceFiles;
@@ -511,6 +823,15 @@ function renderActionButtons() {
   if (parseButton) {
     parseButton.textContent = isParsing ? copy.parsingButton : copy.parseButton;
     parseButton.disabled = isParsing;
+  }
+  if (pickPdfButton) {
+    pickPdfButton.disabled = isParsing;
+  }
+  if (pickEpubButton) {
+    pickEpubButton.disabled = isParsing;
+  }
+  if (pdfEngineSelectEl) {
+    pdfEngineSelectEl.disabled = isParsing;
   }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
@@ -581,7 +902,9 @@ async function persistPopupState(task) {
     parseFilename: task.result.artifacts.paper_bundle?.filename ?? previous?.parseFilename,
     parseMarkdownPath: task.result.artifacts.paper_md?.path ?? previous?.parseMarkdownPath,
     translatedTaskId: task.result.artifacts.translated_md ? task.task_id : previous?.translatedTaskId,
-    translatedFilename: task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename
+    translatedFilename: task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename,
+    pendingTaskId: void 0,
+    pendingTaskKind: void 0
   };
   await writePopupState(nextState);
   const summary = createRecentTaskSummary(nextState);
@@ -658,6 +981,15 @@ async function hydrateSavedState(detectedInput) {
   if (!savedState || savedState.input !== detectedInput) {
     return;
   }
+  const pendingTask = getPendingPopupTask(savedState, detectedInput);
+  if (pendingTask) {
+    isParsing = pendingTask.kind === "parse";
+    isTranslating = pendingTask.kind === "translate";
+    renderActionButtons();
+    setResult(getActionStatusText(pendingTask.kind === "parse" ? "running_parse" : "running_translate", uiLanguage));
+    void pollTask(pendingTask.taskId, pendingTask.kind);
+    return;
+  }
   const summary = getSavedResultSummary(savedState, uiLanguage);
   if (summary) {
     setResult(summary);
@@ -674,6 +1006,15 @@ async function pollTask(taskId, kind) {
     setResult(response?.error ?? getCurrentCopy().parseFailed);
     isParsing = false;
     isTranslating = false;
+    if (currentInput) {
+      const previous = await readPopupState();
+      await writePopupState({
+        ...previous ?? { input: currentInput },
+        input: currentInput,
+        pendingTaskId: void 0,
+        pendingTaskKind: void 0
+      });
+    }
     renderActionButtons();
     return;
   }
@@ -684,6 +1025,15 @@ async function pollTask(taskId, kind) {
       isParsing = false;
     } else {
       isTranslating = false;
+    }
+    if (currentInput) {
+      const previous = await readPopupState();
+      await writePopupState({
+        ...previous ?? { input: currentInput },
+        input: currentInput,
+        pendingTaskId: void 0,
+        pendingTaskKind: void 0
+      });
     }
     renderActionButtons();
     return;
@@ -704,8 +1054,11 @@ async function pollTask(taskId, kind) {
   if (kind === "parse") {
     isParsing = false;
     const filename = task.result?.artifacts?.paper_bundle?.filename;
+    const warningText = getResultWarningText(task.result, uiLanguage);
     if (filename) {
-      setResult(getCurrentCopy().parseReady(filename));
+      setResult([getCurrentCopy().parseReady(filename), warningText].filter(Boolean).join(" "));
+    } else if (warningText) {
+      setResult(warningText);
     }
   } else {
     isTranslating = false;
@@ -730,21 +1083,39 @@ async function refreshUsage() {
   try {
     const usage = await client.getUsage();
     if (usageStatusEl) {
-      usageStatusEl.textContent = getCurrentCopy().credits(usage.credit_balance);
+      usageStatusEl.textContent = getUsageStatusText(usage, uiLanguage);
     }
     if (accountEmailEl && usage.email) {
       accountEmailEl.textContent = getCurrentCopy().signedIn(usage.email);
     }
-  } catch {
+  } catch (error) {
     if (usageStatusEl) {
-      usageStatusEl.textContent = getCurrentCopy().signInHint;
+      usageStatusEl.textContent = getUsageStatusText(null, uiLanguage, error.message);
     }
   }
+}
+async function refreshBridgeStatus() {
+  if (!helperStatusEl) {
+    return;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "mdtero.bridge.status"
+    });
+    currentBridgeStatus = response?.result ?? null;
+    helperStatusEl.textContent = getBridgeStatusText(currentBridgeStatus, uiLanguage);
+  } catch {
+    currentBridgeStatus = null;
+    helperStatusEl.textContent = getBridgeStatusText(void 0, uiLanguage);
+  }
+  await updatePreflightHint();
 }
 async function detectCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     setStatus(getCurrentCopy().noActiveTab);
+    detectedPageContext = null;
+    await updatePreflightHint();
     return;
   }
   try {
@@ -753,18 +1124,89 @@ async function detectCurrentTab() {
     if (response?.detected?.value && inputEl) {
       inputEl.value = response.detected.value;
       currentInput = response.detected.value;
+      detectedPageContext = {
+        tabId: tab.id,
+        tabUrl: tab.url,
+        detectedInput: response.detected.value
+      };
       setStatus(getCurrentCopy().detected(response.detected.kind));
+      await updatePreflightHint();
       await hydrateSavedState(response.detected.value);
       return;
     }
   } catch {
   }
+  detectedPageContext = null;
   setStatus(getCurrentCopy().noDoi);
+  await updatePreflightHint();
+}
+async function resolveParsePageContext(input) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    return void 0;
+  }
+  const activeTabUrl = String(tab.url || "").trim();
+  if (activeTabUrl && activeTabUrl === input) {
+    return {
+      tabId: tab.id,
+      tabUrl: activeTabUrl
+    };
+  }
+  if (detectedPageContext && detectedPageContext.tabId === tab.id && detectedPageContext.detectedInput === input) {
+    return {
+      tabId: detectedPageContext.tabId,
+      tabUrl: detectedPageContext.tabUrl || activeTabUrl
+    };
+  }
+  return void 0;
 }
 async function initializeLanguage() {
   const settings = await readSettings();
   uiLanguage = resolveUiLanguage(settings.uiLanguage, globalThis.navigator?.language);
   applyLanguage();
+}
+function setLocalFileName(filename) {
+  if (!localFileNameEl) {
+    return;
+  }
+  const trimmed = String(filename || "").trim();
+  localFileNameEl.dataset.selectedName = trimmed;
+  localFileNameEl.textContent = trimmed || getCurrentCopy().fileNameEmpty;
+}
+async function submitLocalFile(file, artifactKind) {
+  currentInput = file.name;
+  detectedPageContext = null;
+  setLocalFileName(file.name);
+  isParsing = true;
+  renderActionButtons();
+  setResult(getCurrentCopy().localFileParsing(file.name));
+  const settings = await readSettings();
+  if (!settings.token) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(getCurrentCopy().signInHint);
+    return;
+  }
+  const response = await chrome.runtime.sendMessage(
+    createFileParseMessage(
+      file,
+      artifactKind,
+      artifactKind === "pdf" ? pdfEngineSelectEl?.value : void 0
+    )
+  );
+  if (!response?.ok) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(response?.error ?? getCurrentCopy().localFileParseFailed);
+    return;
+  }
+  await writePopupState({
+    ...await readPopupState(),
+    input: file.name,
+    pendingTaskId: response.result.task_id,
+    pendingTaskKind: "parse"
+  });
+  void pollTask(response.result.task_id, "parse");
 }
 parseButton?.addEventListener("click", async () => {
   if (isParsing) {
@@ -780,6 +1222,12 @@ parseButton?.addEventListener("click", async () => {
   renderActionButtons();
   setResult(getActionStatusText("queued_parse", uiLanguage));
   const settings = await readSettings();
+  if (!settings.token) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(getCurrentCopy().signInHint);
+    return;
+  }
   if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
     isParsing = false;
     renderActionButtons();
@@ -789,13 +1237,22 @@ parseButton?.addEventListener("click", async () => {
     }, 2e3);
     return;
   }
-  const response = await chrome.runtime.sendMessage(createParseMessage(input, settings.elsevierApiKey));
+  const pageContext = await resolveParsePageContext(input);
+  const response = await chrome.runtime.sendMessage(
+    createParseMessage(input, settings.elsevierApiKey, pageContext)
+  );
   if (!response?.ok) {
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().parseFailed);
     return;
   }
+  await writePopupState({
+    ...await readPopupState(),
+    input,
+    pendingTaskId: response.result.task_id,
+    pendingTaskKind: "parse"
+  });
   void pollTask(response.result.task_id, "parse");
 });
 translateButton?.addEventListener("click", async () => {
@@ -804,6 +1261,19 @@ translateButton?.addEventListener("click", async () => {
   }
   if (!lastParsedMarkdownPath) {
     setResult(getCurrentCopy().translateFirst);
+    return;
+  }
+  const previous = await readPopupState();
+  const reconnectableTask = getReconnectablePendingTranslationTask(
+    previous,
+    currentInput ?? "",
+    lastParsedMarkdownPath
+  );
+  if (reconnectableTask) {
+    isTranslating = true;
+    renderActionButtons();
+    setResult(getActionStatusText("running_translate", uiLanguage));
+    void pollTask(reconnectableTask.taskId, "translate");
     return;
   }
   isTranslating = true;
@@ -822,10 +1292,46 @@ translateButton?.addEventListener("click", async () => {
     setResult(response?.error ?? getCurrentCopy().translationFailed);
     return;
   }
+  await writePopupState({
+    ...await readPopupState(),
+    input: currentInput ?? "",
+    parseMarkdownPath: lastParsedMarkdownPath,
+    pendingTaskId: response.result.task_id,
+    pendingTaskKind: "translate"
+  });
   void pollTask(response.result.task_id, "translate");
 });
 openSettingsButton?.addEventListener("click", () => {
   void chrome.runtime.openOptionsPage();
+});
+inputEl?.addEventListener("input", () => {
+  currentInput = inputEl.value.trim() || currentInput;
+  void updatePreflightHint();
+});
+pickPdfButton?.addEventListener("click", () => {
+  if (!localFileInputEl) {
+    return;
+  }
+  localFileInputEl.accept = ".pdf,application/pdf";
+  localFileInputEl.dataset.artifactKind = "pdf";
+  localFileInputEl.click();
+});
+pickEpubButton?.addEventListener("click", () => {
+  if (!localFileInputEl) {
+    return;
+  }
+  localFileInputEl.accept = ".epub,application/epub+zip";
+  localFileInputEl.dataset.artifactKind = "epub";
+  localFileInputEl.click();
+});
+localFileInputEl?.addEventListener("change", () => {
+  const file = localFileInputEl.files?.[0];
+  const artifactKind = localFileInputEl.dataset.artifactKind === "epub" ? "epub" : "pdf";
+  if (!file) {
+    return;
+  }
+  void submitLocalFile(file, artifactKind);
+  localFileInputEl.value = "";
 });
 languageToggleEl?.addEventListener("click", async () => {
   uiLanguage = uiLanguage === "en" ? "zh" : "en";
@@ -836,6 +1342,7 @@ languageToggleEl?.addEventListener("click", async () => {
   });
   applyLanguage();
   await refreshUsage();
+  await refreshBridgeStatus();
   await renderRecentTasks();
   const savedState = await readPopupState();
   const summary = getSavedResultSummary(savedState, uiLanguage);
@@ -845,12 +1352,15 @@ languageToggleEl?.addEventListener("click", async () => {
   if (!currentInput) {
     await detectCurrentTab();
   }
+  await updatePreflightHint();
 });
 void (async () => {
   await initializeLanguage();
   await refreshUsage();
+  await refreshBridgeStatus();
   await renderRecentTasks();
   renderActionButtons();
   await detectCurrentTab();
+  await updatePreflightHint();
 })();
 //# sourceMappingURL=popup.js.map

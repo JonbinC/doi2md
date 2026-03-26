@@ -8,6 +8,7 @@ export interface MdteroSettings {
   email?: string;
   uiLanguage?: UiLanguage;
   elsevierApiKey?: string;
+  springerOpenAccessApiKey?: string;
 }
 
 export interface PopupState {
@@ -17,6 +18,8 @@ export interface PopupState {
   parseMarkdownPath?: string;
   translatedTaskId?: string;
   translatedFilename?: string;
+  pendingTaskId?: string;
+  pendingTaskKind?: "parse" | "translate";
 }
 
 export interface RecentTaskSummary {
@@ -60,6 +63,7 @@ export async function readSettings(): Promise<MdteroSettings> {
     token: current.token,
     email: current.email,
     elsevierApiKey: current.elsevierApiKey,
+    springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
 }
@@ -104,4 +108,38 @@ export function summarizePopupState(
   }
   const { input: _input, parseMarkdownPath: _parseMarkdownPath, ...summary } = state;
   return summary;
+}
+
+export function getPendingPopupTask(
+  state: PopupState | undefined,
+  detectedInput: string
+): { taskId: string; kind: "parse" | "translate" } | undefined {
+  if (!state || state.input !== detectedInput || !state.pendingTaskId || !state.pendingTaskKind) {
+    return undefined;
+  }
+  return {
+    taskId: state.pendingTaskId,
+    kind: state.pendingTaskKind
+  };
+}
+
+export function getReconnectablePendingTranslationTask(
+  state: PopupState | undefined,
+  detectedInput: string,
+  parseMarkdownPath: string
+): { taskId: string; kind: "translate" } | undefined {
+  if (
+    !state ||
+    state.input !== detectedInput ||
+    state.pendingTaskKind !== "translate" ||
+    !state.pendingTaskId ||
+    state.parseMarkdownPath !== parseMarkdownPath
+  ) {
+    return undefined;
+  }
+
+  return {
+    taskId: state.pendingTaskId,
+    kind: "translate"
+  };
 }

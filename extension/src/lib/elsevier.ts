@@ -35,6 +35,14 @@ export function requiresElsevierLocalAcquire(input: string): boolean {
   return normalizeElsevierInput(input) !== null;
 }
 
+export function buildElsevierLocalAcquireGuidance(): string {
+  return [
+    "This Elsevier or ScienceDirect paper needs local acquisition in your browser first.",
+    "Add your Elsevier API key in Mdtero extension settings, then retry.",
+    "If Elsevier only returns the abstract, check whether this machine is on a campus or institutional network IP."
+  ].join(" ");
+}
+
 export async function fetchElsevierXml(input: string, apiKey: string) {
   const identifier = normalizeElsevierInput(input);
   if (!identifier) {

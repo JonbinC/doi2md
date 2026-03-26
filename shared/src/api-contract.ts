@@ -33,7 +33,28 @@ export interface PasswordResetRequest {
 
 export interface ParseTaskRequest {
   input: string;
-  elsevier_api_key?: string;
+}
+
+export interface ParseTaskResponse {
+  task_id: string;
+  status: string;
+}
+
+export interface ParseFulltextV2Request {
+  fulltextFile: Blob;
+  filename?: string;
+  sourceDoi?: string;
+  sourceInput?: string;
+}
+
+export type PdfEngine = "grobid" | "docling" | "mineru";
+
+export interface ParseHelperBundleV2Request {
+  helperBundleFile: Blob;
+  filename?: string;
+  sourceDoi?: string;
+  sourceInput?: string;
+  pdfEngine?: PdfEngine;
 }
 
 export interface TranslateTaskRequest {
@@ -69,10 +90,31 @@ export interface TaskRecord {
   error_message?: string | null;
 }
 
+export interface ParserV2ShadowConnectorSnapshot {
+  connector: string;
+  preset_available?: boolean;
+  flag?: string | null;
+  enabled: boolean;
+  entrypoint?: string | null;
+  acquisition_mode?: string | null;
+  priority: number;
+}
+
+export interface ParserV2ShadowDiagnostics {
+  aggregate: {
+    connectors_total: number;
+    enabled_total: number;
+  };
+  connectors: ParserV2ShadowConnectorSnapshot[];
+}
+
 export type CheckoutProductCode =
   | "standard"
   | "pro"
-  | "translation_addon";
+  | "translation_addon"
+  | "recharge_small"
+  | "recharge_medium"
+  | "recharge_large";
 
 export interface CheckoutSessionRequest {
   product_code: CheckoutProductCode;

@@ -1,9 +1,19 @@
 import type { TaskRecord } from "@mdtero/shared";
 
 import { createApiClient } from "../lib/api";
+import { triggerBlobDownload } from "../lib/download";
 import { requiresElsevierLocalAcquire } from "../lib/elsevier";
-import { createDetectMessage, createParseMessage, createTranslateMessage } from "../lib/runtime";
 import {
+  createFileParseMessage,
+  createDetectMessage,
+  createParseMessage,
+  createTranslateMessage,
+  type LocalFileArtifactKind,
+  type ParsePageContext
+} from "../lib/runtime";
+import {
+  getReconnectablePendingTranslationTask,
+  getPendingPopupTask,
   readPopupState,
   readRecentTasks,
   readSettings,
@@ -17,9 +27,13 @@ import {
 } from "../lib/storage";
 import {
   getActionStatusText,
+  getBridgeStatusText,
   getDownloadLabel,
+  getPreflightHintText,
   getPreferredArtifactKey,
+  getResultWarningText,
   getSavedResultSummary,
+  getUsageStatusText,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
 } from "./task-view";
@@ -27,15 +41,30 @@ import {
 const COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Markdown-first paper workflow",
+    subtitle: "Helper-first local paper workflow",
     guest: "Guest mode",
     signedIn: (email: string) => email,
-    credits: (amount: number) => `Credits: ${amount}`,
+    usageSummary: (wallet: string, parse: number, translation: number) =>
+      `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
     signInHint: "Sign in to unlock parse bundles and translation.",
     freeHint: "PDF/XML free",
-    supportSummary: "One extension flow for publisher pages, preprints, and Markdown-ready outputs.",
-    inputLabel: "DOI or supported page",
+    supportSummary: "Browser-managed local capture for helper-first publisher routes, preprints, and Markdown-ready outputs.",
+    supportStableTitle: "Stable mainline",
+    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.",
+    supportShadowTitle: "Bridge-assisted",
+    supportShadowItems: "Springer subscription pages already use helper + browser capture when a live HTML page is available.",
+    supportExperimentalTitle: "Experimental",
+    supportExperimentalItems: "Wiley and Taylor & Francis are available through helper + browser capture, but blocked-page variance is still higher.",
+    inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
+    fileIntakeTitle: "Local file intake",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB and want the same Markdown package flow.",
+    pickPdfButton: "Use PDF",
+    pickEpubButton: "Use EPUB",
+    fileNameEmpty: "No local file selected.",
+    pdfEngineLabel: "PDF engine",
+    localFileParsing: (filename: string) => `Uploading ${filename} for helper-first parsing...`,
+    localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
     parsingButton: "Parsing...",
     settingsButton: "Settings",
@@ -71,15 +100,30 @@ const COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "面向 Markdown 的论文工作流",
+    subtitle: "helper-first 本地论文工作流",
     guest: "游客模式",
     signedIn: (email: string) => email,
-    credits: (amount: number) => `额度：${amount}`,
+    usageSummary: (wallet: string, parse: number, translation: number) =>
+      `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
     signInHint: "登录后可使用压缩包解析和翻译。",
     freeHint: "PDF/XML 免费",
-    supportSummary: "一个扩展界面，同时覆盖出版社页面、预印本与 Markdown 就绪产物。",
-    inputLabel: "DOI 或当前页面",
+    supportSummary: "作为 helper-first 流程里的浏览器侧抓取入口，覆盖出版社页面、预印本与 Markdown 就绪产物。",
+    supportStableTitle: "稳定主线",
+    supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access，以及带有你本地权限的 Elsevier。",
+    supportShadowTitle: "浏览器协同",
+    supportShadowItems: "Springer 订阅页已经可以在实时 HTML 页面条件下走 helper + 浏览器抓取。",
+    supportExperimentalTitle: "实验支持",
+    supportExperimentalItems: "Wiley 与 Taylor & Francis 已可通过 helper + 浏览器抓取，但被 challenge 或权限页拦住的波动仍更高。",
+    inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
+    fileIntakeTitle: "本地文件入口",
+    fileIntakeNote: "如果你手里已经有 PDF 或 EPUB，也可以继续走同一条 Markdown 打包链。",
+    pickPdfButton: "选择 PDF",
+    pickEpubButton: "选择 EPUB",
+    fileNameEmpty: "尚未选择本地文件。",
+    pdfEngineLabel: "PDF 引擎",
+    localFileParsing: (filename: string) => `正在上传 ${filename}，并走 helper-first 解析...`,
+    localFileParseFailed: "本地文件解析失败，请重试。",
     parseButton: "解析论文",
     parsingButton: "解析中...",
     settingsButton: "设置",
@@ -120,12 +164,28 @@ const subtitleEl = document.querySelector<HTMLParagraphElement>("#app-subtitle")
 const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-toggle");
 const accountEmailEl = document.querySelector<HTMLParagraphElement>("#account-email");
 const usageStatusEl = document.querySelector<HTMLParagraphElement>("#usage-status");
+const helperStatusEl = document.querySelector<HTMLParagraphElement>("#helper-status");
 const freeHintEl = document.querySelector<HTMLParagraphElement>("#free-hint");
 const supportSummaryEl = document.querySelector<HTMLParagraphElement>("#support-summary");
+const supportStableTitleEl = document.querySelector<HTMLParagraphElement>("#support-stable-title");
+const supportStableItemsEl = document.querySelector<HTMLParagraphElement>("#support-stable-items");
+const supportShadowTitleEl = document.querySelector<HTMLParagraphElement>("#support-shadow-title");
+const supportShadowItemsEl = document.querySelector<HTMLParagraphElement>("#support-shadow-items");
+const supportExperimentalTitleEl = document.querySelector<HTMLParagraphElement>("#support-experimental-title");
+const supportExperimentalItemsEl = document.querySelector<HTMLParagraphElement>("#support-experimental-items");
 const inputLabelEl = document.querySelector<HTMLLabelElement>("#paper-input-label");
 const inputEl = document.querySelector<HTMLInputElement>("#paper-input");
 const statusEl = document.querySelector<HTMLParagraphElement>("#status");
+const preflightHintEl = document.querySelector<HTMLParagraphElement>("#preflight-hint");
 const campusHintEl = document.querySelector<HTMLParagraphElement>("#campus-hint");
+const fileIntakeTitleEl = document.querySelector<HTMLParagraphElement>("#file-intake-title");
+const fileIntakeNoteEl = document.querySelector<HTMLParagraphElement>("#file-intake-note");
+const pickPdfButton = document.querySelector<HTMLButtonElement>("#pick-pdf-button");
+const pickEpubButton = document.querySelector<HTMLButtonElement>("#pick-epub-button");
+const localFileInputEl = document.querySelector<HTMLInputElement>("#local-file-input");
+const localFileNameEl = document.querySelector<HTMLParagraphElement>("#local-file-name");
+const pdfEngineLabelEl = document.querySelector<HTMLLabelElement>("#pdf-engine-label");
+const pdfEngineSelectEl = document.querySelector<HTMLSelectElement>("#pdf-engine-select");
 const parseButton = document.querySelector<HTMLButtonElement>("#parse-button");
 const openSettingsButton = document.querySelector<HTMLButtonElement>("#open-settings");
 const translateLanguageLabelEl = document.querySelector<HTMLLabelElement>("#translate-language-label");
@@ -148,6 +208,8 @@ let currentInput: string | null = null;
 let uiLanguage: UiLanguage = "en";
 let isParsing = false;
 let isTranslating = false;
+let detectedPageContext: { tabId: number; tabUrl?: string; detectedInput: string } | null = null;
+let currentBridgeStatus: { state?: string | null; runnerState?: string | null } | null = null;
 
 function copyFor(language: UiLanguage) {
   return COPY[language];
@@ -165,8 +227,32 @@ function setStatus(message: string) {
   }
 }
 
+function setPreflightHint(message: string) {
+  if (preflightHintEl) {
+    preflightHintEl.textContent = message;
+    preflightHintEl.hidden = !message.trim();
+  }
+}
+
 function getCurrentCopy() {
   return copyFor(uiLanguage);
+}
+
+async function updatePreflightHint() {
+  const settings = await readSettings();
+  const input = inputEl?.value.trim() || currentInput || "";
+  const pageUrl = detectedPageContext?.tabUrl || "";
+  setPreflightHint(
+    getPreflightHintText(
+      {
+        input,
+        pageUrl,
+        bridgeStatus: currentBridgeStatus,
+        hasElsevierApiKey: Boolean(settings.elsevierApiKey)
+      },
+      uiLanguage
+    )
+  );
 }
 
 function toggleLanguageLabel(language: UiLanguage) {
@@ -202,12 +288,7 @@ function createRecentTaskSummary(state: Awaited<ReturnType<typeof readPopupState
 async function saveArtifact(taskId: string, artifactKey: string) {
   try {
     const artifact = await client.downloadArtifact(taskId, artifactKey);
-    const objectUrl = URL.createObjectURL(artifact.blob);
-    chrome.downloads.download({
-      url: objectUrl,
-      filename: artifact.filename,
-      saveAs: true
-    });
+    triggerBlobDownload(artifact.blob, artifact.filename);
   } catch {
     setResult(getCurrentCopy().downloadFailed);
   }
@@ -221,8 +302,22 @@ function applyLanguage() {
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (freeHintEl) freeHintEl.textContent = copy.freeHint;
   if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
+  if (supportStableTitleEl) supportStableTitleEl.textContent = copy.supportStableTitle;
+  if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
+  if (supportShadowTitleEl) supportShadowTitleEl.textContent = copy.supportShadowTitle;
+  if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
+  if (supportExperimentalTitleEl) supportExperimentalTitleEl.textContent = copy.supportExperimentalTitle;
+  if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
+  if (fileIntakeTitleEl) fileIntakeTitleEl.textContent = copy.fileIntakeTitle;
+  if (fileIntakeNoteEl) fileIntakeNoteEl.textContent = copy.fileIntakeNote;
+  if (pickPdfButton) pickPdfButton.textContent = copy.pickPdfButton;
+  if (pickEpubButton) pickEpubButton.textContent = copy.pickEpubButton;
+  if (pdfEngineLabelEl) pdfEngineLabelEl.textContent = copy.pdfEngineLabel;
+  if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
+    localFileNameEl.textContent = copy.fileNameEmpty;
+  }
   if (campusHintEl) campusHintEl.textContent = copy.campusHint;
   if (translateLanguageLabelEl) translateLanguageLabelEl.textContent = copy.translateLabel;
   if (sourceFilesSummaryEl) sourceFilesSummaryEl.textContent = copy.sourceFiles;
@@ -255,6 +350,15 @@ function renderActionButtons() {
   if (parseButton) {
     parseButton.textContent = isParsing ? copy.parsingButton : copy.parseButton;
     parseButton.disabled = isParsing;
+  }
+  if (pickPdfButton) {
+    pickPdfButton.disabled = isParsing;
+  }
+  if (pickEpubButton) {
+    pickEpubButton.disabled = isParsing;
+  }
+  if (pdfEngineSelectEl) {
+    pdfEngineSelectEl.disabled = isParsing;
   }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
@@ -334,7 +438,9 @@ async function persistPopupState(task: TaskRecord) {
     parseMarkdownPath: task.result.artifacts.paper_md?.path ?? previous?.parseMarkdownPath,
     translatedTaskId: task.result.artifacts.translated_md ? task.task_id : previous?.translatedTaskId,
     translatedFilename:
-      task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename
+      task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename,
+    pendingTaskId: undefined,
+    pendingTaskKind: undefined
   };
 
   await writePopupState(nextState);
@@ -422,6 +528,15 @@ async function hydrateSavedState(detectedInput: string) {
   if (!savedState || savedState.input !== detectedInput) {
     return;
   }
+  const pendingTask = getPendingPopupTask(savedState, detectedInput);
+  if (pendingTask) {
+    isParsing = pendingTask.kind === "parse";
+    isTranslating = pendingTask.kind === "translate";
+    renderActionButtons();
+    setResult(getActionStatusText(pendingTask.kind === "parse" ? "running_parse" : "running_translate", uiLanguage));
+    void pollTask(pendingTask.taskId, pendingTask.kind);
+    return;
+  }
   const summary = getSavedResultSummary(savedState, uiLanguage);
   if (summary) {
     setResult(summary);
@@ -439,6 +554,15 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     setResult(response?.error ?? getCurrentCopy().parseFailed);
     isParsing = false;
     isTranslating = false;
+    if (currentInput) {
+      const previous = await readPopupState();
+      await writePopupState({
+        ...(previous ?? { input: currentInput }),
+        input: currentInput,
+        pendingTaskId: undefined,
+        pendingTaskKind: undefined
+      });
+    }
     renderActionButtons();
     return;
   }
@@ -450,6 +574,15 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
       isParsing = false;
     } else {
       isTranslating = false;
+    }
+    if (currentInput) {
+      const previous = await readPopupState();
+      await writePopupState({
+        ...(previous ?? { input: currentInput }),
+        input: currentInput,
+        pendingTaskId: undefined,
+        pendingTaskKind: undefined
+      });
     }
     renderActionButtons();
     return;
@@ -473,8 +606,11 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
   if (kind === "parse") {
     isParsing = false;
     const filename = task.result?.artifacts?.paper_bundle?.filename;
+    const warningText = getResultWarningText(task.result, uiLanguage);
     if (filename) {
-      setResult(getCurrentCopy().parseReady(filename));
+      setResult([getCurrentCopy().parseReady(filename), warningText].filter(Boolean).join(" "));
+    } else if (warningText) {
+      setResult(warningText);
     }
   } else {
     isTranslating = false;
@@ -504,22 +640,42 @@ async function refreshUsage() {
   try {
     const usage = await client.getUsage();
     if (usageStatusEl) {
-      usageStatusEl.textContent = getCurrentCopy().credits(usage.credit_balance);
+      usageStatusEl.textContent = getUsageStatusText(usage, uiLanguage);
     }
     if (accountEmailEl && usage.email) {
       accountEmailEl.textContent = getCurrentCopy().signedIn(usage.email);
     }
-  } catch {
+  } catch (error) {
     if (usageStatusEl) {
-      usageStatusEl.textContent = getCurrentCopy().signInHint;
+      usageStatusEl.textContent = getUsageStatusText(null, uiLanguage, (error as Error).message);
     }
   }
+}
+
+async function refreshBridgeStatus() {
+  if (!helperStatusEl) {
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "mdtero.bridge.status"
+    });
+    currentBridgeStatus = response?.result ?? null;
+    helperStatusEl.textContent = getBridgeStatusText(currentBridgeStatus, uiLanguage);
+  } catch {
+    currentBridgeStatus = null;
+    helperStatusEl.textContent = getBridgeStatusText(undefined, uiLanguage);
+  }
+  await updatePreflightHint();
 }
 
 async function detectCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     setStatus(getCurrentCopy().noActiveTab);
+    detectedPageContext = null;
+    await updatePreflightHint();
     return;
   }
 
@@ -529,20 +685,104 @@ async function detectCurrentTab() {
     if (response?.detected?.value && inputEl) {
       inputEl.value = response.detected.value;
       currentInput = response.detected.value;
+      detectedPageContext = {
+        tabId: tab.id,
+        tabUrl: tab.url,
+        detectedInput: response.detected.value
+      };
       setStatus(getCurrentCopy().detected(response.detected.kind));
+      await updatePreflightHint();
       await hydrateSavedState(response.detected.value);
       return;
     }
   } catch {
     // Ignore content-script detection failures and fall back to manual input.
   }
+  detectedPageContext = null;
   setStatus(getCurrentCopy().noDoi);
+  await updatePreflightHint();
+}
+
+async function resolveParsePageContext(input: string): Promise<ParsePageContext | undefined> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    return undefined;
+  }
+
+  const activeTabUrl = String(tab.url || "").trim();
+  if (activeTabUrl && activeTabUrl === input) {
+    return {
+      tabId: tab.id,
+      tabUrl: activeTabUrl
+    };
+  }
+
+  if (detectedPageContext && detectedPageContext.tabId === tab.id && detectedPageContext.detectedInput === input) {
+    return {
+      tabId: detectedPageContext.tabId,
+      tabUrl: detectedPageContext.tabUrl || activeTabUrl
+    };
+  }
+
+  return undefined;
 }
 
 async function initializeLanguage() {
   const settings = await readSettings();
   uiLanguage = resolveUiLanguage(settings.uiLanguage, globalThis.navigator?.language);
   applyLanguage();
+}
+
+function setLocalFileName(filename?: string) {
+  if (!localFileNameEl) {
+    return;
+  }
+  const trimmed = String(filename || "").trim();
+  localFileNameEl.dataset.selectedName = trimmed;
+  localFileNameEl.textContent = trimmed || getCurrentCopy().fileNameEmpty;
+}
+
+async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) {
+  currentInput = file.name;
+  detectedPageContext = null;
+  setLocalFileName(file.name);
+  isParsing = true;
+  renderActionButtons();
+  setResult(getCurrentCopy().localFileParsing(file.name));
+
+  const settings = await readSettings();
+  if (!settings.token) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(getCurrentCopy().signInHint);
+    return;
+  }
+
+  const response = await chrome.runtime.sendMessage(
+    createFileParseMessage(
+      file,
+      artifactKind,
+      artifactKind === "pdf"
+        ? (pdfEngineSelectEl?.value as "grobid" | "docling" | "mineru" | undefined)
+        : undefined
+    )
+  );
+
+  if (!response?.ok) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(response?.error ?? getCurrentCopy().localFileParseFailed);
+    return;
+  }
+
+  await writePopupState({
+    ...(await readPopupState()),
+    input: file.name,
+    pendingTaskId: response.result.task_id,
+    pendingTaskKind: "parse"
+  });
+
+  void pollTask(response.result.task_id, "parse");
 }
 
 parseButton?.addEventListener("click", async () => {
@@ -561,6 +801,12 @@ parseButton?.addEventListener("click", async () => {
   setResult(getActionStatusText("queued_parse", uiLanguage));
 
   const settings = await readSettings();
+  if (!settings.token) {
+    isParsing = false;
+    renderActionButtons();
+    setResult(getCurrentCopy().signInHint);
+    return;
+  }
   if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
     isParsing = false;
     renderActionButtons();
@@ -571,13 +817,23 @@ parseButton?.addEventListener("click", async () => {
     return;
   }
 
-  const response = await chrome.runtime.sendMessage(createParseMessage(input, settings.elsevierApiKey));
+  const pageContext = await resolveParsePageContext(input);
+  const response = await chrome.runtime.sendMessage(
+    createParseMessage(input, settings.elsevierApiKey, pageContext)
+  );
   if (!response?.ok) {
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().parseFailed);
     return;
   }
+
+  await writePopupState({
+    ...(await readPopupState()),
+    input,
+    pendingTaskId: response.result.task_id,
+    pendingTaskKind: "parse"
+  });
 
   void pollTask(response.result.task_id, "parse");
 });
@@ -588,6 +844,20 @@ translateButton?.addEventListener("click", async () => {
   }
   if (!lastParsedMarkdownPath) {
     setResult(getCurrentCopy().translateFirst);
+    return;
+  }
+
+  const previous = await readPopupState();
+  const reconnectableTask = getReconnectablePendingTranslationTask(
+    previous,
+    currentInput ?? "",
+    lastParsedMarkdownPath
+  );
+  if (reconnectableTask) {
+    isTranslating = true;
+    renderActionButtons();
+    setResult(getActionStatusText("running_translate", uiLanguage));
+    void pollTask(reconnectableTask.taskId, "translate");
     return;
   }
 
@@ -608,11 +878,52 @@ translateButton?.addEventListener("click", async () => {
     return;
   }
 
+  await writePopupState({
+    ...(await readPopupState()),
+    input: currentInput ?? "",
+    parseMarkdownPath: lastParsedMarkdownPath,
+    pendingTaskId: response.result.task_id,
+    pendingTaskKind: "translate"
+  });
+
   void pollTask(response.result.task_id, "translate");
 });
 
 openSettingsButton?.addEventListener("click", () => {
   void chrome.runtime.openOptionsPage();
+});
+
+inputEl?.addEventListener("input", () => {
+  currentInput = inputEl.value.trim() || currentInput;
+  void updatePreflightHint();
+});
+
+pickPdfButton?.addEventListener("click", () => {
+  if (!localFileInputEl) {
+    return;
+  }
+  localFileInputEl.accept = ".pdf,application/pdf";
+  localFileInputEl.dataset.artifactKind = "pdf";
+  localFileInputEl.click();
+});
+
+pickEpubButton?.addEventListener("click", () => {
+  if (!localFileInputEl) {
+    return;
+  }
+  localFileInputEl.accept = ".epub,application/epub+zip";
+  localFileInputEl.dataset.artifactKind = "epub";
+  localFileInputEl.click();
+});
+
+localFileInputEl?.addEventListener("change", () => {
+  const file = localFileInputEl.files?.[0];
+  const artifactKind = localFileInputEl.dataset.artifactKind === "epub" ? "epub" : "pdf";
+  if (!file) {
+    return;
+  }
+  void submitLocalFile(file, artifactKind);
+  localFileInputEl.value = "";
 });
 
 languageToggleEl?.addEventListener("click", async () => {
@@ -624,6 +935,7 @@ languageToggleEl?.addEventListener("click", async () => {
   });
   applyLanguage();
   await refreshUsage();
+  await refreshBridgeStatus();
   await renderRecentTasks();
   const savedState = await readPopupState();
   const summary = getSavedResultSummary(savedState, uiLanguage);
@@ -633,13 +945,16 @@ languageToggleEl?.addEventListener("click", async () => {
   if (!currentInput) {
     await detectCurrentTab();
   }
+  await updatePreflightHint();
 });
 
 void (async () => {
   await initializeLanguage();
 
   await refreshUsage();
+  await refreshBridgeStatus();
   await renderRecentTasks();
   renderActionButtons();
   await detectCurrentTab();
+  await updatePreflightHint();
 })();

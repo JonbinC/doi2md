@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildElsevierLocalAcquireGuidance,
   normalizeElsevierInput,
   requiresElsevierLocalAcquire
 } from "../src/lib/elsevier";
@@ -31,5 +32,16 @@ describe("requiresElsevierLocalAcquire", () => {
   it("flags Elsevier inputs and ignores arxiv", () => {
     expect(requiresElsevierLocalAcquire("10.1016/j.energy.2026.140192")).toBe(true);
     expect(requiresElsevierLocalAcquire("https://arxiv.org/abs/1706.03762")).toBe(false);
+  });
+});
+
+describe("buildElsevierLocalAcquireGuidance", () => {
+  it("gives user-facing setup guidance instead of a blunt API key error", () => {
+    expect(buildElsevierLocalAcquireGuidance()).toContain("local acquisition");
+    expect(buildElsevierLocalAcquireGuidance()).toContain("Mdtero extension settings");
+    expect(buildElsevierLocalAcquireGuidance()).toContain("campus or institutional network IP");
+    expect(buildElsevierLocalAcquireGuidance()).not.toBe(
+      "Elsevier API Key is required for Elsevier / ScienceDirect parsing."
+    );
   });
 });

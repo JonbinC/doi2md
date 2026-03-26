@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { createParseMessage, createTranslateMessage } from "../src/lib/runtime";
+import {
+  createFileParseMessage,
+  createParseMessage,
+  createTranslateMessage
+} from "../src/lib/runtime";
 import {
   getActionStatusText,
+  getBridgeStatusText,
   getDownloadLabel,
+  getPreflightHintText,
+  getUsageStatusText,
   getPreferredArtifactKey,
+  getResultWarningText,
   getSavedResultSummary,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -15,6 +23,22 @@ describe("createParseMessage", () => {
     expect(createParseMessage("10.1016/j.conbuildmat.2026.145877")).toEqual({
       type: "mdtero.parse.request",
       input: "10.1016/j.conbuildmat.2026.145877"
+    });
+  });
+
+  it("can include current-page context for helper-first capture", () => {
+    expect(
+      createParseMessage("https://example.com/paper", undefined, {
+        tabId: 42,
+        tabUrl: "https://example.com/paper"
+      })
+    ).toEqual({
+      type: "mdtero.parse.request",
+      input: "https://example.com/paper",
+      pageContext: {
+        tabId: 42,
+        tabUrl: "https://example.com/paper"
+      }
     });
   });
 });
@@ -28,6 +52,33 @@ describe("createTranslateMessage", () => {
       sourceMarkdownPath: "/tmp/zhou2025performance/paper.md",
       targetLanguage: "zh",
       mode: "standard"
+    });
+  });
+});
+
+describe("createFileParseMessage", () => {
+  it("builds a PDF local file parse message with an explicit engine", () => {
+    const file = new File(["pdf"], "demo.pdf", { type: "application/pdf" });
+
+    expect(createFileParseMessage(file, "pdf", "docling")).toEqual({
+      type: "mdtero.parse.file.request",
+      file,
+      filename: "demo.pdf",
+      mediaType: "application/pdf",
+      artifactKind: "pdf",
+      pdfEngine: "docling"
+    });
+  });
+
+  it("builds an EPUB local file parse message without a PDF engine", () => {
+    const file = new File(["epub"], "demo.epub", { type: "application/epub+zip" });
+
+    expect(createFileParseMessage(file, "epub")).toEqual({
+      type: "mdtero.parse.file.request",
+      file,
+      filename: "demo.epub",
+      mediaType: "application/epub+zip",
+      artifactKind: "epub"
     });
   });
 });
@@ -140,6 +191,96 @@ describe("getActionStatusText", () => {
   });
 });
 
+describe("getUsageStatusText", () => {
+  it("formats usage summaries from live account data", () => {
+    expect(
+      getUsageStatusText(
+        {
+          wallet_balance_display: "¥5.00",
+          parse_quota_remaining: 156,
+          translation_quota_remaining: 26
+        },
+        "zh"
+      )
+    ).toBe("余额 ¥5.00 · 解析 156 · 翻译 26");
+  });
+
+  it("preserves backend or network errors instead of masking them as sign-in hints", () => {
+    expect(getUsageStatusText(null, "en", "503 Service Unavailable")).toBe("503 Service Unavailable");
+    expect(getUsageStatusText(null, "zh", "请求超时")).toBe("请求超时");
+  });
+});
+
+describe("getBridgeStatusText", () => {
+  it("formats helper bridge status for popup surfaces", () => {
+    expect(getBridgeStatusText({ state: "connected", runnerState: "idle" }, "en")).toBe(
+      "Local helper ready for browser-assisted capture."
+    );
+    expect(getBridgeStatusText({ state: "connected", runnerState: "busy" }, "zh")).toBe(
+      "本地 helper 已连接，正在处理浏览器任务。"
+    );
+    expect(getBridgeStatusText({ state: "unavailable", runnerState: "idle" }, "en")).toContain(
+      "not detected"
+    );
+    expect(getBridgeStatusText(undefined, "zh")).toBe("本地 helper 状态未知。");
+  });
+});
+
+describe("getPreflightHintText", () => {
+  it("warns when Elsevier input is missing the required API key", () => {
+    expect(
+      getPreflightHintText(
+        {
+          input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
+          hasElsevierApiKey: false
+        },
+        "en"
+      )
+    ).toContain("Elsevier / ScienceDirect");
+  });
+
+  it("warns when a supported live page is open but the helper is unavailable", () => {
+    expect(
+      getPreflightHintText(
+        {
+          input: "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490",
+          pageUrl: "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490",
+          bridgeStatus: { state: "unavailable", runnerState: "idle" },
+          hasElsevierApiKey: true
+        },
+        "en"
+      )
+    ).toContain("Start `mdtero-local`");
+  });
+
+  it("confirms helper-first capture readiness on supported live pages", () => {
+    expect(
+      getPreflightHintText(
+        {
+          input: "https://arxiv.org/html/2401.00001",
+          pageUrl: "https://arxiv.org/html/2401.00001",
+          bridgeStatus: { state: "connected", runnerState: "idle" },
+          hasElsevierApiKey: true
+        },
+        "zh"
+      )
+    ).toContain("helper-first");
+  });
+
+  it("nudges users away from PDF or EPUB shells", () => {
+    expect(
+      getPreflightHintText(
+        {
+          input: "https://www.tandfonline.com/doi/epub/10.1080/26395940.2021.1947159?download=true",
+          pageUrl: "https://www.tandfonline.com/doi/epub/10.1080/26395940.2021.1947159?download=true",
+          bridgeStatus: { state: "connected", runnerState: "idle" }
+        },
+        "en"
+      )
+    ).toContain("HTML full-text page");
+  });
+});
+
 describe("getSavedResultSummary", () => {
   it("summarizes saved results with stable filenames only", () => {
     expect(
@@ -164,5 +305,28 @@ describe("getSavedResultSummary", () => {
         "zh"
       )
     ).toBe("已就绪：tang2026simulation.zip");
+  });
+});
+
+describe("getResultWarningText", () => {
+  it("localizes the abstract-only Elsevier campus-network hint", () => {
+    expect(
+      getResultWarningText(
+        {
+          warning_code: "elsevier_abstract_only",
+          warning_message: "Elsevier only returned the abstract."
+        },
+        "en"
+      )
+    ).toContain("campus or institutional network IP");
+    expect(
+      getResultWarningText(
+        {
+          warning_code: "elsevier_abstract_only",
+          warning_message: "Elsevier only returned the abstract."
+        },
+        "zh"
+      )
+    ).toContain("校园网");
   });
 });

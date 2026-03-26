@@ -7,3 +7,4 @@ export enum ApiErrorCode {
   NetworkFailure = "network_failure",
   ArtifactUnavailable = "artifact_unavailable"
 }
+

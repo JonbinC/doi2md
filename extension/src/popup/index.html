@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">M</div>
           <div class="brand-copy">
             <h1 id="app-title">Mdtero</h1>
-            <p id="app-subtitle">Markdown-first paper workflow</p>
+            <p id="app-subtitle">Helper-first local paper workflow</p>
           </div>
           <button id="language-toggle" type="button" class="ghost-chip">中文</button>
         </div>
@@ -21,6 +21,7 @@
           <div>
             <p id="account-email" class="meta-label">Guest mode</p>
             <p id="usage-status" class="meta-value">Checking account...</p>
+            <p id="helper-status" class="meta-label">Local helper status unknown.</p>
           </div>
           <p id="free-hint" class="meta-pill">PDF/XML free</p>
         </div>
@@ -30,15 +31,50 @@
         <div class="support-row">
           <span class="support-chip"><span class="support-icon support-icon-elsevier">E</span>Elsevier</span>
           <span class="support-chip"><span class="support-icon support-icon-arxiv">arX</span>arXiv</span>
+          <span class="support-chip"><span class="support-icon support-icon-pmc">PMC</span>PMC</span>
+          <span class="support-chip"><span class="support-icon support-icon-preprint">Rx</span>bioRxiv</span>
+          <span class="support-chip"><span class="support-icon support-icon-plos">PL</span>PLOS</span>
         </div>
-        <p id="support-summary" class="meta-label support-summary">One extension flow for publisher pages, preprints, and Markdown-ready outputs.</p>
+        <p id="support-summary" class="meta-label support-summary">Browser-managed local capture for helper-first publisher routes, preprints, and Markdown-ready outputs.</p>
+        <div class="support-stack">
+          <div class="support-group">
+            <p id="support-stable-title" class="meta-label support-group-title">Stable mainline</p>
+            <p id="support-stable-items" class="meta-label">arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.</p>
+          </div>
+          <div class="support-group">
+            <p id="support-shadow-title" class="meta-label support-group-title">Bridge-assisted</p>
+            <p id="support-shadow-items" class="meta-label">Springer subscription pages already use helper + browser capture when a live HTML page is available.</p>
+          </div>
+          <div class="support-group">
+            <p id="support-experimental-title" class="meta-label support-group-title">Experimental</p>
+            <p id="support-experimental-items" class="meta-label">Wiley and Taylor &amp; Francis can run through helper + browser capture, but challenge and login variance is still higher.</p>
+          </div>
+        </div>
       </section>
 
       <section class="card">
-        <label id="paper-input-label" for="paper-input">DOI or supported page</label>
+        <label id="paper-input-label" for="paper-input">DOI or live page</label>
         <input id="paper-input" type="text" placeholder="10.1016/..." />
         <p id="status" class="status-line">Detecting paper input...</p>
+        <p id="preflight-hint" class="meta-label campus-hint"></p>
         <p id="campus-hint" class="meta-label campus-hint">Note: Campus network IP required for Elsevier full-text access.</p>
+      </section>
+
+      <section class="card" id="file-intake-card">
+        <p id="file-intake-title" class="meta-value">Local file intake</p>
+        <p id="file-intake-note" class="meta-label">Use this when you already have a local PDF or EPUB and want the same Markdown package flow.</p>
+        <div class="button-row">
+          <button id="pick-pdf-button" type="button" class="secondary-button">Use PDF</button>
+          <button id="pick-epub-button" type="button" class="secondary-button">Use EPUB</button>
+        </div>
+        <input id="local-file-input" type="file" hidden />
+        <p id="local-file-name" class="meta-label">No local file selected.</p>
+        <label id="pdf-engine-label" for="pdf-engine-select">PDF engine</label>
+        <select id="pdf-engine-select">
+          <option value="docling">Docling</option>
+          <option value="grobid">GROBID</option>
+          <option value="mineru">MinerU</option>
+        </select>
       </section>
 
       <section class="card action-card">

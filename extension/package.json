@@ -5,13 +5,5 @@
   "scripts": {
     "build": "node esbuild.config.mjs",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@mdtero/shared": "file:../shared"
-  },
-  "devDependencies": {
-    "esbuild": "^0.25.0",
-    "typescript": "^5.8.0",
-    "vitest": "^3.2.4"
   }
 }

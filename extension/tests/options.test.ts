@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getPendingPopupTask,
+  getReconnectablePendingTranslationTask,
   mergeSettings,
   resolveUiLanguage,
   summarizePopupState,
@@ -96,5 +98,55 @@ describe("mergeSettings", () => {
         parseFilename: "old2025paper.zip"
       }
     ]);
+  });
+
+  it("restores a pending translate task for the same detected input", () => {
+    expect(
+      getPendingPopupTask(
+        {
+          input: "10.1016/j.conbuildmat.2026.145877",
+          parseTaskId: "task-1",
+          parseFilename: "tang2026simulation.zip",
+          parseMarkdownPath: "/tmp/tang2026simulation/paper.md",
+          pendingTaskId: "task-translate-1",
+          pendingTaskKind: "translate"
+        },
+        "10.1016/j.conbuildmat.2026.145877"
+      )
+    ).toEqual({
+      taskId: "task-translate-1",
+      kind: "translate"
+    });
+  });
+
+  it("reuses the same pending translation for the same parsed markdown path", () => {
+    expect(
+      getReconnectablePendingTranslationTask(
+        {
+          input: "10.1016/j.conbuildmat.2026.145877",
+          parseMarkdownPath: "/tmp/tang2026simulation/paper.md",
+          pendingTaskId: "task-translate-1",
+          pendingTaskKind: "translate"
+        },
+        "10.1016/j.conbuildmat.2026.145877",
+        "/tmp/tang2026simulation/paper.md"
+      )
+    ).toEqual({
+      taskId: "task-translate-1",
+      kind: "translate"
+    });
+
+    expect(
+      getReconnectablePendingTranslationTask(
+        {
+          input: "10.1016/j.conbuildmat.2026.145877",
+          parseMarkdownPath: "/tmp/tang2026simulation/paper.md",
+          pendingTaskId: "task-translate-1",
+          pendingTaskKind: "translate"
+        },
+        "10.1016/j.conbuildmat.2026.145877",
+        "/tmp/other/paper.md"
+      )
+    ).toBeUndefined();
   });
 });

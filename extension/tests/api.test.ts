@@ -29,6 +29,8 @@ describe("createApiClient", () => {
     );
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer demo-token");
+    expect(headers.get("X-Client-Channel")).toBe("extension");
+    expect(headers.get("X-Client-Version")).toBe("extension-dev");
   });
 
   it("downloads task artifacts with filename metadata", async () => {
@@ -60,6 +62,84 @@ describe("createApiClient", () => {
     );
   });
 
+  it("logs in with password through the dedicated auth route", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ token: "password-token" }), { status: 200 })
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000"
+      })
+    );
+
+    const result = await client.loginWithPassword({
+      email: "reader@example.com",
+      password: "Reader2026"
+    });
+
+    expect(result.token).toBe("password-token");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/auth/password/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "reader@example.com",
+          password: "Reader2026"
+        })
+      })
+    );
+  });
+
+  it("falls back to artifact-specific filenames when download headers omit one", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response("# translated", {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown"
+        }
+      })
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const artifact = await client.downloadArtifact("task-123", "translated_md");
+
+    expect(artifact.filename).toBe("translated.md");
+    expect(artifact.mediaType).toBe("text/markdown");
+  });
+
+  it("exposes the shared client-config route for extension upgrade checks", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ api_version: "2026-03-22" }), { status: 200 }));
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const config = await client.getClientConfig();
+
+    expect(config.api_version).toBe("2026-03-22");
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("X-Client-Version")).toBe("extension-dev");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/client-config",
+      expect.objectContaining({
+        headers: expect.any(Headers)
+      })
+    );
+  });
+
   it("uploads local XML as multipart parse input", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ task_id: "task-upload", status: "queued" }), { status: 200 }));
@@ -85,6 +165,131 @@ describe("createApiClient", () => {
         body: expect.any(FormData)
       })
     );
+  });
+
+  it("uploads helper-first payloads through the v2 parse routes", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ task_id: "task-v2", status: "queued" }), { status: 200 }));
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    await client.createParseFulltextV2Task({
+      fulltextFile: new Blob(["<html></html>"], { type: "text/html" }),
+      filename: "paper.html",
+      sourceInput: "https://example.org/paper"
+    });
+    await client.createParseHelperBundleV2Task({
+      helperBundleFile: new Blob(["zip"], { type: "application/zip" }),
+      filename: "helper-bundle.zip",
+      sourceDoi: "10.1016/j.energy.2026.140192",
+      pdfEngine: "docling"
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:8000/tasks/parse-fulltext-v2",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData)
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:8000/tasks/parse-helper-bundle-v2",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData)
+      })
+    );
+
+    const fulltextBody = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(fulltextBody.get("fulltext_file")).toBeTruthy();
+    expect(fulltextBody.get("source_input")).toBe("https://example.org/paper");
+
+    const helperBundleBody = fetchMock.mock.calls[1]?.[1]?.body as FormData;
+    expect(helperBundleBody.get("helper_bundle")).toBeTruthy();
+    expect(helperBundleBody.get("source_doi")).toBe("10.1016/j.energy.2026.140192");
+    expect(helperBundleBody.get("pdf_engine")).toBe("docling");
+  });
+
+  it("loads parser-v2 shadow diagnostics through the authenticated diagnostics route", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          aggregate: { connectors_total: 5, enabled_total: 1 },
+          connectors: [{ connector: "springer_subscription_connector", enabled: true, priority: 10 }]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const diagnostics = await client.getParserV2ShadowDiagnostics();
+
+    expect(diagnostics.aggregate.enabled_total).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/diagnostics/parser-v2/shadow",
+      expect.objectContaining({
+        headers: expect.any(Headers)
+      })
+    );
+  });
+
+  it("surfaces backend detail messages for failed requests", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Elsevier and ScienceDirect inputs must be acquired locally first." }), {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      })
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    await expect(
+      client.createParseTask({ input: "10.1016/j.energy.2026.140192" })
+    ).rejects.toThrow("Elsevier and ScienceDirect inputs must be acquired locally first.");
+  });
+
+  it("refuses parse requests when the user is not signed in", async () => {
+    const fetchMock = vi.mocked(fetch);
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000"
+      })
+    );
+
+    await expect(
+      client.createParseTask({ input: "10.1000/example" })
+    ).rejects.toThrow("Sign in required");
+    await expect(
+      client.createUploadedParseTask({
+        xmlFile: new Blob(["<xml />"], { type: "application/xml" }),
+        filename: "paper.xml",
+        sourceInput: "10.1000/example"
+      })
+    ).rejects.toThrow("Sign in required");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns typed task metadata for history and detail endpoints", async () => {
@@ -116,7 +321,7 @@ describe("createApiClient", () => {
           task_kind: "translate",
           input_summary: "zhou2025performance",
           stage: "translating",
-          progress_percent: 50,
+          progress_percent: null,
           created_at: "2026-03-16T12:05:00+00:00",
           result: null,
           error_code: null,
@@ -146,7 +351,7 @@ describe("createApiClient", () => {
     expect(detail.task_kind).toBe("translate");
     expect(detail.input_summary).toBe("zhou2025performance");
     expect(detail.stage).toBe("translating");
-    expect(detail.progress_percent).toBe(50);
+    expect(detail.progress_percent).toBeNull();
     expect(detail.created_at).toBe("2026-03-16T12:05:00+00:00");
   });
 });

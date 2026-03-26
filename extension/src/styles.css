@@ -189,8 +189,71 @@ summary,
   background: linear-gradient(135deg, #ffffff 0%, #ffe4ec 100%);
 }
 
+.support-icon-pmc {
+  color: #0f766e;
+  background: linear-gradient(135deg, #ffffff 0%, #dcfce7 100%);
+}
+
+.support-icon-preprint {
+  color: #7c3aed;
+  background: linear-gradient(135deg, #ffffff 0%, #ede9fe 100%);
+}
+
+.support-icon-plos {
+  color: #c2410c;
+  background: linear-gradient(135deg, #ffffff 0%, #ffedd5 100%);
+}
+
 .support-row-tight {
   margin-top: 12px;
+}
+
+.support-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.support-group {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.86);
+  border: 1px solid rgba(110, 125, 170, 0.12);
+}
+
+.support-group-title {
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 4px;
+}
+
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-mode-row {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-mode-row .ghost-chip,
+.active-chip {
+  width: auto;
+}
+
+.active-chip {
+  background: var(--accent-soft);
+  border-color: rgba(76, 116, 255, 0.24);
+  color: var(--accent-strong);
+}
+
+#password-auth-panel,
+#code-auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .support-summary {

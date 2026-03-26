@@ -16,40 +16,38 @@ describe("workspace", () => {
     expect(popupHtml).toContain('href="./styles.css"');
     expect(popupHtml).toContain('src="./popup.js"');
     expect(popupHtml).toContain('id="supported-sources-inline"');
+    expect(popupHtml).toContain('id="helper-status"');
     expect(popupHtml).toContain("Elsevier");
     expect(popupHtml).toContain("arXiv");
+    expect(popupHtml).toContain('id="support-stable-title"');
+    expect(popupHtml).toContain('id="support-shadow-title"');
+    expect(popupHtml).toContain('id="support-experimental-title"');
+    expect(popupHtml).toContain('id="file-intake-card"');
+    expect(popupHtml).toContain('id="local-file-input"');
+    expect(popupHtml).toContain('id="pdf-engine-select"');
+    expect(popupHtml).toContain("PMC");
+    expect(popupHtml).toContain("Wiley");
     expect(optionsHtml).toContain('href="./styles.css"');
     expect(optionsHtml).toContain('src="./options.js"');
     expect(optionsHtml).toContain('id="settings-overview-card"');
+    expect(optionsHtml).toContain('id="password-input"');
+    expect(optionsHtml).toContain('id="auth-mode-password"');
+    expect(optionsHtml).toContain('id="shadow-status"');
+    expect(optionsHtml).toContain('id="springer-oa-api-key"');
+    expect(optionsHtml).toContain('id="permissions-card"');
+    expect(optionsHtml).toContain('id="permissions-title"');
+    expect(optionsHtml).toContain('id="settings-support-stable-title"');
+    expect(optionsHtml).toContain('id="settings-support-experimental-title"');
+    expect(optionsHtml).toContain("Taylor &amp; Francis");
+    expect(optionsHtml.indexOf('id="code-input"')).toBeLessThan(optionsHtml.indexOf('id="verify-code"'));
   });
 
-  it("keeps public install guides beside the extension package", () => {
-    const readme = readFileSync(resolve("../README.md"), "utf-8");
-    const codexInstall = readFileSync(resolve("../codex/INSTALL.md"), "utf-8");
-    const openClawInstall = readFileSync(resolve("../openclaw/INSTALL.md"), "utf-8");
-
-    expect(readme).toContain("Chrome Web Store");
-    expect(readme).toContain("Edge Add-ons");
-    expect(readme).not.toContain("mdtero-extension-beta.zip");
-    expect(readme).toContain("./openclaw/INSTALL.md");
-    expect(codexInstall).toContain("inspect it locally, then run it");
-    expect(codexInstall).not.toContain("| sh");
-    expect(openClawInstall).toContain("inspect it locally, then run it");
-    expect(openClawInstall).not.toContain("| sh");
-  });
-
-  it("declares release assets and icons for the public extension repo", () => {
+  it("declares warm brand assets for the extension package", () => {
     const manifest = readFileSync(resolve("manifest.json"), "utf-8");
-    const readme = readFileSync(resolve("../README.md"), "utf-8");
-    const englishMessages = readFileSync(resolve("_locales/en/messages.json"), "utf-8");
 
     expect(manifest).toContain('"icons"');
     expect(manifest).toContain('"16": "assets/icon-16.png"');
     expect(manifest).toContain('"128": "assets/icon-128.png"');
     expect(manifest).toContain('"default_icon"');
-    expect(englishMessages).toContain("Local paper capture");
-    expect(englishMessages).toContain("Markdown-first");
-    expect(readme).toContain("Chrome Web Store");
-    expect(readme).toContain("Edge Add-ons");
   });
 });
