@@ -106,7 +106,7 @@ describe("extension background Elsevier routing", () => {
     fetchSpringerOpenAccessJats.mockReset();
   });
 
-  it("routes Elsevier local XML acquisition through parse-fulltext-v2 instead of the legacy upload endpoint", async () => {
+  it("routes Elsevier local XML acquisition through parse-helper-bundle-v2 with bundled figure assets", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(true);
@@ -114,7 +114,10 @@ describe("extension background Elsevier routing", () => {
       xmlBlob: new Blob(["<article/>"], { type: "application/xml" }),
       filename: "paper.xml",
       sourceDoi: "10.1016/j.energy.2026.140192",
-      sourceInput: "10.1016/j.energy.2026.140192"
+      sourceInput: "10.1016/j.energy.2026.140192",
+      bundleExtraFiles: {
+        "paper_files/gr1.jpg": new Uint8Array([1, 2, 3])
+      }
     });
 
     await import("../src/background");
@@ -134,20 +137,30 @@ describe("extension background Elsevier routing", () => {
     );
 
     await vi.waitFor(() => {
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
+      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
-          fulltextFile: expect.any(Blob),
-          filename: "paper.xml",
+          helperBundleFile: expect.any(Blob),
+          filename: "helper-bundle.zip",
           sourceDoi: "10.1016/j.energy.2026.140192",
           sourceInput: "10.1016/j.energy.2026.140192"
         })
       );
+      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(createUploadedParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-v2", status: "queued" }
+        result: { task_id: "task-bundle", status: "queued" }
       });
     });
+
+    const call = createParseHelperBundleV2Task.mock.calls.at(-1)?.[0];
+    expect(call?.helperBundleFile).toBeInstanceOf(Blob);
+    const text = new TextDecoder().decode(new Uint8Array(await call?.helperBundleFile.arrayBuffer()));
+    expect(text).toContain("\"connector\":\"elsevier_article_retrieval_api\"");
+    expect(text).toContain("\"artifact_kind\":\"structured_xml\"");
+    expect(text).toContain("\"extra_files\":[\"paper_files/gr1.jpg\"]");
+    expect(text).toContain("paper.xml");
+    expect(text).toContain("paper_files/gr1.jpg");
   });
 
   it("routes current-tab browser capture through parse-helper-bundle-v2 before falling back to direct parse", async () => {

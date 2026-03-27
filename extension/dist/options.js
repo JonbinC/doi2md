@@ -186,10 +186,10 @@ function triggerBlobDownload(blob, filename, deps = defaultDeps) {
   }
 }
 
-// ../../packages/shared/src/api-contract.ts
+// ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
-// ../../packages/shared/src/publisher-capability-matrix.ts
+// ../shared/src/publisher-capability-matrix.ts
 var GROUPS = [
   {
     id: "helper_only",
@@ -562,7 +562,7 @@ function getPublisherCapabilityGroups(language) {
   })).filter((group) => group.entries.length > 0);
 }
 
-// ../../packages/shared/src/shadow-status.ts
+// ../shared/src/shadow-status.ts
 var CONNECTOR_LABELS = {
   springer_subscription_connector: {
     en: "Springer subscription",

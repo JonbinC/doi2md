@@ -258,10 +258,10 @@ function createDetectMessage() {
   };
 }
 
-// ../../packages/shared/src/api-contract.ts
+// ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
-// ../../packages/shared/src/publisher-capability-matrix.ts
+// ../shared/src/publisher-capability-matrix.ts
 function link(href, en, zh) {
   return {
     href,

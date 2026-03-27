@@ -647,12 +647,116 @@ async function fetchElsevierXml(input, apiKey) {
     }
     throw new Error(`Elsevier XML fetch failed: ${response.status}`);
   }
+  const xmlBytes = new Uint8Array(await response.arrayBuffer());
+  const xmlText = new TextDecoder().decode(xmlBytes);
   return {
-    xmlBlob: await response.blob(),
+    xmlBlob: new Blob([xmlBytes], { type: "application/xml" }),
     sourceDoi: identifier.kind === "doi" ? identifier.value : void 0,
     sourceInput: input,
-    filename: "paper.xml"
+    filename: "paper.xml",
+    bundleExtraFiles: await collectElsevierImageAssetFiles(xmlText)
   };
+}
+async function collectElsevierImageAssetFiles(xmlText) {
+  const pii = extractElsevierPii(xmlText);
+  if (!pii) {
+    return {};
+  }
+  const eid = `1-s2.0-${pii}`;
+  const objectMap = extractElsevierObjectMap(xmlText);
+  const figureRefs = extractElsevierFigureRefs(xmlText);
+  const assetFiles = {};
+  for (const grRef of figureRefs) {
+    const assetUrl = normalizeElsevierFigureAssetUrl(objectMap.get(grRef), eid, grRef);
+    if (!assetUrl) {
+      continue;
+    }
+    try {
+      const assetResponse = await fetch(assetUrl);
+      if (!assetResponse.ok) {
+        continue;
+      }
+      const contentType = String(assetResponse.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.startsWith("image/")) {
+        continue;
+      }
+      const assetBytes = new Uint8Array(await assetResponse.arrayBuffer());
+      if (assetBytes.length === 0) {
+        continue;
+      }
+      const filename = assetUrl.split("/").pop()?.split("?")[0]?.trim();
+      if (!filename) {
+        continue;
+      }
+      assetFiles[`paper_files/${filename}`] = assetBytes;
+    } catch {
+      continue;
+    }
+  }
+  return assetFiles;
+}
+function extractElsevierPii(xmlText) {
+  const pii = xmlText.match(/<[^>]*pii[^>]*>\s*([^<\s]+)\s*<\/[^>]*pii[^>]*>/i)?.[1] || xmlText.match(/<[^>]*identifier[^>]*>\s*PII:([^<\s]+)\s*<\/[^>]*identifier[^>]*>/i)?.[1] || xmlText.match(/\bPII:([A-Z0-9]+)\b/i)?.[1];
+  const cleaned = String(pii || "").trim().replace(/[^0-9A-Z]/gi, "");
+  return cleaned || null;
+}
+function extractElsevierObjectMap(xmlText) {
+  const objectMap = /* @__PURE__ */ new Map();
+  const pattern = /<[^>]*object\b[^>]*\bref="([^"]+)"[^>]*>([\s\S]*?)<\/[^>]*object>/gi;
+  for (const match of xmlText.matchAll(pattern)) {
+    const ref = String(match[1] || "").trim();
+    const rawUrl = String(match[2] || "").trim();
+    if (ref && rawUrl && !objectMap.has(ref)) {
+      objectMap.set(ref, rawUrl);
+    }
+  }
+  return objectMap;
+}
+function extractElsevierFigureRefs(xmlText) {
+  const refs = [];
+  const seen = /* @__PURE__ */ new Set();
+  const locatorPattern = /<[^>]*link\b[^>]*\blocator="([^"]+)"[^>]*\/?>/gi;
+  for (const match of xmlText.matchAll(locatorPattern)) {
+    const ref = String(match[1] || "").trim();
+    if (ref && !seen.has(ref)) {
+      seen.add(ref);
+      refs.push(ref);
+    }
+  }
+  const hrefPattern = /<[^>]*link\b[^>]*\bhref="([^"]+\/((?:gr|graphic)\d+))"[^>]*\/?>/gi;
+  for (const match of xmlText.matchAll(hrefPattern)) {
+    const ref = String(match[2] || "").trim();
+    if (ref && !seen.has(ref)) {
+      seen.add(ref);
+      refs.push(ref);
+    }
+  }
+  return refs;
+}
+function normalizeElsevierFigureAssetUrl(rawUrl, eid, grRef) {
+  const clean = String(rawUrl || "").trim();
+  if (clean) {
+    if (clean.includes("api.elsevier.com/content/article/") && clean.includes("/ref/")) {
+      const assetName = clean.split("/ref/").pop()?.split("?")[0]?.trim();
+      if (assetName) {
+        const suffix = assetName.includes(".") ? assetName : `${assetName}.jpg`;
+        return `https://ars.els-cdn.com/content/image/${eid}-${suffix}`;
+      }
+    }
+    if (clean.includes("api.elsevier.com/content/object/eid/")) {
+      const assetName = clean.split("/eid/").pop()?.split("?")[0]?.trim();
+      if (assetName) {
+        return `https://ars.els-cdn.com/content/image/${assetName}`;
+      }
+    }
+    if (clean.includes("ars.els-cdn.com/content/image/")) {
+      return clean;
+    }
+  }
+  if (!eid || !grRef) {
+    return null;
+  }
+  return `https://ars.els-cdn.com/content/image/${eid}-${grRef}.jpg`;
 }
 
 // src/lib/springer.ts
@@ -740,6 +844,7 @@ var CONNECTOR_PRESETS = {
 };
 function buildHelperBundleBlob(options) {
   const payloadBytes = toUint8Array(options.payload);
+  const extraFiles = Object.entries(options.extraFiles || {}).sort(([left], [right]) => left.localeCompare(right));
   const manifest = {
     connector: options.connector,
     artifact_kind: options.artifactKind,
@@ -757,7 +862,7 @@ function buildHelperBundleBlob(options) {
       options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
     ),
     payload_name: options.payloadName,
-    extra_files: []
+    extra_files: extraFiles.map(([name]) => name)
   };
   const archive = buildStoredZip([
     {
@@ -767,7 +872,11 @@ function buildHelperBundleBlob(options) {
     {
       name: options.payloadName,
       bytes: payloadBytes
-    }
+    },
+    ...extraFiles.map(([name, payload]) => ({
+      name,
+      bytes: toUint8Array(payload)
+    }))
   ]);
   return new Blob([archive], { type: "application/zip" });
 }
@@ -910,10 +1019,10 @@ function crc32(bytes) {
   return (value ^ 4294967295) >>> 0;
 }
 
-// ../../packages/shared/src/api-contract.ts
+// ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
-// ../../packages/shared/src/publisher-capability-matrix.ts
+// ../shared/src/publisher-capability-matrix.ts
 function link(href, en, zh) {
   return {
     href,
@@ -1405,9 +1514,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           throw new Error(buildElsevierLocalAcquireGuidance());
         }
         const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-        return client.createParseFulltextV2Task({
-          fulltextFile: uploaded.xmlBlob,
-          filename: uploaded.filename,
+        const helperBundle = buildHelperBundleBlob({
+          connector: "elsevier_article_retrieval_api",
+          artifactKind: "structured_xml",
+          payload: await uploaded.xmlBlob.arrayBuffer(),
+          payloadName: uploaded.filename,
+          sourceDoi: uploaded.sourceDoi,
+          access: "licensed",
+          extraFiles: uploaded.bundleExtraFiles
+        });
+        return client.createParseHelperBundleV2Task({
+          helperBundleFile: helperBundle,
+          filename: "helper-bundle.zip",
           sourceDoi: uploaded.sourceDoi,
           sourceInput: uploaded.sourceInput
         });

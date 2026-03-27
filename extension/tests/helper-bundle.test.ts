@@ -40,4 +40,24 @@ describe("buildHelperBundleBlob", () => {
     expect(text).toContain("\"user_private_retention\":true");
     expect(text).toContain("paper.pdf");
   });
+
+  it("includes extra files in the bundle manifest and archive", async () => {
+    const blob = buildHelperBundleBlob({
+      connector: "elsevier_article_retrieval_api",
+      artifactKind: "structured_xml",
+      payload: "<article/>",
+      payloadName: "paper.xml",
+      sourceDoi: "10.1016/j.energy.2026.140192",
+      access: "licensed",
+      extraFiles: {
+        "paper_files/gr1.jpg": new Uint8Array([1, 2, 3])
+      }
+    });
+
+    const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+    expect(text).toContain("\"artifact_kind\":\"structured_xml\"");
+    expect(text).toContain("\"extra_files\":[\"paper_files/gr1.jpg\"]");
+    expect(text).toContain("paper.xml");
+    expect(text).toContain("paper_files/gr1.jpg");
+  });
 });

@@ -8,6 +8,7 @@ interface BuildHelperBundleBlobOptions {
   artifactKind: ArtifactKind;
   payload: string | Uint8Array | ArrayBuffer;
   payloadName: string;
+  extraFiles?: Record<string, string | Uint8Array | ArrayBuffer>;
   sourceDoi?: string;
   sourceUrl?: string;
   sourceId?: string;
@@ -57,6 +58,7 @@ const CONNECTOR_PRESETS: Record<string, { access: AccessKind; sourceName: string
 
 export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Blob {
   const payloadBytes = toUint8Array(options.payload);
+  const extraFiles = Object.entries(options.extraFiles || {}).sort(([left], [right]) => left.localeCompare(right));
   const manifest = {
     connector: options.connector,
     artifact_kind: options.artifactKind,
@@ -74,7 +76,7 @@ export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Bl
       options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
     ),
     payload_name: options.payloadName,
-    extra_files: []
+    extra_files: extraFiles.map(([name]) => name)
   };
 
   const archive = buildStoredZip([
@@ -85,7 +87,11 @@ export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Bl
     {
       name: options.payloadName,
       bytes: payloadBytes
-    }
+    },
+    ...extraFiles.map(([name, payload]) => ({
+      name,
+      bytes: toUint8Array(payload)
+    }))
   ]);
 
   return new Blob([archive], { type: "application/zip" });

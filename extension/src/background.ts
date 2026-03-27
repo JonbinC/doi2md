@@ -229,9 +229,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           throw new Error(buildElsevierLocalAcquireGuidance());
         }
         const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-        return client.createParseFulltextV2Task({
-          fulltextFile: uploaded.xmlBlob,
-          filename: uploaded.filename,
+        const helperBundle = buildHelperBundleBlob({
+          connector: "elsevier_article_retrieval_api",
+          artifactKind: "structured_xml",
+          payload: await uploaded.xmlBlob.arrayBuffer(),
+          payloadName: uploaded.filename,
+          sourceDoi: uploaded.sourceDoi,
+          access: "licensed",
+          extraFiles: uploaded.bundleExtraFiles
+        });
+        return client.createParseHelperBundleV2Task({
+          helperBundleFile: helperBundle,
+          filename: "helper-bundle.zip",
           sourceDoi: uploaded.sourceDoi,
           sourceInput: uploaded.sourceInput
         });
