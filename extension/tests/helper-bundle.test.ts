@@ -41,23 +41,23 @@ describe("buildHelperBundleBlob", () => {
     expect(text).toContain("paper.pdf");
   });
 
-  it("includes extra files in the bundle manifest and archive", async () => {
+  it("includes declared extra files in the bundle manifest and archive", async () => {
     const blob = buildHelperBundleBlob({
-      connector: "elsevier_article_retrieval_api",
-      artifactKind: "structured_xml",
-      payload: "<article/>",
-      payloadName: "paper.xml",
-      sourceDoi: "10.1016/j.energy.2026.140192",
+      connector: "springer_subscription_connector",
+      artifactKind: "html",
+      payload: "<html><body><article>Demo</article></body></html>",
+      payloadName: "paper.html",
+      sourceUrl: "https://link.springer.com/article/10.1000/demo",
       access: "licensed",
       extraFiles: {
-        "paper_files/gr1.jpg": new Uint8Array([1, 2, 3])
+        "assets/figure-1.png": new Uint8Array([0x89, 0x50, 0x4e, 0x47])
       }
     });
 
     const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
-    expect(text).toContain("\"artifact_kind\":\"structured_xml\"");
-    expect(text).toContain("\"extra_files\":[\"paper_files/gr1.jpg\"]");
-    expect(text).toContain("paper.xml");
-    expect(text).toContain("paper_files/gr1.jpg");
+    expect(text).toContain("\"artifact_kind\":\"html\"");
+    expect(text).toContain("\"extra_files\":[\"assets/figure-1.png\"]");
+    expect(text).toContain("paper.html");
+    expect(text).toContain("assets/figure-1.png");
   });
 });
