@@ -25,6 +25,10 @@ describe("workspace", () => {
     expect(popupHtml).toContain('id="file-intake-card"');
     expect(popupHtml).toContain('id="local-file-input"');
     expect(popupHtml).toContain('id="pdf-engine-select"');
+    expect(popupHtml).toContain('<option value="grobid" selected>GROBID</option>');
+    expect(popupHtml.indexOf('<option value="grobid" selected>GROBID</option>')).toBeLessThan(
+      popupHtml.indexOf('<option value="docling">Docling</option>')
+    );
     expect(popupHtml).toContain("PMC");
     expect(popupHtml).toContain("Wiley");
     expect(optionsHtml).toContain('href="./styles.css"');

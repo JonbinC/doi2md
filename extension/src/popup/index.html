@@ -62,7 +62,7 @@
 
       <section class="card" id="file-intake-card">
         <p id="file-intake-title" class="meta-value">Local file intake</p>
-        <p id="file-intake-note" class="meta-label">Use this when you already have a local PDF or EPUB and want the same Markdown package flow.</p>
+        <p id="file-intake-note" class="meta-label">Use this when you already have a local PDF or EPUB. PDF defaults to GROBID, with Docling and MinerU available when needed.</p>
         <div class="button-row">
           <button id="pick-pdf-button" type="button" class="secondary-button">Use PDF</button>
           <button id="pick-epub-button" type="button" class="secondary-button">Use EPUB</button>
@@ -71,8 +71,8 @@
         <p id="local-file-name" class="meta-label">No local file selected.</p>
         <label id="pdf-engine-label" for="pdf-engine-select">PDF engine</label>
         <select id="pdf-engine-select">
+          <option value="grobid" selected>GROBID</option>
           <option value="docling">Docling</option>
-          <option value="grobid">GROBID</option>
           <option value="mineru">MinerU</option>
         </select>
       </section>
