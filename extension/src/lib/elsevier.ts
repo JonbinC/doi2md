@@ -66,14 +66,12 @@ export async function fetchElsevierXml(input: string, apiKey: string) {
   }
 
   const xmlBytes = new Uint8Array(await response.arrayBuffer());
-  const xmlText = new TextDecoder().decode(xmlBytes);
-
   return {
     xmlBlob: new Blob([xmlBytes], { type: "application/xml" }),
     sourceDoi: identifier.kind === "doi" ? identifier.value : undefined,
     sourceInput: input,
     filename: "paper.xml",
-    bundleExtraFiles: await collectElsevierImageAssetFiles(xmlText)
+    bundleExtraFiles: {}
   };
 }
 

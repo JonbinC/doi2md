@@ -106,7 +106,7 @@ describe("extension background Elsevier routing", () => {
     fetchSpringerOpenAccessJats.mockReset();
   });
 
-  it("routes Elsevier local XML acquisition through parse-helper-bundle-v2 with bundled figure assets", async () => {
+  it("routes Elsevier local XML acquisition through parse-helper-bundle-v2 without bundling figure bytes", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(true);
@@ -115,9 +115,7 @@ describe("extension background Elsevier routing", () => {
       filename: "paper.xml",
       sourceDoi: "10.1016/j.energy.2026.140192",
       sourceInput: "10.1016/j.energy.2026.140192",
-      bundleExtraFiles: {
-        "paper_files/gr1.jpg": new Uint8Array([1, 2, 3])
-      }
+      bundleExtraFiles: {}
     });
 
     await import("../src/background");
@@ -158,9 +156,9 @@ describe("extension background Elsevier routing", () => {
     const text = new TextDecoder().decode(new Uint8Array(await call?.helperBundleFile.arrayBuffer()));
     expect(text).toContain("\"connector\":\"elsevier_article_retrieval_api\"");
     expect(text).toContain("\"artifact_kind\":\"structured_xml\"");
-    expect(text).toContain("\"extra_files\":[\"paper_files/gr1.jpg\"]");
+    expect(text).toContain("\"extra_files\":[]");
     expect(text).toContain("paper.xml");
-    expect(text).toContain("paper_files/gr1.jpg");
+    expect(text).not.toContain("paper_files/gr1.jpg");
   });
 
   it("routes current-tab browser capture through parse-helper-bundle-v2 before falling back to direct parse", async () => {

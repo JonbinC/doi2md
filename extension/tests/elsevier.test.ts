@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
-  collectElsevierImageAssetFiles,
   buildElsevierLocalAcquireGuidance,
+  fetchElsevierXml,
   normalizeElsevierInput,
   requiresElsevierLocalAcquire
 } from "../src/lib/elsevier";
@@ -47,46 +47,47 @@ describe("buildElsevierLocalAcquireGuidance", () => {
   });
 });
 
-describe("collectElsevierImageAssetFiles", () => {
-  it("downloads figure assets into helper bundle paper_files members", async () => {
+describe("fetchElsevierXml", () => {
+  it("keeps Elsevier figure links remote instead of bundling downloaded image bytes", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (input) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "https://ars.els-cdn.com/content/image/1-s2.0-S0360544226002970-gr1.jpg") {
-        return new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
-          status: 200,
-          headers: {
-            "content-type": "image/jpeg"
-          }
-        });
+      if (url.includes("https://api.elsevier.com/content/article/pii/S0360544226002970")) {
+        return new Response(
+          `
+            <full-text-retrieval-response>
+              <coredata>
+                <dc:identifier>PII:S0360544226002970</dc:identifier>
+              </coredata>
+              <originalText>
+                <xocs:doc xmlns:xocs="http://www.elsevier.com/xml/xocs/dtd"
+                          xmlns:ce="http://www.elsevier.com/xml/common/dtd">
+                  <xocs:attachment>
+                    <ce:object ref="gr1" category="standard">https://api.elsevier.com/content/object/eid/1-s2.0-S0360544226002970-gr1.jpg</ce:object>
+                  </xocs:attachment>
+                  <ce:figure id="fig1">
+                    <ce:label>Figure 1</ce:label>
+                    <ce:link locator="gr1" />
+                  </ce:figure>
+                </xocs:doc>
+              </originalText>
+            </full-text-retrieval-response>
+          `,
+          { status: 200, headers: { "content-type": "application/xml" } }
+        );
       }
-      return new Response("missing", { status: 404 });
-    };
+      return new Response("unexpected", { status: 500 });
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
 
     try {
-      const assets = await collectElsevierImageAssetFiles(`
-        <full-text-retrieval-response>
-          <coredata>
-            <dc:identifier>PII:S0360544226002970</dc:identifier>
-          </coredata>
-          <originalText>
-            <xocs:doc xmlns:xocs="http://www.elsevier.com/xml/xocs/dtd"
-                      xmlns:ce="http://www.elsevier.com/xml/common/dtd">
-              <xocs:attachment>
-                <ce:object ref="gr1" category="standard">https://api.elsevier.com/content/object/eid/1-s2.0-S0360544226002970-gr1.jpg</ce:object>
-              </xocs:attachment>
-              <ce:figure id="fig1">
-                <ce:label>Figure 1</ce:label>
-                <ce:link locator="gr1" />
-              </ce:figure>
-            </xocs:doc>
-          </originalText>
-        </full-text-retrieval-response>
-      `);
+      const uploaded = await fetchElsevierXml(
+        "https://www.sciencedirect.com/science/article/pii/S0360544226002970",
+        "els-demo"
+      );
 
-      expect(assets).toEqual({
-        "paper_files/1-s2.0-S0360544226002970-gr1.jpg": expect.any(Uint8Array)
-      });
+      expect(uploaded.bundleExtraFiles).toEqual({});
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       globalThis.fetch = originalFetch;
     }
