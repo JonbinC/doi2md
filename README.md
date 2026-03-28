@@ -33,6 +33,7 @@ Use this repository when you specifically need the browser extension for local c
 - the paper page needs to stay on your own machine
 - you want a quick path to `paper.md`, figures, and a reusable bundle
 - you already have a local PDF or EPUB and want to keep the same package flow
+- local PDF intake currently defaults to `GROBID`; `Docling` and `MinerU` remain selectable fallbacks
 
 PDF is optional input. The default handoff format remains the Markdown package.
 
