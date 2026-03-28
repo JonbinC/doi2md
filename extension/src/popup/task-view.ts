@@ -253,7 +253,7 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
   if (result.warning_code === "elsevier_abstract_only") {
     return language === "zh"
       ? "Elsevier 仅返回了摘要。请确认你当前是否处于校园网或机构 IP 环境。"
-      : "Elsevier only returned the abstract. Are you on a campus or institutional network IP?";
+      : "Elsevier only returned the abstract. Check whether this machine is on a campus or institutional network IP.";
   }
   return result.warning_message ?? "";
 }

@@ -806,7 +806,7 @@ function getResultWarningText(result, language = "en") {
     return "";
   }
   if (result.warning_code === "elsevier_abstract_only") {
-    return language === "zh" ? "Elsevier \u4EC5\u8FD4\u56DE\u4E86\u6458\u8981\u3002\u8BF7\u786E\u8BA4\u4F60\u5F53\u524D\u662F\u5426\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u73AF\u5883\u3002" : "Elsevier only returned the abstract. Are you on a campus or institutional network IP?";
+    return language === "zh" ? "Elsevier \u4EC5\u8FD4\u56DE\u4E86\u6458\u8981\u3002\u8BF7\u786E\u8BA4\u4F60\u5F53\u524D\u662F\u5426\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u73AF\u5883\u3002" : "Elsevier only returned the abstract. Check whether this machine is on a campus or institutional network IP.";
   }
   return result.warning_message ?? "";
 }
