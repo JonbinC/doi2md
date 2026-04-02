@@ -14,6 +14,7 @@ export interface MdteroSettings {
 export interface PopupState {
   input: string;
   parseTaskId?: string;
+  parseArtifactKey?: string;
   parseFilename?: string;
   parseMarkdownPath?: string;
   translatedTaskId?: string;
@@ -26,6 +27,7 @@ export interface RecentTaskSummary {
   input: string;
   label: string;
   parseTaskId?: string;
+  parseArtifactKey?: string;
   parseFilename?: string;
   translatedTaskId?: string;
   translatedFilename?: string;

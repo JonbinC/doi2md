@@ -26,6 +26,13 @@ export interface BrowserBridgeAcquireResponse {
   page_title?: string;
   failure_code?: string;
   failure_message?: string;
+  failure_context?: {
+    sourceUrl: string;
+    title: string;
+    hasMetadataSignals: boolean;
+    hasBodySignals: boolean;
+    isPdfEmbedShell: boolean;
+  };
 }
 
 interface ListenerEvent<T> {
@@ -105,6 +112,8 @@ export function initializeBrowserBridge(options: BrowserBridgeOptions) {
   let runnerState: "idle" | "busy" = "idle";
   let bridgeState: "connected" | "unavailable" | "disconnected" = "disconnected";
   let idlePollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let acquireQueue: Promise<void> = Promise.resolve();
+  let pendingAcquireCount = 0;
 
   const clearIdlePoll = () => {
     if (idlePollTimer !== null) {
@@ -156,18 +165,24 @@ export function initializeBrowserBridge(options: BrowserBridgeOptions) {
       if (!isAcquireEnvelope(payload)) {
         return;
       }
+      pendingAcquireCount += 1;
       runnerState = "busy";
       clearIdlePoll();
-      Promise.resolve(options.acquire(payload.request))
-        .then((response) => {
-          connectedPort.postMessage(response);
-        })
-        .catch((error) => {
-          connectedPort.postMessage(toBridgeFailure(payload.request, error));
-        })
-        .finally(() => {
-          runnerState = "idle";
-          scheduleIdlePoll(BRIDGE_POST_TASK_POLL_DELAY_MS);
+      acquireQueue = acquireQueue
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            const response = await options.acquire(payload.request);
+            connectedPort.postMessage(response);
+          } catch (error) {
+            connectedPort.postMessage(toBridgeFailure(payload.request, error));
+          } finally {
+            pendingAcquireCount = Math.max(0, pendingAcquireCount - 1);
+            if (pendingAcquireCount === 0) {
+              runnerState = "idle";
+              scheduleIdlePoll(BRIDGE_POST_TASK_POLL_DELAY_MS);
+            }
+          }
         });
     });
 

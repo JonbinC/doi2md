@@ -10,7 +10,10 @@ function buildHelperFirstParseBody(params) {
   }
   return body;
 }
-function fallbackArtifactFilename(artifact) {
+function fallbackArtifactFilename(artifact, preferredFilename) {
+  if (preferredFilename && preferredFilename.trim()) {
+    return preferredFilename.trim();
+  }
   if (artifact === "paper_bundle") return "paper_bundle.zip";
   if (artifact === "paper_md") return "paper.md";
   if (artifact === "paper_pdf") return "paper.pdf";
@@ -87,6 +90,17 @@ function createApiClient(getSettings) {
         (response) => response.json()
       );
     },
+    getSourceConnectivityEnvironmentSummary() {
+      return request("/diagnostics/source-connectivity/environment", void 0, { requireAuth: true }).then(
+        (response) => response.json()
+      );
+    },
+    explainSourceConnectivity(payload) {
+      return request("/diagnostics/source-connectivity/explain", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }, { requireAuth: true }).then((response) => response.json());
+    },
     getClientConfig() {
       return request("/client-config").then((response) => response.json());
     },
@@ -151,12 +165,64 @@ function createApiClient(getSettings) {
     getTask(taskId) {
       return request(`/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
     },
-    downloadArtifact(taskId, artifact) {
+    downloadArtifact(taskId, artifact, preferredFilename) {
       return request(`/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
-        filename: extractFilename(response.headers.get("Content-Disposition"), fallbackArtifactFilename(artifact)),
+        filename: extractFilename(
+          response.headers.get("Content-Disposition"),
+          fallbackArtifactFilename(artifact, preferredFilename)
+        ),
         mediaType: response.headers.get("Content-Type") ?? "application/octet-stream"
       }));
+    }
+  };
+}
+function createRouterSSOTClient(getSettings) {
+  async function requireSignedInSettings() {
+    const settings = await getSettings();
+    if (!settings.token) {
+      throw new Error("Sign in required before fetching route plan.");
+    }
+    return settings;
+  }
+  function getRuntimeVersion() {
+    const runtimeVersion = globalThis.chrome?.runtime?.getManifest?.().version;
+    return runtimeVersion ? `extension-${runtimeVersion}` : "extension-dev";
+  }
+  async function request(path, init) {
+    const settings = await requireSignedInSettings();
+    const headers = new Headers(init?.headers ?? {});
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    headers.set("Authorization", `Bearer ${settings.token}`);
+    headers.set("X-Client-Channel", "extension");
+    headers.set("X-Client-Version", getRuntimeVersion());
+    const response = await fetch(`${settings.apiBaseUrl}${path}`, {
+      ...init,
+      headers
+    });
+    if (!response.ok) {
+      const detail = await response.clone().json().then((payload) => {
+        if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
+          return payload.detail.trim();
+        }
+        return "";
+      }).catch(() => "");
+      throw new Error(detail || `API request failed: ${response.status}`);
+    }
+    return response;
+  }
+  return {
+    /**
+     * Fetch canonical route plan from backend SSOT.
+     * Extension should use this instead of local routing rules.
+     */
+    fetchRoutePlan(payload) {
+      return request("/api/v1/extension/route", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }).then((response) => response.json());
     }
   };
 }
@@ -186,6 +252,8 @@ function initializeBrowserBridge(options) {
   let runnerState = "idle";
   let bridgeState = "disconnected";
   let idlePollTimer = null;
+  let acquireQueue = Promise.resolve();
+  let pendingAcquireCount = 0;
   const clearIdlePoll = () => {
     if (idlePollTimer !== null) {
       globalThis.clearTimeout(idlePollTimer);
@@ -231,15 +299,22 @@ function initializeBrowserBridge(options) {
       if (!isAcquireEnvelope(payload)) {
         return;
       }
+      pendingAcquireCount += 1;
       runnerState = "busy";
       clearIdlePoll();
-      Promise.resolve(options.acquire(payload.request)).then((response) => {
-        connectedPort.postMessage(response);
-      }).catch((error) => {
-        connectedPort.postMessage(toBridgeFailure(payload.request, error));
-      }).finally(() => {
-        runnerState = "idle";
-        scheduleIdlePoll(BRIDGE_POST_TASK_POLL_DELAY_MS);
+      acquireQueue = acquireQueue.catch(() => void 0).then(async () => {
+        try {
+          const response = await options.acquire(payload.request);
+          connectedPort.postMessage(response);
+        } catch (error) {
+          connectedPort.postMessage(toBridgeFailure(payload.request, error));
+        } finally {
+          pendingAcquireCount = Math.max(0, pendingAcquireCount - 1);
+          if (pendingAcquireCount === 0) {
+            runnerState = "idle";
+            scheduleIdlePoll(BRIDGE_POST_TASK_POLL_DELAY_MS);
+          }
+        }
       });
     });
     connectedPort.onDisconnect.addListener(() => {
@@ -284,6 +359,7 @@ function initializeBrowserBridge(options) {
 }
 
 // src/lib/bridge-acquire.ts
+var CONTENT_SCRIPT_MESSAGE_TIMEOUT_MS = 2e3;
 async function performBridgeAcquire(options) {
   const { request, chromeApi, bridgeSession: bridgeSession2 } = options;
   const pageLoadMs = getBridgeTimeoutMs(request.timeouts?.page_load_ms, 3e4);
@@ -299,9 +375,24 @@ async function performBridgeAcquire(options) {
         failure_message: "No active bridge tab is available for current-tab capture."
       };
     }
-    const response2 = await sendTabMessageWithRetry(chromeApi.tabs, activeTabId, {
-      type: "mdtero.capture_current_tab.request"
-    });
+    let response2;
+    try {
+      response2 = await sendTabMessageWithRetry(chromeApi.tabs, activeTabId, {
+        type: "mdtero.capture_current_tab.request"
+      });
+    } catch {
+      const finalTabUrl = await getTabUrl(chromeApi.tabs, activeTabId);
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "content_script_unavailable",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: "Current-tab capture did not succeed.",
+          finalTabUrl
+        })
+      };
+    }
     if (!response2?.ok || !response2.capture?.ok) {
       return {
         task_id: request.task_id,
@@ -324,7 +415,8 @@ async function performBridgeAcquire(options) {
   }
   if (request.action === "open_and_fetch_xml") {
     const targetUrl2 = resolveTargetUrl(request.input, request.source_url);
-    const tabId2 = await openAcquisitionTab(chromeApi.tabs, targetUrl2, bridgeSession2);
+    const opened2 = await openAcquisitionTab(chromeApi.tabs, targetUrl2, bridgeSession2);
+    const tabId2 = opened2.tabId;
     if (!tabId2) {
       return {
         task_id: request.task_id,
@@ -334,13 +426,43 @@ async function performBridgeAcquire(options) {
         failure_message: "Browser opened the target page without a usable tab id."
       };
     }
-    await waitForTabComplete(chromeApi.tabs, tabId2, pageLoadMs);
-    await delay(settleMs);
-    const response2 = await sendTabMessageWithRetry(chromeApi.tabs, tabId2, {
-      type: "mdtero.fetch_xml.request",
-      artifactUrl: request.artifact_url,
-      sourceUrl: request.source_url
+    const xmlTabLoadResult = await waitForTabComplete(chromeApi.tabs, tabId2, pageLoadMs, {
+      acceptAlreadyComplete: opened2.acceptAlreadyComplete,
+      previousUrl: opened2.previousUrl
     });
+    if (!xmlTabLoadResult.ok) {
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "tab_load_timeout",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: xmlTabLoadResult.errorMessage,
+          finalTabUrl: xmlTabLoadResult.finalTabUrl
+        })
+      };
+    }
+    await delay(settleMs);
+    let response2;
+    try {
+      response2 = await sendTabMessageWithRetry(chromeApi.tabs, tabId2, {
+        type: "mdtero.fetch_xml.request",
+        artifactUrl: request.artifact_url,
+        sourceUrl: request.source_url
+      });
+    } catch {
+      const finalTabUrl = await getTabUrl(chromeApi.tabs, tabId2);
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "content_script_unavailable",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: "Page hook did not return a usable XML payload.",
+          finalTabUrl
+        })
+      };
+    }
     if (!response2?.ok || !response2.xml) {
       return {
         task_id: request.task_id,
@@ -372,7 +494,8 @@ async function performBridgeAcquire(options) {
   if (request.action === "open_and_download_epub") {
     const artifactUrl = resolveArtifactUrl(request);
     const targetUrl2 = resolveEpubTargetUrl(request);
-    const tabId2 = await openAcquisitionTab(chromeApi.tabs, targetUrl2, bridgeSession2);
+    const opened2 = await openAcquisitionTab(chromeApi.tabs, targetUrl2, bridgeSession2);
+    const tabId2 = opened2.tabId;
     if (!tabId2) {
       return {
         task_id: request.task_id,
@@ -382,16 +505,46 @@ async function performBridgeAcquire(options) {
         failure_message: "Browser opened the target page without a usable tab id."
       };
     }
-    await waitForTabComplete(chromeApi.tabs, tabId2, pageLoadMs);
+    const epubTabLoadResult = await waitForTabComplete(chromeApi.tabs, tabId2, pageLoadMs, {
+      acceptAlreadyComplete: opened2.acceptAlreadyComplete,
+      previousUrl: opened2.previousUrl
+    });
+    if (!epubTabLoadResult.ok) {
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "tab_load_timeout",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: epubTabLoadResult.errorMessage,
+          finalTabUrl: epubTabLoadResult.finalTabUrl
+        })
+      };
+    }
     await delay(settleMs);
-    const response2 = await sendTabMessageWithRetry(
-      chromeApi.tabs,
-      tabId2,
-      {
-        type: "mdtero.download_epub.request",
-        artifactUrl
-      }
-    );
+    let response2;
+    try {
+      response2 = await sendTabMessageWithRetry(
+        chromeApi.tabs,
+        tabId2,
+        {
+          type: "mdtero.download_epub.request",
+          artifactUrl
+        }
+      );
+    } catch {
+      const finalTabUrl = await getTabUrl(chromeApi.tabs, tabId2);
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "content_script_unavailable",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: "Page hook did not return a usable EPUB payload.",
+          finalTabUrl
+        })
+      };
+    }
     if (!response2?.ok || !response2.download) {
       return {
         task_id: request.task_id,
@@ -424,7 +577,8 @@ async function performBridgeAcquire(options) {
     throw new Error(`Unsupported bridge action: ${request.action}`);
   }
   const targetUrl = resolveTargetUrl(request.input, request.source_url);
-  const tabId = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession2);
+  const opened = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession2);
+  const tabId = opened.tabId;
   if (!tabId) {
     return {
       task_id: request.task_id,
@@ -434,18 +588,42 @@ async function performBridgeAcquire(options) {
       failure_message: "Browser opened the target page without a usable tab id."
     };
   }
-  await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs);
-  await delay(settleMs);
-  const response = await sendTabMessageWithRetry(chromeApi.tabs, tabId, {
-    type: "mdtero.capture_html.request"
+  const htmlTabLoadResult = await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs, {
+    acceptAlreadyComplete: opened.acceptAlreadyComplete,
+    previousUrl: opened.previousUrl
   });
+  if (!htmlTabLoadResult.ok) {
+    return {
+      task_id: request.task_id,
+      status: "failed",
+      connector: request.connector,
+      failure_code: "tab_load_timeout",
+      failure_message: buildUnavailableContentScriptMessage({
+        baseMessage: htmlTabLoadResult.errorMessage,
+        finalTabUrl: htmlTabLoadResult.finalTabUrl
+      })
+    };
+  }
+  await delay(settleMs);
+  let response;
+  try {
+    response = await sendTabMessageWithRetry(chromeApi.tabs, tabId, {
+      type: "mdtero.capture_html.request"
+    });
+  } catch {
+    response = void 0;
+  }
   if (!response?.ok || !response.capture) {
+    const finalTabUrl = await getTabUrl(chromeApi.tabs, tabId);
     return {
       task_id: request.task_id,
       status: "failed",
       connector: request.connector,
       failure_code: "content_script_unavailable",
-      failure_message: "Capture hook did not return a usable article payload."
+      failure_message: buildUnavailableContentScriptMessage({
+        baseMessage: "Capture hook did not return a usable article payload.",
+        finalTabUrl
+      })
     };
   }
   if (!response.capture.ok) {
@@ -454,7 +632,8 @@ async function performBridgeAcquire(options) {
       status: "failed",
       connector: request.connector,
       failure_code: response.capture.failureCode || "article_body_missing",
-      failure_message: response.capture.failureMessage || "Page loaded but article capture did not succeed."
+      failure_message: response.capture.failureMessage || "Page loaded but article capture did not succeed.",
+      failure_context: response.capture.failureContext
     };
   }
   return {
@@ -469,35 +648,20 @@ async function performBridgeAcquire(options) {
   };
 }
 async function openAcquisitionTab(tabs, targetUrl, bridgeSession2) {
-  const existingTabId = bridgeSession2?.tabId;
-  if (existingTabId && typeof tabs.update === "function") {
-    try {
-      const updated = await tabs.update(existingTabId, {
-        url: targetUrl,
-        active: false
-      });
-      const updatedTabId = updated.id ?? existingTabId;
-      if (bridgeSession2) {
-        bridgeSession2.tabId = updatedTabId;
-      }
-      return updatedTabId;
-    } catch {
-      if (bridgeSession2) {
-        bridgeSession2.tabId = null;
-      }
-    }
-  }
   const created = await tabs.create({ url: targetUrl, active: false });
   if (bridgeSession2) {
     bridgeSession2.tabId = created.id ?? null;
   }
-  return created.id;
+  return {
+    tabId: created.id,
+    acceptAlreadyComplete: true
+  };
 }
 async function sendTabMessageWithRetry(tabs, tabId, message, maxAttempts = 4) {
   let lastError = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      return await tabs.sendMessage(tabId, message);
+      return await sendTabMessageWithTimeout(tabs, tabId, message, CONTENT_SCRIPT_MESSAGE_TIMEOUT_MS);
     } catch (error) {
       lastError = error;
       if (!isRetryableContentScriptError(error) || attempt === maxAttempts - 1) {
@@ -508,10 +672,45 @@ async function sendTabMessageWithRetry(tabs, tabId, message, maxAttempts = 4) {
   }
   throw lastError instanceof Error ? lastError : new Error("Content script did not become available.");
 }
+async function sendTabMessageWithTimeout(tabs, tabId, message, timeoutMs) {
+  let timeoutHandle = null;
+  try {
+    return await Promise.race([
+      tabs.sendMessage(tabId, message),
+      new Promise((_, reject) => {
+        timeoutHandle = globalThis.setTimeout(() => {
+          reject(new Error("Content script response timed out."));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutHandle !== null) {
+      globalThis.clearTimeout(timeoutHandle);
+    }
+  }
+}
+async function getTabUrl(tabs, tabId) {
+  if (typeof tabs.get !== "function") {
+    return "";
+  }
+  try {
+    return String((await tabs.get(tabId))?.url || "").trim();
+  } catch {
+    return "";
+  }
+}
+function buildUnavailableContentScriptMessage(options) {
+  const baseMessage = String(options.baseMessage || "").trim() || "Content script did not become available.";
+  const finalTabUrl = String(options.finalTabUrl || "").trim();
+  if (!finalTabUrl) {
+    return baseMessage;
+  }
+  return `${baseMessage} Final tab URL: ${finalTabUrl}`;
+}
 function isRetryableContentScriptError(error) {
   const message = error instanceof Error ? error.message : String(error || "");
   const lowered = message.toLowerCase();
-  return lowered.includes("receiving end does not exist") || lowered.includes("could not establish connection") || lowered.includes("message port closed");
+  return lowered.includes("receiving end does not exist") || lowered.includes("could not establish connection") || lowered.includes("message port closed") || lowered.includes("response timed out");
 }
 function delay(ms) {
   return new Promise((resolve) => {
@@ -560,31 +759,80 @@ function resolveEpubTargetUrl(request) {
   }
   return resolveTargetUrl(request.input, request.source_url);
 }
-function waitForTabComplete(tabs, tabId, timeoutMs) {
-  return new Promise((resolve, reject) => {
+function waitForTabComplete(tabs, tabId, timeoutMs, options) {
+  return new Promise((resolve) => {
     const timeout = globalThis.setTimeout(() => {
-      tabs.onUpdated.removeListener(handleUpdate);
-      reject(new Error("Timed out waiting for tab load completion."));
+      void getTabUrl(tabs, tabId).then((finalTabUrl) => {
+        resolveIfPending({
+          ok: false,
+          errorMessage: "Timed out waiting for tab load completion.",
+          finalTabUrl
+        });
+      });
     }, timeoutMs);
+    let settled = false;
+    const resolveIfPending = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      tabs.onUpdated.removeListener(handleUpdate);
+      resolve(result);
+    };
     const handleUpdate = (updatedTabId, changeInfo) => {
       if (updatedTabId !== tabId) {
         return;
       }
       if (changeInfo.status === "complete") {
-        globalThis.clearTimeout(timeout);
-        tabs.onUpdated.removeListener(handleUpdate);
-        resolve();
+        if (!options?.previousUrl) {
+          resolveIfPending({ ok: true });
+          return;
+        }
+        void maybeResolveCompletedState();
       }
     };
     tabs.onUpdated.addListener(handleUpdate);
+    if (options?.acceptAlreadyComplete !== false) {
+      void maybeResolveCompletedState();
+    }
+    async function maybeResolveCompletedState() {
+      const tab = await getTabDetails(tabs, tabId);
+      if (tab?.status !== "complete") {
+        return;
+      }
+      const currentUrl = String(tab.url || "").trim();
+      const previousUrl = String(options?.previousUrl || "").trim();
+      if (previousUrl && currentUrl === previousUrl) {
+        return;
+      }
+      resolveIfPending({ ok: true });
+    }
   });
+}
+async function getTabDetails(tabs, tabId) {
+  if (typeof tabs.get !== "function") {
+    return null;
+  }
+  try {
+    return await tabs.get(tabId);
+  } catch {
+    return null;
+  }
 }
 
 // src/lib/bridge-wake.ts
 var BRIDGE_SUPPORTED_URL_PATTERNS = [
   "arxiv.org",
+  "dl.acm.org",
+  "ieeexplore.ieee.org",
+  "nature.com",
+  "pubs.acs.org",
+  "pubs.rsc.org",
   "sciencedirect.com/science/article/pii/",
+  "techrxiv.org",
   "link.springer.com",
+  "mdpi.com",
   "springer.com",
   "springernature.com",
   "onlinelibrary.wiley.com",
@@ -657,56 +905,6 @@ async function fetchElsevierXml(input, apiKey) {
   };
 }
 
-// src/lib/springer.ts
-var DOI_PATTERN = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
-var DOI_URL_PATTERN2 = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
-var SPRINGER_HOST_PATTERN = /(link\.springer\.com|springer\.com|springernature\.com)/i;
-function normalizeSpringerInput(input, pageUrl) {
-  const trimmed = String(input || "").trim();
-  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN2);
-  if (doiUrlMatch) {
-    return doiUrlMatch[1];
-  }
-  if (SPRINGER_HOST_PATTERN.test(trimmed)) {
-    const doiMatch = trimmed.match(DOI_PATTERN);
-    if (doiMatch) {
-      return doiMatch[1];
-    }
-  }
-  if (/^10\.1007\//i.test(trimmed)) {
-    return trimmed;
-  }
-  if (SPRINGER_HOST_PATTERN.test(String(pageUrl || ""))) {
-    const doiMatch = trimmed.match(DOI_PATTERN);
-    if (doiMatch) {
-      return doiMatch[1];
-    }
-  }
-  return null;
-}
-async function fetchSpringerOpenAccessJats(input, apiKey, pageUrl) {
-  const sourceDoi = normalizeSpringerInput(input, pageUrl);
-  if (!sourceDoi) {
-    throw new Error("Input is not recognized as a Springer DOI or Springer article page.");
-  }
-  const response = await fetch(
-    `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(sourceDoi)}&api_key=${encodeURIComponent(apiKey)}`
-  );
-  if (!response.ok) {
-    throw new Error(`Springer OA JATS fetch failed: ${response.status}`);
-  }
-  const text = await response.text();
-  if (!/<article[\s>]/i.test(text)) {
-    throw new Error("Springer OA API did not return a JATS article payload.");
-  }
-  return {
-    xmlBlob: new Blob([text], { type: "application/xml" }),
-    filename: "paper.xml",
-    sourceDoi,
-    sourceInput: input
-  };
-}
-
 // src/lib/helper-bundle.ts
 var encoder = new TextEncoder();
 var CONNECTOR_PRESETS = {
@@ -735,6 +933,10 @@ var CONNECTOR_PRESETS = {
     sourceName: "taylor_francis_tdm",
     userPrivateRetention: true
   },
+  taylor_francis_oa_epub: {
+    access: "open",
+    sourceName: "taylor_francis_oa_epub"
+  },
   arxiv_native: {
     access: "open",
     sourceName: "arxiv_native"
@@ -742,7 +944,10 @@ var CONNECTOR_PRESETS = {
 };
 function buildHelperBundleBlob(options) {
   const payloadBytes = toUint8Array(options.payload);
-  const extraFiles = Object.entries(options.extraFiles || {}).sort(([left], [right]) => left.localeCompare(right));
+  const extraFiles = Object.entries(options.extraFiles || {}).sort(([left], [right]) => left.localeCompare(right)).map(([name, payload]) => ({
+    name,
+    bytes: toUint8Array(payload)
+  }));
   const manifest = {
     connector: options.connector,
     artifact_kind: options.artifactKind,
@@ -760,7 +965,7 @@ function buildHelperBundleBlob(options) {
       options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
     ),
     payload_name: options.payloadName,
-    extra_files: extraFiles.map(([name]) => name)
+    extra_files: extraFiles.map((entry) => entry.name)
   };
   const archive = buildStoredZip([
     {
@@ -771,10 +976,7 @@ function buildHelperBundleBlob(options) {
       name: options.payloadName,
       bytes: payloadBytes
     },
-    ...extraFiles.map(([name, payload]) => ({
-      name,
-      bytes: toUint8Array(payload)
-    }))
+    ...extraFiles
   ]);
   return new Blob([archive], { type: "application/zip" });
 }
@@ -915,6 +1117,686 @@ function crc32(bytes) {
     value = CRC32_TABLE[(value ^ item) & 255] ^ value >>> 8;
   }
   return (value ^ 4294967295) >>> 0;
+}
+
+// src/lib/springer.ts
+var DOI_PATTERN = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
+var DOI_URL_PATTERN2 = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
+var SPRINGER_HOST_PATTERN = /(link\.springer\.com|springer\.com|springernature\.com)/i;
+function normalizeSpringerInput(input, pageUrl) {
+  const trimmed = String(input || "").trim();
+  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN2);
+  if (doiUrlMatch) {
+    return doiUrlMatch[1];
+  }
+  if (SPRINGER_HOST_PATTERN.test(trimmed)) {
+    const doiMatch = trimmed.match(DOI_PATTERN);
+    if (doiMatch) {
+      return doiMatch[1];
+    }
+  }
+  if (/^10\.1007\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (SPRINGER_HOST_PATTERN.test(String(pageUrl || ""))) {
+    const doiMatch = trimmed.match(DOI_PATTERN);
+    if (doiMatch) {
+      return doiMatch[1];
+    }
+  }
+  return null;
+}
+async function fetchSpringerOpenAccessJats(input, apiKey, pageUrl) {
+  const sourceDoi = normalizeSpringerInput(input, pageUrl);
+  if (!sourceDoi) {
+    throw new Error("Input is not recognized as a Springer DOI or Springer article page.");
+  }
+  const response = await fetch(
+    `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(sourceDoi)}&api_key=${encodeURIComponent(apiKey)}`
+  );
+  if (!response.ok) {
+    throw new Error(`Springer OA JATS fetch failed: ${response.status}`);
+  }
+  const text = await response.text();
+  if (!/<article[\s>]/i.test(text)) {
+    throw new Error("Springer OA API did not return a JATS article payload.");
+  }
+  return {
+    xmlBlob: new Blob([text], { type: "application/xml" }),
+    filename: "paper.xml",
+    sourceDoi,
+    sourceInput: input
+  };
+}
+
+// src/lib/legacy-parse.ts
+async function runLegacyParseRequest(client2, message) {
+  if (requiresElsevierLocalAcquire(message.input)) {
+    if (!message.elsevierApiKey) {
+      throw new Error(buildElsevierLocalAcquireGuidance());
+    }
+    const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
+    const helperBundle = buildHelperBundleBlob({
+      connector: "elsevier_article_retrieval_api",
+      artifactKind: "structured_xml",
+      payload: await uploaded.xmlBlob.arrayBuffer(),
+      payloadName: uploaded.filename,
+      extraFiles: uploaded.bundleExtraFiles,
+      sourceDoi: uploaded.sourceDoi,
+      access: "licensed"
+    });
+    return client2.createParseHelperBundleV2Task({
+      helperBundleFile: helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi: uploaded.sourceDoi,
+      sourceInput: uploaded.sourceInput
+    });
+  }
+  const springerSourceDoi = normalizeSpringerInput(message.input, message.pageContext?.tabUrl);
+  if (springerSourceDoi && message.springerOpenAccessApiKey) {
+    try {
+      const uploaded = await fetchSpringerOpenAccessJats(
+        message.input,
+        message.springerOpenAccessApiKey,
+        message.pageContext?.tabUrl
+      );
+      return client2.createParseFulltextV2Task({
+        fulltextFile: uploaded.xmlBlob,
+        filename: uploaded.filename,
+        sourceDoi: uploaded.sourceDoi,
+        sourceInput: uploaded.sourceInput
+      });
+    } catch {
+    }
+  }
+  const currentTabBundleTask = await tryCreateCurrentTabHelperBundleTask(client2, {
+    input: message.input,
+    springerOpenAccessApiKey: message.springerOpenAccessApiKey,
+    pageContext: message.pageContext
+  });
+  if (currentTabBundleTask) {
+    return currentTabBundleTask;
+  }
+  return client2.createParseTask({ input: message.input });
+}
+async function runLegacyFileParseRequest(client2, message) {
+  const filename = String(message.filename || "").trim() || "paper.bin";
+  const artifactKind = message.artifactKind === "epub" ? "epub" : "pdf";
+  const sourceType = artifactKind === "pdf" ? "browser_extension_local_upload_pdf" : "browser_extension_local_upload_epub";
+  const helperBundle = buildHelperBundleBlob({
+    connector: "local_file_upload",
+    artifactKind,
+    payload: await message.file.arrayBuffer(),
+    payloadName: filename,
+    sourceType,
+    sourceUrl: `file://${filename}`,
+    acquisitionMode: "browser_extension_local_upload",
+    userPrivateRetention: true
+  });
+  return client2.createParseHelperBundleV2Task({
+    helperBundleFile: helperBundle,
+    filename: "helper-bundle.zip",
+    sourceInput: filename,
+    pdfEngine: artifactKind === "pdf" ? message.pdfEngine : void 0
+  });
+}
+function inferSourceDoi(input) {
+  const trimmed = String(input || "").trim();
+  return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
+}
+function isArxivAbsReference(value) {
+  const lowered = String(value || "").trim().toLowerCase();
+  return lowered.includes("arxiv.org/abs/") || lowered.includes("arxiv:");
+}
+function shouldSkipArxivCurrentTabCapture(message) {
+  if (isArxivAbsReference(message.input)) {
+    return true;
+  }
+  return isArxivAbsReference(message.pageContext?.tabUrl);
+}
+function describeCurrentTabCaptureFailure(params) {
+  const failureCode = String(params.failureCode || "").trim().toLowerCase();
+  const failureMessage = String(params.failureMessage || "").trim();
+  if (failureCode === "login_required") {
+    return "This page still requires institutional or account sign-in. Open the article in your browser, finish login, then retry capture.";
+  }
+  if (failureCode === "challenge_page_detected") {
+    return "This page is still behind a browser challenge. Finish the verification in the page, wait for the article to load, then retry capture.";
+  }
+  if (failureCode === "article_body_missing") {
+    return "No article body was detected on the current page. Open the HTML full-text page instead of a PDF or download shell, then retry capture.";
+  }
+  if (failureCode === "content_script_unavailable") {
+    return "Browser page capture is not ready yet. Reload the paper page or reopen the extension, then try again.";
+  }
+  return failureMessage || "Browser page capture did not succeed on the current page.";
+}
+async function tryCreateCurrentTabHelperBundleTask(client2, message) {
+  const tabId = message.pageContext?.tabId;
+  if (!tabId) {
+    return null;
+  }
+  if (shouldSkipArxivCurrentTabCapture(message)) {
+    return null;
+  }
+  const response = await chrome.tabs.sendMessage(tabId, {
+    type: "mdtero.capture_current_tab.request",
+    springerOpenAccessApiKey: message.springerOpenAccessApiKey
+  });
+  if (response?.xml?.ok && response.xml.payloadText) {
+    return client2.createParseFulltextV2Task({
+      fulltextFile: new Blob([response.xml.payloadText], { type: "application/xml" }),
+      filename: response.xml.payloadName || "paper.xml",
+      sourceDoi: inferSourceDoi(message.input) || normalizeSpringerInput(message.input, message.pageContext?.tabUrl) || void 0,
+      sourceInput: message.input
+    });
+  }
+  const capture = response?.capture;
+  if (!response?.ok) {
+    throw new Error(
+      describeCurrentTabCaptureFailure({
+        failureCode: "content_script_unavailable"
+      })
+    );
+  }
+  if (!capture?.ok || !capture.html) {
+    throw new Error(
+      describeCurrentTabCaptureFailure({
+        failureCode: capture?.failureCode,
+        failureMessage: capture?.failureMessage
+      })
+    );
+  }
+  const connector = inferBrowserHelperBundleConnector(
+    message.input,
+    message.pageContext?.tabUrl || capture.sourceUrl
+  );
+  const helperBundle = buildHelperBundleBlob({
+    connector,
+    artifactKind: "html",
+    payload: capture.html,
+    payloadName: capture.payloadName || "paper.html",
+    sourceDoi: inferSourceDoi(message.input),
+    sourceUrl: message.pageContext?.tabUrl || capture.sourceUrl || void 0,
+    access: inferBrowserHelperBundleAccess(connector)
+  });
+  return client2.createParseHelperBundleV2Task({
+    helperBundleFile: helperBundle,
+    filename: "helper-bundle.zip",
+    sourceDoi: inferSourceDoi(message.input),
+    sourceInput: message.input
+  });
+}
+
+// src/lib/source-connectivity-observation.ts
+function buildSourceConnectivityObservation(status) {
+  const state = status?.state ?? "unavailable";
+  const runnerState = status?.runnerState ?? "idle";
+  const ready = state === "connected";
+  return {
+    browser_bridge: {
+      ready,
+      state,
+      runnerState
+    },
+    local_helper: {
+      ready,
+      state,
+      runnerState
+    }
+  };
+}
+
+// src/lib/page-capture.ts
+var CHALLENGE_MARKERS = [
+  "just a moment",
+  "access denied",
+  "captcha",
+  "cf-browser-verification",
+  "window._cf_chl_opt",
+  "__cf_chl_tk=",
+  "/cdn-cgi/challenge-platform/",
+  "ctype: 'managed'",
+  "verify you are human",
+  "checking if the site connection is secure",
+  "enable javascript and cookies to continue",
+  "pardon the interruption"
+];
+var LOGIN_MARKERS = [
+  "sign in",
+  "institutional access",
+  "shibboleth",
+  "openathens",
+  "access through your institution",
+  "login via your institution",
+  "institutional login",
+  "institutional sign in",
+  "your institution does not have access",
+  "purchase a subscription to gain access"
+];
+var ARTICLE_XML_MARKERS = [
+  "<article",
+  "<body",
+  "<sec",
+  "<jats:",
+  "full-text-retrieval-response",
+  "originaltext"
+];
+function classifyAccessShell(html) {
+  const lowered = String(html || "").toLowerCase();
+  if (CHALLENGE_MARKERS.some((marker) => lowered.includes(marker))) {
+    return "challenge";
+  }
+  if (LOGIN_MARKERS.some((marker) => lowered.includes(marker)) || lowered.includes("password") && lowered.includes("sign in")) {
+    return "login";
+  }
+  return null;
+}
+function isLikelyChallengeOrLoginShell(html) {
+  return classifyAccessShell(html) !== null;
+}
+function isLikelyHtmlDocument(text) {
+  const lowered = String(text || "").trim().toLowerCase();
+  return lowered.startsWith("<!doctype html") || lowered.startsWith("<html") || lowered.includes("<html");
+}
+function hasAnyMarker(text, markers) {
+  return markers.some((marker) => text.includes(marker));
+}
+function isLikelyStructuredArticleXml(text) {
+  const lowered = String(text || "").trim().toLowerCase();
+  if (!lowered.startsWith("<") && !lowered.startsWith("<?xml")) {
+    return false;
+  }
+  if (isLikelyHtmlDocument(lowered) || isLikelyChallengeOrLoginShell(lowered)) {
+    return false;
+  }
+  return hasAnyMarker(lowered, ARTICLE_XML_MARKERS);
+}
+async function fetchXmlArtifact(candidateUrls) {
+  for (const candidate of candidateUrls.map((item) => String(item || "").trim()).filter(Boolean)) {
+    const response = await fetch(candidate, {
+      credentials: "include"
+    });
+    if (!response.ok) {
+      continue;
+    }
+    const text = await response.text();
+    const normalized = text.trim();
+    if (!normalized) {
+      continue;
+    }
+    if (!normalized.startsWith("<")) {
+      continue;
+    }
+    if (isLikelyHtmlDocument(normalized) || isLikelyChallengeOrLoginShell(normalized)) {
+      continue;
+    }
+    if (isLikelyStructuredArticleXml(normalized)) {
+      return {
+        ok: true,
+        payloadText: normalized,
+        payloadName: "paper.xml",
+        sourceUrl: candidate
+      };
+    }
+  }
+  return {
+    ok: false,
+    failureCode: "artifact_download_missing",
+    failureMessage: "Browser page context could not download an XML payload."
+  };
+}
+
+// src/lib/action-executor.ts
+async function executeAction(action, context, routePlan) {
+  switch (action) {
+    case "capture_current_tab_html":
+      return executeCaptureCurrentTabHtml(context);
+    case "native_arxiv_parse":
+      return { success: true };
+    case "fetch_structured_xml":
+      return executeFetchStructuredXml(context, routePlan);
+    case "fetch_elsevier_xml":
+      return executeFetchElsevierXml(context, routePlan);
+    case "fetch_epub_asset":
+      return executeFetchEpubAsset(context, routePlan);
+    case "fetch_oa_repository":
+      return executeFetchOaRepository(context, routePlan);
+    case "fetch_helper_source":
+      return executeFetchHelperSource(context, routePlan);
+    case "fallback_pdf_parse":
+      return {
+        success: false,
+        requiresUpload: true,
+        error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually."
+      };
+    default:
+      return { success: false, error: `Unknown action: ${action}` };
+  }
+}
+async function executeCaptureCurrentTabHtml(context) {
+  if (!context.tabId) {
+    return { success: false, error: "No tab ID for current tab capture" };
+  }
+  try {
+    const response = await chrome.tabs.sendMessage(context.tabId, {
+      type: "mdtero.capture_current_tab.request",
+      springerOpenAccessApiKey: context.springerOpenAccessApiKey
+    });
+    if (response?.xml?.ok && response.xml.payloadText) {
+      const helperBundle2 = buildHelperBundleBlob({
+        connector: inferBrowserHelperBundleConnector(context.input, context.tabUrl),
+        artifactKind: "jats_xml",
+        payload: response.xml.payloadText,
+        payloadName: response.xml.payloadName || "paper.xml",
+        sourceDoi: inferSourceDoi2(context.input),
+        sourceUrl: context.tabUrl,
+        access: "open"
+      });
+      return {
+        success: true,
+        helperBundle: helperBundle2,
+        filename: "helper-bundle.zip",
+        sourceDoi: inferSourceDoi2(context.input)
+      };
+    }
+    const capture = response?.capture;
+    if (!response?.ok) {
+      return { success: false, error: "Content script unavailable. Reload the page and try again." };
+    }
+    if (!capture?.ok || !capture.html) {
+      return {
+        success: false,
+        error: capture?.failureMessage || "Page capture failed"
+      };
+    }
+    const connector = inferBrowserHelperBundleConnector(context.input, context.tabUrl);
+    const helperBundle = buildHelperBundleBlob({
+      connector,
+      artifactKind: "html",
+      payload: capture.html,
+      payloadName: capture.payloadName || "paper.html",
+      sourceDoi: inferSourceDoi2(context.input),
+      sourceUrl: context.tabUrl || capture.sourceUrl,
+      access: inferBrowserHelperBundleAccess(connector)
+    });
+    return {
+      success: true,
+      helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi: inferSourceDoi2(context.input)
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+async function executeFetchStructuredXml(context, routePlan) {
+  const candidates = routePlan.acquisition_candidates || [];
+  for (const candidate of candidates) {
+    if (isStructuredXmlCandidate(candidate)) {
+      if ((candidate.connector === "springer_openaccess_api" || candidate.connector === "springer_full_text_tdm") && context.springerOpenAccessApiKey) {
+        try {
+          const result = await fetchSpringerOpenAccessJats(
+            context.input,
+            context.springerOpenAccessApiKey,
+            context.tabUrl
+          );
+          const helperBundle = buildHelperBundleBlob({
+            connector: routePlan.top_connector || candidate.connector,
+            artifactKind: "jats_xml",
+            payload: await result.xmlBlob.arrayBuffer(),
+            payloadName: result.filename,
+            sourceDoi: result.sourceDoi,
+            sourceUrl: context.tabUrl,
+            access: "open"
+          });
+          return {
+            success: true,
+            helperBundle,
+            filename: "helper-bundle.zip",
+            sourceDoi: result.sourceDoi
+          };
+        } catch {
+        }
+      }
+      const candidateUrl = candidate.url;
+      if (candidateUrl) {
+        try {
+          const result = await fetchXmlArtifact([candidateUrl]);
+          if (result.ok) {
+            const helperBundle = buildHelperBundleBlob({
+              connector: routePlan.top_connector || candidate.connector,
+              artifactKind: "jats_xml",
+              payload: result.payloadText,
+              payloadName: result.payloadName,
+              sourceDoi: inferSourceDoi2(context.input),
+              sourceUrl: result.sourceUrl,
+              access: candidate.access === "licensed" ? "licensed" : "open"
+            });
+            return {
+              success: true,
+              helperBundle,
+              filename: "helper-bundle.zip",
+              sourceDoi: inferSourceDoi2(context.input)
+            };
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  return { success: false, error: "No structured XML source available" };
+}
+async function executeFetchElsevierXml(context, routePlan) {
+  if (!context.elsevierApiKey) {
+    return {
+      success: false,
+      requiresHelper: true,
+      error: routePlan.user_message || "Elsevier requires API key. Configure in settings."
+    };
+  }
+  try {
+    const result = await fetchElsevierXml(context.input, context.elsevierApiKey);
+    const helperBundle = buildHelperBundleBlob({
+      connector: "elsevier_article_retrieval_api",
+      artifactKind: "structured_xml",
+      payload: await result.xmlBlob.arrayBuffer(),
+      payloadName: result.filename,
+      extraFiles: result.bundleExtraFiles,
+      sourceDoi: result.sourceDoi,
+      access: "licensed"
+    });
+    return {
+      success: true,
+      helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi: result.sourceDoi
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+async function executeFetchEpubAsset(context, routePlan) {
+  if (!context.tabId) {
+    return {
+      success: false,
+      error: routePlan.user_message || "Open the article page in the current tab and retry EPUB capture."
+    };
+  }
+  const candidate = pickEpubCandidate(routePlan);
+  if (!candidate?.epub_url) {
+    return { success: false, error: "No EPUB acquisition URL available for this route." };
+  }
+  try {
+    const response = await chrome.tabs.sendMessage(context.tabId, {
+      type: "mdtero.download_epub.request",
+      artifactUrl: candidate.epub_url
+    });
+    const download = response?.download;
+    if (!response?.ok || !download?.ok || !download.payloadBase64) {
+      return {
+        success: false,
+        error: download?.failureMessage || "Browser page context could not download the EPUB artifact."
+      };
+    }
+    const helperBundle = buildHelperBundleBlob({
+      connector: routePlan.top_connector || candidate.connector,
+      artifactKind: "epub",
+      payload: base64ToBytes(download.payloadBase64),
+      payloadName: download.payloadName || "paper.epub",
+      sourceDoi: inferSourceDoi2(context.input),
+      sourceUrl: download.sourceUrl || candidate.epub_url,
+      access: candidate.access === "licensed" ? "licensed" : "open"
+    });
+    return {
+      success: true,
+      helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi: inferSourceDoi2(context.input)
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+async function executeFetchOaRepository(context, routePlan) {
+  const oaUrl = routePlan.best_oa_url;
+  if (!oaUrl) {
+    return { success: false, error: "No OA repository URL available" };
+  }
+  try {
+    const isPdf = oaUrl.toLowerCase().includes(".pdf") || oaUrl.includes("/pdf") || oaUrl.includes("download");
+    if (isPdf) {
+      return {
+        success: false,
+        requiresUpload: true,
+        error: "OA source is PDF. Please download and upload manually."
+      };
+    }
+    const response = await fetch(oaUrl, { credentials: "include" });
+    if (!response.ok) {
+      return { success: false, error: `OA fetch failed: ${response.status}` };
+    }
+    const html = await response.text();
+    const finalUrl = response.url;
+    const helperBundle = buildHelperBundleBlob({
+      connector: routePlan.top_connector || inferBrowserHelperBundleConnector(context.input, finalUrl),
+      artifactKind: "html",
+      payload: html,
+      payloadName: "paper.html",
+      sourceDoi: inferSourceDoi2(context.input),
+      sourceUrl: finalUrl,
+      access: "open"
+    });
+    return {
+      success: true,
+      helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi: inferSourceDoi2(context.input)
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+async function executeFetchHelperSource(context, routePlan) {
+  if (!context.tabId) {
+    return {
+      success: false,
+      requiresHelper: true,
+      error: "This source requires browser capture. Open the article page and retry."
+    };
+  }
+  return executeCaptureCurrentTabHtml(context);
+}
+function inferSourceDoi2(input) {
+  const trimmed = String(input || "").trim();
+  return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
+}
+function isStructuredXmlCandidate(candidate) {
+  const format = String(candidate.format || "").trim().toLowerCase();
+  const handoff = String(candidate.handoff || "").trim().toLowerCase();
+  const connector = String(candidate.connector || "").trim().toLowerCase();
+  if (format === "xml" || format === "jats" || format === "jats_xml" || format === "structured_xml") {
+    return true;
+  }
+  if (handoff.includes("xml_to_markdown") || handoff.includes("xml_upload_or_native_xml_parse")) {
+    return true;
+  }
+  return [
+    "europe_pmc_fulltext_xml",
+    "plos_jats_xml",
+    "biorxiv_jats_xml",
+    "medrxiv_jats_xml",
+    "springer_openaccess_api",
+    "springer_full_text_tdm",
+    "elsevier_article_retrieval_api"
+  ].includes(connector);
+}
+function pickEpubCandidate(routePlan) {
+  const candidates = routePlan.acquisition_candidates || [];
+  const topConnector = String(routePlan.top_connector || "").trim();
+  return candidates.find((candidate) => candidate.connector === topConnector && candidate.epub_url) || candidates.find((candidate) => candidate.epub_url);
+}
+function base64ToBytes(payloadBase64) {
+  const decoded = globalThis.atob(payloadBase64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
+}
+
+// src/lib/ssot-route.ts
+async function fetchRoutePlanFromSsot(routeClient, input, pageContext) {
+  return routeClient.fetchRoutePlan({
+    input,
+    page_url: pageContext?.tabUrl,
+    page_title: pageContext?.tabTitle
+  });
+}
+async function executeSsotActionSequence(parseClient, routePlan, context) {
+  for (const action of routePlan.action_sequence) {
+    const result = await executeAction(action, context, {
+      top_connector: routePlan.top_connector,
+      fail_closed: routePlan.fail_closed,
+      user_message: routePlan.user_message,
+      best_oa_url: routePlan.best_oa_url,
+      acquisition_candidates: routePlan.acquisition_candidates
+    });
+    if (result.success) {
+      if (result.helperBundle) {
+        try {
+          const task = await parseClient.createParseHelperBundleV2Task({
+            helperBundleFile: result.helperBundle,
+            filename: result.filename || "helper-bundle.zip",
+            sourceDoi: result.sourceDoi,
+            sourceInput: context.input
+          });
+          return { success: true, taskId: task.task_id };
+        } catch (error) {
+          if (routePlan.fail_closed) {
+            return { success: false, error: String(error) };
+          }
+          continue;
+        }
+      }
+      if (result.taskId) {
+        return { success: true, taskId: result.taskId };
+      }
+      continue;
+    }
+    if (result.requiresHelper || result.requiresUpload) {
+      return {
+        success: false,
+        requiresHelper: result.requiresHelper,
+        requiresUpload: result.requiresUpload,
+        error: result.error
+      };
+    }
+    if (routePlan.fail_closed) {
+      return { success: false, error: result.error || "Action failed" };
+    }
+  }
+  return { success: false, error: "No executable action succeeded" };
 }
 
 // ../shared/src/api-contract.ts
@@ -1246,6 +2128,7 @@ async function writeSettings(next) {
 
 // src/background.ts
 var client = createApiClient(readSettings);
+var routerSSOT = createRouterSSOTClient(readSettings);
 var bridgeSession = {};
 var browserBridge = typeof chrome !== "undefined" && chrome.runtime?.connectNative ? initializeBrowserBridge({
   runtime: chrome.runtime,
@@ -1258,98 +2141,6 @@ async function handleBridgeAcquire(request) {
     request,
     chromeApi: chrome,
     bridgeSession
-  });
-}
-function inferSourceDoi(input) {
-  const trimmed = String(input || "").trim();
-  return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
-}
-function describeCurrentTabCaptureFailure(params) {
-  const failureCode = String(params.failureCode || "").trim().toLowerCase();
-  const failureMessage = String(params.failureMessage || "").trim();
-  if (failureCode === "login_required") {
-    return "This page still requires institutional or account sign-in. Open the article in your browser, finish login, then retry capture.";
-  }
-  if (failureCode === "challenge_page_detected") {
-    return "This page is still behind a browser challenge. Finish the verification in the page, wait for the article to load, then retry capture.";
-  }
-  if (failureCode === "article_body_missing") {
-    return "No article body was detected on the current page. Open the HTML full-text page instead of a PDF or download shell, then retry capture.";
-  }
-  if (failureCode === "content_script_unavailable") {
-    return "Browser page capture is not ready yet. Reload the paper page or reopen the extension, then try again.";
-  }
-  return failureMessage || "Browser page capture did not succeed on the current page.";
-}
-async function tryCreateCurrentTabHelperBundleTask(message) {
-  const tabId = message.pageContext?.tabId;
-  if (!tabId) {
-    return null;
-  }
-  const response = await chrome.tabs.sendMessage(tabId, {
-    type: "mdtero.capture_current_tab.request",
-    springerOpenAccessApiKey: message.springerOpenAccessApiKey
-  });
-  if (response?.xml?.ok && response.xml.payloadText) {
-    return client.createParseFulltextV2Task({
-      fulltextFile: new Blob([response.xml.payloadText], { type: "application/xml" }),
-      filename: response.xml.payloadName || "paper.xml",
-      sourceDoi: inferSourceDoi(message.input) || normalizeSpringerInput(message.input, message.pageContext?.tabUrl) || void 0,
-      sourceInput: message.input
-    });
-  }
-  const capture = response?.capture;
-  if (!response?.ok) {
-    throw new Error(
-      describeCurrentTabCaptureFailure({
-        failureCode: "content_script_unavailable"
-      })
-    );
-  }
-  if (!capture?.ok || !capture.html) {
-    throw new Error(
-      describeCurrentTabCaptureFailure({
-        failureCode: capture?.failureCode,
-        failureMessage: capture?.failureMessage
-      })
-    );
-  }
-  const connector = inferBrowserHelperBundleConnector(message.input, message.pageContext?.tabUrl || capture.sourceUrl);
-  const helperBundle = buildHelperBundleBlob({
-    connector,
-    artifactKind: "html",
-    payload: capture.html,
-    payloadName: capture.payloadName || "paper.html",
-    sourceDoi: inferSourceDoi(message.input),
-    sourceUrl: message.pageContext?.tabUrl || capture.sourceUrl || void 0,
-    access: inferBrowserHelperBundleAccess(connector)
-  });
-  return client.createParseHelperBundleV2Task({
-    helperBundleFile: helperBundle,
-    filename: "helper-bundle.zip",
-    sourceDoi: inferSourceDoi(message.input),
-    sourceInput: message.input
-  });
-}
-async function createLocalFileHelperBundleTask(message) {
-  const filename = String(message.filename || "").trim() || "paper.bin";
-  const artifactKind = message.artifactKind === "epub" ? "epub" : "pdf";
-  const sourceType = artifactKind === "pdf" ? "browser_extension_local_upload_pdf" : "browser_extension_local_upload_epub";
-  const helperBundle = buildHelperBundleBlob({
-    connector: "local_file_upload",
-    artifactKind,
-    payload: await message.file.arrayBuffer(),
-    payloadName: filename,
-    sourceType,
-    sourceUrl: `file://${filename}`,
-    acquisitionMode: "browser_extension_local_upload",
-    userPrivateRetention: true
-  });
-  return client.createParseHelperBundleV2Task({
-    helperBundleFile: helperBundle,
-    filename: "helper-bundle.zip",
-    sourceInput: filename,
-    pdfEngine: artifactKind === "pdf" ? message.pdfEngine : void 0
   });
 }
 chrome.runtime.onStartup?.addListener(() => {
@@ -1382,12 +2173,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message?.type === "mdtero.bridge.status") {
+    const status = browserBridge ? browserBridge.getStatus() : {
+      state: "unavailable",
+      runnerState: "idle"
+    };
     sendResponse({
       ok: true,
-      result: browserBridge ? browserBridge.getStatus() : {
-        state: "unavailable",
-        runnerState: "idle"
-      }
+      result: status
+    });
+    return false;
+  }
+  if (message?.type === "mdtero.source_connectivity.observation") {
+    const status = browserBridge ? browserBridge.getStatus() : {
+      state: "unavailable",
+      runnerState: "idle"
+    };
+    sendResponse({
+      ok: true,
+      result: buildSourceConnectivityObservation(status)
     });
     return false;
   }
@@ -1401,58 +2204,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
+  if (message?.type === "mdtero.parse.ssot.request") {
+    (async () => {
+      const settings = await readSettings();
+      if (!settings.token) {
+        throw new Error("Sign in required before parsing or translating.");
+      }
+      const routePlan = await fetchRoutePlanFromSsot(
+        routerSSOT,
+        message.input,
+        message.pageContext?.tabUrl ? {
+          tabUrl: message.pageContext.tabUrl,
+          tabTitle: message.pageContext.tabTitle
+        } : void 0
+      );
+      const result = await executeSsotActionSequence(
+        client,
+        routePlan,
+        {
+          tabId: message.pageContext?.tabId,
+          tabUrl: message.pageContext?.tabUrl,
+          tabTitle: message.pageContext?.tabTitle,
+          input: message.input,
+          springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
+          elsevierApiKey: settings.elsevierApiKey
+        }
+      );
+      if (result.success && result.taskId) {
+        return { task_id: result.taskId };
+      }
+      throw new Error(result.error || "Action sequence failed");
+    })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === "mdtero.parse.request") {
     (async () => {
       const settings = await readSettings();
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
-      if (requiresElsevierLocalAcquire(message.input)) {
-        if (!message.elsevierApiKey) {
-          throw new Error(buildElsevierLocalAcquireGuidance());
-        }
-        const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-        const helperBundle = buildHelperBundleBlob({
-          connector: "elsevier_article_retrieval_api",
-          artifactKind: "structured_xml",
-          payload: await uploaded.xmlBlob.arrayBuffer(),
-          payloadName: uploaded.filename,
-          sourceDoi: uploaded.sourceDoi,
-          access: "licensed",
-          extraFiles: uploaded.bundleExtraFiles
-        });
-        return client.createParseHelperBundleV2Task({
-          helperBundleFile: helperBundle,
-          filename: "helper-bundle.zip",
-          sourceDoi: uploaded.sourceDoi,
-          sourceInput: uploaded.sourceInput
-        });
-      }
-      const springerSourceDoi = normalizeSpringerInput(message.input, message.pageContext?.tabUrl);
-      if (springerSourceDoi && settings.springerOpenAccessApiKey) {
-        try {
-          const uploaded = await fetchSpringerOpenAccessJats(
-            message.input,
-            settings.springerOpenAccessApiKey,
-            message.pageContext?.tabUrl
-          );
-          return client.createParseFulltextV2Task({
-            fulltextFile: uploaded.xmlBlob,
-            filename: uploaded.filename,
-            sourceDoi: uploaded.sourceDoi,
-            sourceInput: uploaded.sourceInput
-          });
-        } catch {
-        }
-      }
-      const currentTabBundleTask = await tryCreateCurrentTabHelperBundleTask({
-        ...message,
-        springerOpenAccessApiKey: settings.springerOpenAccessApiKey
+      return runLegacyParseRequest(client, {
+        input: message.input,
+        elsevierApiKey: message.elsevierApiKey,
+        springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
+        pageContext: message.pageContext
       });
-      if (currentTabBundleTask) {
-        return currentTabBundleTask;
-      }
-      return client.createParseTask({ input: message.input });
     })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -1465,7 +2261,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!message.file) {
         throw new Error("No local file was provided.");
       }
-      return createLocalFileHelperBundleTask({
+      return runLegacyFileParseRequest(client, {
         file: message.file,
         filename: message.filename,
         artifactKind: message.artifactKind,

@@ -3,7 +3,7 @@ import type { PopupState, UiLanguage } from "../lib/storage";
 import { requiresElsevierLocalAcquire } from "../lib/elsevier";
 import { isBridgeSupportedPage } from "../lib/bridge-wake";
 
-const SECONDARY_ORDER = ["translated_md"] as const;
+const SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"] as const;
 const SOURCE_ORDER = ["paper_pdf", "paper_xml"] as const;
 
 export function getPreferredArtifactKey(result?: TaskResult | null): string | undefined {
@@ -31,6 +31,9 @@ export function getSourceArtifactKeys(result?: TaskResult | null): string[] {
 
 export function getDownloadLabel(artifactKey: string, language: UiLanguage = "en"): string {
   if (language === "zh") {
+    if (artifactKey === "paper_md") {
+      return "下载 Markdown";
+    }
     if (artifactKey === "paper_bundle") {
       return "下载压缩包";
     }
@@ -44,6 +47,9 @@ export function getDownloadLabel(artifactKey: string, language: UiLanguage = "en
       return "下载 XML";
     }
     return "下载文件";
+  }
+  if (artifactKey === "paper_md") {
+    return "Download Markdown";
   }
   if (artifactKey === "paper_bundle") {
     return "Download ZIP";
@@ -77,7 +83,7 @@ export function getActionStatusText(kind: ActionStatusKind, language: UiLanguage
       return "解析任务已提交，正在准备文件...";
     }
     if (kind === "running_parse") {
-      return "正在解析论文并打包文件...";
+      return "正在解析论文并准备 Markdown...";
     }
     if (kind === "queued_translate") {
       return "翻译任务已提交，正在准备...";
@@ -94,7 +100,7 @@ export function getActionStatusText(kind: ActionStatusKind, language: UiLanguage
     return "Parse request sent. Preparing files...";
   }
   if (kind === "running_parse") {
-    return "Parsing paper and packaging files...";
+    return "Parsing paper and preparing Markdown...";
   }
   if (kind === "queued_translate") {
     return "Translation request sent. Preparing text...";
@@ -151,10 +157,10 @@ export function getBridgeStatusText(
       return "本地 helper 已就绪，可处理浏览器协同抓取。";
     }
     if (state === "disconnected") {
-      return "本地 helper 已断开。请重启 mdtero-local 或重载扩展。";
+      return "本地 helper 已断开。请重启 mdtero 或重载扩展。";
     }
     if (state === "unavailable") {
-      return "暂未检测到本地 helper。请安装或启动 mdtero-local。";
+      return "暂未检测到本地 helper。请安装或启动 mdtero。";
     }
     return "本地 helper 状态未知。";
   }
@@ -166,10 +172,10 @@ export function getBridgeStatusText(
     return "Local helper ready for browser-assisted capture.";
   }
   if (state === "disconnected") {
-    return "Local helper disconnected. Restart mdtero-local or reload the extension.";
+    return "Local helper disconnected. Restart mdtero or reload the extension.";
   }
   if (state === "unavailable") {
-    return "Local helper not detected. Install or start mdtero-local.";
+    return "Local helper not detected. Install or start mdtero.";
   }
   return "Local helper status unknown.";
 }
@@ -210,8 +216,8 @@ export function getPreflightHintText(
 
   if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
     return language === "zh"
-      ? "当前输入命中了 Elsevier / ScienceDirect。请先在设置里填写 Elsevier API Key。"
-      : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first.";
+      ? "当前输入命中了 Elsevier / ScienceDirect。请先在设置里填写 Elsevier API Key；部分论文还可能要求本机处于校园网或机构网络环境。"
+      : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first; some papers may still require this machine to be on a campus or institutional network.";
   }
 
   if (!livePageSupported) {
@@ -220,8 +226,8 @@ export function getPreflightHintText(
 
   if (bridgeMissing) {
     return language === "zh"
-      ? "当前页面支持浏览器态本地抓取，但还没检测到 helper。请先启动 `mdtero-local`。"
-      : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero-local` first.";
+      ? "当前页面支持浏览器态本地抓取，但还没检测到 helper。请先启动 `mdtero`。"
+      : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero` first.";
   }
 
   if (bridgeReady) {

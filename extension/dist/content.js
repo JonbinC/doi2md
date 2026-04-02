@@ -165,7 +165,9 @@ var PDF_SHELL_MARKERS = [
   'type="application/pdf"',
   "/doi/pdfdirect/",
   "/epdf",
-  "/doi/pdf/",
+  "/doi/pdf/"
+];
+var PDF_DOWNLOAD_LINK_MARKERS = [
   "download pdf"
 ];
 var METADATA_MARKERS = [
@@ -227,6 +229,66 @@ function isLikelyHtmlDocument(text) {
 function hasAnyMarker(text, markers) {
   return markers.some((marker) => text.includes(marker));
 }
+function stripTagBlock(html, tagName) {
+  return html.replace(new RegExp(`<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>`, "gi"), "");
+}
+function stripSelfClosingTag(html, tagName) {
+  return html.replace(new RegExp(`<${tagName}\\b[^>]*\\/?>`, "gi"), "");
+}
+function stripTaggedNodesByAttributeMarker(html, markers) {
+  let cleaned = html;
+  for (const marker of markers) {
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleaned = cleaned.replace(
+      new RegExp(
+        `<([a-z0-9:-]+)\\b[^>]*(?:id|class)=["'][^"']*${escaped}[^"']*["'][^>]*>[\\s\\S]*?<\\/\\1>`,
+        "gi"
+      ),
+      ""
+    );
+    cleaned = cleaned.replace(
+      new RegExp(
+        `<([a-z0-9:-]+)\\b[^>]*(?:id|class)=["'][^"']*${escaped}[^"']*["'][^>]*\\/?>`,
+        "gi"
+      ),
+      ""
+    );
+  }
+  return cleaned;
+}
+function stripStronglyHiddenNodes(html) {
+  return html.replace(
+    /<([a-z0-9:-]+)\b(?=[^>]*(?:aria-hidden=["']true["']|hidden\b))(?=[^>]*style=["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"']*["'])[^>]*>[\s\S]*?<\/\1>/gi,
+    ""
+  );
+}
+function stripExtensionResourceNodes(html) {
+  return html.replace(
+    /<([a-z0-9:-]+)\b[^>]*(?:src|href)=["']chrome-extension:\/\/[^"']+["'][^>]*>(?:[\s\S]*?<\/\1>)?/gi,
+    ""
+  );
+}
+function sanitizeCapturedHtml(html) {
+  let cleaned = String(html || "");
+  for (const tagName of ["script", "style", "noscript", "iframe", "object", "embed"]) {
+    cleaned = stripTagBlock(cleaned, tagName);
+  }
+  for (const tagName of ["iframe", "object", "embed"]) {
+    cleaned = stripSelfClosingTag(cleaned, tagName);
+  }
+  cleaned = stripTaggedNodesByAttributeMarker(cleaned, [
+    "glarity",
+    "tp-extension",
+    "tcb-extension",
+    "crx-",
+    "shadowll"
+  ]);
+  cleaned = stripTagBlock(cleaned, "shadow-host");
+  cleaned = stripSelfClosingTag(cleaned, "shadow-host");
+  cleaned = stripExtensionResourceNodes(cleaned);
+  cleaned = stripStronglyHiddenNodes(cleaned);
+  return cleaned.trim();
+}
 function isLikelyStructuredArticleXml(text) {
   const lowered = String(text || "").trim().toLowerCase();
   if (!lowered.startsWith("<") && !lowered.startsWith("<?xml")) {
@@ -255,21 +317,47 @@ ${html}`);
       failureMessage: "Page loaded but still requires user sign-in or institutional access."
     };
   }
-  const lowered = html.toLowerCase();
-  const isPdfEmbedShell = hasAnyMarker(lowered, PDF_SHELL_MARKERS);
+  const sanitizedHtml = sanitizeCapturedHtml(html);
+  const normalizedUrl = String(input.url || "").toLowerCase();
+  if (normalizedUrl.includes("arxiv.org/abs/")) {
+    return {
+      ok: false,
+      failureCode: "article_body_missing",
+      failureMessage: "arXiv abstract pages do not contain the full text. Open the /html/ page instead, then retry capture.",
+      failureContext: {
+        sourceUrl: input.url,
+        title: input.title,
+        hasMetadataSignals: true,
+        hasBodySignals: false,
+        isPdfEmbedShell: false
+      }
+    };
+  }
+  const lowered = sanitizedHtml.toLowerCase();
+  const rawLowered = html.toLowerCase();
   const hasMetadataSignals = hasAnyMarker(lowered, METADATA_MARKERS);
   const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS) || lowered.includes("abstract");
+  const hasPdfEmbedShellSignals = hasAnyMarker(rawLowered, PDF_SHELL_MARKERS);
+  const hasPdfDownloadOnlySignals = hasAnyMarker(rawLowered, PDF_DOWNLOAD_LINK_MARKERS);
   const hasArticleSignals = hasMetadataSignals && hasBodySignals;
+  const isPdfEmbedShell = hasPdfEmbedShellSignals || hasPdfDownloadOnlySignals && !hasArticleSignals;
   if (isPdfEmbedShell || !hasArticleSignals) {
     return {
       ok: false,
       failureCode: "article_body_missing",
-      failureMessage: "Page loaded but no article body markers were detected."
+      failureMessage: "Page loaded but no article body markers were detected.",
+      failureContext: {
+        sourceUrl: input.url,
+        title: input.title,
+        hasMetadataSignals,
+        hasBodySignals,
+        isPdfEmbedShell
+      }
     };
   }
   return {
     ok: true,
-    html,
+    html: sanitizedHtml,
     payloadName: "paper.html",
     sourceUrl: input.url,
     pageTitle: input.title
@@ -339,8 +427,11 @@ function arrayBufferToBase64(buffer) {
 }
 
 // src/lib/auth-bridge.ts
-var TRUSTED_HOST_PATTERNS = [
-  /^([a-z0-9-]+\.)*mdtero\.com$/i,
+var TRUSTED_SITE_ORIGINS = /* @__PURE__ */ new Set([
+  "https://mdtero.com",
+  "https://www.mdtero.com"
+]);
+var TRUSTED_LOCAL_DEV_HOST_PATTERNS = [
   /^localhost$/i,
   /^127\.0\.0\.1$/i
 ];
@@ -352,7 +443,10 @@ function isMdteroAuthTokenPayload(data) {
 function isTrustedMdteroOrigin(origin) {
   try {
     const url = new URL(origin);
-    return TRUSTED_HOST_PATTERNS.some((pattern) => pattern.test(url.hostname));
+    if (TRUSTED_SITE_ORIGINS.has(url.origin)) {
+      return true;
+    }
+    return url.protocol === "http:" && TRUSTED_LOCAL_DEV_HOST_PATTERNS.some((pattern) => pattern.test(url.hostname));
   } catch {
     return false;
   }
@@ -364,14 +458,24 @@ function shouldAcceptMdteroAuthMessage(event) {
   if (!isTrustedMdteroOrigin(event.eventOrigin)) {
     return false;
   }
+  if (event.currentOrigin !== event.eventOrigin) {
+    return false;
+  }
   return isMdteroAuthTokenPayload(event.data);
 }
 
 // src/lib/bridge-wake.ts
 var BRIDGE_SUPPORTED_URL_PATTERNS = [
   "arxiv.org",
+  "dl.acm.org",
+  "ieeexplore.ieee.org",
+  "nature.com",
+  "pubs.acs.org",
+  "pubs.rsc.org",
   "sciencedirect.com/science/article/pii/",
+  "techrxiv.org",
   "link.springer.com",
+  "mdpi.com",
   "springer.com",
   "springernature.com",
   "onlinelibrary.wiley.com",

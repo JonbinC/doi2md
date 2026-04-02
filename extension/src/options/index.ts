@@ -24,9 +24,9 @@ const COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Sign in faster, check balance and quota, and tune preferences.",
-    supportSummary: "Keep browser capture on your own machine and see which sources are ready with your current setup.",
+    supportSummary: "Keep the default acquisition path on your own machine and see which sources are ready with your current setup.",
     browserAssistedNote:
-      "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest.",
+      "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest while the helper remains the default acquisition path.",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote:
       "Only fill the keys you actually need. Everything stays on your own machine.",
@@ -35,13 +35,13 @@ const COPY = {
     capabilityFallback: "Fallback",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
-    permissionsDownloads: "`downloads` saves Markdown bundles, translations, and source files back to your own machine.",
+    permissionsDownloads: "`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.",
     permissionsNative: "`nativeMessaging` connects the extension to your local Mdtero helper for browser-assisted acquisition.",
     permissionsHosts: "Publisher host permissions stay limited to supported scholarly sites and the Mdtero / publisher APIs already used by the product.",
     helperReady: "Local helper ready for browser-assisted capture.",
     helperBusy: "Local helper is connected and currently handling a browser task.",
-    helperUnavailable: "Local helper not detected yet. Install or restart mdtero-local to enable browser-assisted capture.",
-    helperDisconnected: "Local helper disconnected. Restart mdtero-local or reload the extension to reconnect.",
+    helperUnavailable: "Local helper not detected yet. Install or restart mdtero to enable browser-assisted capture.",
+    helperDisconnected: "Local helper disconnected. Restart mdtero or reload the extension to reconnect.",
     helperUnknown: "Local helper status unknown.",
     shadowSignedOut: "Sign in to view experimental connector shadow status.",
     shadowUnavailable: "Experimental connector shadow status unavailable.",
@@ -77,9 +77,9 @@ const COPY = {
   zh: {
     title: "Mdtero 账户",
     subtitle: "优先用密码登录，再查看余额、额度与偏好设置。",
-    supportSummary: "把浏览器抓取留在你自己的设备上，并查看当前这套配置已经适合哪些来源。",
+    supportSummary: "把默认获取路径留在你自己的设备上，并查看当前这套配置已经适合哪些来源。",
     browserAssistedNote:
-      "如果某个来源需要浏览器辅助，只要在本地保持文章页面打开，剩下的交给 Mdtero 引导即可。",
+      "如果某个来源需要浏览器辅助，只要在本地保持文章页面打开，剩下的交给 Mdtero 引导即可，而 helper 仍然是默认获取路径。",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote: "只填写你实际需要的 key；这些信息都保留在你自己的机器上。",
     capabilityNeed: "你需要准备什么",
@@ -87,13 +87,13 @@ const COPY = {
     capabilityFallback: "兜底方式",
     permissionsTitle: "为什么 Mdtero 需要这些权限",
     permissionsTabs: "`tabs` 用来复用或打开受支持的论文页面，以便在本机完成抓取。",
-    permissionsDownloads: "`downloads` 用来把 Markdown 压缩包、译文和源文件保存回你的电脑。",
+    permissionsDownloads: "`downloads` 用来把 Markdown、译文、兜底压缩包和源文件保存回你的电脑。",
     permissionsNative: "`nativeMessaging` 用来把扩展连接到你本地的 Mdtero helper，完成浏览器协同抓取。",
     permissionsHosts: "站点权限只覆盖已支持的学术站点，以及产品已经使用的 Mdtero / 出版商 API。",
     helperReady: "本地 helper 已就绪，可处理浏览器协同抓取。",
     helperBusy: "本地 helper 已连接，正在处理浏览器任务。",
-    helperUnavailable: "暂未检测到本地 helper。请安装或重启 mdtero-local 以启用浏览器协同抓取。",
-    helperDisconnected: "本地 helper 已断开。请重启 mdtero-local 或重载扩展后再试。",
+    helperUnavailable: "暂未检测到本地 helper。请安装或重启 mdtero 以启用浏览器协同抓取。",
+    helperDisconnected: "本地 helper 已断开。请重启 mdtero 或重载扩展后再试。",
     helperUnknown: "本地 helper 状态未知。",
     shadowSignedOut: "登录后可查看实验 connector shadow 状态。",
     shadowUnavailable: "暂时无法获取实验 connector shadow 状态。",
@@ -179,6 +179,27 @@ const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
 let authMode: "password" | "code" = "password";
 let currentHelperState: CapabilityHelperState = "unavailable";
+
+function setLabeledParagraph(paragraph: HTMLParagraphElement, label: string, value: string) {
+  paragraph.textContent = "";
+  const strong = document.createElement("strong");
+  strong.textContent = `${label}:`;
+  paragraph.appendChild(strong);
+  paragraph.append(" ");
+  paragraph.appendChild(document.createTextNode(value));
+}
+
+function renderHistoryNotice(message: string, color?: string) {
+  if (!historyList) return;
+  historyList.textContent = "";
+  const paragraph = document.createElement("p");
+  paragraph.className = "meta-label";
+  paragraph.textContent = message;
+  if (color) {
+    paragraph.style.color = color;
+  }
+  historyList.appendChild(paragraph);
+}
 
 function copyFor(language: UiLanguage) {
   return COPY[language] as any;
@@ -278,20 +299,21 @@ function renderPublisherCapabilityMatrix() {
 
       const need = document.createElement("p");
       need.className = "capability-copy";
-      need.innerHTML = `<strong>${copy.capabilityNeed}:</strong> ${entry.whatYouNeed}`;
+      setLabeledParagraph(need, copy.capabilityNeed, entry.whatYouNeed);
       card.appendChild(need);
 
       const route = document.createElement("p");
       route.className = "capability-copy";
-      route.innerHTML = `<strong>${copy.capabilityRoute}:</strong> ${entry.howMdteroGetsIt}`;
+      setLabeledParagraph(route, copy.capabilityRoute, entry.howMdteroGetsIt);
       card.appendChild(route);
 
       const fallback = document.createElement("p");
       fallback.className = "capability-copy capability-copy-muted";
-      fallback.innerHTML = `<strong>${copy.capabilityFallback}:</strong> ${formatCapabilityFallbacks(
-        entry.fallbacks,
-        uiLanguage as PublisherCapabilityLanguage
-      )}`;
+      setLabeledParagraph(
+        fallback,
+        copy.capabilityFallback,
+        formatCapabilityFallbacks(entry.fallbacks, uiLanguage as PublisherCapabilityLanguage)
+      );
       card.appendChild(fallback);
 
       if (entry.links.length > 0) {
@@ -418,11 +440,11 @@ async function refreshHistory() {
   try {
     const { items } = await client.getMyTasks();
     if (items.length === 0) {
-      historyList.innerHTML = `<p class="meta-label">${(copy as any).historyEmpty || "No history found."}</p>`;
+      renderHistoryNotice((copy as any).historyEmpty || "No history found.");
       return;
     }
 
-    historyList.innerHTML = "";
+    historyList.textContent = "";
     for (const task of items) {
       const row = document.createElement("div");
       row.style.cssText = "display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px;";
@@ -465,7 +487,7 @@ async function refreshHistory() {
           dlBtn.addEventListener("click", async () => {
             try {
               dlBtn.textContent = "Downloading...";
-              const result = await client.downloadArtifact(task.task_id, key);
+              const result = await client.downloadArtifact(task.task_id, key, desc.filename);
               triggerBlobDownload(result.blob, result.filename);
               dlBtn.textContent = `⬇ ${key.replace("paper_", "").toUpperCase()}`;
             } catch (err) {
@@ -490,7 +512,7 @@ async function refreshHistory() {
     }
   } catch (error) {
     const errorPrefix = (copy as any).historyError || "Failed to load history: ";
-    historyList.innerHTML = `<p class="meta-label" style="color: #f44336;">${errorPrefix}${(error as Error).message}</p>`;
+    renderHistoryNotice(`${errorPrefix}${(error as Error).message}`, "#f44336");
   }
 }
 

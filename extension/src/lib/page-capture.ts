@@ -4,6 +4,14 @@ export interface PageCaptureInput {
   html: string;
 }
 
+export interface PageCaptureFailureContext {
+  sourceUrl: string;
+  title: string;
+  hasMetadataSignals: boolean;
+  hasBodySignals: boolean;
+  isPdfEmbedShell: boolean;
+}
+
 export type EpubDownloadResult =
   | {
       ok: true;
@@ -42,6 +50,7 @@ export type PageCaptureResult =
       ok: false;
       failureCode: "challenge_page_detected" | "login_required" | "article_body_missing";
       failureMessage: string;
+      failureContext?: PageCaptureFailureContext;
     };
 
 function decodeHtmlAttribute(value: string): string {
@@ -191,7 +200,10 @@ const PDF_SHELL_MARKERS = [
   'type="application/pdf"',
   "/doi/pdfdirect/",
   "/epdf",
-  "/doi/pdf/",
+  "/doi/pdf/"
+];
+
+const PDF_DOWNLOAD_LINK_MARKERS = [
   "download pdf"
 ];
 
@@ -264,6 +276,72 @@ function hasAnyMarker(text: string, markers: string[]): boolean {
   return markers.some((marker) => text.includes(marker));
 }
 
+function stripTagBlock(html: string, tagName: string): string {
+  return html.replace(new RegExp(`<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>`, "gi"), "");
+}
+
+function stripSelfClosingTag(html: string, tagName: string): string {
+  return html.replace(new RegExp(`<${tagName}\\b[^>]*\\/?>`, "gi"), "");
+}
+
+function stripTaggedNodesByAttributeMarker(html: string, markers: string[]): string {
+  let cleaned = html;
+  for (const marker of markers) {
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleaned = cleaned.replace(
+      new RegExp(
+        `<([a-z0-9:-]+)\\b[^>]*(?:id|class)=["'][^"']*${escaped}[^"']*["'][^>]*>[\\s\\S]*?<\\/\\1>`,
+        "gi"
+      ),
+      ""
+    );
+    cleaned = cleaned.replace(
+      new RegExp(
+        `<([a-z0-9:-]+)\\b[^>]*(?:id|class)=["'][^"']*${escaped}[^"']*["'][^>]*\\/?>`,
+        "gi"
+      ),
+      ""
+    );
+  }
+  return cleaned;
+}
+
+function stripStronglyHiddenNodes(html: string): string {
+  return html.replace(
+    /<([a-z0-9:-]+)\b(?=[^>]*(?:aria-hidden=["']true["']|hidden\b))(?=[^>]*style=["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"']*["'])[^>]*>[\s\S]*?<\/\1>/gi,
+    ""
+  );
+}
+
+function stripExtensionResourceNodes(html: string): string {
+  return html.replace(
+    /<([a-z0-9:-]+)\b[^>]*(?:src|href)=["']chrome-extension:\/\/[^"']+["'][^>]*>(?:[\s\S]*?<\/\1>)?/gi,
+    ""
+  );
+}
+
+export function sanitizeCapturedHtml(html: string): string {
+  let cleaned = String(html || "");
+  for (const tagName of ["script", "style", "noscript", "iframe", "object", "embed"]) {
+    cleaned = stripTagBlock(cleaned, tagName);
+  }
+  for (const tagName of ["iframe", "object", "embed"]) {
+    cleaned = stripSelfClosingTag(cleaned, tagName);
+  }
+  cleaned = stripTaggedNodesByAttributeMarker(cleaned, [
+    "glarity",
+    "tp-extension",
+    "tcb-extension",
+    "crx-",
+    "shadowll"
+  ]);
+  cleaned = stripTagBlock(cleaned, "shadow-host");
+  cleaned = stripSelfClosingTag(cleaned, "shadow-host");
+  cleaned = stripExtensionResourceNodes(cleaned);
+  cleaned = stripStronglyHiddenNodes(cleaned);
+  return cleaned.trim();
+}
+
 function isLikelyStructuredArticleXml(text: string): boolean {
   const lowered = String(text || "").trim().toLowerCase();
   if (!lowered.startsWith("<") && !lowered.startsWith("<?xml")) {
@@ -293,23 +371,50 @@ export function buildPageCaptureResult(input: PageCaptureInput): PageCaptureResu
     };
   }
 
-  const lowered = html.toLowerCase();
-  const isPdfEmbedShell = hasAnyMarker(lowered, PDF_SHELL_MARKERS);
+  const sanitizedHtml = sanitizeCapturedHtml(html);
+  const normalizedUrl = String(input.url || "").toLowerCase();
+  if (normalizedUrl.includes("arxiv.org/abs/")) {
+    return {
+      ok: false,
+      failureCode: "article_body_missing",
+      failureMessage: "arXiv abstract pages do not contain the full text. Open the /html/ page instead, then retry capture.",
+      failureContext: {
+        sourceUrl: input.url,
+        title: input.title,
+        hasMetadataSignals: true,
+        hasBodySignals: false,
+        isPdfEmbedShell: false
+      }
+    };
+  }
+
+  const lowered = sanitizedHtml.toLowerCase();
+  const rawLowered = html.toLowerCase();
   const hasMetadataSignals = hasAnyMarker(lowered, METADATA_MARKERS);
   const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS) || lowered.includes("abstract");
+  const hasPdfEmbedShellSignals = hasAnyMarker(rawLowered, PDF_SHELL_MARKERS);
+  const hasPdfDownloadOnlySignals = hasAnyMarker(rawLowered, PDF_DOWNLOAD_LINK_MARKERS);
   const hasArticleSignals = hasMetadataSignals && hasBodySignals;
+  const isPdfEmbedShell = hasPdfEmbedShellSignals || (hasPdfDownloadOnlySignals && !hasArticleSignals);
 
   if (isPdfEmbedShell || !hasArticleSignals) {
     return {
       ok: false,
       failureCode: "article_body_missing",
-      failureMessage: "Page loaded but no article body markers were detected."
+      failureMessage: "Page loaded but no article body markers were detected.",
+      failureContext: {
+        sourceUrl: input.url,
+        title: input.title,
+        hasMetadataSignals,
+        hasBodySignals,
+        isPdfEmbedShell
+      }
     };
   }
 
   return {
     ok: true,
-    html,
+    html: sanitizedHtml,
     payloadName: "paper.html",
     sourceUrl: input.url,
     pageTitle: input.title

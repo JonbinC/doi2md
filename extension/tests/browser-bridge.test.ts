@@ -87,21 +87,20 @@ describe("initializeBrowserBridge", () => {
       }
     });
 
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(acquire).toHaveBeenCalledWith(
-      expect.objectContaining({
-        task_id: "task-1",
-        action: "open_and_capture_html"
-      })
-    );
-    expect(postMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        task_id: "task-1",
-        status: "succeeded"
-      })
-    );
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task_id: "task-1",
+          action: "open_and_capture_html"
+        })
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task_id: "task-1",
+          status: "succeeded"
+        })
+      );
+    });
   });
 
   it("maps handler failures into bridge failure responses", async () => {
@@ -131,16 +130,104 @@ describe("initializeBrowserBridge", () => {
       }
     });
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task_id: "task-2",
+          status: "failed",
+          failure_code: "unsupported_route"
+        })
+      );
+    });
+  });
 
-    expect(postMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({
+  it("serializes bridge acquisition messages so only one browser acquire runs at a time", async () => {
+    const onMessage = createEventSink();
+    const onDisconnect = createEventSink();
+    const postMessage = vi.fn();
+    let releaseFirst: (() => void) | null = null;
+    const acquire = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () =>
+              resolve({
+                task_id: "task-1",
+                status: "succeeded",
+                artifact_kind: "html",
+                payload_name: "paper.html"
+              });
+          })
+      )
+      .mockResolvedValueOnce({
         task_id: "task-2",
-        status: "failed",
-        failure_code: "unsupported_route"
-      })
-    );
+        status: "succeeded",
+        artifact_kind: "html",
+        payload_name: "paper.html"
+      });
+
+    initializeBrowserBridge({
+      runtime: {
+        connectNative: () => ({
+          onMessage,
+          onDisconnect,
+          postMessage
+        })
+      } as never,
+      acquire
+    });
+
+    onMessage.emit({
+      type: "mdtero.bridge.acquire",
+      request: {
+        task_id: "task-1",
+        action: "open_and_capture_html",
+        input: "https://example.org/one"
+      }
+    });
+    onMessage.emit({
+      type: "mdtero.bridge.acquire",
+      request: {
+        task_id: "task-2",
+        action: "open_and_capture_html",
+        input: "https://example.org/two"
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledTimes(1);
+      expect(acquire).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          task_id: "task-1"
+        })
+      );
+    });
+
+    releaseFirst?.();
+
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledTimes(2);
+      expect(acquire).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          task_id: "task-2"
+        })
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task_id: "task-1",
+          status: "succeeded"
+        })
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          task_id: "task-2",
+          status: "succeeded"
+        })
+      );
+    });
   });
 
   it("fails soft when native host is not registered yet", async () => {
@@ -325,6 +412,9 @@ describe("initializeBrowserBridge", () => {
         }
       });
 
+      await vi.waitFor(() => {
+        expect(acquire).toHaveBeenCalledTimes(1);
+      });
       vi.advanceTimersByTime(5000);
       await Promise.resolve();
 
@@ -338,20 +428,17 @@ describe("initializeBrowserBridge", () => {
         payload_name: "paper.html"
       });
 
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.waitFor(() => {
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            task_id: "task-busy",
+            status: "succeeded"
+          })
+        );
+      });
       await vi.advanceTimersByTimeAsync(250);
 
-      expect(postMessage).toHaveBeenCalledTimes(3);
-      expect(postMessage).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          task_id: "task-busy",
-          status: "succeeded"
-        })
-      );
-      expect(postMessage).toHaveBeenNthCalledWith(
-        3,
+      expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "mdtero.bridge.hello",
           runner_state: "idle"

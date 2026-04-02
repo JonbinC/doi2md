@@ -50,6 +50,10 @@ const CONNECTOR_PRESETS: Record<string, { access: AccessKind; sourceName: string
     sourceName: "taylor_francis_tdm",
     userPrivateRetention: true
   },
+  taylor_francis_oa_epub: {
+    access: "open",
+    sourceName: "taylor_francis_oa_epub"
+  },
   arxiv_native: {
     access: "open",
     sourceName: "arxiv_native"
@@ -58,7 +62,12 @@ const CONNECTOR_PRESETS: Record<string, { access: AccessKind; sourceName: string
 
 export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Blob {
   const payloadBytes = toUint8Array(options.payload);
-  const extraFiles = Object.entries(options.extraFiles || {}).sort(([left], [right]) => left.localeCompare(right));
+  const extraFiles = Object.entries(options.extraFiles || {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, payload]) => ({
+      name,
+      bytes: toUint8Array(payload)
+    }));
   const manifest = {
     connector: options.connector,
     artifact_kind: options.artifactKind,
@@ -76,7 +85,7 @@ export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Bl
       options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
     ),
     payload_name: options.payloadName,
-    extra_files: extraFiles.map(([name]) => name)
+    extra_files: extraFiles.map((entry) => entry.name)
   };
 
   const archive = buildStoredZip([
@@ -88,10 +97,7 @@ export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Bl
       name: options.payloadName,
       bytes: payloadBytes
     },
-    ...extraFiles.map(([name, payload]) => ({
-      name,
-      bytes: toUint8Array(payload)
-    }))
+    ...extraFiles
   ]);
 
   return new Blob([archive], { type: "application/zip" });

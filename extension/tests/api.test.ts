@@ -116,6 +116,30 @@ describe("createApiClient", () => {
     expect(artifact.mediaType).toBe("text/markdown");
   });
 
+  it("prefers task artifact metadata filenames when download headers omit one", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response("# parsed", {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown"
+        }
+      })
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const artifact = await client.downloadArtifact("task-123", "paper_md", "zhou2025performance.md");
+
+    expect(artifact.filename).toBe("zhou2025performance.md");
+    expect(artifact.mediaType).toBe("text/markdown");
+  });
+
   it("exposes the shared client-config route for extension upgrade checks", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ api_version: "2026-03-22" }), { status: 200 }));
@@ -242,6 +266,94 @@ describe("createApiClient", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/diagnostics/parser-v2/shadow",
       expect.objectContaining({
+        headers: expect.any(Headers)
+      })
+    );
+  });
+
+  it("loads source connectivity environment diagnostics through the authenticated diagnostics route", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          browser_bridge: { dependency: "browser_bridge", status: "ready", reason_codes: [], details: {} },
+          local_helper: { dependency: "local_helper", status: "ready", reason_codes: [], details: {} },
+          credentials: []
+        }),
+        { status: 200 }
+      )
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const diagnostics = await client.getSourceConnectivityEnvironmentSummary();
+
+    expect(diagnostics.local_helper.status).toBe("ready");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/diagnostics/source-connectivity/environment",
+      expect.objectContaining({
+        headers: expect.any(Headers)
+      })
+    );
+  });
+
+  it("posts source connectivity explain requests through the authenticated diagnostics route", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          input_kind: "doi",
+          input_value: "10.1002/sam.11700",
+          route_summary: {
+            top_connector: "wiley_tdm",
+            route_kind: "html_helper_first",
+            fallback_chain: ["pdf"]
+          },
+          access_summary: { availability: "user_entitled" },
+          environment_summary: {
+            browser_bridge: { dependency: "browser_bridge", status: "ready", reason_codes: [], details: {} },
+            local_helper: { dependency: "local_helper", status: "ready", reason_codes: [], details: {} },
+            credentials: []
+          },
+          provider_probe: {
+            status: "blocked",
+            reason_codes: ["route_ready_waiting_for_user_capture"],
+            attribution: "user_environment",
+            details: {}
+          },
+          recommended_next_step: {
+            action: "open_in_edge_and_capture",
+            message: "Open the article in Edge and retry capture."
+          }
+        }),
+        { status: 200 }
+      )
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const diagnostics = await client.explainSourceConnectivity({
+      input: "10.1002/sam.11700"
+    });
+
+    expect(diagnostics.route_summary.top_connector).toBe("wiley_tdm");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/diagnostics/source-connectivity/explain",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          input: "10.1002/sam.11700"
+        }),
         headers: expect.any(Headers)
       })
     );

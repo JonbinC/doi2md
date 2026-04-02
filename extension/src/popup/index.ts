@@ -46,14 +46,14 @@ const COPY = {
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
-    signInHint: "Sign in to unlock parse bundles and translation.",
+    signInHint: "Sign in to unlock Markdown downloads and translation.",
     freeHint: "PDF/XML free",
-    supportSummary: "Open papers on your own machine and turn them into reusable Markdown packages.",
+    supportSummary: "Open papers on your own machine through the helper-first path, then use browser capture only when needed before turning them into reusable Markdown outputs.",
     supportStableTitle: "Ready now",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
     supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself.",
-    supportExperimentalTitle: "Browser help may be needed",
+    supportExperimentalTitle: "Browser capture only when needed",
     supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary by login and challenge flow.",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
@@ -105,9 +105,9 @@ const COPY = {
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
-    signInHint: "登录后可使用压缩包解析和翻译。",
+    signInHint: "登录后可使用 Markdown 下载和翻译。",
     freeHint: "PDF/XML 免费",
-    supportSummary: "在你自己的设备上打开论文，并整理成可复用的 Markdown 文献包。",
+    supportSummary: "优先走 helper-first，在你自己的设备上打开论文；只有确实需要时再补充浏览器抓取，最后整理成可复用的 Markdown 结果。",
     supportStableTitle: "现在就能用",
     supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access 等开放来源最顺手。",
     supportShadowTitle: "使用你自己的访问权限",
@@ -117,7 +117,7 @@ const COPY = {
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "本地文件入口",
-    fileIntakeNote: "如果你手里已经有 PDF 或 EPUB，也可以继续走同一条 Markdown 打包链。PDF 默认走 GROBID，Docling 和 MinerU 可按需切换。",
+    fileIntakeNote: "如果你手里已经有 PDF 或 EPUB，也可以继续走同一条 Markdown 解析链。PDF 默认走 GROBID，Docling 和 MinerU 可按需切换。",
     pickPdfButton: "选择 PDF",
     pickEpubButton: "选择 EPUB",
     fileNameEmpty: "尚未选择本地文件。",
@@ -279,15 +279,16 @@ function createRecentTaskSummary(state: Awaited<ReturnType<typeof readPopupState
     input: state.input,
     label: stripArtifactSuffix(state.translatedFilename ?? state.parseFilename),
     parseTaskId: state.parseTaskId,
+    parseArtifactKey: state.parseArtifactKey,
     parseFilename: state.parseFilename,
     translatedTaskId: state.translatedTaskId,
     translatedFilename: state.translatedFilename
   };
 }
 
-async function saveArtifact(taskId: string, artifactKey: string) {
+async function saveArtifact(taskId: string, artifactKey: string, preferredFilename?: string) {
   try {
-    const artifact = await client.downloadArtifact(taskId, artifactKey);
+    const artifact = await client.downloadArtifact(taskId, artifactKey, preferredFilename);
     triggerBlobDownload(artifact.blob, artifact.filename);
   } catch {
     setResult(getCurrentCopy().downloadFailed);
@@ -379,7 +380,12 @@ function clearSecondaryDownloads() {
   }
 }
 
-function appendActionButton(container: HTMLDivElement | null, taskId: string, artifactKey: string) {
+function appendActionButton(
+  container: HTMLDivElement | null,
+  taskId: string,
+  artifactKey: string,
+  preferredFilename?: string
+) {
   if (!container) {
     return;
   }
@@ -388,7 +394,7 @@ function appendActionButton(container: HTMLDivElement | null, taskId: string, ar
   button.className = "secondary-button";
   button.textContent = getDownloadLabel(artifactKey, uiLanguage);
   button.addEventListener("click", () => {
-    void saveArtifact(taskId, artifactKey);
+    void saveArtifact(taskId, artifactKey, preferredFilename);
   });
   container.appendChild(button);
 }
@@ -406,12 +412,17 @@ function renderArtifacts(task: TaskRecord) {
     downloadButton.hidden = false;
     downloadButton.textContent = getDownloadLabel(preferredKey, uiLanguage);
     downloadButton.onclick = () => {
-      void saveArtifact(task.task_id, preferredKey);
+      void saveArtifact(task.task_id, preferredKey, task.result?.artifacts?.[preferredKey]?.filename);
     };
   }
 
   getSecondaryArtifactKeys(task.result).forEach((artifactKey) => {
-    appendActionButton(secondaryDownloadsEl, task.task_id, artifactKey);
+    appendActionButton(
+      secondaryDownloadsEl,
+      task.task_id,
+      artifactKey,
+      task.result?.artifacts?.[artifactKey]?.filename
+    );
   });
 
   const sourceArtifactKeys = getSourceArtifactKeys(task.result);
@@ -420,7 +431,12 @@ function renderArtifacts(task: TaskRecord) {
       sourceFilesEl.hidden = false;
     }
     sourceArtifactKeys.forEach((artifactKey) => {
-      appendActionButton(sourceDownloadsEl, task.task_id, artifactKey);
+      appendActionButton(
+        sourceDownloadsEl,
+        task.task_id,
+        artifactKey,
+        task.result?.artifacts?.[artifactKey]?.filename
+      );
     });
   }
 }
@@ -431,10 +447,14 @@ async function persistPopupState(task: TaskRecord) {
   }
 
   const previous = await readPopupState();
+  const preferredParseArtifact =
+    task.result.preferred_artifact === "paper_bundle" ? "paper_bundle" : "paper_md";
+  const preferredParseDescriptor = task.result.artifacts[preferredParseArtifact];
   const nextState = {
     input: currentInput,
-    parseTaskId: task.result.artifacts.paper_bundle ? task.task_id : previous?.parseTaskId,
-    parseFilename: task.result.artifacts.paper_bundle?.filename ?? previous?.parseFilename,
+    parseTaskId: preferredParseDescriptor ? task.task_id : previous?.parseTaskId,
+    parseArtifactKey: preferredParseDescriptor ? preferredParseArtifact : previous?.parseArtifactKey,
+    parseFilename: preferredParseDescriptor?.filename ?? previous?.parseFilename,
     parseMarkdownPath: task.result.artifacts.paper_md?.path ?? previous?.parseMarkdownPath,
     translatedTaskId: task.result.artifacts.translated_md ? task.task_id : previous?.translatedTaskId,
     translatedFilename:
@@ -496,15 +516,15 @@ async function renderRecentTasks() {
     });
     actions.appendChild(useDoi);
 
-    if (task.parseTaskId) {
-      const zipButton = document.createElement("button");
-      zipButton.type = "button";
-      zipButton.className = "secondary-button";
-      zipButton.textContent = getDownloadLabel("paper_bundle", uiLanguage);
-      zipButton.addEventListener("click", () => {
-        void saveArtifact(task.parseTaskId!, "paper_bundle");
+    if (task.parseTaskId && task.parseArtifactKey) {
+      const parseButton = document.createElement("button");
+      parseButton.type = "button";
+      parseButton.className = "secondary-button";
+      parseButton.textContent = getDownloadLabel(task.parseArtifactKey, uiLanguage);
+      parseButton.addEventListener("click", () => {
+        void saveArtifact(task.parseTaskId!, task.parseArtifactKey!, task.parseFilename);
       });
-      actions.appendChild(zipButton);
+      actions.appendChild(parseButton);
     }
 
     if (task.translatedTaskId) {
@@ -513,7 +533,7 @@ async function renderRecentTasks() {
       translatedButton.className = "secondary-button";
       translatedButton.textContent = getDownloadLabel("translated_md", uiLanguage);
       translatedButton.addEventListener("click", () => {
-        void saveArtifact(task.translatedTaskId!, "translated_md");
+        void saveArtifact(task.translatedTaskId!, "translated_md", task.translatedFilename);
       });
       actions.appendChild(translatedButton);
     }
@@ -605,7 +625,10 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
 
   if (kind === "parse") {
     isParsing = false;
-    const filename = task.result?.artifacts?.paper_bundle?.filename;
+    const preferredArtifactKey = getPreferredArtifactKey(task.result);
+    const filename = preferredArtifactKey
+      ? task.result?.artifacts?.[preferredArtifactKey]?.filename
+      : undefined;
     const warningText = getResultWarningText(task.result, uiLanguage);
     if (filename) {
       setResult([getCurrentCopy().parseReady(filename), warningText].filter(Boolean).join(" "));

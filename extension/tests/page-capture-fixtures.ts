@@ -98,6 +98,32 @@ export const HTML_CAPTURE_FIXTURES: HtmlCaptureFixture[] = [
     }
   },
   {
+    name: "nature fulltext page with download pdf affordance",
+    url: "https://www.nature.com/articles/d41586-023-02980-0",
+    title: "AI and science: what 1,600 researchers think",
+    html: `
+      <html>
+        <head>
+          <meta name="prism.doi" content="doi:10.1038/d41586-023-02980-0" />
+          <meta name="dc.identifier" content="doi:10.1038/d41586-023-02980-0" />
+        </head>
+        <body>
+          <main>
+            <article class="c-article-body">
+              <h1>AI and science: what 1,600 researchers think</h1>
+              <a href="/articles/d41586-023-02980-0.pdf" data-track-action="download pdf">Download PDF</a>
+              <section class="c-article-section">Body text</section>
+              <section id="references">References</section>
+            </article>
+          </main>
+        </body>
+      </html>
+    `,
+    expected: {
+      ok: true
+    }
+  },
+  {
     name: "arxiv abstract page",
     url: "https://arxiv.org/abs/2401.00001",
     title: "arXiv Demo",
@@ -117,7 +143,8 @@ export const HTML_CAPTURE_FIXTURES: HtmlCaptureFixture[] = [
       </html>
     `,
     expected: {
-      ok: true
+      ok: false,
+      failureCode: "article_body_missing"
     }
   },
   {
@@ -139,6 +166,26 @@ export const HTML_CAPTURE_FIXTURES: HtmlCaptureFixture[] = [
     `,
     expected: {
       ok: true
+    }
+  },
+  {
+    name: "arxiv pdf shell",
+    url: "https://arxiv.org/pdf/2401.00001.pdf",
+    title: "arXiv PDF Demo",
+    html: `
+      <html>
+        <head>
+          <meta name="citation_title" content="Demo arXiv PDF" />
+          <meta name="dc:identifier" content="arXiv:2401.00001" />
+        </head>
+        <body>
+          <iframe title="pdf" src="https://arxiv.org/pdf/2401.00001.pdf" type="application/pdf"></iframe>
+        </body>
+      </html>
+    `,
+    expected: {
+      ok: false,
+      failureCode: "article_body_missing"
     }
   },
   {

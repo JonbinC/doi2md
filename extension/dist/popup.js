@@ -10,7 +10,10 @@ function buildHelperFirstParseBody(params) {
   }
   return body;
 }
-function fallbackArtifactFilename(artifact) {
+function fallbackArtifactFilename(artifact, preferredFilename) {
+  if (preferredFilename && preferredFilename.trim()) {
+    return preferredFilename.trim();
+  }
   if (artifact === "paper_bundle") return "paper_bundle.zip";
   if (artifact === "paper_md") return "paper.md";
   if (artifact === "paper_pdf") return "paper.pdf";
@@ -87,6 +90,17 @@ function createApiClient(getSettings) {
         (response) => response.json()
       );
     },
+    getSourceConnectivityEnvironmentSummary() {
+      return request("/diagnostics/source-connectivity/environment", void 0, { requireAuth: true }).then(
+        (response) => response.json()
+      );
+    },
+    explainSourceConnectivity(payload) {
+      return request("/diagnostics/source-connectivity/explain", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }, { requireAuth: true }).then((response) => response.json());
+    },
     getClientConfig() {
       return request("/client-config").then((response) => response.json());
     },
@@ -151,10 +165,13 @@ function createApiClient(getSettings) {
     getTask(taskId) {
       return request(`/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
     },
-    downloadArtifact(taskId, artifact) {
+    downloadArtifact(taskId, artifact, preferredFilename) {
       return request(`/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
-        filename: extractFilename(response.headers.get("Content-Disposition"), fallbackArtifactFilename(artifact)),
+        filename: extractFilename(
+          response.headers.get("Content-Disposition"),
+          fallbackArtifactFilename(artifact, preferredFilename)
+        ),
         mediaType: response.headers.get("Content-Type") ?? "application/octet-stream"
       }));
     }
@@ -626,8 +643,15 @@ function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkd
 // src/lib/bridge-wake.ts
 var BRIDGE_SUPPORTED_URL_PATTERNS = [
   "arxiv.org",
+  "dl.acm.org",
+  "ieeexplore.ieee.org",
+  "nature.com",
+  "pubs.acs.org",
+  "pubs.rsc.org",
   "sciencedirect.com/science/article/pii/",
+  "techrxiv.org",
   "link.springer.com",
+  "mdpi.com",
   "springer.com",
   "springernature.com",
   "onlinelibrary.wiley.com",
@@ -639,7 +663,7 @@ function isBridgeSupportedPage(url) {
 }
 
 // src/popup/task-view.ts
-var SECONDARY_ORDER = ["translated_md"];
+var SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"];
 var SOURCE_ORDER = ["paper_pdf", "paper_xml"];
 function getPreferredArtifactKey(result) {
   if (!result?.artifacts) {
@@ -663,6 +687,9 @@ function getSourceArtifactKeys(result) {
 }
 function getDownloadLabel(artifactKey, language = "en") {
   if (language === "zh") {
+    if (artifactKey === "paper_md") {
+      return "\u4E0B\u8F7D Markdown";
+    }
     if (artifactKey === "paper_bundle") {
       return "\u4E0B\u8F7D\u538B\u7F29\u5305";
     }
@@ -676,6 +703,9 @@ function getDownloadLabel(artifactKey, language = "en") {
       return "\u4E0B\u8F7D XML";
     }
     return "\u4E0B\u8F7D\u6587\u4EF6";
+  }
+  if (artifactKey === "paper_md") {
+    return "Download Markdown";
   }
   if (artifactKey === "paper_bundle") {
     return "Download ZIP";
@@ -700,7 +730,7 @@ function getActionStatusText(kind, language = "en") {
       return "\u89E3\u6790\u4EFB\u52A1\u5DF2\u63D0\u4EA4\uFF0C\u6B63\u5728\u51C6\u5907\u6587\u4EF6...";
     }
     if (kind === "running_parse") {
-      return "\u6B63\u5728\u89E3\u6790\u8BBA\u6587\u5E76\u6253\u5305\u6587\u4EF6...";
+      return "\u6B63\u5728\u89E3\u6790\u8BBA\u6587\u5E76\u51C6\u5907 Markdown...";
     }
     if (kind === "queued_translate") {
       return "\u7FFB\u8BD1\u4EFB\u52A1\u5DF2\u63D0\u4EA4\uFF0C\u6B63\u5728\u51C6\u5907...";
@@ -717,7 +747,7 @@ function getActionStatusText(kind, language = "en") {
     return "Parse request sent. Preparing files...";
   }
   if (kind === "running_parse") {
-    return "Parsing paper and packaging files...";
+    return "Parsing paper and preparing Markdown...";
   }
   if (kind === "queued_translate") {
     return "Translation request sent. Preparing text...";
@@ -747,10 +777,10 @@ function getBridgeStatusText(status, language = "en") {
       return "\u672C\u5730 helper \u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5904\u7406\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002";
     }
     if (state === "disconnected") {
-      return "\u672C\u5730 helper \u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero-local \u6216\u91CD\u8F7D\u6269\u5C55\u3002";
+      return "\u672C\u5730 helper \u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero \u6216\u91CD\u8F7D\u6269\u5C55\u3002";
     }
     if (state === "unavailable") {
-      return "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730 helper\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u52A8 mdtero-local\u3002";
+      return "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730 helper\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u52A8 mdtero\u3002";
     }
     return "\u672C\u5730 helper \u72B6\u6001\u672A\u77E5\u3002";
   }
@@ -761,10 +791,10 @@ function getBridgeStatusText(status, language = "en") {
     return "Local helper ready for browser-assisted capture.";
   }
   if (state === "disconnected") {
-    return "Local helper disconnected. Restart mdtero-local or reload the extension.";
+    return "Local helper disconnected. Restart mdtero or reload the extension.";
   }
   if (state === "unavailable") {
-    return "Local helper not detected. Install or start mdtero-local.";
+    return "Local helper not detected. Install or start mdtero.";
   }
   return "Local helper status unknown.";
 }
@@ -781,13 +811,13 @@ function getPreflightHintText(params, language = "en") {
     return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\uFF0C\u518D\u8FDB\u884C\u672C\u5730\u6293\u53D6\u3002" : "This looks like a PDF/EPUB page. Open the HTML full-text page first for better local capture.";
   }
   if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
-    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u8BF7\u5148\u5728\u8BBE\u7F6E\u91CC\u586B\u5199 Elsevier API Key\u3002" : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first.";
+    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u8BF7\u5148\u5728\u8BBE\u7F6E\u91CC\u586B\u5199 Elsevier API Key\uFF1B\u90E8\u5206\u8BBA\u6587\u8FD8\u53EF\u80FD\u8981\u6C42\u672C\u673A\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784\u7F51\u7EDC\u73AF\u5883\u3002" : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first; some papers may still require this machine to be on a campus or institutional network.";
   }
   if (!livePageSupported) {
     return "";
   }
   if (bridgeMissing) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\uFF0C\u4F46\u8FD8\u6CA1\u68C0\u6D4B\u5230 helper\u3002\u8BF7\u5148\u542F\u52A8 `mdtero-local`\u3002" : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero-local` first.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\uFF0C\u4F46\u8FD8\u6CA1\u68C0\u6D4B\u5230 helper\u3002\u8BF7\u5148\u542F\u52A8 `mdtero`\u3002" : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero` first.";
   }
   if (bridgeReady) {
     return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5DF2\u6EE1\u8DB3\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\u6761\u4EF6\uFF0C\u53EF\u4F18\u5148\u8D70 helper-first \u91C7\u96C6\u3002" : "This page is ready for browser-managed local capture through the helper-first path.";
@@ -819,19 +849,19 @@ var COPY = {
     guest: "Guest mode",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
-    signInHint: "Sign in to unlock parse bundles and translation.",
+    signInHint: "Sign in to unlock Markdown downloads and translation.",
     freeHint: "PDF/XML free",
-    supportSummary: "Open papers on your own machine and turn them into reusable Markdown packages.",
+    supportSummary: "Open papers on your own machine through the helper-first path, then use browser capture only when needed before turning them into reusable Markdown outputs.",
     supportStableTitle: "Ready now",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
     supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself.",
-    supportExperimentalTitle: "Browser help may be needed",
+    supportExperimentalTitle: "Browser capture only when needed",
     supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary by login and challenge flow.",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB and want the same Markdown package flow.",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF defaults to GROBID, with Docling and MinerU available when needed.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
@@ -877,9 +907,9 @@ var COPY = {
     guest: "\u6E38\u5BA2\u6A21\u5F0F",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
-    signInHint: "\u767B\u5F55\u540E\u53EF\u4F7F\u7528\u538B\u7F29\u5305\u89E3\u6790\u548C\u7FFB\u8BD1\u3002",
+    signInHint: "\u767B\u5F55\u540E\u53EF\u4F7F\u7528 Markdown \u4E0B\u8F7D\u548C\u7FFB\u8BD1\u3002",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\u6253\u5F00\u8BBA\u6587\uFF0C\u5E76\u6574\u7406\u6210\u53EF\u590D\u7528\u7684 Markdown \u6587\u732E\u5305\u3002",
+    supportSummary: "\u4F18\u5148\u8D70 helper-first\uFF0C\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\u6253\u5F00\u8BBA\u6587\uFF1B\u53EA\u6709\u786E\u5B9E\u9700\u8981\u65F6\u518D\u8865\u5145\u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u6700\u540E\u6574\u7406\u6210\u53EF\u590D\u7528\u7684 Markdown \u7ED3\u679C\u3002",
     supportStableTitle: "\u73B0\u5728\u5C31\u80FD\u7528",
     supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
     supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
@@ -889,7 +919,7 @@ var COPY = {
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
-    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF \u6216 EPUB\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u6253\u5305\u94FE\u3002",
+    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF \u6216 EPUB\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002PDF \u9ED8\u8BA4\u8D70 GROBID\uFF0CDocling \u548C MinerU \u53EF\u6309\u9700\u5207\u6362\u3002",
     pickPdfButton: "\u9009\u62E9 PDF",
     pickEpubButton: "\u9009\u62E9 EPUB",
     fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
@@ -1035,14 +1065,15 @@ function createRecentTaskSummary(state) {
     input: state.input,
     label: stripArtifactSuffix(state.translatedFilename ?? state.parseFilename),
     parseTaskId: state.parseTaskId,
+    parseArtifactKey: state.parseArtifactKey,
     parseFilename: state.parseFilename,
     translatedTaskId: state.translatedTaskId,
     translatedFilename: state.translatedFilename
   };
 }
-async function saveArtifact(taskId, artifactKey) {
+async function saveArtifact(taskId, artifactKey, preferredFilename) {
   try {
-    const artifact = await client.downloadArtifact(taskId, artifactKey);
+    const artifact = await client.downloadArtifact(taskId, artifactKey, preferredFilename);
     triggerBlobDownload(artifact.blob, artifact.filename);
   } catch {
     setResult(getCurrentCopy().downloadFailed);
@@ -1150,7 +1181,7 @@ function clearSecondaryDownloads() {
     sourceFilesEl.open = false;
   }
 }
-function appendActionButton(container, taskId, artifactKey) {
+function appendActionButton(container, taskId, artifactKey, preferredFilename) {
   if (!container) {
     return;
   }
@@ -1159,7 +1190,7 @@ function appendActionButton(container, taskId, artifactKey) {
   button.className = "secondary-button";
   button.textContent = getDownloadLabel(artifactKey, uiLanguage);
   button.addEventListener("click", () => {
-    void saveArtifact(taskId, artifactKey);
+    void saveArtifact(taskId, artifactKey, preferredFilename);
   });
   container.appendChild(button);
 }
@@ -1175,11 +1206,16 @@ function renderArtifacts(task) {
     downloadButton.hidden = false;
     downloadButton.textContent = getDownloadLabel(preferredKey, uiLanguage);
     downloadButton.onclick = () => {
-      void saveArtifact(task.task_id, preferredKey);
+      void saveArtifact(task.task_id, preferredKey, task.result?.artifacts?.[preferredKey]?.filename);
     };
   }
   getSecondaryArtifactKeys(task.result).forEach((artifactKey) => {
-    appendActionButton(secondaryDownloadsEl, task.task_id, artifactKey);
+    appendActionButton(
+      secondaryDownloadsEl,
+      task.task_id,
+      artifactKey,
+      task.result?.artifacts?.[artifactKey]?.filename
+    );
   });
   const sourceArtifactKeys = getSourceArtifactKeys(task.result);
   if (sourceArtifactKeys.length > 0) {
@@ -1187,7 +1223,12 @@ function renderArtifacts(task) {
       sourceFilesEl.hidden = false;
     }
     sourceArtifactKeys.forEach((artifactKey) => {
-      appendActionButton(sourceDownloadsEl, task.task_id, artifactKey);
+      appendActionButton(
+        sourceDownloadsEl,
+        task.task_id,
+        artifactKey,
+        task.result?.artifacts?.[artifactKey]?.filename
+      );
     });
   }
 }
@@ -1196,10 +1237,13 @@ async function persistPopupState(task) {
     return;
   }
   const previous = await readPopupState();
+  const preferredParseArtifact = task.result.preferred_artifact === "paper_bundle" ? "paper_bundle" : "paper_md";
+  const preferredParseDescriptor = task.result.artifacts[preferredParseArtifact];
   const nextState = {
     input: currentInput,
-    parseTaskId: task.result.artifacts.paper_bundle ? task.task_id : previous?.parseTaskId,
-    parseFilename: task.result.artifacts.paper_bundle?.filename ?? previous?.parseFilename,
+    parseTaskId: preferredParseDescriptor ? task.task_id : previous?.parseTaskId,
+    parseArtifactKey: preferredParseDescriptor ? preferredParseArtifact : previous?.parseArtifactKey,
+    parseFilename: preferredParseDescriptor?.filename ?? previous?.parseFilename,
     parseMarkdownPath: task.result.artifacts.paper_md?.path ?? previous?.parseMarkdownPath,
     translatedTaskId: task.result.artifacts.translated_md ? task.task_id : previous?.translatedTaskId,
     translatedFilename: task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename,
@@ -1252,15 +1296,15 @@ async function renderRecentTasks() {
       setResult(getSavedResultSummary(task, uiLanguage));
     });
     actions.appendChild(useDoi);
-    if (task.parseTaskId) {
-      const zipButton = document.createElement("button");
-      zipButton.type = "button";
-      zipButton.className = "secondary-button";
-      zipButton.textContent = getDownloadLabel("paper_bundle", uiLanguage);
-      zipButton.addEventListener("click", () => {
-        void saveArtifact(task.parseTaskId, "paper_bundle");
+    if (task.parseTaskId && task.parseArtifactKey) {
+      const parseButton2 = document.createElement("button");
+      parseButton2.type = "button";
+      parseButton2.className = "secondary-button";
+      parseButton2.textContent = getDownloadLabel(task.parseArtifactKey, uiLanguage);
+      parseButton2.addEventListener("click", () => {
+        void saveArtifact(task.parseTaskId, task.parseArtifactKey, task.parseFilename);
       });
-      actions.appendChild(zipButton);
+      actions.appendChild(parseButton2);
     }
     if (task.translatedTaskId) {
       const translatedButton = document.createElement("button");
@@ -1268,7 +1312,7 @@ async function renderRecentTasks() {
       translatedButton.className = "secondary-button";
       translatedButton.textContent = getDownloadLabel("translated_md", uiLanguage);
       translatedButton.addEventListener("click", () => {
-        void saveArtifact(task.translatedTaskId, "translated_md");
+        void saveArtifact(task.translatedTaskId, "translated_md", task.translatedFilename);
       });
       actions.appendChild(translatedButton);
     }
@@ -1353,7 +1397,8 @@ async function pollTask(taskId, kind) {
   await renderRecentTasks();
   if (kind === "parse") {
     isParsing = false;
-    const filename = task.result?.artifacts?.paper_bundle?.filename;
+    const preferredArtifactKey = getPreferredArtifactKey(task.result);
+    const filename = preferredArtifactKey ? task.result?.artifacts?.[preferredArtifactKey]?.filename : void 0;
     const warningText = getResultWarningText(task.result, uiLanguage);
     if (filename) {
       setResult([getCurrentCopy().parseReady(filename), warningText].filter(Boolean).join(" "));
