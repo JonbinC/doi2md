@@ -41,7 +41,7 @@ describe("buildHelperBundleBlob", () => {
     expect(text).toContain("paper.pdf");
   });
 
-  it("includes declared extra files in the bundle manifest and archive", async () => {
+  it("packages declared extra asset files into the helper bundle manifest and archive", async () => {
     const blob = buildHelperBundleBlob({
       connector: "springer_subscription_connector",
       artifactKind: "html",

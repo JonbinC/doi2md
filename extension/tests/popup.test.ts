@@ -84,29 +84,59 @@ describe("createFileParseMessage", () => {
 });
 
 describe("getPreferredArtifactKey", () => {
-  it("prefers paper bundles over raw markdown downloads", () => {
+  it("returns the backend-selected primary artifact", () => {
     expect(
       getPreferredArtifactKey({
-        preferred_artifact: "paper_bundle",
+        preferred_artifact: "paper_md",
         artifacts: {
-          paper_bundle: {
-            path: "/tmp/paper_bundle.zip",
-            filename: "zhou2025performance_bundle.zip",
-            media_type: "application/zip"
-          },
           paper_md: {
             path: "/tmp/paper.md",
             filename: "zhou2025performance.md",
             media_type: "text/markdown"
+          },
+          paper_bundle: {
+            path: "/tmp/paper_bundle.zip",
+            filename: "zhou2025performance.zip",
+            media_type: "application/zip"
           }
         }
       })
-    ).toBe("paper_bundle");
+    ).toBe("paper_md");
   });
 });
 
 describe("getSecondaryArtifactKeys", () => {
-  it("only keeps translated markdown as a secondary main action", () => {
+  it("keeps fallback zip and translation as secondary actions when markdown is primary", () => {
+    expect(
+      getSecondaryArtifactKeys({
+        preferred_artifact: "paper_md",
+        artifacts: {
+          paper_md: {
+            path: "/tmp/paper.md",
+            filename: "tang2026simulation.md",
+            media_type: "text/markdown"
+          },
+          paper_bundle: {
+            path: "/tmp/tang2026simulation.zip",
+            filename: "tang2026simulation.zip",
+            media_type: "application/zip"
+          },
+          paper_xml: {
+            path: "/tmp/paper.xml",
+            filename: "tang2026simulation.xml",
+            media_type: "application/xml"
+          },
+          translated_md: {
+            path: "/tmp/tang2026simulation.zh.md",
+            filename: "tang2026simulation.zh.md",
+            media_type: "text/markdown"
+          }
+        }
+      })
+    ).toEqual(["paper_bundle", "translated_md"]);
+  });
+
+  it("keeps markdown available when zip becomes the fallback-safe primary action", () => {
     expect(
       getSecondaryArtifactKeys({
         preferred_artifact: "paper_bundle",
@@ -121,11 +151,6 @@ describe("getSecondaryArtifactKeys", () => {
             filename: "tang2026simulation.md",
             media_type: "text/markdown"
           },
-          paper_xml: {
-            path: "/tmp/paper.xml",
-            filename: "tang2026simulation.xml",
-            media_type: "application/xml"
-          },
           translated_md: {
             path: "/tmp/tang2026simulation.zh.md",
             filename: "tang2026simulation.zh.md",
@@ -133,7 +158,7 @@ describe("getSecondaryArtifactKeys", () => {
           }
         }
       })
-    ).toEqual(["translated_md"]);
+    ).toEqual(["paper_md", "translated_md"]);
   });
 });
 
@@ -166,6 +191,7 @@ describe("getSourceArtifactKeys", () => {
 
 describe("getDownloadLabel", () => {
   it("renders localized user-facing labels instead of artifact keys", () => {
+    expect(getDownloadLabel("paper_md", "en")).toBe("Download Markdown");
     expect(getDownloadLabel("paper_bundle", "en")).toBe(
       "Download ZIP"
     );
@@ -176,6 +202,7 @@ describe("getDownloadLabel", () => {
     expect(getDownloadLabel("paper_xml", "en")).toBe(
       "Download XML"
     );
+    expect(getDownloadLabel("paper_md", "zh")).toBe("下载 Markdown");
     expect(getDownloadLabel("paper_bundle", "zh")).toBe("下载压缩包");
     expect(getDownloadLabel("translated_md", "zh")).toBe("下载译文");
   });
@@ -185,7 +212,7 @@ describe("getActionStatusText", () => {
   it("avoids surfacing raw task identifiers in status copy", () => {
     expect(getActionStatusText("detecting", "en")).toBe("Detecting DOI from this page...");
     expect(getActionStatusText("queued_parse", "en")).toBe("Parse request sent. Preparing files...");
-    expect(getActionStatusText("running_parse", "en")).toBe("Parsing paper and packaging files...");
+    expect(getActionStatusText("running_parse", "en")).toBe("Parsing paper and preparing Markdown...");
     expect(getActionStatusText("queued_translate", "zh")).toBe("翻译任务已提交，正在准备...");
     expect(getActionStatusText("failed", "zh")).toBe("处理失败，请重试。");
   });
@@ -237,6 +264,15 @@ describe("getPreflightHintText", () => {
         "en"
       )
     ).toContain("Elsevier / ScienceDirect");
+    expect(
+      getPreflightHintText(
+        {
+          input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
+          hasElsevierApiKey: false
+        },
+        "en"
+      )
+    ).toContain("campus or institutional network");
   });
 
   it("warns when a supported live page is open but the helper is unavailable", () => {
@@ -250,7 +286,7 @@ describe("getPreflightHintText", () => {
         },
         "en"
       )
-    ).toContain("Start `mdtero-local`");
+    ).toContain("Start `mdtero`");
   });
 
   it("confirms helper-first capture readiness on supported live pages", () => {

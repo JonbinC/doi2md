@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "Capture papers on your own machine and turn them into reusable Markdown research packages.",
+    "message": "Start in Mdtero Account for discovery and API-key management, then use helper-first paper capture on your own machine, with browser capture only for supported live paper pages before turning everything into reusable Markdown outputs.",
     "description": "The description of the extension"
   }
 }

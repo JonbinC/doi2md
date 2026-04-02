@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { collectAcceptanceSamples } from "../../../scripts/collect_acceptance_samples.mjs";
+import { collectAcceptanceSamples } from "../../scripts/collect_acceptance_samples.mjs";
 
 describe("collectAcceptanceSamples", () => {
   let sandboxDir: string | null = null;

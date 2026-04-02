@@ -6,14 +6,15 @@ import {
 } from "../src/lib/auth-bridge";
 
 describe("isTrustedMdteroOrigin", () => {
-  it("allows Mdtero and local development origins", () => {
+  it("allows the production site origin and local development origins", () => {
     expect(isTrustedMdteroOrigin("https://mdtero.com")).toBe(true);
-    expect(isTrustedMdteroOrigin("https://app.mdtero.com")).toBe(true);
+    expect(isTrustedMdteroOrigin("https://www.mdtero.com")).toBe(true);
     expect(isTrustedMdteroOrigin("http://localhost:3000")).toBe(true);
     expect(isTrustedMdteroOrigin("http://127.0.0.1:5173")).toBe(true);
   });
 
-  it("rejects publisher and third-party origins", () => {
+  it("rejects publisher, third-party, and unrelated mdtero subdomain origins", () => {
+    expect(isTrustedMdteroOrigin("https://app.mdtero.com")).toBe(false);
     expect(isTrustedMdteroOrigin("https://www.sciencedirect.com")).toBe(false);
     expect(isTrustedMdteroOrigin("https://arxiv.org")).toBe(false);
     expect(isTrustedMdteroOrigin("https://example.com")).toBe(false);
@@ -67,6 +68,17 @@ describe("shouldAcceptMdteroAuthMessage", () => {
       shouldAcceptMdteroAuthMessage({
         currentOrigin: "https://mdtero.com",
         eventOrigin: "https://example.com",
+        data: {
+          type: "mdtero.auth.token",
+          token: "token-1",
+          email: "reader@example.com"
+        }
+      })
+    ).toBe(false);
+    expect(
+      shouldAcceptMdteroAuthMessage({
+        currentOrigin: "https://mdtero.com",
+        eventOrigin: "https://www.mdtero.com",
         data: {
           type: "mdtero.auth.token",
           token: "token-1",

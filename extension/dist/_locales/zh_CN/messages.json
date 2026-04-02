@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "在你自己的设备上抓取论文，并整理成可复用的 Markdown 文献包。",
+    "message": "先在 Mdtero 账户页完成发现和 API key 管理，再以 helper-first 为主，在你自己的设备上抓取论文；只有支持的实时论文页才需要浏览器补充抓取，最后整理成可复用的 Markdown 结果。",
     "description": "The description of the extension"
   }
 }

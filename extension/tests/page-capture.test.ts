@@ -48,7 +48,65 @@ describe("buildPageCaptureResult", () => {
         ok: false,
         failureCode: fixture.expected.failureCode
       });
+      if (!result.ok && result.failureCode === "article_body_missing") {
+        expect(result.failureContext).toEqual(
+          expect.objectContaining({
+            sourceUrl: fixture.url,
+            title: fixture.title,
+            hasMetadataSignals: expect.any(Boolean),
+            hasBodySignals: expect.any(Boolean),
+            isPdfEmbedShell: expect.any(Boolean)
+          })
+        );
+      }
     }
+  });
+
+  it("strips obvious injected overlays, scripts, styles, and hidden extension nodes from captured html", () => {
+    const result = buildPageCaptureResult({
+      url: "https://www.nature.com/articles/d41586-023-02980-0",
+      title: "AI and science: what 1,600 researchers think",
+      html: `
+        <html>
+          <head>
+            <meta name="citation_doi" content="10.1038/d41586-023-02980-0" />
+            <style>.glarity--summary { display: block; }</style>
+            <script>window.__tracker = true;</script>
+          </head>
+          <body>
+            <shadow-host></shadow-host>
+            <main>
+              <article class="c-article-body">
+                <h1>AI and science: what 1,600 researchers think</h1>
+                <section class="c-article-section">Body text</section>
+              </article>
+            </main>
+            <div id="shadowLL"><link rel="stylesheet" href="chrome-extension://demo/sciteFont.css" /></div>
+            <div class="glarity--summary notranslate">Injected overlay</div>
+            <div class="tp-extension">Injected widget</div>
+            <div id="tcb-extension-uk-wrapper">Injected wrapper</div>
+            <textarea aria-hidden="true" style="visibility:hidden !important;">shadow node</textarea>
+            <iframe name="__tcfapiLocator" style="display:none;"></iframe>
+          </body>
+        </html>
+      `
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected ok result");
+    }
+    expect(result.html).toContain("<article");
+    expect(result.html).not.toContain("window.__tracker");
+    expect(result.html).not.toContain(".glarity--summary");
+    expect(result.html).not.toContain("Injected overlay");
+    expect(result.html).not.toContain("tp-extension");
+    expect(result.html).not.toContain("tcb-extension-uk-wrapper");
+    expect(result.html).not.toContain("__tcfapiLocator");
+    expect(result.html).not.toContain("shadow-host");
+    expect(result.html).not.toContain("shadowLL");
+    expect(result.html).not.toContain("chrome-extension://");
+    expect(result.html).not.toContain("visibility:hidden !important");
   });
 });
 

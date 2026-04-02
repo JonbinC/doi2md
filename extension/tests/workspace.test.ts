@@ -46,33 +46,28 @@ describe("workspace", () => {
     expect(optionsHtml.indexOf('id="code-input"')).toBeLessThan(optionsHtml.indexOf('id="verify-code"'));
   });
 
-  it("keeps a separate launch-site workspace with built html entrypoints", () => {
-    const sitePackage = readFileSync(resolve("../site/package.json"), "utf-8");
-    const siteIndexHtml = readFileSync(resolve("../site/src/index.html"), "utf-8");
-    const siteGuideHtml = readFileSync(resolve("../site/src/guide.html"), "utf-8");
-    const siteAccountHtml = readFileSync(resolve("../site/src/account.html"), "utf-8");
-    const siteDemoHtml = readFileSync(resolve("../site/src/demo.html"), "utf-8");
+  it("keeps the public repo scoped away from the site workspace", () => {
+    const repoReadme = readFileSync(resolve("../README.md"), "utf-8");
 
-    expect(sitePackage).toContain('"name": "@mdtero/site"');
-    expect(siteIndexHtml).toContain('href="./styles.css');
-    expect(siteIndexHtml).toContain('src="./main.js');
-    expect(siteGuideHtml).toContain('src="./guide.js');
-    expect(siteAccountHtml).toContain('src="./account.js');
-    expect(siteDemoHtml).toContain('src="./demo.js');
+    expect(repoReadme).toContain("public local-client and install surface");
+    expect(() => readFileSync(resolve("../site/package.json"), "utf-8")).toThrow();
+    expect(() => readFileSync(resolve("../site/src/index.html"), "utf-8")).toThrow();
   });
 
-  it("declares warm brand assets for the extension and the launch site", () => {
+  it("declares warm brand assets for the extension", () => {
     const manifest = readFileSync(resolve("manifest.json"), "utf-8");
-    const siteBuildConfig = readFileSync(resolve("../site/esbuild.config.mjs"), "utf-8");
     const localeEn = readFileSync(resolve("_locales/en/messages.json"), "utf-8");
     const localeZh = readFileSync(resolve("_locales/zh_CN/messages.json"), "utf-8");
 
     expect(manifest).toContain('"icons"');
-    expect(manifest).toContain('"16": "assets/icon-16.png"');
-    expect(manifest).toContain('"128": "assets/icon-128.png"');
+    expect(manifest).toContain('"16": "dist/assets/icon-16.png"');
+    expect(manifest).toContain('"128": "dist/assets/icon-128.png"');
     expect(manifest).toContain('"default_icon"');
-    expect(localeEn).toContain("reusable Markdown research packages");
-    expect(localeZh).toContain("可复用的 Markdown 文献包");
-    expect(siteBuildConfig).toContain('copyFile("src/assets/brand-mark.svg", "dist/assets/brand-mark.svg")');
+    expect(manifest).toContain('"service_worker": "dist/background.js"');
+    expect(manifest).toContain('"default_popup": "dist/popup.html"');
+    expect(localeEn).toContain("reusable Markdown outputs");
+    expect(localeEn).not.toContain("reusable Markdown research packages");
+    expect(localeZh).toContain("可复用的 Markdown 结果");
+    expect(localeZh).not.toContain("可复用的 Markdown 文献包");
   });
 });

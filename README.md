@@ -1,31 +1,37 @@
 <div align="center">
   <img src="./extension/src/assets/icon-128.png" alt="Mdtero logo" width="120" />
 
-  # Mdtero Browser Extension
+  # Mdtero Public Surface
 
-  *The public extension mirror for Mdtero's browser extension.*
+  *The public local-client and install surface for Mdtero.*
 </div>
 
-This repository is the public home for the browser extension only.
+This repository is the public home for Mdtero's user-side installables.
 
-The active product SSOT lives in [`JonbinC/mdtero`](https://github.com/JonbinC/mdtero):
+This repo is now the intended SSOT for the browser extension and the wider public install surface.
 
-- website, guide, dashboard, and API docs: `apps/site`
-- active extension source of truth: `apps/extension`
-- shared client contract: `packages/shared`
+The frontend repo may keep a compatibility mirror under `mdtero-frontend/apps/extension`, but long-lived extension changes should start here.
 
-This repo stays focused on extension distribution and extension-facing public code.
+The product and backend SSOT still live in separate private repos:
+
+- frontend product repo: `JonbinC/mdtero`
+- backend parsing repo: `JonbinC/mdtero-backend`
+
+This repo stays focused on what users install or run locally.
 
 Mdtero turns papers into reusable Markdown research packages.
 
-Use this repository when you specifically need the browser extension for local capture from a live paper page or from local files on your own machine.
+Use this repository when you specifically need public local capture, helper setup, or public install guidance.
 
 ## This Repo Contains
 
-- the public extension mirror in [`extension`](./extension)
-- the mirrored shared contract in [`shared`](./shared)
-- the packaged extension source and build output for manual testing
-- public install guides for Codex and OpenClaw
+- the public extension code in [`extension`](./extension)
+- helper-facing public assets in [`helper`](./helper)
+- skill-facing public assets in [`skills`](./skills)
+- public install entry points in [`install`](./install)
+- shared client contract in [`shared`](./shared)
+- public docs in [`docs/public`](./docs/public)
+- archived legacy assets in [`archive`](./archive)
 
 ## When To Use The Extension
 
@@ -39,9 +45,10 @@ PDF is optional input. The default handoff format remains the Markdown package.
 
 ## Repo Boundary
 
-- use this repo for extension packaging, public extension code, and browser-side local capture guidance
-- do not treat this repo as the source of truth for website flows, dashboard UX, or backend behavior
-- when extension behavior changes in `JonbinC/mdtero`, sync the same change here in the same round
+- use this repo for public extension packaging, helper/setup assets, and user-side install guidance
+- do not treat this repo as the source of truth for dashboard UX or backend implementation
+- if something is meant to be downloaded, installed, or run by end users locally, default it here
+- legacy MCP code is archived and is not an actively maintained surface
 
 ## Install
 
@@ -53,17 +60,20 @@ PDF is optional input. The default handoff format remains the Markdown package.
 ## Repo Map
 
 - [`extension`](./extension): extension source, tests, build output, and manifest
-- [`shared`](./shared): public client contract used by the extension
-- [`codex`](./codex): Codex-facing install guidance
-- [`openclaw`](./openclaw): OpenClaw-facing install guidance
+- [`helper`](./helper): helper-facing public assets and MCP/runtime utilities
+- [`archive`](./archive): deprecated or historical public assets kept only for reference
+- [`skills`](./skills): public skill-facing install guidance
+- [`install`](./install): top-level install entry docs
+- [`shared`](./shared): public client contract used by local clients
+- [`docs/public`](./docs/public): stable public-facing docs
 
 ## Public Links
 
 - Chrome Web Store: [Mdtero on Google Chrome](https://chromewebstore.google.com/detail/mdtero/knpihhcooldgedbklgjghebijcpejibp)
 - Edge Add-ons: [Mdtero on Microsoft Edge](https://microsoftedge.microsoft.com/addons/detail/mdtero/bgikfidgigjnkgfdhhopojgpckilknic)
 - Product guide: [mdtero.com/guide](https://mdtero.com/guide)
-- OpenClaw install guide: [`./openclaw/INSTALL.md`](./openclaw/INSTALL.md)
-- Codex install guide: [`./codex/INSTALL.md`](./codex/INSTALL.md)
+- OpenClaw install guide: [`./helper/openclaw/INSTALL.md`](./helper/openclaw/INSTALL.md)
+- Codex install guide: [`./skills/codex/INSTALL.md`](./skills/codex/INSTALL.md)
 
 ## Local Development
 
@@ -82,4 +92,4 @@ Build output lives in [`extension/dist`](./extension/dist).
 - local helper or extension should handle publisher-side local acquisition when required
 - permissions stay scoped to local downloads, supported paper tabs, native helper messaging, and the supported publisher/API host list
 - for the local helper, download the installer, inspect it locally, then run it
-- if repo responsibilities ever conflict, `JonbinC/mdtero` wins as product SSOT
+- if repo responsibilities ever conflict, frontend/backend SSOT wins over this public packaging repo

@@ -5,10 +5,10 @@ import { join } from "node:path";
 
 import {
   buildBackendAcceptanceSample
-} from "../../../scripts/build_backend_acceptance_sample.mjs";
+} from "../../scripts/build_backend_acceptance_sample.mjs";
 import {
   buildBackendAcceptanceSamples
-} from "../../../scripts/build_backend_acceptance_samples.mjs";
+} from "../../scripts/build_backend_acceptance_samples.mjs";
 
 describe("buildBackendAcceptanceSample", () => {
   let sandboxDir: string | null = null;

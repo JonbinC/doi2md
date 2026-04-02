@@ -8,6 +8,7 @@ function createChromeTabsMock() {
   const onUpdatedListeners: Array<(tabId: number, changeInfo: { status?: string }) => void> = [];
   return {
     create: vi.fn(async ({ url }: { url: string }) => ({ id: 11, url })),
+    get: vi.fn(async (tabId: number) => ({ id: tabId, status: "loading" })),
     update: vi.fn(async (tabId: number, { url }: { url: string }) => ({ id: tabId, url })),
     sendMessage: vi.fn(),
     onUpdated: {
@@ -101,6 +102,51 @@ describe("performBridgeAcquire", () => {
 
     expect(response.status).toBe("failed");
     expect(response.failure_code).toBe("challenge_page_detected");
+  });
+
+  it("forwards article-body diagnostics from the content script when helper capture fails", async () => {
+    const tabs = createChromeTabsMock();
+    tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      capture: {
+        ok: false,
+        failureCode: "article_body_missing",
+        failureMessage: "Page loaded but no article body markers were detected.",
+        failureContext: {
+          sourceUrl: "https://www.nature.com/articles/d41586-023-02980-0",
+          title: "AI and science: what 1,600 researchers think",
+          hasMetadataSignals: true,
+          hasBodySignals: false,
+          isPdfEmbedShell: false
+        }
+      }
+    });
+
+    const promise = performBridgeAcquire({
+      request: {
+        task_id: "task-diagnostics",
+        action: "open_and_capture_html",
+        connector: "nature_html",
+        input: "https://www.nature.com/articles/d41586-023-02980-0"
+      },
+      chromeApi: {
+        tabs
+      } as never
+    });
+
+    await flushBridgeSetup();
+    tabs.onUpdated.emit(11, "complete");
+    const response = await promise;
+
+    expect(response.status).toBe("failed");
+    expect(response.failure_code).toBe("article_body_missing");
+    expect(response.failure_context).toEqual(
+      expect.objectContaining({
+        sourceUrl: "https://www.nature.com/articles/d41586-023-02980-0",
+        hasMetadataSignals: true,
+        hasBodySignals: false
+      })
+    );
   });
 
   it("downloads epub artifacts and returns a base64 payload", async () => {
@@ -231,8 +277,14 @@ describe("performBridgeAcquire", () => {
     expect(response.payload_text).toContain("Retry success");
   });
 
-  it("reuses the existing bridge tab for the next acquisition when available", async () => {
+  it("opens a fresh acquisition tab when the next request targets a different page", async () => {
     const tabs = createChromeTabsMock();
+    const currentTab = {
+      id: 17,
+      status: "loading",
+      url: "https://link.springer.com/article/10.1007/old"
+    };
+    tabs.get.mockImplementation(async () => ({ ...currentTab }));
     tabs.sendMessage.mockResolvedValue({
       ok: true,
       capture: {
@@ -260,18 +312,280 @@ describe("performBridgeAcquire", () => {
     } as never);
 
     await flushBridgeSetup();
-    tabs.onUpdated.emit(17, "complete");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    tabs.onUpdated.emit(11, "complete");
     const response = await promise;
 
-    expect(tabs.create).not.toHaveBeenCalled();
-    expect(tabs.update).toHaveBeenCalledWith(
-      17,
+    expect(tabs.update).not.toHaveBeenCalled();
+    expect(tabs.create).toHaveBeenCalledWith(
       expect.objectContaining({
         url: "https://doi.org/10.1007/s12011-024-04385-0",
         active: false
       })
     );
+    expect(bridgeSession.tabId).toBe(11);
     expect(response.status).toBe("succeeded");
+  });
+
+  it("includes the final tab URL when the content script never becomes available", async () => {
+    const tabs = createChromeTabsMock();
+    tabs.get.mockResolvedValue({
+      id: 11,
+      status: "complete",
+      url: "https://dl.acm.org/doi/10.1145/3131726.3131736"
+    });
+    tabs.sendMessage.mockRejectedValue(
+      new Error("Could not establish connection. Receiving end does not exist.")
+    );
+
+    const promise = performBridgeAcquire({
+      request: {
+        task_id: "task-unavailable",
+        action: "open_and_capture_html",
+        connector: "best_oa_location_html",
+        input: "10.1145/3131726.3131736"
+      },
+      chromeApi: {
+        tabs
+      } as never
+    });
+
+    await flushBridgeSetup();
+    tabs.onUpdated.emit(11, "complete");
+    const response = await promise;
+
+    expect(response.status).toBe("failed");
+    expect(response.failure_code).toBe("content_script_unavailable");
+    expect(response.failure_message).toContain("Final tab URL: https://dl.acm.org/doi/10.1145/3131726.3131736");
+  });
+
+  it("fails cleanly when the content script message hangs without resolving", async () => {
+    vi.useFakeTimers();
+    const tabs = createChromeTabsMock();
+    tabs.get.mockResolvedValue({
+      id: 11,
+      status: "complete",
+      url: "https://www.nature.com/articles/d41586-023-02980-0"
+    });
+    tabs.sendMessage.mockImplementation(() => new Promise(() => {}));
+
+    try {
+      const promise = performBridgeAcquire({
+        request: {
+          task_id: "task-hung-message",
+          action: "open_and_capture_html",
+          connector: "nature_html",
+          input: "https://www.nature.com/articles/d41586-023-02980-0"
+        },
+        chromeApi: {
+          tabs
+        } as never
+      });
+
+      await vi.advanceTimersByTimeAsync(12000);
+      const response = await promise;
+
+      expect(response.status).toBe("failed");
+      expect(response.failure_code).toBe("content_script_unavailable");
+      expect(response.failure_message).toContain("Final tab URL: https://www.nature.com/articles/d41586-023-02980-0");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("accepts an already-complete newly opened tab without waiting for another update event", async () => {
+    const tabs = createChromeTabsMock();
+    tabs.get.mockResolvedValue({
+      id: 11,
+      status: "complete",
+      url: "https://link.springer.com/article/10.1007/s10735-026-10774-7"
+    });
+    tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      capture: {
+        ok: true,
+        html: "<html><body><article>Fast complete</article></body></html>",
+        payloadName: "paper.html",
+        sourceUrl: "https://link.springer.com/article/10.1007/s10735-026-10774-7",
+        pageTitle: "Fast complete"
+      }
+    });
+
+    await expect(
+      performBridgeAcquire({
+        request: {
+          task_id: "task-fast-complete",
+          action: "open_and_capture_html",
+          connector: "springer_subscription_connector",
+          input: "10.1007/s10735-026-10774-7",
+          timeouts: {
+            page_load_ms: 5
+          }
+        } as never,
+        chromeApi: {
+          tabs
+        } as never
+      } as never)
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      artifact_kind: "html"
+    });
+
+    expect(tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://doi.org/10.1007/s10735-026-10774-7",
+        active: false
+      })
+    );
+    expect(tabs.get).toHaveBeenCalledWith(11);
+  });
+
+  it("opens a fresh acquisition tab even when the previous bridge tab already points at the same target URL", async () => {
+    const tabs = createChromeTabsMock();
+    tabs.get.mockResolvedValue({
+      id: 17,
+      status: "complete",
+      url: "https://www.nature.com/articles/d41586-023-02980-0"
+    });
+    tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      capture: {
+        ok: true,
+        html: "<html><body><article>Fresh same-url page</article></body></html>",
+        payloadName: "paper.html",
+        sourceUrl: "https://www.nature.com/articles/d41586-023-02980-0",
+        pageTitle: "AI and science"
+      }
+    });
+
+    const bridgeSession = { tabId: 17 };
+    const promise = performBridgeAcquire({
+      request: {
+        task_id: "task-same-url",
+        action: "open_and_capture_html",
+        connector: "nature_html",
+        input: "https://www.nature.com/articles/d41586-023-02980-0"
+      },
+      chromeApi: {
+        tabs
+      } as never,
+      bridgeSession
+    } as never);
+
+    await flushBridgeSetup();
+    tabs.onUpdated.emit(11, "complete");
+    const response = await promise;
+
+    expect(tabs.update).not.toHaveBeenCalled();
+    expect(tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://www.nature.com/articles/d41586-023-02980-0",
+        active: false
+      })
+    );
+    expect(bridgeSession.tabId).toBe(11);
+    expect(response.status).toBe("succeeded");
+    expect(response.payload_text).toContain("Fresh same-url page");
+  });
+
+  it("ignores stale completion events from the previous bridge tab after opening a fresh acquisition tab", async () => {
+    const tabs = createChromeTabsMock();
+    const nextTab = {
+      id: 11,
+      status: "loading",
+      url: "https://pubs.rsc.org/en/content/articlehtml/2020/ta/d0ta03080e"
+    };
+    tabs.get.mockImplementation(async (tabId: number) => {
+      if (tabId === 17) {
+        return {
+          id: 17,
+          status: "complete",
+          url: "https://dl.acm.org/doi/10.1145/3131726.3131736"
+        };
+      }
+      return { ...nextTab };
+    });
+    tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      capture: {
+        ok: true,
+        html: "<html><body><article>Fresh page</article></body></html>",
+        payloadName: "paper.html",
+        sourceUrl: "https://pubs.rsc.org/en/content/articlehtml/2020/ta/d0ta03080e",
+        pageTitle: "RSC Article"
+      }
+    });
+
+    const promise = performBridgeAcquire({
+      request: {
+        task_id: "task-refresh",
+        action: "open_and_capture_html",
+        connector: "rsc_html",
+        input: "https://pubs.rsc.org/en/content/articlehtml/2020/ta/d0ta03080e"
+      },
+      chromeApi: {
+        tabs
+      } as never,
+      bridgeSession: {
+        tabId: 17
+      }
+    } as never);
+
+    await flushBridgeSetup();
+    tabs.onUpdated.emit(17, "complete");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(tabs.sendMessage).not.toHaveBeenCalled();
+
+    nextTab.status = "complete";
+    tabs.onUpdated.emit(11, "complete");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(tabs.sendMessage).toHaveBeenCalledTimes(1);
+    const response = await promise;
+
+    expect(tabs.update).not.toHaveBeenCalled();
+    expect(tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://pubs.rsc.org/en/content/articlehtml/2020/ta/d0ta03080e",
+        active: false
+      })
+    );
+    expect(tabs.sendMessage).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe("succeeded");
+    expect(response.payload_text).toContain("Fresh page");
+  });
+
+  it("includes the final tab URL when tab load completion times out", async () => {
+    const tabs = createChromeTabsMock();
+    tabs.get.mockResolvedValue({
+      id: 11,
+      status: "loading",
+      url: "https://www.nature.com/articles/d41586-023-02980-0"
+    });
+
+    const responsePromise = performBridgeAcquire({
+      request: {
+        task_id: "task-load-timeout",
+        action: "open_and_capture_html",
+        connector: "nature_html",
+        input: "https://www.nature.com/articles/d41586-023-02980-0",
+        timeouts: {
+          page_load_ms: 5
+        }
+      },
+      chromeApi: {
+        tabs
+      } as never
+    });
+
+    await expect(responsePromise).resolves.toMatchObject({
+      status: "failed",
+      failure_code: "tab_load_timeout"
+    });
+    await expect(responsePromise).resolves.toMatchObject({
+      failure_message: expect.stringContaining(
+        "Final tab URL: https://www.nature.com/articles/d41586-023-02980-0"
+      )
+    });
   });
 
   it("prefers the last real page tab for current-tab capture instead of the recycled bridge tab", async () => {

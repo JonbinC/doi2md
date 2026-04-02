@@ -2,9 +2,11 @@ import type {
   BrowserBridgeAcquireRequest,
   BrowserBridgeAcquireResponse
 } from "./browser-bridge";
+import type { PageCaptureFailureContext } from "./page-capture";
 
 interface TabsApiLike {
   create(createProperties: { url: string; active?: boolean }): Promise<{ id?: number; url?: string }>;
+  get?(tabId: number): Promise<{ id?: number; status?: string; url?: string }>;
   update?(
     tabId: number,
     updateProperties: { url?: string; active?: boolean }
@@ -39,6 +41,7 @@ interface ContentCaptureResponse {
     pageTitle?: string;
     failureCode?: string;
     failureMessage?: string;
+    failureContext?: PageCaptureFailureContext;
   };
   download?: {
     ok: boolean;
@@ -58,6 +61,14 @@ interface ContentCaptureResponse {
   };
 }
 
+interface OpenAcquisitionTabResult {
+  tabId: number | null | undefined;
+  acceptAlreadyComplete: boolean;
+  previousUrl?: string;
+}
+
+const CONTENT_SCRIPT_MESSAGE_TIMEOUT_MS = 2000;
+
 export async function performBridgeAcquire(
   options: PerformBridgeAcquireOptions
 ): Promise<BrowserBridgeAcquireResponse> {
@@ -75,9 +86,24 @@ export async function performBridgeAcquire(
         failure_message: "No active bridge tab is available for current-tab capture."
       };
     }
-    const response = (await sendTabMessageWithRetry(chromeApi.tabs, activeTabId, {
-      type: "mdtero.capture_current_tab.request"
-    })) as ContentCaptureResponse | undefined;
+    let response: ContentCaptureResponse | undefined;
+    try {
+      response = (await sendTabMessageWithRetry(chromeApi.tabs, activeTabId, {
+        type: "mdtero.capture_current_tab.request"
+      })) as ContentCaptureResponse | undefined;
+    } catch {
+      const finalTabUrl = await getTabUrl(chromeApi.tabs, activeTabId);
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "content_script_unavailable",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: "Current-tab capture did not succeed.",
+          finalTabUrl
+        })
+      };
+    }
     if (!response?.ok || !response.capture?.ok) {
       return {
         task_id: request.task_id,
@@ -101,7 +127,8 @@ export async function performBridgeAcquire(
 
   if (request.action === "open_and_fetch_xml") {
     const targetUrl = resolveTargetUrl(request.input, request.source_url);
-    const tabId = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession);
+    const opened = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession);
+    const tabId = opened.tabId;
     if (!tabId) {
       return {
         task_id: request.task_id,
@@ -111,13 +138,43 @@ export async function performBridgeAcquire(
         failure_message: "Browser opened the target page without a usable tab id."
       };
     }
-    await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs);
+    const xmlTabLoadResult = await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs, {
+      acceptAlreadyComplete: opened.acceptAlreadyComplete,
+      previousUrl: opened.previousUrl
+    });
+    if (!xmlTabLoadResult.ok) {
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "tab_load_timeout",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: xmlTabLoadResult.errorMessage,
+          finalTabUrl: xmlTabLoadResult.finalTabUrl
+        })
+      };
+    }
     await delay(settleMs);
-    const response = (await sendTabMessageWithRetry(chromeApi.tabs, tabId, {
-      type: "mdtero.fetch_xml.request",
-      artifactUrl: request.artifact_url,
-      sourceUrl: request.source_url
-    })) as ContentCaptureResponse | undefined;
+    let response: ContentCaptureResponse | undefined;
+    try {
+      response = (await sendTabMessageWithRetry(chromeApi.tabs, tabId, {
+        type: "mdtero.fetch_xml.request",
+        artifactUrl: request.artifact_url,
+        sourceUrl: request.source_url
+      })) as ContentCaptureResponse | undefined;
+    } catch {
+      const finalTabUrl = await getTabUrl(chromeApi.tabs, tabId);
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "content_script_unavailable",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: "Page hook did not return a usable XML payload.",
+          finalTabUrl
+        })
+      };
+    }
     if (!response?.ok || !response.xml) {
       return {
         task_id: request.task_id,
@@ -150,7 +207,8 @@ export async function performBridgeAcquire(
   if (request.action === "open_and_download_epub") {
     const artifactUrl = resolveArtifactUrl(request);
     const targetUrl = resolveEpubTargetUrl(request);
-    const tabId = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession);
+    const opened = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession);
+    const tabId = opened.tabId;
     if (!tabId) {
       return {
         task_id: request.task_id,
@@ -161,17 +219,47 @@ export async function performBridgeAcquire(
       };
     }
 
-    await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs);
+    const epubTabLoadResult = await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs, {
+      acceptAlreadyComplete: opened.acceptAlreadyComplete,
+      previousUrl: opened.previousUrl
+    });
+    if (!epubTabLoadResult.ok) {
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "tab_load_timeout",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: epubTabLoadResult.errorMessage,
+          finalTabUrl: epubTabLoadResult.finalTabUrl
+        })
+      };
+    }
     await delay(settleMs);
 
-    const response = (await sendTabMessageWithRetry(
-      chromeApi.tabs,
-      tabId,
-      {
-        type: "mdtero.download_epub.request",
-        artifactUrl
-      }
-    )) as ContentCaptureResponse | undefined;
+    let response: ContentCaptureResponse | undefined;
+    try {
+      response = (await sendTabMessageWithRetry(
+        chromeApi.tabs,
+        tabId,
+        {
+          type: "mdtero.download_epub.request",
+          artifactUrl
+        }
+      )) as ContentCaptureResponse | undefined;
+    } catch {
+      const finalTabUrl = await getTabUrl(chromeApi.tabs, tabId);
+      return {
+        task_id: request.task_id,
+        status: "failed",
+        connector: request.connector,
+        failure_code: "content_script_unavailable",
+        failure_message: buildUnavailableContentScriptMessage({
+          baseMessage: "Page hook did not return a usable EPUB payload.",
+          finalTabUrl
+        })
+      };
+    }
 
     if (!response?.ok || !response.download) {
       return {
@@ -210,7 +298,8 @@ export async function performBridgeAcquire(
   }
 
   const targetUrl = resolveTargetUrl(request.input, request.source_url);
-  const tabId = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession);
+  const opened = await openAcquisitionTab(chromeApi.tabs, targetUrl, bridgeSession);
+  const tabId = opened.tabId;
   if (!tabId) {
     return {
       task_id: request.task_id,
@@ -221,20 +310,44 @@ export async function performBridgeAcquire(
     };
   }
 
-  await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs);
+  const htmlTabLoadResult = await waitForTabComplete(chromeApi.tabs, tabId, pageLoadMs, {
+    acceptAlreadyComplete: opened.acceptAlreadyComplete,
+    previousUrl: opened.previousUrl
+  });
+  if (!htmlTabLoadResult.ok) {
+    return {
+      task_id: request.task_id,
+      status: "failed",
+      connector: request.connector,
+      failure_code: "tab_load_timeout",
+      failure_message: buildUnavailableContentScriptMessage({
+        baseMessage: htmlTabLoadResult.errorMessage,
+        finalTabUrl: htmlTabLoadResult.finalTabUrl
+      })
+    };
+  }
   await delay(settleMs);
 
-  const response = (await sendTabMessageWithRetry(chromeApi.tabs, tabId, {
-    type: "mdtero.capture_html.request"
-  })) as ContentCaptureResponse | undefined;
+  let response: ContentCaptureResponse | undefined;
+  try {
+    response = (await sendTabMessageWithRetry(chromeApi.tabs, tabId, {
+      type: "mdtero.capture_html.request"
+    })) as ContentCaptureResponse | undefined;
+  } catch {
+    response = undefined;
+  }
 
   if (!response?.ok || !response.capture) {
+    const finalTabUrl = await getTabUrl(chromeApi.tabs, tabId);
     return {
       task_id: request.task_id,
       status: "failed",
       connector: request.connector,
       failure_code: "content_script_unavailable",
-      failure_message: "Capture hook did not return a usable article payload."
+      failure_message: buildUnavailableContentScriptMessage({
+        baseMessage: "Capture hook did not return a usable article payload.",
+        finalTabUrl
+      })
     };
   }
 
@@ -245,7 +358,8 @@ export async function performBridgeAcquire(
       connector: request.connector,
       failure_code: response.capture.failureCode || "article_body_missing",
       failure_message:
-        response.capture.failureMessage || "Page loaded but article capture did not succeed."
+        response.capture.failureMessage || "Page loaded but article capture did not succeed.",
+      failure_context: response.capture.failureContext
     };
   }
 
@@ -265,31 +379,15 @@ async function openAcquisitionTab(
   tabs: TabsApiLike,
   targetUrl: string,
   bridgeSession?: { tabId?: number | null; pageTabId?: number | null }
-) {
-  const existingTabId = bridgeSession?.tabId;
-  if (existingTabId && typeof tabs.update === "function") {
-    try {
-      const updated = await tabs.update(existingTabId, {
-        url: targetUrl,
-        active: false
-      });
-      const updatedTabId = updated.id ?? existingTabId;
-      if (bridgeSession) {
-        bridgeSession.tabId = updatedTabId;
-      }
-      return updatedTabId;
-    } catch {
-      if (bridgeSession) {
-        bridgeSession.tabId = null;
-      }
-    }
-  }
-
+): Promise<OpenAcquisitionTabResult> {
   const created = await tabs.create({ url: targetUrl, active: false });
   if (bridgeSession) {
     bridgeSession.tabId = created.id ?? null;
   }
-  return created.id;
+  return {
+    tabId: created.id,
+    acceptAlreadyComplete: true
+  };
 }
 
 async function sendTabMessageWithRetry(
@@ -301,7 +399,7 @@ async function sendTabMessageWithRetry(
   let lastError: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      return await tabs.sendMessage(tabId, message);
+      return await sendTabMessageWithTimeout(tabs, tabId, message, CONTENT_SCRIPT_MESSAGE_TIMEOUT_MS);
     } catch (error) {
       lastError = error;
       if (!isRetryableContentScriptError(error) || attempt === maxAttempts - 1) {
@@ -313,13 +411,60 @@ async function sendTabMessageWithRetry(
   throw lastError instanceof Error ? lastError : new Error("Content script did not become available.");
 }
 
+async function sendTabMessageWithTimeout(
+  tabs: TabsApiLike,
+  tabId: number,
+  message: unknown,
+  timeoutMs: number
+) {
+  let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      tabs.sendMessage(tabId, message),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = globalThis.setTimeout(() => {
+          reject(new Error("Content script response timed out."));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutHandle !== null) {
+      globalThis.clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+async function getTabUrl(tabs: TabsApiLike, tabId: number) {
+  if (typeof tabs.get !== "function") {
+    return "";
+  }
+  try {
+    return String((await tabs.get(tabId))?.url || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function buildUnavailableContentScriptMessage(options: {
+  baseMessage: string;
+  finalTabUrl?: string;
+}) {
+  const baseMessage = String(options.baseMessage || "").trim() || "Content script did not become available.";
+  const finalTabUrl = String(options.finalTabUrl || "").trim();
+  if (!finalTabUrl) {
+    return baseMessage;
+  }
+  return `${baseMessage} Final tab URL: ${finalTabUrl}`;
+}
+
 function isRetryableContentScriptError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   const lowered = message.toLowerCase();
   return (
     lowered.includes("receiving end does not exist") ||
     lowered.includes("could not establish connection") ||
-    lowered.includes("message port closed")
+    lowered.includes("message port closed") ||
+    lowered.includes("response timed out")
   );
 }
 
@@ -378,24 +523,91 @@ function resolveEpubTargetUrl(request: BrowserBridgeAcquireRequest): string {
   return resolveTargetUrl(request.input, request.source_url);
 }
 
-function waitForTabComplete(tabs: TabsApiLike, tabId: number, timeoutMs: number) {
-  return new Promise<void>((resolve, reject) => {
+function waitForTabComplete(
+  tabs: TabsApiLike,
+  tabId: number,
+  timeoutMs: number,
+  options?: {
+    acceptAlreadyComplete?: boolean;
+    previousUrl?: string;
+  }
+) {
+  return new Promise<{ ok: true } | { ok: false; errorMessage: string; finalTabUrl?: string }>((resolve) => {
     const timeout = globalThis.setTimeout(() => {
-      tabs.onUpdated.removeListener(handleUpdate);
-      reject(new Error("Timed out waiting for tab load completion."));
+      void getTabUrl(tabs, tabId).then((finalTabUrl) => {
+        resolveIfPending({
+          ok: false,
+          errorMessage: "Timed out waiting for tab load completion.",
+          finalTabUrl
+        });
+      });
     }, timeoutMs);
+
+    let settled = false;
+
+    const resolveIfPending = (result: { ok: true } | { ok: false; errorMessage: string; finalTabUrl?: string }) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      tabs.onUpdated.removeListener(handleUpdate);
+      resolve(result);
+    };
 
     const handleUpdate = (updatedTabId: number, changeInfo: { status?: string }) => {
       if (updatedTabId !== tabId) {
         return;
       }
       if (changeInfo.status === "complete") {
-        globalThis.clearTimeout(timeout);
-        tabs.onUpdated.removeListener(handleUpdate);
-        resolve();
+        if (!options?.previousUrl) {
+          resolveIfPending({ ok: true });
+          return;
+        }
+        void maybeResolveCompletedState();
       }
     };
 
     tabs.onUpdated.addListener(handleUpdate);
+
+    if (options?.acceptAlreadyComplete !== false) {
+      void maybeResolveCompletedState();
+    }
+
+    async function maybeResolveCompletedState() {
+      const tab = await getTabDetails(tabs, tabId);
+      if (tab?.status !== "complete") {
+        return;
+      }
+      const currentUrl = String(tab.url || "").trim();
+      const previousUrl = String(options?.previousUrl || "").trim();
+      if (previousUrl && currentUrl === previousUrl) {
+        return;
+      }
+      resolveIfPending({ ok: true });
+    }
   });
+}
+
+async function isTabAlreadyComplete(tabs: TabsApiLike, tabId: number) {
+  if (typeof tabs.get !== "function") {
+    return false;
+  }
+  try {
+    const tab = await tabs.get(tabId);
+    return tab?.status === "complete";
+  } catch {
+    return false;
+  }
+}
+
+async function getTabDetails(tabs: TabsApiLike, tabId: number) {
+  if (typeof tabs.get !== "function") {
+    return null;
+  }
+  try {
+    return await tabs.get(tabId);
+  } catch {
+    return null;
+  }
 }

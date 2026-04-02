@@ -1,18 +1,30 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "downloads", "nativeMessaging", "tabs"],
+  "permissions": [
+    "storage",
+    "downloads",
+    "nativeMessaging",
+    "tabs"
+  ],
   "host_permissions": [
     "https://api.mdtero.com/*",
     "https://api.elsevier.com/*",
     "https://api.springernature.com/*",
     "https://doi.org/*",
     "*://*.arxiv.org/*",
+    "*://*.dl.acm.org/*",
+    "*://*.ieeexplore.ieee.org/*",
+    "*://*.nature.com/*",
+    "*://*.pubs.acs.org/*",
+    "*://*.pubs.rsc.org/*",
     "*://*.sciencedirect.com/science/article/pii/*",
+    "*://*.techrxiv.org/*",
     "*://*.link.springer.com/*",
+    "*://*.mdpi.com/*",
     "*://*.springer.com/*",
     "*://*.springernature.com/*",
     "*://*.onlinelibrary.wiley.com/*",
@@ -42,20 +54,31 @@
         "https://mdtero.com/*",
         "https://*.mdtero.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     },
     {
       "matches": [
         "*://*.arxiv.org/*",
+        "*://*.dl.acm.org/*",
+        "*://*.ieeexplore.ieee.org/*",
+        "*://*.nature.com/*",
+        "*://*.pubs.acs.org/*",
+        "*://*.pubs.rsc.org/*",
         "*://*.sciencedirect.com/science/article/pii/*",
+        "*://*.techrxiv.org/*",
         "*://*.link.springer.com/*",
+        "*://*.mdpi.com/*",
         "*://*.springer.com/*",
         "*://*.springernature.com/*",
         "*://*.onlinelibrary.wiley.com/*",
         "*://*.tandfonline.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]

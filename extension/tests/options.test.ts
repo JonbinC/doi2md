@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -148,5 +150,12 @@ describe("mergeSettings", () => {
         "/tmp/other/paper.md"
       )
     ).toBeUndefined();
+  });
+
+  it("keeps the static options shell aligned with markdown-first download wording", () => {
+    const html = readFileSync(new URL("../src/options/index.html", import.meta.url), "utf-8");
+
+    expect(html).toContain("fallback ZIP");
+    expect(html).not.toContain("Markdown bundles");
   });
 });

@@ -10,7 +10,10 @@ function buildHelperFirstParseBody(params) {
   }
   return body;
 }
-function fallbackArtifactFilename(artifact) {
+function fallbackArtifactFilename(artifact, preferredFilename) {
+  if (preferredFilename && preferredFilename.trim()) {
+    return preferredFilename.trim();
+  }
   if (artifact === "paper_bundle") return "paper_bundle.zip";
   if (artifact === "paper_md") return "paper.md";
   if (artifact === "paper_pdf") return "paper.pdf";
@@ -87,6 +90,17 @@ function createApiClient(getSettings) {
         (response) => response.json()
       );
     },
+    getSourceConnectivityEnvironmentSummary() {
+      return request("/diagnostics/source-connectivity/environment", void 0, { requireAuth: true }).then(
+        (response) => response.json()
+      );
+    },
+    explainSourceConnectivity(payload) {
+      return request("/diagnostics/source-connectivity/explain", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }, { requireAuth: true }).then((response) => response.json());
+    },
     getClientConfig() {
       return request("/client-config").then((response) => response.json());
     },
@@ -151,10 +165,13 @@ function createApiClient(getSettings) {
     getTask(taskId) {
       return request(`/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
     },
-    downloadArtifact(taskId, artifact) {
+    downloadArtifact(taskId, artifact, preferredFilename) {
       return request(`/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
-        filename: extractFilename(response.headers.get("Content-Disposition"), fallbackArtifactFilename(artifact)),
+        filename: extractFilename(
+          response.headers.get("Content-Disposition"),
+          fallbackArtifactFilename(artifact, preferredFilename)
+        ),
         mediaType: response.headers.get("Content-Type") ?? "application/octet-stream"
       }));
     }
@@ -692,8 +709,8 @@ var COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Sign in faster, check balance and quota, and tune preferences.",
-    supportSummary: "Keep browser capture on your own machine and see which sources are ready with your current setup.",
-    browserAssistedNote: "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest.",
+    supportSummary: "Keep the default acquisition path on your own machine and see which sources are ready with your current setup.",
+    browserAssistedNote: "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest while the helper remains the default acquisition path.",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote: "Only fill the keys you actually need. Everything stays on your own machine.",
     capabilityNeed: "What you need",
@@ -701,13 +718,13 @@ var COPY = {
     capabilityFallback: "Fallback",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
-    permissionsDownloads: "`downloads` saves Markdown bundles, translations, and source files back to your own machine.",
+    permissionsDownloads: "`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.",
     permissionsNative: "`nativeMessaging` connects the extension to your local Mdtero helper for browser-assisted acquisition.",
     permissionsHosts: "Publisher host permissions stay limited to supported scholarly sites and the Mdtero / publisher APIs already used by the product.",
     helperReady: "Local helper ready for browser-assisted capture.",
     helperBusy: "Local helper is connected and currently handling a browser task.",
-    helperUnavailable: "Local helper not detected yet. Install or restart mdtero-local to enable browser-assisted capture.",
-    helperDisconnected: "Local helper disconnected. Restart mdtero-local or reload the extension to reconnect.",
+    helperUnavailable: "Local helper not detected yet. Install or restart mdtero to enable browser-assisted capture.",
+    helperDisconnected: "Local helper disconnected. Restart mdtero or reload the extension to reconnect.",
     helperUnknown: "Local helper status unknown.",
     shadowSignedOut: "Sign in to view experimental connector shadow status.",
     shadowUnavailable: "Experimental connector shadow status unavailable.",
@@ -742,8 +759,8 @@ var COPY = {
   zh: {
     title: "Mdtero \u8D26\u6237",
     subtitle: "\u4F18\u5148\u7528\u5BC6\u7801\u767B\u5F55\uFF0C\u518D\u67E5\u770B\u4F59\u989D\u3001\u989D\u5EA6\u4E0E\u504F\u597D\u8BBE\u7F6E\u3002",
-    supportSummary: "\u628A\u6D4F\u89C8\u5668\u6293\u53D6\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\uFF0C\u5E76\u67E5\u770B\u5F53\u524D\u8FD9\u5957\u914D\u7F6E\u5DF2\u7ECF\u9002\u5408\u54EA\u4E9B\u6765\u6E90\u3002",
-    browserAssistedNote: "\u5982\u679C\u67D0\u4E2A\u6765\u6E90\u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9\uFF0C\u53EA\u8981\u5728\u672C\u5730\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\uFF0C\u5269\u4E0B\u7684\u4EA4\u7ED9 Mdtero \u5F15\u5BFC\u5373\u53EF\u3002",
+    supportSummary: "\u628A\u9ED8\u8BA4\u83B7\u53D6\u8DEF\u5F84\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\uFF0C\u5E76\u67E5\u770B\u5F53\u524D\u8FD9\u5957\u914D\u7F6E\u5DF2\u7ECF\u9002\u5408\u54EA\u4E9B\u6765\u6E90\u3002",
+    browserAssistedNote: "\u5982\u679C\u67D0\u4E2A\u6765\u6E90\u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9\uFF0C\u53EA\u8981\u5728\u672C\u5730\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\uFF0C\u5269\u4E0B\u7684\u4EA4\u7ED9 Mdtero \u5F15\u5BFC\u5373\u53EF\uFF0C\u800C helper \u4ECD\u7136\u662F\u9ED8\u8BA4\u83B7\u53D6\u8DEF\u5F84\u3002",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote: "\u53EA\u586B\u5199\u4F60\u5B9E\u9645\u9700\u8981\u7684 key\uFF1B\u8FD9\u4E9B\u4FE1\u606F\u90FD\u4FDD\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u673A\u5668\u4E0A\u3002",
     capabilityNeed: "\u4F60\u9700\u8981\u51C6\u5907\u4EC0\u4E48",
@@ -751,13 +768,13 @@ var COPY = {
     capabilityFallback: "\u515C\u5E95\u65B9\u5F0F",
     permissionsTitle: "\u4E3A\u4EC0\u4E48 Mdtero \u9700\u8981\u8FD9\u4E9B\u6743\u9650",
     permissionsTabs: "`tabs` \u7528\u6765\u590D\u7528\u6216\u6253\u5F00\u53D7\u652F\u6301\u7684\u8BBA\u6587\u9875\u9762\uFF0C\u4EE5\u4FBF\u5728\u672C\u673A\u5B8C\u6210\u6293\u53D6\u3002",
-    permissionsDownloads: "`downloads` \u7528\u6765\u628A Markdown \u538B\u7F29\u5305\u3001\u8BD1\u6587\u548C\u6E90\u6587\u4EF6\u4FDD\u5B58\u56DE\u4F60\u7684\u7535\u8111\u3002",
+    permissionsDownloads: "`downloads` \u7528\u6765\u628A Markdown\u3001\u8BD1\u6587\u3001\u515C\u5E95\u538B\u7F29\u5305\u548C\u6E90\u6587\u4EF6\u4FDD\u5B58\u56DE\u4F60\u7684\u7535\u8111\u3002",
     permissionsNative: "`nativeMessaging` \u7528\u6765\u628A\u6269\u5C55\u8FDE\u63A5\u5230\u4F60\u672C\u5730\u7684 Mdtero helper\uFF0C\u5B8C\u6210\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002",
     permissionsHosts: "\u7AD9\u70B9\u6743\u9650\u53EA\u8986\u76D6\u5DF2\u652F\u6301\u7684\u5B66\u672F\u7AD9\u70B9\uFF0C\u4EE5\u53CA\u4EA7\u54C1\u5DF2\u7ECF\u4F7F\u7528\u7684 Mdtero / \u51FA\u7248\u5546 API\u3002",
     helperReady: "\u672C\u5730 helper \u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5904\u7406\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002",
     helperBusy: "\u672C\u5730 helper \u5DF2\u8FDE\u63A5\uFF0C\u6B63\u5728\u5904\u7406\u6D4F\u89C8\u5668\u4EFB\u52A1\u3002",
-    helperUnavailable: "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730 helper\u3002\u8BF7\u5B89\u88C5\u6216\u91CD\u542F mdtero-local \u4EE5\u542F\u7528\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002",
-    helperDisconnected: "\u672C\u5730 helper \u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero-local \u6216\u91CD\u8F7D\u6269\u5C55\u540E\u518D\u8BD5\u3002",
+    helperUnavailable: "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730 helper\u3002\u8BF7\u5B89\u88C5\u6216\u91CD\u542F mdtero \u4EE5\u542F\u7528\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002",
+    helperDisconnected: "\u672C\u5730 helper \u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero \u6216\u91CD\u8F7D\u6269\u5C55\u540E\u518D\u8BD5\u3002",
     helperUnknown: "\u672C\u5730 helper \u72B6\u6001\u672A\u77E5\u3002",
     shadowSignedOut: "\u767B\u5F55\u540E\u53EF\u67E5\u770B\u5B9E\u9A8C connector shadow \u72B6\u6001\u3002",
     shadowUnavailable: "\u6682\u65F6\u65E0\u6CD5\u83B7\u53D6\u5B9E\u9A8C connector shadow \u72B6\u6001\u3002",
@@ -840,6 +857,25 @@ var client = createApiClient(readSettings);
 var uiLanguage = "en";
 var authMode = "password";
 var currentHelperState = "unavailable";
+function setLabeledParagraph(paragraph, label, value) {
+  paragraph.textContent = "";
+  const strong = document.createElement("strong");
+  strong.textContent = `${label}:`;
+  paragraph.appendChild(strong);
+  paragraph.append(" ");
+  paragraph.appendChild(document.createTextNode(value));
+}
+function renderHistoryNotice(message, color) {
+  if (!historyList) return;
+  historyList.textContent = "";
+  const paragraph = document.createElement("p");
+  paragraph.className = "meta-label";
+  paragraph.textContent = message;
+  if (color) {
+    paragraph.style.color = color;
+  }
+  historyList.appendChild(paragraph);
+}
 function copyFor(language) {
   return COPY[language];
 }
@@ -911,18 +947,19 @@ function renderPublisherCapabilityMatrix() {
       card.appendChild(row);
       const need = document.createElement("p");
       need.className = "capability-copy";
-      need.innerHTML = `<strong>${copy.capabilityNeed}:</strong> ${entry.whatYouNeed}`;
+      setLabeledParagraph(need, copy.capabilityNeed, entry.whatYouNeed);
       card.appendChild(need);
       const route = document.createElement("p");
       route.className = "capability-copy";
-      route.innerHTML = `<strong>${copy.capabilityRoute}:</strong> ${entry.howMdteroGetsIt}`;
+      setLabeledParagraph(route, copy.capabilityRoute, entry.howMdteroGetsIt);
       card.appendChild(route);
       const fallback = document.createElement("p");
       fallback.className = "capability-copy capability-copy-muted";
-      fallback.innerHTML = `<strong>${copy.capabilityFallback}:</strong> ${formatCapabilityFallbacks(
-        entry.fallbacks,
-        uiLanguage
-      )}`;
+      setLabeledParagraph(
+        fallback,
+        copy.capabilityFallback,
+        formatCapabilityFallbacks(entry.fallbacks, uiLanguage)
+      );
       card.appendChild(fallback);
       if (entry.links.length > 0) {
         const links = document.createElement("div");
@@ -1039,10 +1076,10 @@ async function refreshHistory() {
   try {
     const { items } = await client.getMyTasks();
     if (items.length === 0) {
-      historyList.innerHTML = `<p class="meta-label">${copy.historyEmpty || "No history found."}</p>`;
+      renderHistoryNotice(copy.historyEmpty || "No history found.");
       return;
     }
-    historyList.innerHTML = "";
+    historyList.textContent = "";
     for (const task of items) {
       const row = document.createElement("div");
       row.style.cssText = "display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px;";
@@ -1079,7 +1116,7 @@ async function refreshHistory() {
           dlBtn.addEventListener("click", async () => {
             try {
               dlBtn.textContent = "Downloading...";
-              const result = await client.downloadArtifact(task.task_id, key);
+              const result = await client.downloadArtifact(task.task_id, key, desc.filename);
               triggerBlobDownload(result.blob, result.filename);
               dlBtn.textContent = `\u2B07 ${key.replace("paper_", "").toUpperCase()}`;
             } catch (err) {
@@ -1102,7 +1139,7 @@ async function refreshHistory() {
     }
   } catch (error) {
     const errorPrefix = copy.historyError || "Failed to load history: ";
-    historyList.innerHTML = `<p class="meta-label" style="color: #f44336;">${errorPrefix}${error.message}</p>`;
+    renderHistoryNotice(`${errorPrefix}${error.message}`, "#f44336");
   }
 }
 async function refreshView() {

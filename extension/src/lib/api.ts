@@ -1,14 +1,19 @@
 import type {
   EmailStartRequest,
   EmailVerifyRequest,
+  PasswordLoginRequest,
   ParseTaskRequest,
   ParseTaskResponse,
   ParseFulltextV2Request,
   ParseHelperBundleV2Request,
   ParserV2ShadowDiagnostics,
-  PasswordLoginRequest,
   TaskRecord,
-  TranslateTaskRequest
+  TranslateTaskRequest,
+  ExtensionRouteRequest,
+  ExtensionRouteResponse,
+  SourceConnectivityDiagnostic,
+  SourceConnectivityEnvironmentSummary,
+  SourceConnectivityExplainRequest
 } from "@mdtero/shared";
 
 export interface ApiClientSettings {
@@ -50,7 +55,10 @@ function buildHelperFirstParseBody(params: {
   return body;
 }
 
-function fallbackArtifactFilename(artifact: string) {
+function fallbackArtifactFilename(artifact: string, preferredFilename?: string | null) {
+  if (preferredFilename && preferredFilename.trim()) {
+    return preferredFilename.trim();
+  }
   if (artifact === "paper_bundle") return "paper_bundle.zip";
   if (artifact === "paper_md") return "paper.md";
   if (artifact === "paper_pdf") return "paper.pdf";
@@ -138,6 +146,17 @@ export function createApiClient(
         (response) => response.json() as Promise<ParserV2ShadowDiagnostics>
       );
     },
+    getSourceConnectivityEnvironmentSummary() {
+      return request("/diagnostics/source-connectivity/environment", undefined, { requireAuth: true }).then(
+        (response) => response.json() as Promise<SourceConnectivityEnvironmentSummary>
+      );
+    },
+    explainSourceConnectivity(payload: SourceConnectivityExplainRequest) {
+      return request("/diagnostics/source-connectivity/explain", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }, { requireAuth: true }).then((response) => response.json() as Promise<SourceConnectivityDiagnostic>);
+    },
     getClientConfig() {
       return request("/client-config").then((response) => response.json() as Promise<ClientConfigResponse>);
     },
@@ -202,12 +221,97 @@ export function createApiClient(
     getTask(taskId: string) {
       return request(`/tasks/${taskId}`, undefined, { requireAuth: true }).then((response) => response.json() as Promise<TaskRecord>);
     },
-    downloadArtifact(taskId: string, artifact: string) {
+    downloadArtifact(taskId: string, artifact: string, preferredFilename?: string | null) {
       return request(`/tasks/${taskId}/download/${artifact}`, undefined, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
-        filename: extractFilename(response.headers.get("Content-Disposition"), fallbackArtifactFilename(artifact)),
+        filename: extractFilename(
+          response.headers.get("Content-Disposition"),
+          fallbackArtifactFilename(artifact, preferredFilename)
+        ),
         mediaType: response.headers.get("Content-Type") ?? "application/octet-stream"
       }));
     }
   };
+}
+
+// Router SSOT API functions
+
+export function createRouterSSOTClient(
+  getSettings: () => Promise<ApiClientSettings>
+) {
+  async function requireSignedInSettings() {
+    const settings = await getSettings();
+    if (!settings.token) {
+      throw new Error("Sign in required before fetching route plan.");
+    }
+    return settings;
+  }
+
+  function getRuntimeVersion() {
+    const runtimeVersion = globalThis.chrome?.runtime?.getManifest?.().version;
+    return runtimeVersion ? `extension-${runtimeVersion}` : "extension-dev";
+  }
+
+  async function request(path: string, init?: RequestInit) {
+    const settings = await requireSignedInSettings();
+    const headers = new Headers(init?.headers ?? {});
+    
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    
+    headers.set("Authorization", `Bearer ${settings.token}`);
+    headers.set("X-Client-Channel", "extension");
+    headers.set("X-Client-Version", getRuntimeVersion());
+
+    const response = await fetch(`${settings.apiBaseUrl}${path}`, {
+      ...init,
+      headers,
+    });
+
+    if (!response.ok) {
+      const detail = await response
+        .clone()
+        .json()
+        .then((payload) => {
+          if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
+            return payload.detail.trim();
+          }
+          return "";
+        })
+        .catch(() => "");
+      throw new Error(detail || `API request failed: ${response.status}`);
+    }
+
+    return response;
+  }
+
+  return {
+    /**
+     * Fetch canonical route plan from backend SSOT.
+     * Extension should use this instead of local routing rules.
+     */
+    fetchRoutePlan(payload: ExtensionRouteRequest) {
+      return request("/api/v1/extension/route", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }).then((response) => response.json() as Promise<ExtensionRouteResponse>);
+    },
+  };
+}
+
+/**
+ * Legacy compatibility: Check if route requires local helper.
+ * New code should use Router SSOT via fetchRoutePlan().
+ */
+export function routeRequiresLocalHandoff(routePlan: ExtensionRouteResponse): boolean {
+  return routePlan.requires_helper;
+}
+
+/**
+ * Legacy compatibility: Check if current tab capture is allowed.
+ * New code should use Router SSOT via fetchRoutePlan().
+ */
+export function routeAllowsCurrentTabCapture(routePlan: ExtensionRouteResponse): boolean {
+  return routePlan.allows_current_tab;
 }

@@ -1,6 +1,7 @@
-import { copyFile, mkdir, cp } from "node:fs/promises";
+import { copyFile, mkdir, cp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import esbuild from "esbuild";
+import { rewriteManifestForDistribution } from "./build/manifest-paths.mjs";
 
 const outdir = resolve("dist");
 
@@ -22,7 +23,6 @@ await esbuild.build({
 await mkdir("dist/assets", { recursive: true });
 
 await Promise.all([
-  copyFile("manifest.json", "dist/manifest.json"),
   copyFile("src/popup/index.html", "dist/popup.html"),
   copyFile("src/options/index.html", "dist/options.html"),
   copyFile("src/styles.css", "dist/styles.css"),
@@ -32,5 +32,11 @@ await Promise.all([
   copyFile("src/assets/icon-128.png", "dist/assets/icon-128.png"),
   cp("_locales", "dist/_locales", { recursive: true })
 ]);
+
+const sourceManifest = JSON.parse(await readFile("manifest.json", "utf-8"));
+await writeFile(
+  "dist/manifest.json",
+  JSON.stringify(rewriteManifestForDistribution(sourceManifest), null, 2)
+);
 
 console.log(`Extension build output: ${outdir}`);
