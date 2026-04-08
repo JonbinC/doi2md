@@ -1,6 +1,6 @@
 {
-  "name": "@mdtero/install",
-  "version": "0.1.0",
+  "name": "mdtero-install",
+  "version": "0.1.3",
   "description": "Lightweight installer for Mdtero agent skill bundles.",
   "homepage": "https://mdtero.com",
   "repository": {
@@ -24,10 +24,11 @@
   },
   "type": "module",
   "bin": {
-    "mdtero-install": "bin/mdtero-install.mjs"
+    "mdtero-install": "bin/mdtero-install"
   },
   "files": [
     "bin",
+    "install/manifest.json",
     "skills"
   ],
   "scripts": {

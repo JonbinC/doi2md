@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero-install.mjs");
+const CLI_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero-install");
 
 function runNode(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -40,14 +41,14 @@ test("install writes the mdtero skill bundle into a codex workspace", async () =
     helperCommand: "mdtero",
     helperInstallerUrl: "https://api.mdtero.com/helpers/install_mdtero_helper.sh",
     cli: {
-      packageName: "@mdtero/install",
-      npxCommand: "npx @mdtero/install"
+      packageName: "mdtero-install",
+      npxCommand: "npx mdtero-install"
     },
     targets: [
       {
         target: "codex",
         label: "Codex",
-        installCommand: "npx @mdtero/install install codex",
+        installCommand: "npx mdtero-install install codex",
         skillDirectory: ".codex/skills/mdtero"
       }
     ]
@@ -90,13 +91,52 @@ test("package metadata stays publishable for the unified install entry", async (
   const content = await readFile(packageJsonPath, "utf8");
   const pkg = JSON.parse(content);
 
-  assert.equal(pkg.name, "@mdtero/install");
+  assert.equal(pkg.name, "mdtero-install");
   assert.equal(typeof pkg.version, "string");
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   assert.notEqual(pkg.private, true);
-  assert.equal(pkg.bin?.["mdtero-install"], "bin/mdtero-install.mjs");
+  assert.equal(pkg.bin?.["mdtero-install"], "bin/mdtero-install");
   assert.equal(pkg.publishConfig?.access, "public");
   assert.equal(pkg.repository?.type, "git");
   assert.match(pkg.repository?.url ?? "", /JonbinC\/doi2md/);
   assert.equal(pkg.homepage, "https://mdtero.com");
+});
+
+test("bin entry stays executable for npm-run installs", async () => {
+  const stats = await stat(CLI_WRAPPER_PATH);
+  assert.ok((stats.mode & 0o111) !== 0, "mdtero-install CLI must keep its executable bit");
+});
+
+test("show falls back to the bundled manifest when the remote manifest is unavailable", async () => {
+  const server = createServer((request, response) => {
+    if (request.url === "/missing.json") {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "missing" }));
+      return;
+    }
+    response.writeHead(404);
+    response.end("not found");
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const missingManifestUrl = `http://127.0.0.1:${address.port}/missing.json`;
+
+    const completed = await runNode([CLI_PATH, "show"], {
+      cwd: PROJECT_ROOT,
+      env: {
+        ...process.env,
+        MDTERO_INSTALL_MANIFEST_URL: missingManifestUrl
+      }
+    });
+
+    assert.equal(completed.code, 0, completed.stderr);
+    assert.match(completed.stdout, /Mdtero install manifest v1/);
+    assert.match(completed.stdout, /npx mdtero-install/);
+  } finally {
+    server.close();
+  }
 });

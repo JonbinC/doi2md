@@ -28,15 +28,15 @@ Use this repository when you specifically need public local capture, helper setu
 The public npm entry for agent-side setup is:
 
 ```bash
-npx @mdtero/install show
+npx mdtero-install show
 ```
 
 Direct install examples:
 
 ```bash
-npx @mdtero/install install codex
-npx @mdtero/install install claude_code
-npx @mdtero/install install gemini_cli
+npx mdtero-install install codex
+npx mdtero-install install claude_code
+npx mdtero-install install gemini_cli
 ```
 
 OpenClaw keeps the dedicated route:

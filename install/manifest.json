@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "manifestUrl": "https://mdtero.com/install/manifest.json",
+  "installGuideUrl": "https://api.mdtero.com/skills/install.md",
+  "helperCommand": "mdtero",
+  "helperInstallerUrl": "https://api.mdtero.com/helpers/install_mdtero_helper.sh",
+  "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
+  "cli": {
+    "packageName": "mdtero-install",
+    "npxCommand": "npx mdtero-install"
+  },
+  "targets": [
+    {
+      "target": "openclaw",
+      "label": "OpenClaw",
+      "description": "One-copy setup through the official ClawHub path inside OpenClaw.",
+      "descriptionZh": "适合在 OpenClaw 里直接走官方 ClawHub 安装路径。",
+      "installCommand": "clawhub install mdtero",
+      "skillDirectory": ".openclaw/skills/mdtero"
+    },
+    {
+      "target": "claude_code",
+      "label": "Claude Code",
+      "description": "Best for workspaces that keep Mdtero in .claude/skills.",
+      "descriptionZh": "适合把 Mdtero 放进 .claude/skills 的 Claude Code 工作区。",
+      "installCommand": "npx mdtero-install install claude_code",
+      "skillDirectory": ".claude/skills/mdtero"
+    },
+    {
+      "target": "codex",
+      "label": "Codex",
+      "description": "Best for workspaces that keep Mdtero in .codex/skills.",
+      "descriptionZh": "适合把 Mdtero 放进 .codex/skills 的 Codex 工作区。",
+      "installCommand": "npx mdtero-install install codex",
+      "skillDirectory": ".codex/skills/mdtero"
+    },
+    {
+      "target": "gemini_cli",
+      "label": "Gemini CLI",
+      "description": "Best for Gemini CLI setups that keep the workflow in GEMINI.md.",
+      "descriptionZh": "适合把工作流写进 GEMINI.md 的 Gemini CLI 环境。",
+      "installCommand": "npx mdtero-install install gemini_cli",
+      "skillDirectory": ".gemini/skills/mdtero"
+    }
+  ]
+}
