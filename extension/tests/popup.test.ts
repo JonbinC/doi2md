@@ -70,6 +70,18 @@ describe("createFileParseMessage", () => {
     });
   });
 
+  it("keeps the default PDF local file parse message engine-free so backend auto-resolution can decide", () => {
+    const file = new File(["pdf"], "demo.pdf", { type: "application/pdf" });
+
+    expect(createFileParseMessage(file, "pdf")).toEqual({
+      type: "mdtero.parse.file.request",
+      file,
+      filename: "demo.pdf",
+      mediaType: "application/pdf",
+      artifactKind: "pdf"
+    });
+  });
+
   it("builds an EPUB local file parse message without a PDF engine", () => {
     const file = new File(["epub"], "demo.epub", { type: "application/epub+zip" });
 
