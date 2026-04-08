@@ -23,6 +23,28 @@ Mdtero turns papers into reusable Markdown research packages.
 
 Use this repository when you specifically need public local capture, helper setup, or public install guidance.
 
+## Unified Agent Install
+
+The public npm entry for agent-side setup is:
+
+```bash
+npx mdtero-install show
+```
+
+Direct install examples:
+
+```bash
+npx mdtero-install install codex
+npx mdtero-install install claude_code
+npx mdtero-install install gemini_cli
+```
+
+OpenClaw keeps the dedicated route:
+
+```bash
+clawhub install mdtero
+```
+
 ## This Repo Contains
 
 - the public extension code in [`extension`](./extension)
