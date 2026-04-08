@@ -94,5 +94,9 @@ test("package metadata stays publishable for the unified install entry", async (
   assert.equal(typeof pkg.version, "string");
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   assert.notEqual(pkg.private, true);
-  assert.equal(pkg.bin?.["mdtero-install"], "./bin/mdtero-install.mjs");
+  assert.equal(pkg.bin?.["mdtero-install"], "bin/mdtero-install.mjs");
+  assert.equal(pkg.publishConfig?.access, "public");
+  assert.equal(pkg.repository?.type, "git");
+  assert.match(pkg.repository?.url ?? "", /JonbinC\/doi2md/);
+  assert.equal(pkg.homepage, "https://mdtero.com");
 });

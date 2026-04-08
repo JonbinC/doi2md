@@ -2,9 +2,29 @@
   "name": "@mdtero/install",
   "version": "0.1.0",
   "description": "Lightweight installer for Mdtero agent skill bundles.",
+  "homepage": "https://mdtero.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JonbinC/doi2md.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JonbinC/doi2md/issues"
+  },
+  "keywords": [
+    "mdtero",
+    "codex",
+    "claude-code",
+    "gemini-cli",
+    "openclaw",
+    "skills",
+    "installer"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
-    "mdtero-install": "./bin/mdtero-install.mjs"
+    "mdtero-install": "bin/mdtero-install.mjs"
   },
   "files": [
     "bin",
