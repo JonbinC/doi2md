@@ -861,11 +861,10 @@ var COPY = {
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF defaults to GROBID, with Docling and MinerU available when needed.",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF now uses the built-in parser stack automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
-    pdfEngineLabel: "PDF engine",
     localFileParsing: (filename) => `Uploading ${filename} for helper-first parsing...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
@@ -919,11 +918,10 @@ var COPY = {
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
-    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF \u6216 EPUB\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002PDF \u9ED8\u8BA4\u8D70 GROBID\uFF0CDocling \u548C MinerU \u53EF\u6309\u9700\u5207\u6362\u3002",
+    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF \u6216 EPUB\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002PDF \u4F1A\u81EA\u52A8\u4F7F\u7528\u5185\u7F6E\u89E3\u6790\u6808\u3002",
     pickPdfButton: "\u9009\u62E9 PDF",
     pickEpubButton: "\u9009\u62E9 EPUB",
     fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
-    pdfEngineLabel: "PDF \u5F15\u64CE",
     localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u5E76\u8D70 helper-first \u89E3\u6790...`,
     localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
@@ -985,8 +983,6 @@ var pickPdfButton = document.querySelector("#pick-pdf-button");
 var pickEpubButton = document.querySelector("#pick-epub-button");
 var localFileInputEl = document.querySelector("#local-file-input");
 var localFileNameEl = document.querySelector("#local-file-name");
-var pdfEngineLabelEl = document.querySelector("#pdf-engine-label");
-var pdfEngineSelectEl = document.querySelector("#pdf-engine-select");
 var parseButton = document.querySelector("#parse-button");
 var openSettingsButton = document.querySelector("#open-settings");
 var translateLanguageLabelEl = document.querySelector("#translate-language-label");
@@ -1099,7 +1095,6 @@ function applyLanguage() {
   if (fileIntakeNoteEl) fileIntakeNoteEl.textContent = copy.fileIntakeNote;
   if (pickPdfButton) pickPdfButton.textContent = copy.pickPdfButton;
   if (pickEpubButton) pickEpubButton.textContent = copy.pickEpubButton;
-  if (pdfEngineLabelEl) pdfEngineLabelEl.textContent = copy.pdfEngineLabel;
   if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
     localFileNameEl.textContent = copy.fileNameEmpty;
   }
@@ -1160,9 +1155,6 @@ function renderActionButtons() {
   }
   if (pickEpubButton) {
     pickEpubButton.disabled = isParsing;
-  }
-  if (pdfEngineSelectEl) {
-    pdfEngineSelectEl.disabled = isParsing;
   }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
@@ -1532,13 +1524,7 @@ async function submitLocalFile(file, artifactKind) {
     setResult(getCurrentCopy().signInHint);
     return;
   }
-  const response = await chrome.runtime.sendMessage(
-    createFileParseMessage(
-      file,
-      artifactKind,
-      artifactKind === "pdf" ? pdfEngineSelectEl?.value : void 0
-    )
-  );
+  const response = await chrome.runtime.sendMessage(createFileParseMessage(file, artifactKind));
   if (!response?.ok) {
     isParsing = false;
     renderActionButtons();
