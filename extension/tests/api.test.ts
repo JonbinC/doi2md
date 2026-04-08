@@ -211,7 +211,7 @@ describe("createApiClient", () => {
       helperBundleFile: new Blob(["zip"], { type: "application/zip" }),
       filename: "helper-bundle.zip",
       sourceDoi: "10.1016/j.energy.2026.140192",
-      pdfEngine: "docling"
+      pdfEngine: "opendataloader"
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -238,7 +238,7 @@ describe("createApiClient", () => {
     const helperBundleBody = fetchMock.mock.calls[1]?.[1]?.body as FormData;
     expect(helperBundleBody.get("helper_bundle")).toBeTruthy();
     expect(helperBundleBody.get("source_doi")).toBe("10.1016/j.energy.2026.140192");
-    expect(helperBundleBody.get("pdf_engine")).toBe("docling");
+    expect(helperBundleBody.get("pdf_engine")).toBe("opendataloader");
   });
 
   it("loads parser-v2 shadow diagnostics through the authenticated diagnostics route", async () => {
