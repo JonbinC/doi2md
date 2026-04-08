@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const BUNDLED_MANIFEST_PATH = fileURLToPath(new URL("../install/manifest.json", import.meta.url));
 const DEFAULT_MANIFEST_URL =
   process.env.MDTERO_INSTALL_MANIFEST_URL || "https://mdtero.com/install/manifest.json";
 
@@ -45,11 +46,22 @@ function parseArgs(argv) {
 }
 
 async function fetchManifest(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch install manifest: HTTP ${response.status}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.json();
+  } catch (error) {
+    const { readFile } = await import("node:fs/promises");
+    const fallbackContent = await readFile(BUNDLED_MANIFEST_PATH, "utf8");
+    const fallbackManifest = JSON.parse(fallbackContent);
+    fallbackManifest.manifestUrl = url;
+    fallbackManifest.fallbackNotice = `Using bundled manifest fallback after fetch failure: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    return fallbackManifest;
   }
-  return response.json();
 }
 
 async function copyDirectory(sourceDir, targetDir) {
@@ -76,6 +88,9 @@ async function showManifest(manifest) {
   console.log(`Mdtero install manifest v${manifest.version}`);
   console.log(`Manifest URL: ${manifest.manifestUrl}`);
   console.log(`Unified CLI: ${manifest.cli?.npxCommand || "n/a"}`);
+  if (manifest.fallbackNotice) {
+    console.log(`Notice: ${manifest.fallbackNotice}`);
+  }
   console.log("");
   for (const target of manifest.targets || []) {
     console.log(`${target.label}: ${target.installCommand}`);

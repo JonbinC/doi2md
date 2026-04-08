@@ -13,15 +13,15 @@ Use it for:
 For agent-style installs, prefer the lightweight install CLI:
 
 ```bash
-npx @mdtero/install show
+npx mdtero-install show
 ```
 
 Examples:
 
 ```bash
-npx @mdtero/install install codex
-npx @mdtero/install install claude_code
-npx @mdtero/install install gemini_cli
+npx mdtero-install install codex
+npx mdtero-install install claude_code
+npx mdtero-install install gemini_cli
 ```
 
 OpenClaw remains the special case:
