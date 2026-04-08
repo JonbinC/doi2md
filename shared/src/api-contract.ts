@@ -47,7 +47,7 @@ export interface ParseFulltextV2Request {
   sourceInput?: string;
 }
 
-export type PdfEngine = "grobid" | "docling" | "mineru";
+export type PdfEngine = "grobid" | "opendataloader" | "docling" | "mineru";
 
 export interface ParseHelperBundleV2Request {
   helperBundleFile: Blob;

@@ -58,11 +58,10 @@ const COPY = {
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF defaults to GROBID, with Docling and MinerU available when needed.",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF now uses the built-in parser stack automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
-    pdfEngineLabel: "PDF engine",
     localFileParsing: (filename: string) => `Uploading ${filename} for helper-first parsing...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
@@ -117,11 +116,10 @@ const COPY = {
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "本地文件入口",
-    fileIntakeNote: "如果你手里已经有 PDF 或 EPUB，也可以继续走同一条 Markdown 解析链。PDF 默认走 GROBID，Docling 和 MinerU 可按需切换。",
+    fileIntakeNote: "如果你手里已经有 PDF 或 EPUB，也可以继续走同一条 Markdown 解析链。PDF 会自动使用内置解析栈。",
     pickPdfButton: "选择 PDF",
     pickEpubButton: "选择 EPUB",
     fileNameEmpty: "尚未选择本地文件。",
-    pdfEngineLabel: "PDF 引擎",
     localFileParsing: (filename: string) => `正在上传 ${filename}，并走 helper-first 解析...`,
     localFileParseFailed: "本地文件解析失败，请重试。",
     parseButton: "解析论文",
@@ -184,8 +182,6 @@ const pickPdfButton = document.querySelector<HTMLButtonElement>("#pick-pdf-butto
 const pickEpubButton = document.querySelector<HTMLButtonElement>("#pick-epub-button");
 const localFileInputEl = document.querySelector<HTMLInputElement>("#local-file-input");
 const localFileNameEl = document.querySelector<HTMLParagraphElement>("#local-file-name");
-const pdfEngineLabelEl = document.querySelector<HTMLLabelElement>("#pdf-engine-label");
-const pdfEngineSelectEl = document.querySelector<HTMLSelectElement>("#pdf-engine-select");
 const parseButton = document.querySelector<HTMLButtonElement>("#parse-button");
 const openSettingsButton = document.querySelector<HTMLButtonElement>("#open-settings");
 const translateLanguageLabelEl = document.querySelector<HTMLLabelElement>("#translate-language-label");
@@ -315,7 +311,6 @@ function applyLanguage() {
   if (fileIntakeNoteEl) fileIntakeNoteEl.textContent = copy.fileIntakeNote;
   if (pickPdfButton) pickPdfButton.textContent = copy.pickPdfButton;
   if (pickEpubButton) pickEpubButton.textContent = copy.pickEpubButton;
-  if (pdfEngineLabelEl) pdfEngineLabelEl.textContent = copy.pdfEngineLabel;
   if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
     localFileNameEl.textContent = copy.fileNameEmpty;
   }
@@ -357,9 +352,6 @@ function renderActionButtons() {
   }
   if (pickEpubButton) {
     pickEpubButton.disabled = isParsing;
-  }
-  if (pdfEngineSelectEl) {
-    pdfEngineSelectEl.disabled = isParsing;
   }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
@@ -781,15 +773,7 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
     return;
   }
 
-  const response = await chrome.runtime.sendMessage(
-    createFileParseMessage(
-      file,
-      artifactKind,
-      artifactKind === "pdf"
-        ? (pdfEngineSelectEl?.value as "grobid" | "docling" | "mineru" | undefined)
-        : undefined
-    )
-  );
+  const response = await chrome.runtime.sendMessage(createFileParseMessage(file, artifactKind));
 
   if (!response?.ok) {
     isParsing = false;
