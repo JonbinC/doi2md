@@ -1,0 +1,17 @@
+{
+  "name": "@mdtero/install",
+  "version": "0.1.0",
+  "description": "Lightweight installer for Mdtero agent skill bundles.",
+  "type": "module",
+  "bin": {
+    "mdtero-install": "./bin/mdtero-install.mjs"
+  },
+  "files": [
+    "bin",
+    "skills"
+  ],
+  "scripts": {
+    "test:install": "node --test tests/mdtero-install.test.mjs"
+  },
+  "license": "MIT"
+}

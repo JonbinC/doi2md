@@ -9,7 +9,8 @@ Use the normal path in this order:
 
 1. Start from [mdtero.com/account](https://mdtero.com/account)
 2. Create or select an API key
-3. Paste the prepared install message into Codex
+3. Run `npx @mdtero/install install codex`
+4. Paste the prepared install message into Codex if you want the agent to verify setup in-place
 
 Keep Mdtero inside Codex for normal parse, translation, and review work.
 
