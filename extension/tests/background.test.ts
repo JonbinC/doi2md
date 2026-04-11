@@ -304,7 +304,7 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("routes local PDF uploads through parse-helper-bundle-v2 with the chosen PDF engine", async () => {
+  it("routes local PDF uploads through parse-helper-bundle-v2 with the chosen grobid engine", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -321,7 +321,7 @@ describe("extension background Elsevier routing", () => {
         filename: "demo.pdf",
         mediaType: "application/pdf",
         artifactKind: "pdf",
-        pdfEngine: "opendataloader"
+        pdfEngine: "grobid"
       },
       {},
       sendResponse
@@ -333,7 +333,7 @@ describe("extension background Elsevier routing", () => {
           helperBundleFile: expect.any(Blob),
           filename: "helper-bundle.zip",
           sourceInput: "demo.pdf",
-          pdfEngine: "opendataloader"
+          pdfEngine: "grobid"
         })
       );
       expect(sendResponse).toHaveBeenCalledWith({

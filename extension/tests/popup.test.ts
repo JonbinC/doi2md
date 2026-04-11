@@ -57,16 +57,16 @@ describe("createTranslateMessage", () => {
 });
 
 describe("createFileParseMessage", () => {
-  it("builds a PDF local file parse message with an explicit engine", () => {
+  it("builds a PDF local file parse message with an explicit grobid engine", () => {
     const file = new File(["pdf"], "demo.pdf", { type: "application/pdf" });
 
-    expect(createFileParseMessage(file, "pdf", "docling")).toEqual({
+    expect(createFileParseMessage(file, "pdf", "grobid")).toEqual({
       type: "mdtero.parse.file.request",
       file,
       filename: "demo.pdf",
       mediaType: "application/pdf",
       artifactKind: "pdf",
-      pdfEngine: "docling"
+      pdfEngine: "grobid"
     });
   });
 
