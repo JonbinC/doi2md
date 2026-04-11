@@ -8,3 +8,4 @@ Examples:
 - public troubleshooting guides
 - extension/helper compatibility notes
 - versioned release notes for public clients
+- desktop preview release notes and launch guidance

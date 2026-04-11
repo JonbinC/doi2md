@@ -9,10 +9,12 @@ This is the intended SSOT for:
 - browser extension code
 - public helper surface
 - public skill/install surface
+- public desktop preview mirror surface
 
 ## Put Here
 
 - browser extension source and public packaging
+- desktop preview docs and mirrored release artifacts
 - local helper installers and helper-side public scripts
 - public skills and agent install documents
 - public install and troubleshooting docs
@@ -25,6 +27,7 @@ This is the intended SSOT for:
 ## Do Not Put Here
 
 - private backend implementation
+- desktop GUI source code as the primary home
 - dashboard or site product code as the primary home
 - secret-bearing operational scripts
 
