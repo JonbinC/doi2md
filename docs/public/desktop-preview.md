@@ -7,7 +7,7 @@ That means:
 - the build is generated from `JonbinC/mdtero/apps/desktop`
 - the public repo mirrors preview-facing docs and optional bundle assets
 - signing, notarization, and auto-update are not part of this preview stage
-- current preview installer targets are macOS `dmg` and Windows `exe`
+- current preview installer targets are macOS universal `dmg` and Windows `exe`
 
 ## Local Launch
 
