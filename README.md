@@ -48,6 +48,7 @@ clawhub install mdtero
 ## This Repo Contains
 
 - the public extension code in [`extension`](./extension)
+- desktop preview release notes and mirrored bundles in [`desktop`](./desktop)
 - helper-facing public assets in [`helper`](./helper)
 - skill-facing public assets in [`skills`](./skills)
 - public install entry points in [`install`](./install)
@@ -65,9 +66,21 @@ clawhub install mdtero
 
 PDF is optional input. The default handoff format remains the Markdown package.
 
+## Desktop Preview
+
+The desktop GUI source of truth stays in `JonbinC/mdtero` under `apps/desktop`.
+
+This public repo only carries the public preview release surface:
+
+- mirrored preview bundle docs
+- lightweight release notes
+- public download-facing structure for desktop previews
+
+Do not move the actual Electron source of truth here.
+
 ## Repo Boundary
 
-- use this repo for public extension packaging, helper/setup assets, and user-side install guidance
+- use this repo for public extension packaging, desktop preview mirroring, helper/setup assets, and user-side install guidance
 - do not treat this repo as the source of truth for dashboard UX or backend implementation
 - if something is meant to be downloaded, installed, or run by end users locally, default it here
 - legacy MCP code is archived and is not an actively maintained surface
@@ -82,6 +95,7 @@ PDF is optional input. The default handoff format remains the Markdown package.
 ## Repo Map
 
 - [`extension`](./extension): extension source, tests, build output, and manifest
+- [`desktop`](./desktop): desktop preview release docs and mirrored preview bundles
 - [`helper`](./helper): helper-facing public assets and MCP/runtime utilities
 - [`archive`](./archive): deprecated or historical public assets kept only for reference
 - [`skills`](./skills): public skill-facing install guidance
@@ -106,6 +120,8 @@ npm run build
 ```
 
 Build output lives in [`extension/dist`](./extension/dist).
+
+Desktop preview mirror docs live in [`desktop`](./desktop).
 
 ## Notes
 
