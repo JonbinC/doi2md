@@ -9,6 +9,7 @@ Use this directory for:
 - preview release notes
 - mirrored preview bundle assets
 - public download-facing docs
+- user-facing notes about desktop capabilities that are already implemented upstream
 
 Do not move the desktop app source code here.
 
@@ -22,5 +23,6 @@ Do not move the desktop app source code here.
 ## Current Boundary
 
 - preview bundle only
+- public notes may describe current GUI capabilities such as bilingual shell copy or local source-API settings
 - not a signed production installer
 - not the desktop source of truth

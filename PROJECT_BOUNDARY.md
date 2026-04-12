@@ -18,6 +18,7 @@ This is the intended SSOT for:
 - local helper installers and helper-side public scripts
 - public skills and agent install documents
 - public install and troubleshooting docs
+- mirrored capability notes for already-shipped desktop behavior, without re-homing the desktop source code
 
 ## Legacy
 
