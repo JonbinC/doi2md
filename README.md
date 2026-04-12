@@ -79,6 +79,15 @@ This public repo only carries the public preview release surface:
 
 Do not move the actual Electron source of truth here.
 
+Current preview positioning:
+
+- dual-mode research workspace: `Discovery` and `Notebook`
+- bilingual GUI shell: `English / 中文`
+- local source enhancement settings for `OpenAlex`, `Elsevier`, `Wiley TDM`, and `Springer OA`
+- current preview artifact classes: `mac universal dmg`, `win x64 exe`, and a portable preview bundle
+
+See [`desktop/README.md`](./desktop/README.md) for the current preview scope and artifact notes.
+
 ## Repo Boundary
 
 - use this repo for public extension packaging, desktop preview mirroring, helper/setup assets, and user-side install guidance
