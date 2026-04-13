@@ -62,14 +62,16 @@ The parsing core and account/session logic remain owned by the upstream Mdtero a
 1. Build the preview bundle in `mdtero` with `npm run package:preview --workspace=@mdtero/desktop`
 2. Review the generated bundle locally
 3. Refresh `apps/desktop/installers/manifest.json` and mirror it into `desktop/releases/installer-manifest.json`
-4. Mirror the bundle docs or selected assets into this directory
-5. Publish the public repo changes to `JonbinC/doi2md`
+4. Stage the actual installer binaries locally with `npm run stage:public-installers --workspace=@mdtero/desktop`
+5. Mirror the bundle docs or selected assets into this directory
+6. Publish the public repo changes to `JonbinC/doi2md`
 
 For installer builds, the upstream desktop host also exposes:
 
 - `npm run package:installer:mac --workspace=@mdtero/desktop`
 - `npm run package:installer:win --workspace=@mdtero/desktop`
 - `npm run mirror:public-installer-manifest --workspace=@mdtero/desktop`
+- `npm run stage:public-installers --workspace=@mdtero/desktop`
 
 The upstream GitHub Actions workflow can rebuild the same installer classes for `macOS` and `Windows`.
 
