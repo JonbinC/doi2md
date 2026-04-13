@@ -5,21 +5,25 @@
   "artifacts": [
     {
       "fileName": "Mdtero-0.1.0-preview.1-mac-universal.dmg",
+      "publicFilePath": "desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg",
       "sizeBytes": 200638427,
       "sha256": "0093c4568153d0936523bde22cc1613d924963ea8f213ad0feb49fd07e15df9a"
     },
     {
       "fileName": "Mdtero-0.1.0-preview.1-mac-universal.dmg.blockmap",
+      "publicFilePath": "desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg.blockmap",
       "sizeBytes": 209750,
       "sha256": "9cb797ac63017ec53ae7bc849a522f1e8271e5da33cfd6b5fd886321ce3fa6a3"
     },
     {
       "fileName": "Mdtero-0.1.0-preview.1-win-x64.exe",
+      "publicFilePath": "desktop/releases/Mdtero-0.1.0-preview.1-win-x64.exe",
       "sizeBytes": 88046016,
       "sha256": "cb941afa3270c7ee4a7ca729e9e5e32e1560bb82809a34a9dbf859c33789fd46"
     },
     {
       "fileName": "Mdtero-0.1.0-preview.1-win-x64.exe.blockmap",
+      "publicFilePath": "desktop/releases/Mdtero-0.1.0-preview.1-win-x64.exe.blockmap",
       "sizeBytes": 91695,
       "sha256": "08a43d536c4321cb45d54aae8a22391d30196314e01eaf80ff3ca7a4aba9d4bc"
     }
