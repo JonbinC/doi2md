@@ -75,6 +75,7 @@ This public repo only carries the public preview release surface:
 - mirrored preview bundle docs
 - lightweight release notes
 - public download-facing structure for desktop previews
+- mirrored installer manifest metadata for staged preview installers
 - capability notes for features already shipped from the upstream desktop SSOT, such as bilingual shell copy and local source-API settings
 
 Do not move the actual Electron source of truth here.
