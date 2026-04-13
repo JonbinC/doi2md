@@ -9,6 +9,7 @@ Use this directory for:
 - preview release notes
 - mirrored preview bundle assets
 - public download-facing docs
+- mirrored installer manifest metadata
 - user-facing notes about desktop capabilities that are already implemented upstream
 
 Do not move the desktop app source code here.
@@ -60,15 +61,19 @@ The parsing core and account/session logic remain owned by the upstream Mdtero a
 
 1. Build the preview bundle in `mdtero` with `npm run package:preview --workspace=@mdtero/desktop`
 2. Review the generated bundle locally
-3. Mirror the bundle docs or selected assets into this directory
-4. Publish the public repo changes to `JonbinC/doi2md`
+3. Refresh `apps/desktop/installers/manifest.json` and mirror it into `desktop/releases/installer-manifest.json`
+4. Mirror the bundle docs or selected assets into this directory
+5. Publish the public repo changes to `JonbinC/doi2md`
 
 For installer builds, the upstream desktop host also exposes:
 
 - `npm run package:installer:mac --workspace=@mdtero/desktop`
 - `npm run package:installer:win --workspace=@mdtero/desktop`
+- `npm run mirror:public-installer-manifest --workspace=@mdtero/desktop`
 
 The upstream GitHub Actions workflow can rebuild the same installer classes for `macOS` and `Windows`.
+
+The mirrored installer ledger lives at `desktop/releases/installer-manifest.json` and is copied from the upstream SSOT file `mdtero-frontend/apps/desktop/installers/manifest.json`.
 
 ## Current Boundary
 
