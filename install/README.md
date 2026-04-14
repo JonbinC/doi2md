@@ -30,6 +30,14 @@ OpenClaw remains the special case:
 clawhub install mdtero
 ```
 
+Account boundary:
+
+- Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.
+
 Canonical manifest:
 
 - `https://mdtero.com/install/manifest.json`
+
+Manual fallback / helper guide:
+
+- `https://api.mdtero.com/skills/install.md`

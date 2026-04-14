@@ -1,7 +1,7 @@
 {
   "name": "mdtero-install",
   "version": "0.1.3",
-  "description": "Lightweight installer for Mdtero agent skill bundles.",
+  "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, and OpenClaw guidance.",
   "homepage": "https://mdtero.com",
   "repository": {
     "type": "git",
@@ -28,11 +28,12 @@
   },
   "files": [
     "bin",
-    "install/manifest.json",
+    "install",
     "skills"
   ],
   "scripts": {
-    "test:install": "node --test tests/mdtero-install.test.mjs"
+    "test:install": "node --test tests/mdtero-install.test.mjs",
+    "test:public-contract": "node --test tests/public-contract-truth.test.mjs tests/mdtero-install.test.mjs"
   },
   "license": "MIT"
 }

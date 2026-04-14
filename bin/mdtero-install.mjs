@@ -56,10 +56,10 @@ async function fetchManifest(url) {
     const { readFile } = await import("node:fs/promises");
     const fallbackContent = await readFile(BUNDLED_MANIFEST_PATH, "utf8");
     const fallbackManifest = JSON.parse(fallbackContent);
-    fallbackManifest.manifestUrl = url;
     fallbackManifest.fallbackNotice = `Using bundled manifest fallback after fetch failure: ${
       error instanceof Error ? error.message : String(error)
     }`;
+    fallbackManifest.requestedManifestUrl = url;
     return fallbackManifest;
   }
 }
