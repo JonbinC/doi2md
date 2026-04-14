@@ -13,8 +13,8 @@
     {
       "target": "openclaw",
       "label": "OpenClaw",
-      "description": "One-copy setup through the official ClawHub path inside OpenClaw.",
-      "descriptionZh": "适合在 OpenClaw 里直接走官方 ClawHub 安装路径。",
+      "description": "Direct install inside OpenClaw with one prepared command.",
+      "descriptionZh": "适合直接在 OpenClaw 里用现成命令完成安装。",
       "installCommand": "clawhub install mdtero",
       "skillDirectory": ".openclaw/skills/mdtero"
     },

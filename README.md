@@ -21,6 +21,8 @@ This repo stays focused on what users install or run locally.
 
 Mdtero turns papers into reusable Markdown research packages.
 
+Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.
+
 Use this repository when you specifically need public local capture, helper setup, or public install guidance.
 
 ## Unified Agent Install
