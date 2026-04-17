@@ -74,8 +74,8 @@
           "win-x64-exe"
         ],
         "downloadPaths": [
-          "https://github.com/JonbinC/mdtero/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-mac-universal.dmg",
-          "https://github.com/JonbinC/mdtero/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-win-x64.exe"
+          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-mac-universal.dmg",
+          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-win-x64.exe"
         ],
         "autoUpdate": false
       }
@@ -101,8 +101,8 @@
           "win-x64-exe"
         ],
         "downloadPaths": [
-          "https://github.com/JonbinC/mdtero/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-mac-universal.dmg",
-          "https://github.com/JonbinC/mdtero/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-win-x64.exe"
+          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-mac-universal.dmg",
+          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-win-x64.exe"
         ],
         "autoUpdate": false
       }

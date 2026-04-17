@@ -6,14 +6,14 @@
     {
       "fileName": "Mdtero-0.1.0-preview.1-mac-universal.dmg",
       "publicFilePath": "desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg",
-      "sizeBytes": 200638427,
-      "sha256": "0093c4568153d0936523bde22cc1613d924963ea8f213ad0feb49fd07e15df9a"
+      "sizeBytes": 200663006,
+      "sha256": "8cf5541fb7a8b3cac39ad104cad4712bfaaaf50e659d00d01a1914ace2c79165"
     },
     {
       "fileName": "Mdtero-0.1.0-preview.1-mac-universal.dmg.blockmap",
       "publicFilePath": "desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg.blockmap",
-      "sizeBytes": 209750,
-      "sha256": "9cb797ac63017ec53ae7bc849a522f1e8271e5da33cfd6b5fd886321ce3fa6a3"
+      "sizeBytes": 210706,
+      "sha256": "2e0cf420bfbeebed3346aa75c37adc45550bd7384b3fa075589c3cd65810a323"
     },
     {
       "fileName": "Mdtero-0.1.0-preview.1-win-x64.exe",
