@@ -47,6 +47,8 @@ OpenClaw keeps the dedicated route:
 clawhub install mdtero
 ```
 
+Claude Code, Codex, and Gemini CLI stay on the npm-first install path via `npx mdtero-install install <target>`.
+
 ## This Repo Contains
 
 - the public extension code in [`extension`](./extension)

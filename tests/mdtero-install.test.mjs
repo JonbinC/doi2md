@@ -36,6 +36,120 @@ function createManifestDataUrl(manifest) {
   return `data:application/json,${encodeURIComponent(JSON.stringify(manifest))}`;
 }
 
+async function readPackageVersion() {
+  const packageJsonPath = join(PROJECT_ROOT, "package.json");
+  const content = await readFile(packageJsonPath, "utf8");
+  const pkg = JSON.parse(content);
+  return pkg.version;
+}
+
+function createVersionManifest({ currentVersion, latestVersion }) {
+  return {
+    version: 1,
+    manifestUrl: "https://mdtero.com/install/manifest.json",
+    installGuideUrl: "https://api.mdtero.com/skills/install.md",
+    helperCommand: "mdtero",
+    helperInstallerUrl: "https://api.mdtero.com/helpers/install_mdtero_helper.sh",
+    accountBoundaryNote:
+      "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
+    cli: {
+      packageName: "mdtero-install",
+      packageVersion: currentVersion,
+      npxCommand: "npx mdtero-install"
+    },
+    targets: [
+      {
+        target: "codex",
+        label: "Codex",
+        installCommand: "npx mdtero-install install codex",
+        skillDirectory: ".codex/skills/mdtero"
+      }
+    ],
+    releaseTruth: {
+      source: "website-first",
+      manifestPath: "/install/manifest.json",
+      boundaries: {
+        cliInstallSourceOfTruth: "targets[*] except openclaw",
+        openclawInstallSourceOfTruth: "targets[target=openclaw]",
+        desktopSourceOfTruth: "mdtero-public/desktop/releases/installer-manifest.json"
+      },
+      current: {
+        cli: {
+          version: currentVersion,
+          packageName: "mdtero-install",
+          packageManager: "npm",
+          installCommand: "npx mdtero-install",
+          installTargets: ["codex"]
+        }
+      },
+      latest: {
+        cli: {
+          version: latestVersion,
+          packageName: "mdtero-install",
+          packageManager: "npm",
+          installCommand: "npx mdtero-install",
+          installTargets: ["codex"]
+        }
+      }
+    }
+  };
+}
+
+test("version reports the installed cli version from package metadata", async () => {
+  const currentVersion = await readPackageVersion();
+  const manifest = createVersionManifest({ currentVersion, latestVersion: currentVersion });
+
+  const completed = await runNode([CLI_PATH, "version", "--manifest-url", createManifestDataUrl(manifest)], {
+    cwd: PROJECT_ROOT
+  });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.match(completed.stdout, new RegExp(`Current version: ${currentVersion.replace(/\./g, "\\.")}`));
+});
+
+test("version resolves the latest public cli version from canonical release metadata", async () => {
+  const currentVersion = await readPackageVersion();
+  const latestVersion = "0.1.4";
+  const manifest = createVersionManifest({ currentVersion, latestVersion });
+
+  const completed = await runNode([CLI_PATH, "version", "--manifest-url", createManifestDataUrl(manifest)], {
+    cwd: PROJECT_ROOT
+  });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.match(completed.stdout, /Latest public version: 0\.1\.4/);
+  assert.doesNotMatch(completed.stdout, /Manifest version:/, "version output must surface CLI release truth, not manifest schema version");
+});
+
+test("version says the cli is up to date when current and latest public versions match", async () => {
+  const currentVersion = await readPackageVersion();
+  const manifest = createVersionManifest({ currentVersion, latestVersion: currentVersion });
+
+  const completed = await runNode([CLI_PATH, "version", "--manifest-url", createManifestDataUrl(manifest)], {
+    cwd: PROJECT_ROOT
+  });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.match(completed.stdout, /Status: up to date/);
+  assert.match(completed.stdout, /Upgrade: not needed/);
+});
+
+test("version prints npm-first guided upgrade output when the public release is newer", async () => {
+  const currentVersion = await readPackageVersion();
+  const latestVersion = "0.1.4";
+  const manifest = createVersionManifest({ currentVersion, latestVersion });
+
+  const completed = await runNode([CLI_PATH, "version", "--manifest-url", createManifestDataUrl(manifest)], {
+    cwd: PROJECT_ROOT
+  });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.match(completed.stdout, /Status: update available/);
+  assert.match(completed.stdout, /Upgrade: npm install -g mdtero-install@0\.1\.4/);
+  assert.match(completed.stdout, /Guide: npx mdtero-install show/);
+  assert.doesNotMatch(completed.stdout, /auto-update/i, "guided update output must not imply auto-update support");
+});
+
 test("install writes the mdtero skill bundle into a codex workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "mdtero-install-"));
 
@@ -112,8 +226,13 @@ test("show prints the canonical manifest contract from the remote manifest", asy
   assert.match(completed.stdout, /Unified CLI: npx mdtero-install/);
   assert.match(
     completed.stdout,
-    /OpenClaw: clawhub install mdtero[\s\S]*Claude Code: npx mdtero-install install claude_code[\s\S]*Codex: npx mdtero-install install codex[\s\S]*Gemini CLI: npx mdtero-install install gemini_cli/,
-    "show output must list the canonical targets and commands in manifest order"
+    /Account boundary: Keyword discovery and API-key management stay in Mdtero Account\. Use the agent install for parse, translate, task-status, and download workflows\./,
+    "show output must surface the canonical account boundary note"
+  );
+  assert.match(
+    completed.stdout,
+    /OpenClaw: clawhub install mdtero\s+  Direct install inside OpenClaw with one prepared command\.[\s\S]*Claude Code: npx mdtero-install install claude_code\s+  Best for workspaces that keep Mdtero in \.claude\/skills\.[\s\S]*Codex: npx mdtero-install install codex\s+  Best for workspaces that keep Mdtero in \.codex\/skills\.[\s\S]*Gemini CLI: npx mdtero-install install gemini_cli\s+  Best for Gemini CLI setups that keep the workflow in GEMINI\.md\./,
+    "show output must list the canonical targets, commands, and target-specific guidance in manifest order"
   );
   assert.doesNotMatch(completed.stdout, /fallback/i, "show should not mention fallback when the remote manifest is reachable");
 });

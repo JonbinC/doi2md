@@ -42,8 +42,12 @@ function expectMissing(content, forbidden, label) {
   );
 }
 
-test("install manifest stays the canonical audited agent target contract", async () => {
-  const [manifest, siteManifest] = await Promise.all([readJson(MANIFEST_PATH), readJson(SITE_MANIFEST_PATH)]);
+test("install manifest stays the canonical audited website-first release contract", async () => {
+  const [manifest, siteManifest, desktopManifest] = await Promise.all([
+    readJson(MANIFEST_PATH),
+    readJson(SITE_MANIFEST_PATH),
+    readJson(join(PUBLIC_ROOT, "desktop", "releases", "installer-manifest.json"))
+  ]);
 
   assert.deepEqual(manifest, siteManifest, "mdtero-public/install/manifest.json must stay mirrored with the site manifest");
   assert.equal(manifest.manifestUrl, "https://mdtero.com/install/manifest.json", "manifest must point to the canonical public manifest URL");
@@ -52,6 +56,57 @@ test("install manifest stays the canonical audited agent target contract", async
     manifest.accountBoundaryNote,
     "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
     "manifest must keep the Mdtero Account boundary note"
+  );
+  assert.equal(manifest.releaseTruth?.source, "website-first", "manifest must declare website-first public release truth");
+  assert.equal(
+    manifest.releaseTruth?.manifestPath,
+    "/install/manifest.json",
+    "manifest must self-identify its canonical public path"
+  );
+  assert.equal(
+    manifest.releaseTruth?.boundaries?.desktopSourceOfTruth,
+    "mdtero-public/desktop/releases/installer-manifest.json",
+    "manifest must document the desktop public truth boundary"
+  );
+  assert.equal(
+    manifest.releaseTruth?.boundaries?.cliInstallSourceOfTruth,
+    "targets[*] except openclaw",
+    "manifest must document the npm-first CLI target boundary"
+  );
+  assert.equal(
+    manifest.releaseTruth?.boundaries?.openclawInstallSourceOfTruth,
+    "targets[target=openclaw]",
+    "manifest must keep OpenClaw separate from npm-first targets"
+  );
+  assert.equal(
+    manifest.releaseTruth?.current?.cli?.version,
+    manifest.cli?.packageVersion,
+    "current CLI version must match the published install package version"
+  );
+  assert.equal(
+    manifest.releaseTruth?.latest?.cli?.version,
+    manifest.cli?.packageVersion,
+    "latest CLI version must stay aligned with the published install package version when the public package is current"
+  );
+  assert.equal(
+    manifest.releaseTruth?.latest?.cli?.packageName,
+    manifest.cli?.packageName,
+    "latest CLI release truth must keep the canonical public package name"
+  );
+  assert.equal(
+    manifest.releaseTruth?.latest?.cli?.packageManager,
+    "npm",
+    "latest CLI release truth must keep npm as the public package manager"
+  );
+  assert.equal(
+    manifest.releaseTruth?.latest?.cli?.installCommand,
+    manifest.cli?.npxCommand,
+    "latest CLI release truth must keep the canonical public install command"
+  );
+  assert.equal(
+    manifest.releaseTruth?.current?.desktop?.version,
+    desktopManifest.version,
+    "current desktop version must resolve from the public desktop installer ledger"
   );
   assert.deepEqual(
     manifest.targets.map((target) => target.target),
@@ -67,6 +122,16 @@ test("install manifest stays the canonical audited agent target contract", async
       "npx mdtero-install install gemini_cli"
     ],
     "manifest install commands must stay aligned with the canonical target list"
+  );
+  assert.deepEqual(
+    manifest.releaseTruth?.current?.cli?.installTargets,
+    ["claude_code", "codex", "gemini_cli"],
+    "release truth must isolate npm-first CLI targets from OpenClaw"
+  );
+  assert.deepEqual(
+    manifest.releaseTruth?.current?.desktop?.publicArtifactTypes,
+    ["mac-universal-dmg", "win-x64-exe"],
+    "release truth must expose only the public desktop installer classes"
   );
 });
 
@@ -84,8 +149,10 @@ test("public markdown surfaces keep the same preview and install boundary truth"
   expectContains(rootReadme, "npx mdtero-install show", "README.md");
   expectContains(rootReadme, "npx mdtero-install install codex", "README.md");
   expectContains(rootReadme, "npx mdtero-install install claude_code", "README.md");
-  expectContains(rootReadme, "npx mdtero-install install gemini_cli", "README.md");
-  expectContains(rootReadme, "clawhub install mdtero", "README.md");
+  expectContains(rootReadme, "ClawHub installs the OpenClaw skill only; the npm-first CLI path remains the public install route for Claude Code, Codex, and Gemini CLI.", "README.md");
+  expectContains(rootReadme, "GitHub Releases and the public `doi2md` repository are mirrors of the website-led release chain, not independent sources of public release truth.", "README.md");
+  expectContains(rootReadme, "npm --prefix mdtero-frontend run test:launchability-proof", "README.md");
+  expectContains(rootReadme, "npx mdtero-install version", "README.md");
 
   expectContains(publicReadme, "Mdtero turns papers into reusable Markdown research packages.", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install show", "mdtero-public/README.md");
@@ -94,6 +161,15 @@ test("public markdown surfaces keep the same preview and install boundary truth"
   expectContains(publicReadme, "npx mdtero-install install gemini_cli", "mdtero-public/README.md");
   expectContains(publicReadme, "clawhub install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
+  expectContains(publicReadme, "OpenClaw keeps the dedicated route", "mdtero-public/README.md");
+  expectContains(publicReadme, "Claude Code, Codex, and Gemini CLI stay on the npm-first install path via `npx mdtero-install install <target>`.", "mdtero-public/README.md");
+
+  const openclawInstallReadme = await readMarkdown(join(PUBLIC_ROOT, "helper", "openclaw", "INSTALL.md"));
+  expectContains(openclawInstallReadme, "The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first CLI release truth used by Claude Code, Codex, and Gemini CLI.", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "GitHub Releases and the public `doi2md` repository only mirror the website-led release chain", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "npm --prefix mdtero-frontend run test:launchability-proof", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "npx mdtero-install version", "mdtero-public/helper/openclaw/INSTALL.md");
 
   expectContains(desktopReadme, "preview release", "mdtero-public/desktop/README.md");
   expectContains(desktopReadme, "unsigned by default", "mdtero-public/desktop/README.md");
@@ -182,8 +258,13 @@ test("frontend maintainer commands expose both seam-localized and aggregate laun
   );
   assert.match(
     publicCommand,
-    /tests\/agent-installs\.test\.ts/,
+    /tests\/agent-installs\.test\.tsx/,
     "test:public-contract must run the site agent install contract test"
+  );
+  assert.match(
+    publicCommand,
+    /tests\/use-dashboard-data\.test\.tsx/,
+    "test:public-contract must run the dashboard install contract test"
   );
   assert.match(
     publicCommand,

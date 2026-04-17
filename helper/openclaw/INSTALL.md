@@ -13,6 +13,14 @@ Use the normal path in this order:
 
 OpenClaw should own the downstream workflow after setup.
 
+## Public Truth Boundary
+
+- The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.
+- OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first CLI release truth used by Claude Code, Codex, and Gemini CLI.
+- GitHub Releases and the public `doi2md` repository only mirror the website-led release chain; they do not override Mdtero Account, website, or manifest truth.
+- Maintainers verify cross-surface release drift with `npm --prefix mdtero-frontend run test:launchability-proof`.
+- Guided update behavior stays explicit: the install CLI reports status via `npx mdtero-install version`, and the desktop app remains a public preview without signed, notarized, or auto-update-ready production promises.
+
 ## Local Acquisition Rule
 
 If OpenClaw is running on a server, do not force campus-only or institutional acquisition through the server.
