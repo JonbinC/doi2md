@@ -42,11 +42,12 @@ function getArtifactSets(manifest) {
 }
 
 test("desktop preview public surfaces stay aligned with the upstream and mirrored installer manifests", async () => {
-  const [upstreamManifest, mirroredManifest, desktopReadme, desktopDoc] = await Promise.all([
+  const [upstreamManifest, mirroredManifest, desktopReadme, desktopDoc, publicInstallManifest] = await Promise.all([
     readJson(UPSTREAM_MANIFEST_PATH),
     readJson(MIRRORED_MANIFEST_PATH),
     readMarkdown(DESKTOP_README_PATH),
-    readMarkdown(DESKTOP_DOC_PATH)
+    readMarkdown(DESKTOP_DOC_PATH),
+    readJson(join(PUBLIC_ROOT, "install", "manifest.json"))
   ]);
 
   assert.deepEqual(
@@ -74,6 +75,21 @@ test("desktop preview public surfaces stay aligned with the upstream and mirrore
 
   expectContains(desktopReadme, upstreamManifest.version, "mdtero-public/desktop/README.md");
   expectContains(desktopDoc, upstreamManifest.version, "mdtero-public/docs/public/desktop-preview.md");
+  assert.equal(
+    publicInstallManifest.releaseTruth?.current?.desktop?.version,
+    upstreamManifest.version,
+    "desktop website-first release truth must resolve the same desktop version as the mirrored installer ledger"
+  );
+  assert.equal(
+    publicInstallManifest.releaseTruth?.current?.desktop?.installerManifestPath,
+    "desktop/releases/installer-manifest.json",
+    "desktop release truth must point consumers at the mirrored installer ledger"
+  );
+  assert.deepEqual(
+    publicInstallManifest.releaseTruth?.current?.desktop?.downloadPaths,
+    installerArtifacts.map((artifact) => artifact.publicFilePath),
+    "desktop release truth must expose the public website download paths for user-facing installers"
+  );
   expectContains(desktopReadme, "preview installer classes only", "mdtero-public/desktop/README.md");
   expectContains(desktopReadme, "not notarized", "mdtero-public/desktop/README.md");
   expectContains(desktopReadme, "no auto-update yet", "mdtero-public/desktop/README.md");
@@ -121,6 +137,11 @@ test("frontend exposes both the desktop seam proof and the aggregate launchabili
     command,
     /apps\/desktop\/tests\/desktop-release\.test\.ts/,
     "desktop-release: test:desktop-preview-contract must run the public mirror\/staging proof"
+  );
+  assert.match(
+    command,
+    /apps\/desktop\/tests\/desktop-app\.test\.tsx/,
+    "desktop-release: test:desktop-preview-contract must run the in-app guided update proof"
   );
   assert.match(
     command,

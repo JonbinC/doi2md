@@ -7,6 +7,7 @@
   "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
   "cli": {
     "packageName": "mdtero-install",
+    "packageVersion": "0.1.3",
     "npxCommand": "npx mdtero-install"
   },
   "targets": [
@@ -42,5 +43,69 @@
       "installCommand": "npx mdtero-install install gemini_cli",
       "skillDirectory": ".gemini/skills/mdtero"
     }
-  ]
+  ],
+  "releaseTruth": {
+    "source": "website-first",
+    "manifestPath": "/install/manifest.json",
+    "boundaries": {
+      "cliInstallSourceOfTruth": "targets[*] except openclaw",
+      "openclawInstallSourceOfTruth": "targets[target=openclaw]",
+      "desktopSourceOfTruth": "mdtero-public/desktop/releases/installer-manifest.json",
+      "desktopPublicationMode": "website-led public preview mirror; no signed, notarized, or auto-update-ready production promise"
+    },
+    "current": {
+      "cli": {
+        "version": "0.1.3",
+        "packageName": "mdtero-install",
+        "packageManager": "npm",
+        "installCommand": "npx mdtero-install",
+        "installTargets": [
+          "claude_code",
+          "codex",
+          "gemini_cli"
+        ]
+      },
+      "desktop": {
+        "version": "0.1.0-preview.1",
+        "channel": "public-preview",
+        "installerManifestPath": "desktop/releases/installer-manifest.json",
+        "publicArtifactTypes": [
+          "mac-universal-dmg",
+          "win-x64-exe"
+        ],
+        "downloadPaths": [
+          "desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg",
+          "desktop/releases/Mdtero-0.1.0-preview.1-win-x64.exe"
+        ],
+        "autoUpdate": false
+      }
+    },
+    "latest": {
+      "cli": {
+        "version": "0.1.3",
+        "packageName": "mdtero-install",
+        "packageManager": "npm",
+        "installCommand": "npx mdtero-install",
+        "installTargets": [
+          "claude_code",
+          "codex",
+          "gemini_cli"
+        ]
+      },
+      "desktop": {
+        "version": "0.1.0-preview.1",
+        "channel": "public-preview",
+        "installerManifestPath": "desktop/releases/installer-manifest.json",
+        "publicArtifactTypes": [
+          "mac-universal-dmg",
+          "win-x64-exe"
+        ],
+        "downloadPaths": [
+          "desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg",
+          "desktop/releases/Mdtero-0.1.0-preview.1-win-x64.exe"
+        ],
+        "autoUpdate": false
+      }
+    }
+  }
 }
