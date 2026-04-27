@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
-import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BUNDLED_MANIFEST_PATH = fileURLToPath(new URL("../install/manifest.json", import.meta.url));
-const PACKAGE_JSON_PATH = fileURLToPath(new URL("../package.json", import.meta.url));
 const DEFAULT_MANIFEST_URL =
   process.env.MDTERO_INSTALL_MANIFEST_URL || "https://mdtero.com/install/manifest.json";
 
@@ -47,39 +46,6 @@ function parseArgs(argv) {
   };
 }
 
-async function readInstalledCliVersion() {
-  const packageContent = await readFile(PACKAGE_JSON_PATH, "utf8");
-  const pkg = JSON.parse(packageContent);
-  return pkg.version;
-}
-
-function parseSemver(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version || "");
-  if (!match) {
-    return null;
-  }
-  return match.slice(1).map((part) => Number(part));
-}
-
-function compareVersions(currentVersion, latestVersion) {
-  const current = parseSemver(currentVersion);
-  const latest = parseSemver(latestVersion);
-  if (!current || !latest) {
-    return 0;
-  }
-
-  for (let index = 0; index < 3; index += 1) {
-    if (current[index] < latest[index]) {
-      return -1;
-    }
-    if (current[index] > latest[index]) {
-      return 1;
-    }
-  }
-
-  return 0;
-}
-
 async function fetchManifest(url) {
   try {
     const response = await fetch(url);
@@ -91,10 +57,10 @@ async function fetchManifest(url) {
     const { readFile } = await import("node:fs/promises");
     const fallbackContent = await readFile(BUNDLED_MANIFEST_PATH, "utf8");
     const fallbackManifest = JSON.parse(fallbackContent);
+    fallbackManifest.manifestUrl = url;
     fallbackManifest.fallbackNotice = `Using bundled manifest fallback after fetch failure: ${
       error instanceof Error ? error.message : String(error)
     }`;
-    fallbackManifest.requestedManifestUrl = url;
     return fallbackManifest;
   }
 }
@@ -123,25 +89,31 @@ async function showManifest(manifest) {
   console.log(`Mdtero install manifest v${manifest.version}`);
   console.log(`Manifest URL: ${manifest.manifestUrl}`);
   console.log(`Unified CLI: ${manifest.cli?.npxCommand || "n/a"}`);
-  if (manifest.accountBoundaryNote) {
-    console.log(`Account boundary: ${manifest.accountBoundaryNote}`);
-  }
   if (manifest.fallbackNotice) {
     console.log(`Notice: ${manifest.fallbackNotice}`);
   }
   console.log("");
   for (const target of manifest.targets || []) {
     console.log(`${target.label}: ${target.installCommand}`);
-    if (target.description) {
-      console.log(`  ${target.description}`);
-    }
   }
+}
+
+async function showVersion(manifest) {
+  const version =
+    manifest.cli?.packageVersion ||
+    manifest.releaseTruth?.current?.cli?.version ||
+    manifest.releaseTruth?.latest?.cli?.version ||
+    "unknown";
+  console.log(version);
 }
 
 async function installSkill(manifest, target, rootDir) {
   const definition = (manifest.targets || []).find((item) => item.target === target);
   if (!definition) {
     throw new Error(`Unsupported target: ${target}`);
+  }
+  if (definition.target === "openclaw") {
+    throw new Error("OpenClaw uses clawhub install mdtero, not npx mdtero-install install openclaw.");
   }
   if (!definition.skillDirectory) {
     throw new Error(`Target ${target} did not expose a skillDirectory.`);
@@ -151,36 +123,6 @@ async function installSkill(manifest, target, rootDir) {
   await copyDirectory(bundledSkillDir(), targetDir);
 
   console.log(`Installed Mdtero skill for ${definition.label} at ${targetDir}`);
-  if (manifest.helperInstallerUrl) {
-    console.log(`If local acquisition is needed, review and run: ${manifest.helperInstallerUrl}`);
-  }
-}
-
-async function showVersion(manifest) {
-  const currentVersion = await readInstalledCliVersion();
-  const latestPublicVersion = manifest?.releaseTruth?.latest?.cli?.version;
-
-  console.log(`Current version: ${currentVersion}`);
-
-  if (!latestPublicVersion) {
-    console.log("Latest public version: unavailable");
-    console.log("Status: unable to verify latest public version");
-    console.log("Upgrade: run npx mdtero-install show to review the current install guide");
-    return;
-  }
-
-  console.log(`Latest public version: ${latestPublicVersion}`);
-
-  const comparison = compareVersions(currentVersion, latestPublicVersion);
-  if (comparison < 0) {
-    console.log("Status: update available");
-    console.log(`Upgrade: npm install -g mdtero-install@${latestPublicVersion}`);
-    console.log("Guide: npx mdtero-install show");
-    return;
-  }
-
-  console.log("Status: up to date");
-  console.log("Upgrade: not needed");
 }
 
 async function main() {

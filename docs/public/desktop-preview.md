@@ -1,32 +1,22 @@
-# Desktop Preview
+# Desktop Deferred Preview Archive
 
-Mdtero Desktop is currently published as a public preview installer set.
+Mdtero Desktop is no longer part of the current public launch path.
 
-That means:
+This page now exists only to document the deferred public preview archive:
 
-- the build is generated from `JonbinC/mdtero/apps/desktop`
-- the public repo mirrors preview-facing docs and optional release assets
-- the public repo also mirrors the upstream installer ledger at `desktop/releases/installer-manifest.json`
-- preview version `0.1.0-preview.1` currently publishes `Mdtero-0.1.0-preview.1-mac-universal.dmg` and `Mdtero-0.1.0-preview.1-win-x64.exe`
-- those user-facing installers live at `desktop/releases/Mdtero-0.1.0-preview.1-mac-universal.dmg` and `desktop/releases/Mdtero-0.1.0-preview.1-win-x64.exe`
-- signing, notarization, and auto-update are not part of this preview stage
-- the canonical upstream ledger may still include `.blockmap` metadata, but the public docs intentionally omit `.blockmap` files from the beginner-facing download list
+- the build was generated from `JonbinC/mdtero/apps/desktop`
+- the public repo still mirrors the upstream installer ledger at `desktop/releases/installer-manifest.json`
+- preview version `0.1.0-preview.1` published `Mdtero-0.1.0-preview.1-mac-universal.dmg` and `Mdtero-0.1.0-preview.1-win-x64.exe`
+- signing, notarization, and auto-update are not part of this archived preview stage
 
-## Expected Use
+## What this archive is for
 
-- review the GUI
-- validate desktop-first research workspace flows
-- stage public preview releases without changing backend or site ownership
-- verify mirrored installer hashes against the upstream desktop manifest when installers are staged
-- keep public docs and guide-facing installer names aligned with `desktop/releases/installer-manifest.json`
+- preserve public references to older preview artifacts
+- keep mirrored installer names and ledger metadata honest
+- make it clear that desktop is deferred, not actively being launched right now
 
-## Release Truth
+## What the active launch path is instead
 
-For the exact release order, use `mdtero-frontend/docs/LAUNCH_RUNBOOK.md`.
-
-The current publication contract is:
-
-- `.github/workflows/build-desktop-installers.yml` can automatically build preview installers and upload CI artifacts
-- public mirroring, manifest refresh, staged public installers, and public repo publication remain manual maintainer work
-- the upstream installer manifest must be refreshed before the site or public docs advertise new installer names
-- this preview surface does not imply a signed production release
+- extension for local browser capture when needed
+- npm-first CLI install for Claude Code, Codex, and Gemini CLI
+- dedicated OpenClaw install through `clawhub install mdtero`

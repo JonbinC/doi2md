@@ -3,7 +3,6 @@
   "manifestUrl": "https://mdtero.com/install/manifest.json",
   "installGuideUrl": "https://api.mdtero.com/skills/install.md",
   "helperCommand": "mdtero",
-  "helperInstallerUrl": "https://api.mdtero.com/helpers/install_mdtero_helper.sh",
   "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
   "cli": {
     "packageName": "mdtero-install",
@@ -51,7 +50,7 @@
       "cliInstallSourceOfTruth": "targets[*] except openclaw",
       "openclawInstallSourceOfTruth": "targets[target=openclaw]",
       "desktopSourceOfTruth": "mdtero-public/desktop/releases/installer-manifest.json",
-      "desktopPublicationMode": "website-led public preview mirror with GitHub Release asset download fallback; no signed, notarized, or auto-update-ready production promise"
+      "desktopPublicationMode": "deferred public preview archive with GitHub Release asset download fallback; not part of the current extension-and-CLI launchability proof"
     },
     "current": {
       "cli": {
