@@ -1,9 +1,5 @@
 .DS_Store
 mdtero-edge-store-*.zip
-desktop/releases/*.dmg
-desktop/releases/*.exe
-desktop/releases/*.blockmap
-node_modules/
 extension/node_modules/
 extension/node_modules/.vite/
 extension/.vite/

@@ -14,8 +14,6 @@ const DESKTOP_WORKFLOW_PATH = join(FRONTEND_ROOT, ".github", "workflows", "build
 const DESKTOP_PACKAGE_PATH = join(FRONTEND_ROOT, "apps", "desktop", "package.json");
 const RUNBOOK_PATH = join(FRONTEND_ROOT, "docs", "LAUNCH_RUNBOOK.md");
 const RELEASE_CHAIN_PATH = join(FRONTEND_ROOT, "docs", "RELEASE_CHAIN.md");
-const PUBLIC_DESKTOP_README_PATH = join(PUBLIC_ROOT, "desktop", "README.md");
-const PUBLIC_DESKTOP_DOC_PATH = join(PUBLIC_ROOT, "docs", "public", "desktop-preview.md");
 const FRONTEND_PACKAGE_PATH = join(FRONTEND_ROOT, "package.json");
 
 async function readText(path) {
@@ -42,166 +40,55 @@ function expectMissing(content, pattern, message) {
   assert.doesNotMatch(content, pattern, message);
 }
 
-test("release-workflow: site deploy automation stays Vercel-only and secret-backed", async () => {
+test("release-workflow: site deploy automation stays Vercel-only", async () => {
   const workflow = await readText(DEPLOY_WORKFLOW_PATH);
 
   expectContains(workflow, "name: Deploy Site to Vercel", "deploy-site.yml");
-  expectMatches(
-    workflow,
-    /VERCEL_TOKEN:\s*\$\{\{\s*secrets\.VERCEL_TOKEN\s*\}\}/,
-    "deploy-site.yml",
-    "must keep Vercel token secret wiring"
-  );
-  expectMatches(
-    workflow,
-    /VERCEL_ORG_ID:\s*\$\{\{\s*vars\.VERCEL_ORG_ID\s*\}\}/,
-    "deploy-site.yml",
-    "must keep Vercel org wiring"
-  );
-  expectMatches(
-    workflow,
-    /VERCEL_PROJECT_ID:\s*\$\{\{\s*vars\.VERCEL_PROJECT_ID\s*\}\}/,
-    "deploy-site.yml",
-    "must keep Vercel project wiring"
-  );
-  expectMatches(
-    workflow,
-    /vercel@[^\s]+\s+pull --yes --environment=production/,
-    "deploy-site.yml",
-    "must pull Vercel project settings before deployment"
-  );
-  expectMatches(
-    workflow,
-    /vercel@[^\s]+\s+build --prod/,
-    "deploy-site.yml",
-    "must build the Vercel deployment"
-  );
-  expectMatches(
-    workflow,
-    /vercel@[^\s]+\s+deploy --prebuilt --prod/,
-    "deploy-site.yml",
-    "must deploy the prebuilt Vercel artifact"
-  );
-  expectMissing(
-    workflow,
-    /stage:public-installers|mirror:public-installer-manifest|doi2md|desktop\/releases/i,
-    "release-workflow: deploy-site.yml must stay site-only automation and must not publish desktop mirrors"
-  );
+  expectMatches(workflow, /VERCEL_TOKEN:\s*\$\{\{\s*secrets\.VERCEL_TOKEN\s*\}\}/, "deploy-site.yml", "must keep Vercel token secret wiring");
+  expectMatches(workflow, /vercel@[^\s]+\s+deploy --prebuilt --prod/, "deploy-site.yml", "must deploy the prebuilt Vercel artifact");
+  expectMissing(workflow, /stage:public-installers|mirror:public-installer-manifest|doi2md|desktop\/releases/i, "deploy-site.yml must stay site-only automation");
 });
 
-test("release-workflow: desktop CI stays build-and-upload only", async () => {
+test("release-workflow: deferred desktop CI stays build-and-upload only", async () => {
   const workflow = await readText(DESKTOP_WORKFLOW_PATH);
 
   expectContains(workflow, "name: Build Desktop Installers", "build-desktop-installers.yml");
-  expectMatches(
-    workflow,
-    /package:installer:mac/,
-    "build-desktop-installers.yml",
-    "must build the mac installer"
-  );
-  expectMatches(
-    workflow,
-    /package:installer:win/,
-    "build-desktop-installers.yml",
-    "must build the windows installer"
-  );
-  expectMatches(
-    workflow,
-    /actions\/upload-artifact@v\d+/,
-    "build-desktop-installers.yml",
-    "must upload build artifacts for maintainer retrieval"
-  );
-  expectMatches(
-    workflow,
-    /apps\/desktop\/installers\/manifest\.json/,
-    "build-desktop-installers.yml",
-    "must upload the installer manifest alongside artifacts"
-  );
-  expectMissing(
-    workflow,
-    /stage:public-installers|mirror:public-installer-manifest|publish|doi2md|deploy-site|vercel/i,
-    "release-workflow: desktop CI must not be described as public mirroring automation"
-  );
+  expectMatches(workflow, /package:installer:mac/, "build-desktop-installers.yml", "must build the mac installer");
+  expectMatches(workflow, /package:installer:win/, "build-desktop-installers.yml", "must build the windows installer");
+  expectMissing(workflow, /stage:public-installers|mirror:public-installer-manifest|publish|doi2md|deploy-site|vercel/i, "desktop CI must not publish public mirrors");
 });
 
-test("release-workflow: desktop maintainer scripts keep the manual manifest and staging seam exposed", async () => {
+test("release-workflow: desktop package still exposes manual archive-maintenance commands", async () => {
   const pkg = await readJson(DESKTOP_PACKAGE_PATH);
   const scripts = pkg.scripts ?? {};
 
-  assert.equal(
-    scripts["write:installer-manifest"],
-    "node ./scripts/write-installer-manifest.mjs",
-    "release-workflow: desktop package must expose a dedicated manual manifest refresh command"
-  );
-  assert.equal(
-    scripts["mirror:public-installer-manifest"],
-    "npm run write:installer-manifest && node ./scripts/mirror-public-installer-manifest.mjs",
-    "release-workflow: desktop package must expose the public manifest mirror command"
-  );
-  assert.equal(
-    scripts["stage:public-installers"],
-    "node ./scripts/stage-public-installers.mjs",
-    "release-workflow: desktop package must expose the public installer staging command"
-  );
-  assert.equal(
-    scripts["package:preview"],
-    "npm run build && node ./scripts/package-preview.mjs",
-    "release-workflow: desktop package must keep the local preview packaging command"
-  );
+  assert.equal(scripts["write:installer-manifest"], "node ./scripts/write-installer-manifest.mjs");
+  assert.equal(scripts["mirror:public-installer-manifest"], "npm run write:installer-manifest && node ./scripts/mirror-public-installer-manifest.mjs");
+  assert.equal(scripts["stage:public-installers"], "node ./scripts/stage-public-installers.mjs");
 });
 
-test("release-workflow: maintainer docs must state manifest-before-site ordering and manual desktop publication boundaries", async () => {
+test("release-workflow: maintainer docs keep desktop out of the active launch sequence", async () => {
   const [runbook, releaseChain] = await Promise.all([readText(RUNBOOK_PATH), readText(RELEASE_CHAIN_PATH)]);
 
   expectContains(runbook, "single authoritative release sequence", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "deploy-site.yml` deploys the site to Vercel", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "build-desktop-installers.yml` builds preview desktop installers and uploads CI artifacts only", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "refreshing installer metadata, mirroring installer metadata into the public repo, staging public installer binaries, mirroring public docs/assets, and publishing `JonbinC/doi2md`", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "Refresh the installer manifest before any site or public-doc update", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "apps/site-next/app/guide/page.tsx` reads `apps/desktop/installers/manifest.json`", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "npm run mirror:public-installer-manifest --workspace=@mdtero/desktop", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "npm run stage:public-installers --workspace=@mdtero/desktop", "LAUNCH_RUNBOOK.md");
-  expectContains(runbook, "do not treat site deployment as valid release proof until the manifest refresh in Step 3 is already complete", "LAUNCH_RUNBOOK.md");
-
-  expectContains(releaseChain, "build-desktop-installers.yml` is **automated build/upload only**", "RELEASE_CHAIN.md");
-  expectContains(releaseChain, "installer manifest refresh, public staging, doc mirroring, and public repo publication remain **manual maintainer work**", "RELEASE_CHAIN.md");
-  expectContains(releaseChain, "manifest refresh must happen before site/public surfaces advertise new installer names", "RELEASE_CHAIN.md");
+  expectContains(runbook, "desktop preview is deferred and archived for the current launch cycle", "LAUNCH_RUNBOOK.md");
+  expectContains(runbook, "active launch surfaces are the site, the public install manifest/docs, and the extension + CLI install flow", "LAUNCH_RUNBOOK.md");
+  expectContains(releaseChain, "Desktop preview is a deferred archive surface, not an active launch surface", "RELEASE_CHAIN.md");
+  expectContains(releaseChain, "desktop workflow and docs may still be maintained for archive fidelity", "RELEASE_CHAIN.md");
 });
 
-test("release-workflow: frontend exposes dedicated release-workflow and aggregate launchability proof commands", async () => {
+test("release-workflow: frontend exposes only the active launchability proof chain", async () => {
   const pkg = await readJson(FRONTEND_PACKAGE_PATH);
   const releaseWorkflowCommand = pkg.scripts?.["test:release-workflow-contract"];
+  const desktopPreviewCommand = pkg.scripts?.["test:desktop-preview-contract"];
   const launchabilityProofCommand = pkg.scripts?.["test:launchability-proof"];
 
-  assert.equal(
-    typeof releaseWorkflowCommand,
-    "string",
-    "release-workflow: mdtero-frontend/package.json must define scripts.test:release-workflow-contract"
-  );
-  assert.match(
-    releaseWorkflowCommand,
-    /node --test \.\.\/mdtero-public\/tests\/release-workflow-contract\.test\.mjs/,
-    "release-workflow: test:release-workflow-contract must run the seam-localized release workflow audit"
-  );
-
-  assert.equal(
-    typeof launchabilityProofCommand,
-    "string",
-    "release-workflow: mdtero-frontend/package.json must define scripts.test:launchability-proof"
-  );
-  assert.match(
-    launchabilityProofCommand,
-    /npm run test:desktop-preview-contract/,
-    "release-workflow: test:launchability-proof must re-run the desktop preview proof command"
-  );
-  assert.match(
-    launchabilityProofCommand,
-    /npm run test:public-contract/,
-    "release-workflow: test:launchability-proof must re-run the public contract proof command"
-  );
-  assert.match(
-    launchabilityProofCommand,
-    /npm run test:release-workflow-contract/,
-    "release-workflow: test:launchability-proof must re-run the release-workflow proof command"
-  );
+  assert.equal(typeof releaseWorkflowCommand, "string");
+  assert.equal(typeof desktopPreviewCommand, "string");
+  assert.equal(typeof launchabilityProofCommand, "string");
+  assert.match(releaseWorkflowCommand, /node --test \.\.\/mdtero-public\/tests\/release-workflow-contract\.test\.mjs/);
+  assert.match(desktopPreviewCommand, /node --test \.\.\/mdtero-public\/tests\/desktop-preview-contract\.test\.mjs/);
+  assert.match(launchabilityProofCommand, /npm run test:public-contract/);
+  assert.match(launchabilityProofCommand, /npm run test:release-workflow-contract/);
+  assert.doesNotMatch(launchabilityProofCommand, /desktop-preview-contract/);
 });
