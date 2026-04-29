@@ -17,6 +17,7 @@ describe("workspace", () => {
     expect(popupHtml).toContain('src="./popup.js"');
     expect(popupHtml).toContain('id="supported-sources-inline"');
     expect(popupHtml).toContain('id="helper-status"');
+    expect(popupHtml).toContain('id="open-settings-login"');
     expect(popupHtml).toContain("Elsevier");
     expect(popupHtml).toContain("arXiv");
     expect(popupHtml).toContain('id="support-stable-title"');

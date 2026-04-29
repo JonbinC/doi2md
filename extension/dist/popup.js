@@ -845,19 +845,20 @@ function getResultWarningText(result, language = "en") {
 var COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Helper-first local paper workflow",
+    subtitle: "Parse papers from this computer",
     guest: "Guest mode",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
-    signInHint: "Sign in to unlock Markdown downloads and translation.",
+    signInHint: "Sign in in Mdtero Account to unlock Markdown downloads, translation, and task history.",
+    signInButton: "Sign in",
     freeHint: "PDF/XML free",
-    supportSummary: "Open papers on your own machine through the helper-first path, then use browser capture only when needed before turning them into reusable Markdown outputs.",
-    supportStableTitle: "Ready now",
+    supportSummary: "Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using. Use browser capture only when needed.",
+    supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
-    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself.",
-    supportExperimentalTitle: "Browser capture only when needed",
-    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary by login and challenge flow.",
+    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself on this computer.",
+    supportExperimentalTitle: "Needs browser help sometimes",
+    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary more by login and challenge flow.",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
@@ -902,19 +903,20 @@ var COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "helper-first \u672C\u5730\u8BBA\u6587\u5DE5\u4F5C\u6D41",
+    subtitle: "\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u5904\u7406\u8BBA\u6587",
     guest: "\u6E38\u5BA2\u6A21\u5F0F",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
-    signInHint: "\u767B\u5F55\u540E\u53EF\u4F7F\u7528 Markdown \u4E0B\u8F7D\u548C\u7FFB\u8BD1\u3002",
+    signInHint: "\u5148\u53BB Mdtero Account \u767B\u5F55\uFF0C\u4E4B\u540E\u624D\u80FD\u4F7F\u7528 Markdown \u4E0B\u8F7D\u3001\u7FFB\u8BD1\u548C\u4EFB\u52A1\u5386\u53F2\u3002",
+    signInButton: "\u53BB\u767B\u5F55",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u4F18\u5148\u8D70 helper-first\uFF0C\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\u6253\u5F00\u8BBA\u6587\uFF1B\u53EA\u6709\u786E\u5B9E\u9700\u8981\u65F6\u518D\u8865\u5145\u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u6700\u540E\u6574\u7406\u6210\u53EF\u590D\u7528\u7684 Markdown \u7ED3\u679C\u3002",
-    supportStableTitle: "\u73B0\u5728\u5C31\u80FD\u7528",
+    supportSummary: "\u628A\u8BBA\u6587\u9875\u6216\u672C\u5730\u6587\u4EF6\u7559\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\uFF0C\u518D\u8BA9 Mdtero \u628A\u5B83\u6574\u7406\u6210\u53EF\u7EE7\u7EED\u4F7F\u7528\u7684 Markdown\u3002",
+    supportStableTitle: "\u8FD9\u53F0\u673A\u5668\u4E0A\u5DF2\u7ECF\u6BD4\u8F83\u987A\u624B",
     supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
     supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
-    supportShadowItems: "Elsevier\u3001Springer \u7B49\u51FA\u7248\u793E\u9875\u9762\uFF0C\u5728\u4F60\u81EA\u5DF1\u5DF2\u7ECF\u80FD\u6253\u5F00\u5168\u6587\u65F6\u901A\u5E38\u6548\u679C\u6700\u597D\u3002",
-    supportExperimentalTitle: "\u6709\u65F6\u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9",
-    supportExperimentalItems: "\u90E8\u5206 Wiley \u4E0E Taylor & Francis \u9875\u9762\u4ECD\u4F1A\u53D7\u767B\u5F55\u6001\u6216\u6311\u6218\u9875\u5F71\u54CD\u3002",
+    supportShadowItems: "Elsevier\u3001Springer \u7B49\u51FA\u7248\u793E\u9875\u9762\uFF0C\u5728\u4F60\u5DF2\u7ECF\u80FD\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u6253\u5F00\u5168\u6587\u65F6\u901A\u5E38\u6548\u679C\u6700\u597D\u3002",
+    supportExperimentalTitle: "\u6709\u65F6\u9700\u8981\u6D4F\u89C8\u5668\u5E2E\u4E00\u628A",
+    supportExperimentalItems: "\u90E8\u5206 Wiley \u4E0E Taylor & Francis \u9875\u9762\u4ECD\u66F4\u5BB9\u6613\u53D7\u767B\u5F55\u6001\u6216\u6311\u6218\u9875\u5F71\u54CD\u3002",
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
@@ -985,6 +987,7 @@ var localFileInputEl = document.querySelector("#local-file-input");
 var localFileNameEl = document.querySelector("#local-file-name");
 var parseButton = document.querySelector("#parse-button");
 var openSettingsButton = document.querySelector("#open-settings");
+var openSettingsLoginButton = document.querySelector("#open-settings-login");
 var translateLanguageLabelEl = document.querySelector("#translate-language-label");
 var translateButton = document.querySelector("#translate-button");
 var translateLanguageEl = document.querySelector("#translate-language");
@@ -1142,6 +1145,7 @@ function applyLanguage() {
     }
   }
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
+  if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   renderActionButtons();
 }
 function renderActionButtons() {
@@ -1633,6 +1637,9 @@ translateButton?.addEventListener("click", async () => {
   void pollTask(response.result.task_id, "translate");
 });
 openSettingsButton?.addEventListener("click", () => {
+  void chrome.runtime.openOptionsPage();
+});
+openSettingsLoginButton?.addEventListener("click", () => {
   void chrome.runtime.openOptionsPage();
 });
 inputEl?.addEventListener("input", () => {
