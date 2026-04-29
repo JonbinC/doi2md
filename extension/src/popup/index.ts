@@ -41,20 +41,21 @@ import {
 const COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Helper-first local paper workflow",
+    subtitle: "Parse papers from this computer",
     guest: "Guest mode",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
-    signInHint: "Sign in to unlock Markdown downloads and translation.",
+    signInHint: "Sign in in Mdtero Account to unlock Markdown downloads, translation, and task history.",
+    signInButton: "Sign in",
     freeHint: "PDF/XML free",
-    supportSummary: "Open papers on your own machine through the helper-first path, then use browser capture only when needed before turning them into reusable Markdown outputs.",
-    supportStableTitle: "Ready now",
+    supportSummary: "Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using. Use browser capture only when needed.",
+    supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
-    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself.",
-    supportExperimentalTitle: "Browser capture only when needed",
-    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary by login and challenge flow.",
+    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself on this computer.",
+    supportExperimentalTitle: "Needs browser help sometimes",
+    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary more by login and challenge flow.",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
@@ -99,20 +100,21 @@ const COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "helper-first 本地论文工作流",
+    subtitle: "在这台机器上处理论文",
     guest: "游客模式",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
-    signInHint: "登录后可使用 Markdown 下载和翻译。",
+    signInHint: "先去 Mdtero Account 登录，之后才能使用 Markdown 下载、翻译和任务历史。",
+    signInButton: "去登录",
     freeHint: "PDF/XML 免费",
-    supportSummary: "优先走 helper-first，在你自己的设备上打开论文；只有确实需要时再补充浏览器抓取，最后整理成可复用的 Markdown 结果。",
-    supportStableTitle: "现在就能用",
+    supportSummary: "把论文页或本地文件留在这台机器上，再让 Mdtero 把它整理成可继续使用的 Markdown。",
+    supportStableTitle: "这台机器上已经比较顺手",
     supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access 等开放来源最顺手。",
     supportShadowTitle: "使用你自己的访问权限",
-    supportShadowItems: "Elsevier、Springer 等出版社页面，在你自己已经能打开全文时通常效果最好。",
-    supportExperimentalTitle: "有时需要浏览器辅助",
-    supportExperimentalItems: "部分 Wiley 与 Taylor & Francis 页面仍会受登录态或挑战页影响。",
+    supportShadowItems: "Elsevier、Springer 等出版社页面，在你已经能在这台机器上打开全文时通常效果最好。",
+    supportExperimentalTitle: "有时需要浏览器帮一把",
+    supportExperimentalItems: "部分 Wiley 与 Taylor & Francis 页面仍更容易受登录态或挑战页影响。",
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "本地文件入口",
@@ -184,6 +186,7 @@ const localFileInputEl = document.querySelector<HTMLInputElement>("#local-file-i
 const localFileNameEl = document.querySelector<HTMLParagraphElement>("#local-file-name");
 const parseButton = document.querySelector<HTMLButtonElement>("#parse-button");
 const openSettingsButton = document.querySelector<HTMLButtonElement>("#open-settings");
+const openSettingsLoginButton = document.querySelector<HTMLButtonElement>("#open-settings-login");
 const translateLanguageLabelEl = document.querySelector<HTMLLabelElement>("#translate-language-label");
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-button");
 const translateLanguageEl = document.querySelector<HTMLSelectElement>("#translate-language");
@@ -338,6 +341,7 @@ function applyLanguage() {
     }
   }
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
+  if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   renderActionButtons();
 }
 
@@ -897,6 +901,10 @@ translateButton?.addEventListener("click", async () => {
 });
 
 openSettingsButton?.addEventListener("click", () => {
+  void chrome.runtime.openOptionsPage();
+});
+
+openSettingsLoginButton?.addEventListener("click", () => {
   void chrome.runtime.openOptionsPage();
 });
 

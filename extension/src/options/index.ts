@@ -71,6 +71,7 @@ const COPY = {
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
     historyError: "Failed to load history: ",
+    downloadFailed: "Download failed:",
     historyRefresh: "Refresh",
     historyRefreshing: "Refreshing..."
   },
@@ -123,6 +124,7 @@ const COPY = {
     historyNote: "从历史记录下载内容永远免费，不扣除额度。",
     historyEmpty: "暂无解析或翻译记录。",
     historyError: "加载历史文档失败：",
+    downloadFailed: "下载失败：",
     historyRefresh: "刷新",
     historyRefreshing: "刷新中..."
   }
@@ -447,28 +449,24 @@ async function refreshHistory() {
     historyList.textContent = "";
     for (const task of items) {
       const row = document.createElement("div");
-      row.style.cssText = "display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px;";
+      row.className = "history-item";
       
       const header = document.createElement("div");
-      header.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;";
+      header.className = "history-item-header";
       
       const inputDiv = document.createElement("div");
-      inputDiv.style.cssText = "flex: 1; word-break: break-all; font-family: monospace; font-size: 0.8rem;";
+      inputDiv.className = "history-item-input";
       const rawTask = task as any; 
       const inputVal = rawTask.paper_input || "Unknown Input";
       inputDiv.textContent = inputVal.length > 50 ? inputVal.substring(0, 50) + "..." : inputVal;
       
       const statusBadge = document.createElement("span");
-      statusBadge.style.cssText = `font-size: 0.7rem; padding: 0.1rem 0.3rem; border-radius: 4px; border: 1px solid;`;
+      statusBadge.className = "history-status-badge";
       statusBadge.textContent = task.status;
       if (task.status === "succeeded") {
-        statusBadge.style.borderColor = "#4caf50";
-        statusBadge.style.color = "#4caf50";
+        statusBadge.classList.add("history-status-badge-succeeded");
       } else if (task.status === "failed") {
-        statusBadge.style.borderColor = "#f44336";
-        statusBadge.style.color = "#f44336";
-      } else {
-        statusBadge.style.borderColor = "var(--border-color)";
+        statusBadge.classList.add("history-status-badge-failed");
       }
       
       header.appendChild(inputDiv);
@@ -477,22 +475,21 @@ async function refreshHistory() {
 
       if (task.status === "succeeded" && task.result?.artifacts) {
         const artifactsRow = document.createElement("div");
-        artifactsRow.style.cssText = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem;";
+        artifactsRow.className = "history-actions";
         
         for (const [key, desc] of Object.entries(task.result.artifacts)) {
           const dlBtn = document.createElement("button");
-          dlBtn.className = "ghost-chip";
-          dlBtn.style.cssText = "padding: 0.2rem 0.4rem; font-size: 0.75rem;";
-          dlBtn.textContent = `⬇ ${key.replace("paper_", "").toUpperCase()}`;
+          dlBtn.className = "ghost-chip history-download-button";
+          dlBtn.textContent = `${copyFor(uiLanguage).historyRefresh === "刷新" ? "下载" : "Download"} ${key.replace("paper_", "").toUpperCase()}`;
           dlBtn.addEventListener("click", async () => {
             try {
-              dlBtn.textContent = "Downloading...";
+              dlBtn.textContent = uiLanguage === "zh" ? "下载中..." : "Downloading...";
               const result = await client.downloadArtifact(task.task_id, key, desc.filename);
               triggerBlobDownload(result.blob, result.filename);
-              dlBtn.textContent = `⬇ ${key.replace("paper_", "").toUpperCase()}`;
+              dlBtn.textContent = `${copyFor(uiLanguage).historyRefresh === "刷新" ? "下载" : "Download"} ${key.replace("paper_", "").toUpperCase()}`;
             } catch (err) {
-              alert("Download failed: " + (err as Error).message);
-              dlBtn.textContent = `⬇ ${key.replace("paper_", "").toUpperCase()}`;
+              renderHistoryNotice(`${copyFor(uiLanguage).downloadFailed} ${(err as Error).message}`, "#b91c1c");
+              dlBtn.textContent = `${copyFor(uiLanguage).historyRefresh === "刷新" ? "下载" : "Download"} ${key.replace("paper_", "").toUpperCase()}`;
             }
           });
           artifactsRow.appendChild(dlBtn);
@@ -503,7 +500,7 @@ async function refreshHistory() {
       const dateStr = rawTask.created_at ? new Date(rawTask.created_at).toLocaleString() : "";
       if (dateStr) {
         const timeDiv = document.createElement("div");
-        timeDiv.style.cssText = "font-size: 0.7rem; color: var(--text-color); opacity: 0.6; text-align: right;";
+        timeDiv.className = "history-item-time";
         timeDiv.textContent = dateStr;
         row.appendChild(timeDiv);
       }

@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">M</div>
           <div class="brand-copy">
             <h1 id="app-title">Mdtero</h1>
-            <p id="app-subtitle">Helper-first local paper workflow</p>
+            <p id="app-subtitle">Parse papers from this computer</p>
           </div>
           <button id="language-toggle" type="button" class="ghost-chip">中文</button>
         </div>
@@ -25,6 +25,10 @@
           </div>
           <p id="free-hint" class="meta-pill">PDF/XML free</p>
         </div>
+        <div class="button-row hero-cta-row">
+          <button id="open-settings-login" type="button" class="primary-button">Sign in</button>
+          <button id="open-settings" type="button" class="secondary-button">Settings</button>
+        </div>
       </section>
 
       <section class="card" id="supported-sources-inline">
@@ -35,19 +39,19 @@
           <span class="support-chip"><span class="support-icon support-icon-preprint">Rx</span>bioRxiv</span>
           <span class="support-chip"><span class="support-icon support-icon-plos">PL</span>PLOS</span>
         </div>
-        <p id="support-summary" class="meta-label support-summary">Browser-managed local capture for helper-first publisher routes, preprints, and Markdown-ready outputs.</p>
+        <p id="support-summary" class="meta-label support-summary">Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using.</p>
         <div class="support-stack">
           <div class="support-group">
-            <p id="support-stable-title" class="meta-label support-group-title">Stable mainline</p>
+            <p id="support-stable-title" class="meta-label support-group-title">Ready on this machine</p>
             <p id="support-stable-items" class="meta-label">arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and Elsevier with your own local entitlement.</p>
           </div>
           <div class="support-group">
-            <p id="support-shadow-title" class="meta-label support-group-title">Bridge-assisted</p>
-            <p id="support-shadow-items" class="meta-label">Springer subscription pages already use helper + browser capture when a live HTML page is available.</p>
+            <p id="support-shadow-title" class="meta-label support-group-title">Use your own access</p>
+            <p id="support-shadow-items" class="meta-label">Springer subscription pages work best when the live HTML page is already open on this computer.</p>
           </div>
           <div class="support-group">
-            <p id="support-experimental-title" class="meta-label support-group-title">Experimental</p>
-            <p id="support-experimental-items" class="meta-label">Wiley and Taylor &amp; Francis can run through helper + browser capture, but challenge and login variance is still higher.</p>
+            <p id="support-experimental-title" class="meta-label support-group-title">Needs browser help sometimes</p>
+            <p id="support-experimental-items" class="meta-label">Wiley and Taylor &amp; Francis still vary more by login and challenge flow.</p>
           </div>
         </div>
       </section>
@@ -72,9 +76,8 @@
       </section>
 
       <section class="card action-card">
-        <div class="button-row">
+        <div class="button-row action-buttons-row">
           <button id="parse-button" type="button" class="primary-button">Parse Paper</button>
-          <button id="open-settings" type="button" class="secondary-button">Settings</button>
         </div>
         <label id="translate-language-label" for="translate-language">Translate to</label>
         <div class="inline-row">
