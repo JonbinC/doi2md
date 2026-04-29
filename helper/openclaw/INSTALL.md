@@ -15,6 +15,8 @@ The website-led install manifest at `https://mdtero.com/install/manifest.json` i
 
 OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first CLI release truth used by Claude Code, Codex, and Gemini CLI.
 
+Confirm that the ClawHub route is available in your OpenClaw environment before relying on it. If the workflow later needs helper-first local acquisition, local PDF / EPUB intake, or licensed full-text retrieval, install the local `mdtero` helper on the user machine separately.
+
 GitHub Releases and the public `doi2md` repository only mirror the website-led release chain.
 
 Helpful public checks:

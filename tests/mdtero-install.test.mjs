@@ -10,6 +10,8 @@ import { spawn } from "node:child_process";
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero-install.mjs");
 const CLI_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero-install");
+const MDTERO_CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero.mjs");
+const MDTERO_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero");
 
 function runNode(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -96,6 +98,7 @@ test("package metadata stays publishable for the unified install entry", async (
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   assert.notEqual(pkg.private, true);
   assert.equal(pkg.bin?.["mdtero-install"], "bin/mdtero-install");
+  assert.equal(pkg.bin?.mdtero, "bin/mdtero");
   assert.equal(pkg.publishConfig?.access, "public");
   assert.equal(pkg.repository?.type, "git");
   assert.match(pkg.repository?.url ?? "", /JonbinC\/doi2md/);
@@ -105,6 +108,8 @@ test("package metadata stays publishable for the unified install entry", async (
 test("bin entry stays executable for npm-run installs", async () => {
   const stats = await stat(CLI_WRAPPER_PATH);
   assert.ok((stats.mode & 0o111) !== 0, "mdtero-install CLI must keep its executable bit");
+  const mdteroStats = await stat(MDTERO_WRAPPER_PATH);
+  assert.ok((mdteroStats.mode & 0o111) !== 0, "mdtero CLI must keep its executable bit");
 });
 
 test("show falls back to the bundled manifest when the remote manifest is unavailable", async () => {
@@ -140,6 +145,34 @@ test("show falls back to the bundled manifest when the remote manifest is unavai
     server.close();
   }
 });
+
+test("mdtero CLI supports version, login, and doctor setup flow", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mdtero-cli-"));
+  const envFile = join(root, ".env");
+
+  const version = await runNode([MDTERO_CLI_PATH, "--version"], { cwd: PROJECT_ROOT });
+  assert.equal(version.code, 0, version.stderr);
+  assert.match(version.stdout, /^0\.1\.5\n$/);
+
+  const login = await runNode([MDTERO_CLI_PATH, "login", "--api-key", "test-key", "--config-file", envFile], { cwd: PROJECT_ROOT });
+  assert.equal(login.code, 0, login.stderr);
+  assert.match(login.stdout, /Saved MDTERO_API_KEY/);
+  assert.equal(await readFile(envFile, "utf8"), 'MDTERO_API_KEY="test-key"\n');
+
+  const doctor = await runNode([MDTERO_CLI_PATH, "doctor", "--config-file", envFile], { cwd: PROJECT_ROOT });
+  assert.equal(doctor.code, 0, doctor.stderr);
+  assert.match(doctor.stdout, /Mdtero CLI: 0\.1\.5/);
+  assert.match(doctor.stdout, /MDTERO_API_KEY: set/);
+});
+
+test("mdtero CLI explains API-key setup for parse commands", async () => {
+  const completed = await runNode([MDTERO_CLI_PATH, "parse", "10.48550/arXiv.1706.03762"], { cwd: PROJECT_ROOT });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.match(completed.stdout, /needs MDTERO_API_KEY/);
+  assert.match(completed.stdout, /mdtero login --api-key/);
+});
+
 
 test("install rejects openclaw because it stays on the dedicated ClawHub path", async () => {
   const completed = await runNode([CLI_PATH, "install", "openclaw"], {

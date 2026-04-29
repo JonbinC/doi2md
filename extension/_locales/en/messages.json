@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "Start in Mdtero Account for discovery and API-key management, then use helper-first paper capture on your own machine, with browser capture only for supported live paper pages before turning everything into reusable Markdown outputs.",
+    "message": "Start in Mdtero Account for discovery and API-key management, then use helper-first local capture for supported live paper pages or local PDF / EPUB files, with browser capture only when needed before downloading reusable Markdown outputs and translation-ready artifacts.",
     "description": "The description of the extension"
   }
 }
