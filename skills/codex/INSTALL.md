@@ -10,6 +10,8 @@ Use the normal path in this order:
 1. Start from [mdtero.com/account](https://mdtero.com/account)
 2. Create or select an API key
 3. Paste the prepared install message into Codex
+4. Run `mdtero login` or `mdtero login --api-key <key>`
+5. Run `mdtero doctor` before continuing with parse, translation, status, or download work
 
 Keep Mdtero inside Codex for normal parse, translation, and review work.
 

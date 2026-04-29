@@ -11,14 +11,18 @@ Keyword discovery and API-key management stay in Mdtero Account.
 - canonical manifest: `https://mdtero.com/install/manifest.json`
 - canonical install guide: `https://api.mdtero.com/skills/install.md`
 
-## Active install routes
+## Install routes
 
 - Claude Code: `npx mdtero-install install claude_code`
 - Codex: `npx mdtero-install install codex`
 - Gemini CLI: `npx mdtero-install install gemini_cli`
+- After install, run `mdtero login` to open `https://mdtero.com/auth` and hand the API key back to your terminal
+- Then run `mdtero doctor` to verify that the installed environment can actually see `MDTERO_API_KEY`
 - OpenClaw: `clawhub install mdtero`
 
 OpenClaw stays on its dedicated route. Claude Code, Codex, and Gemini CLI stay on the npm-first CLI route.
+
+Confirm that the ClawHub route is available in your OpenClaw environment before relying on it. If the workflow later needs helper-first local acquisition, local PDF / EPUB intake, or licensed full-text retrieval, install the local `mdtero` helper on the user machine separately.
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
 

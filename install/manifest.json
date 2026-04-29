@@ -6,15 +6,15 @@
   "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
   "cli": {
     "packageName": "mdtero-install",
-    "packageVersion": "0.1.3",
+    "packageVersion": "0.1.5",
     "npxCommand": "npx mdtero-install"
   },
   "targets": [
     {
       "target": "openclaw",
       "label": "OpenClaw",
-      "description": "Direct install inside OpenClaw with one prepared command.",
-      "descriptionZh": "适合直接在 OpenClaw 里用现成命令完成安装。",
+      "description": "OpenClaw stays on a separate ClawHub route; confirm that route in your OpenClaw environment before relying on it, and keep local helper setup separate when local acquisition is needed.",
+      "descriptionZh": "OpenClaw 保持独立的 ClawHub 路线；请先在你的 OpenClaw 环境里确认该路线可用，再按需单独补装本地 helper 处理本地采集。",
       "installCommand": "clawhub install mdtero",
       "skillDirectory": ".openclaw/skills/mdtero"
     },
@@ -54,7 +54,7 @@
     },
     "current": {
       "cli": {
-        "version": "0.1.3",
+        "version": "0.1.5",
         "packageName": "mdtero-install",
         "packageManager": "npm",
         "installCommand": "npx mdtero-install",
@@ -81,7 +81,7 @@
     },
     "latest": {
       "cli": {
-        "version": "0.1.3",
+        "version": "0.1.5",
         "packageName": "mdtero-install",
         "packageManager": "npm",
         "installCommand": "npx mdtero-install",

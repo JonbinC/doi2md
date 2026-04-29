@@ -9,7 +9,10 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 1. Start from `https://mdtero.com/account`
 2. Create or select an API key
-3. Keep Mdtero inside the agent for parse, translate, status, and download workflows
+3. Install Mdtero into the agent workspace
+4. Run `mdtero login` (or `mdtero login --api-key <key>` when the environment needs manual setup)
+5. Run `mdtero doctor` to verify that the key is available before parse, translate, status, or download work
+6. Restart the agent shell if it does not automatically read `.env`
 
 ## Setup Rules
 
@@ -29,3 +32,8 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - install overview: `https://mdtero.com/install/manifest.json`
 - helper installer: `https://api.mdtero.com/helpers/install_mdtero_helper.sh`
 - install guide: `https://api.mdtero.com/skills/install.md`
+
+## Verification Rule
+
+- do not treat installation as complete until `mdtero doctor` shows that the shell or configured env file can see `MDTERO_API_KEY`
+- after verification, continue with the normal Mdtero workflow from the installed environment
