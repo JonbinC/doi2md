@@ -528,23 +528,23 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     id: "wiley",
     label: { en: "Wiley", zh: "Wiley" },
     variantOf: "wiley",
-    accessVariant: "publisher_page",
-    presentationGroup: "browser_assisted",
+    accessVariant: "publisher_tdm",
+    presentationGroup: "api_key",
     rightsMode: "licensed",
-    acquisitionMode: "browser_page_capture",
-    requiresHelper: true,
-    requiresBrowser: true,
-    requiresApiKey: false,
+    acquisitionMode: "official_api",
+    requiresHelper: false,
+    requiresBrowser: false,
+    requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Add your Wiley TDM token. Institutional sign-in or DOI-level entitlement may still be required.",
+      zh: "\u586B\u5199 Wiley TDM token\u3002\u67D0\u4E9B DOI \u4ECD\u53EF\u80FD\u8981\u6C42\u673A\u6784\u767B\u5F55\u6216\u76F8\u5E94\u6388\u6743\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Wiley article pages.",
-      zh: "\u901A\u8FC7 Wiley \u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Wiley TDM PDF retrieval first, then local browser or on-device fallback if that route is unavailable.",
+      zh: "\u4F18\u5148\u8D70 Wiley TDM PDF \u63A5\u53E3\uFF1B\u5982\u679C\u8BE5\u94FE\u8DEF\u4E0D\u53EF\u7528\uFF0C\u518D\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6216\u8BBE\u5907\u4FA7\u83B7\u53D6\u3002"
     },
-    configureTarget: "browser_assisted_sources",
+    configureTarget: "connector_keys",
     status: "experimental",
     fallbacks: ["pdf"],
     validationRef: "acceptance:task-wiley-validation-1",
@@ -596,6 +596,7 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     elsevierApiKey: current.elsevierApiKey,
+    wileyTdmToken: current.wileyTdmToken,
     springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
@@ -771,32 +772,32 @@ function getBridgeStatusText(status, language = "en") {
   const runnerState = String(status?.runnerState || "").trim().toLowerCase();
   if (language === "zh") {
     if (state === "connected" && runnerState === "busy") {
-      return "\u672C\u5730 helper \u5DF2\u8FDE\u63A5\uFF0C\u6B63\u5728\u5904\u7406\u6D4F\u89C8\u5668\u4EFB\u52A1\u3002";
+      return "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u8FDE\u63A5\uFF0C\u6B63\u5728\u5904\u7406\u8BBE\u5907\u4FA7\u83B7\u53D6\u4EFB\u52A1\u3002";
     }
     if (state === "connected") {
-      return "\u672C\u5730 helper \u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5904\u7406\u6D4F\u89C8\u5668\u534F\u540C\u6293\u53D6\u3002";
+      return "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5728\u9700\u8981\u65F6\u5904\u7406\u8BBE\u5907\u4FA7\u56DE\u9000\u4E0E\u6D4F\u89C8\u5668\u6293\u53D6\u3002";
     }
     if (state === "disconnected") {
-      return "\u672C\u5730 helper \u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero \u6216\u91CD\u8F7D\u6269\u5C55\u3002";
+      return "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero \u6216\u91CD\u8F7D\u6269\u5C55\u3002";
     }
     if (state === "unavailable") {
-      return "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730 helper\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u52A8 mdtero\u3002";
+      return "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730\u8FD0\u884C\u65F6\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u52A8 mdtero\u3002";
     }
-    return "\u672C\u5730 helper \u72B6\u6001\u672A\u77E5\u3002";
+    return "\u672C\u5730\u8FD0\u884C\u65F6\u72B6\u6001\u672A\u77E5\u3002";
   }
   if (state === "connected" && runnerState === "busy") {
-    return "Local helper is connected and handling a browser task.";
+    return "Local runtime is connected and handling an on-device acquisition task.";
   }
   if (state === "connected") {
-    return "Local helper ready for browser-assisted capture.";
+    return "Local runtime ready for on-device fallback and browser capture when needed.";
   }
   if (state === "disconnected") {
-    return "Local helper disconnected. Restart mdtero or reload the extension.";
+    return "Local runtime disconnected. Restart mdtero or reload the extension.";
   }
   if (state === "unavailable") {
-    return "Local helper not detected. Install or start mdtero.";
+    return "Local runtime not detected. Install or start mdtero.";
   }
-  return "Local helper status unknown.";
+  return "Local runtime status unknown.";
 }
 function getPreflightHintText(params, language = "en") {
   const input = String(params.input || "").trim();
@@ -817,12 +818,12 @@ function getPreflightHintText(params, language = "en") {
     return "";
   }
   if (bridgeMissing) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\uFF0C\u4F46\u8FD8\u6CA1\u68C0\u6D4B\u5230 helper\u3002\u8BF7\u5148\u542F\u52A8 `mdtero`\u3002" : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero` first.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u4F46\u8FD8\u6CA1\u68C0\u6D4B\u5230\u8BBE\u5907\u4FA7\u8FD0\u884C\u65F6\u3002\u8BF7\u5148\u542F\u52A8 `mdtero`\u3002" : "This page can fall back to local browser capture, but the on-device runtime is not ready. Start `mdtero` first.";
   }
   if (bridgeReady) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5DF2\u6EE1\u8DB3\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\u6761\u4EF6\uFF0C\u53EF\u4F18\u5148\u8D70 helper-first \u91C7\u96C6\u3002" : "This page is ready for browser-managed local capture through the helper-first path.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5728\u76F4\u8FDE publisher API / TDM \u4E0D\u53EF\u7528\u65F6\uFF0C\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002" : "This page is ready for local browser capture if direct publisher APIs or TDM are not available.";
   }
-  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u6001\u672C\u5730\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4 helper \u5DF2\u8FDE\u63A5\u3002" : "This page supports browser-managed local capture. Confirm the local helper is connected before parsing.";
+  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u8BBE\u5907\u4FA7\u8FD0\u884C\u65F6\u5DF2\u8FDE\u63A5\u3002" : "This page supports local browser capture. Confirm the on-device runtime is connected before parsing.";
 }
 function getSavedResultSummary(state, language = "en") {
   const filename = state?.translatedFilename ?? state?.parseFilename;
@@ -852,7 +853,7 @@ var COPY = {
     signInHint: "Sign in in Mdtero Account to unlock Markdown downloads, translation, and task history.",
     signInButton: "Sign in",
     freeHint: "PDF/XML free",
-    supportSummary: "Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using. Use browser capture only when needed.",
+    supportSummary: "Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using. Prefer direct publisher APIs and TDM routes first, then fall back locally when needed.",
     supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
@@ -866,7 +867,7 @@ var COPY = {
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
-    localFileParsing: (filename) => `Uploading ${filename} for helper-first parsing...`,
+    localFileParsing: (filename) => `Uploading ${filename} for on-device parsing...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
     parsingButton: "Parsing...",
@@ -910,7 +911,7 @@ var COPY = {
     signInHint: "\u5148\u53BB Mdtero Account \u767B\u5F55\uFF0C\u4E4B\u540E\u624D\u80FD\u4F7F\u7528 Markdown \u4E0B\u8F7D\u3001\u7FFB\u8BD1\u548C\u4EFB\u52A1\u5386\u53F2\u3002",
     signInButton: "\u53BB\u767B\u5F55",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u628A\u8BBA\u6587\u9875\u6216\u672C\u5730\u6587\u4EF6\u7559\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\uFF0C\u518D\u8BA9 Mdtero \u628A\u5B83\u6574\u7406\u6210\u53EF\u7EE7\u7EED\u4F7F\u7528\u7684 Markdown\u3002",
+    supportSummary: "\u628A\u8BBA\u6587\u9875\u6216\u672C\u5730\u6587\u4EF6\u7559\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\uFF0C\u518D\u8BA9 Mdtero \u628A\u5B83\u6574\u7406\u6210\u53EF\u7EE7\u7EED\u4F7F\u7528\u7684 Markdown\u3002\u4F18\u5148\u8D70 publisher API / TDM\uFF0C\u5FC5\u8981\u65F6\u518D\u672C\u5730\u56DE\u9000\u3002",
     supportStableTitle: "\u8FD9\u53F0\u673A\u5668\u4E0A\u5DF2\u7ECF\u6BD4\u8F83\u987A\u624B",
     supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
     supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
@@ -924,7 +925,7 @@ var COPY = {
     pickPdfButton: "\u9009\u62E9 PDF",
     pickEpubButton: "\u9009\u62E9 EPUB",
     fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
-    localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u5E76\u8D70 helper-first \u89E3\u6790...`,
+    localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u5E76\u8D70\u672C\u673A\u89E3\u6790\u94FE\u8DEF...`,
     localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
     parsingButton: "\u89E3\u6790\u4E2D...",
