@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">M</div>
           <div class="brand-copy">
             <h1 id="settings-title">Mdtero Account</h1>
-            <p id="settings-subtitle">Connect email, check balance and quota, and tune helper-first browser preferences.</p>
+            <p id="settings-subtitle">Connect email, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.</p>
           </div>
           <button id="language-toggle" type="button" class="ghost-chip">中文</button>
         </div>
@@ -32,10 +32,10 @@
           <span class="support-chip"><span class="support-icon support-icon-preprint">Rx</span>bioRxiv</span>
           <span class="support-chip"><span class="support-icon support-icon-plos">PL</span>PLOS</span>
         </div>
-        <p id="support-summary" class="meta-label support-summary">Configure the helper-first browser surface for publisher-page capture, preprints, and account-linked downloads.</p>
+        <p id="support-summary" class="meta-label support-summary">Configure publisher APIs, TDM access, and on-device fallback routes for supported paper sources and account-linked downloads.</p>
         <div id="publisher-capability-groups" class="capability-groups" aria-live="polite"></div>
         <p id="browser-assisted-note" class="meta-label support-summary">
-          Browser-assisted sources use the same shared matrix, but you still need the article page open locally when Mdtero asks for browser capture.
+          When a route cannot go through direct publisher APIs or TDM, keep the article page open locally so Mdtero can fall back to browser capture on this machine.
         </p>
       </section>
 
@@ -50,6 +50,13 @@
             <input id="elsevier-api-key" type="password" placeholder="Key (optional)" />
             <p class="meta-label">
               <a href="https://dev.elsevier.com/" target="_blank" rel="noopener noreferrer">Get your API key</a> to unlock the official Elsevier route.
+            </p>
+          </div>
+          <div class="capability-config-card">
+            <label id="wiley-tdm-token-label" for="wiley-tdm-token">Wiley TDM Token</label>
+            <input id="wiley-tdm-token" type="password" placeholder="Token (optional)" />
+            <p class="meta-label">
+              Add your Wiley TDM token when the route needs the official Wiley TDM PDF API.
             </p>
           </div>
           <div class="capability-config-card">
@@ -113,7 +120,7 @@
             <p id="permissions-downloads" class="meta-label">`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.</p>
           </div>
           <div class="support-group">
-            <p id="permissions-native" class="meta-label">`nativeMessaging` connects the extension to your local Mdtero helper for browser-assisted acquisition.</p>
+            <p id="permissions-native" class="meta-label">`nativeMessaging` connects the extension to your local Mdtero runtime so supported routes can fall back to on-device acquisition when direct APIs or TDM are unavailable.</p>
           </div>
           <div class="support-group">
             <p id="permissions-hosts" class="meta-label">Publisher host permissions stay limited to supported scholarly sites and the Mdtero / publisher APIs already used by the product.</p>
