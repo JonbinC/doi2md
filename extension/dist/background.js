@@ -2052,23 +2052,23 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     id: "wiley",
     label: { en: "Wiley", zh: "Wiley" },
     variantOf: "wiley",
-    accessVariant: "publisher_page",
-    presentationGroup: "browser_assisted",
+    accessVariant: "publisher_tdm",
+    presentationGroup: "api_key",
     rightsMode: "licensed",
-    acquisitionMode: "browser_page_capture",
-    requiresHelper: true,
-    requiresBrowser: true,
-    requiresApiKey: false,
+    acquisitionMode: "official_api",
+    requiresHelper: false,
+    requiresBrowser: false,
+    requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Add your Wiley TDM token. Institutional sign-in or DOI-level entitlement may still be required.",
+      zh: "\u586B\u5199 Wiley TDM token\u3002\u67D0\u4E9B DOI \u4ECD\u53EF\u80FD\u8981\u6C42\u673A\u6784\u767B\u5F55\u6216\u76F8\u5E94\u6388\u6743\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Wiley article pages.",
-      zh: "\u901A\u8FC7 Wiley \u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Wiley TDM PDF retrieval first, then local browser or on-device fallback if that route is unavailable.",
+      zh: "\u4F18\u5148\u8D70 Wiley TDM PDF \u63A5\u53E3\uFF1B\u5982\u679C\u8BE5\u94FE\u8DEF\u4E0D\u53EF\u7528\uFF0C\u518D\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6216\u8BBE\u5907\u4FA7\u83B7\u53D6\u3002"
     },
-    configureTarget: "browser_assisted_sources",
+    configureTarget: "connector_keys",
     status: "experimental",
     fallbacks: ["pdf"],
     validationRef: "acceptance:task-wiley-validation-1",
@@ -2118,6 +2118,7 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     elsevierApiKey: current.elsevierApiKey,
+    wileyTdmToken: current.wileyTdmToken,
     springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
