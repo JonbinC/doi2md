@@ -1,161 +1,135 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
 
-import {
-  getPendingPopupTask,
-  getReconnectablePendingTranslationTask,
-  mergeSettings,
-  resolveUiLanguage,
-  summarizePopupState,
-  upsertRecentTasks
-} from "../src/lib/storage";
+let mockSettings = {
+  apiBaseUrl: "https://api.mdtero.com",
+  token: undefined,
+  email: undefined,
+  uiLanguage: "en",
+  elsevierApiKey: undefined,
+  springerOpenAccessApiKey: undefined,
+};
 
-describe("mergeSettings", () => {
-  it("preserves token and email when only apiBaseUrl changes", () => {
-    expect(
-      mergeSettings(
-        {
-          apiBaseUrl: "http://old",
-          token: "token-1",
-          email: "user@example.com",
-          uiLanguage: "en"
-        },
-        { apiBaseUrl: "http://new" }
-      )
-    ).toEqual({
-      apiBaseUrl: "http://new",
-      token: "token-1",
-      email: "user@example.com",
-      uiLanguage: "en"
-    });
-  });
+const mockReadSettings = vi.fn(async () => mockSettings);
+const mockWriteSettings = vi.fn(async () => undefined);
+const mockMergeSettings = vi.fn((current, next) => ({ ...current, ...next }));
+const mockResolveUiLanguage = vi.fn((preferred) => preferred ?? "en");
+const mockGetUsage = vi.fn(async () => ({ wallet_balance_display: "$12.00", parse_quota_remaining: 4, translation_quota_remaining: 2 }));
+const mockGetParserV2ShadowDiagnostics = vi.fn(async () => ({ routes: [] }));
+const mockGetMyTasks = vi.fn(async () => ({ items: [] }));
+const mockStartEmailAuth = vi.fn(async () => ({}));
+const mockVerifyEmailAuth = vi.fn(async () => ({ token: "verified-token" }));
+const mockLoginWithPassword = vi.fn(async () => ({ token: "login-token" }));
+const mockDownloadArtifact = vi.fn(async () => ({ blob: new Blob(["demo"]), filename: "paper.md" }));
 
-  it("summarizes stored popup state for the same detected input", () => {
-    expect(
-      summarizePopupState(
-        {
-          input: "10.1016/j.conbuildmat.2026.145877",
-          parseTaskId: "task-1",
-          parseFilename: "tang2026simulation.zip",
-          translatedTaskId: "task-2",
-          translatedFilename: "tang2026simulation.zh.md"
-        },
-        "10.1016/j.conbuildmat.2026.145877"
-      )
-    ).toEqual({
-      parseTaskId: "task-1",
-      parseFilename: "tang2026simulation.zip",
-      translatedTaskId: "task-2",
-      translatedFilename: "tang2026simulation.zh.md"
-    });
-  });
+vi.mock("../src/lib/storage", () => ({
+  readSettings: mockReadSettings,
+  writeSettings: mockWriteSettings,
+  mergeSettings: mockMergeSettings,
+  resolveUiLanguage: mockResolveUiLanguage,
+}));
 
-  it("resolves browser language into a compact ui language", () => {
-    expect(resolveUiLanguage(undefined, "zh-CN")).toBe("zh");
-    expect(resolveUiLanguage(undefined, "en-GB")).toBe("en");
-    expect(resolveUiLanguage("zh", "en-US")).toBe("zh");
-  });
+vi.mock("../src/lib/api", () => ({
+  createApiClient: () => ({
+    getUsage: mockGetUsage,
+    getParserV2ShadowDiagnostics: mockGetParserV2ShadowDiagnostics,
+    getMyTasks: mockGetMyTasks,
+    startEmailAuth: mockStartEmailAuth,
+    verifyEmailAuth: mockVerifyEmailAuth,
+    loginWithPassword: mockLoginWithPassword,
+    downloadArtifact: mockDownloadArtifact,
+  }),
+}));
 
-  it("keeps recent tasks user-facing, deduplicated, and capped", () => {
-    const recent = upsertRecentTasks(
-      [
-        {
-          input: "10.1016/j.old.2025.1",
-          label: "old2025paper",
-          parseTaskId: "task-old",
-          parseFilename: "old2025paper.zip"
-        },
-        {
-          input: "10.1016/j.same.2026.1",
-          label: "same2026paper",
-          parseTaskId: "task-same-1",
-          parseFilename: "same2026paper.zip"
-        }
-      ],
-      {
-        input: "10.1016/j.same.2026.1",
-        label: "same2026paper",
-        parseTaskId: "task-same-2",
-        parseFilename: "same2026paper.zip",
-        translatedTaskId: "task-same-translate",
-        translatedFilename: "same2026paper.zh.md"
+vi.mock("../src/lib/download", () => ({
+  triggerBlobDownload: vi.fn(),
+}));
+
+function createChromeMock(sendMessageImpl: () => Promise<unknown>) {
+  return {
+    runtime: {
+      sendMessage: vi.fn(sendMessageImpl),
+      getManifest: () => ({ version: "0.1.5" }),
+    },
+    storage: {
+      local: {
+        get: vi.fn(async () => ({})),
+        set: vi.fn(async () => undefined),
       },
-      2
+    },
+  };
+}
+
+async function flushUi() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function loadOptionsModule() {
+  vi.resetModules();
+  document.documentElement.innerHTML = readFileSync(resolve("src/options/index.html"), "utf8");
+  await import("../src/options/index.ts");
+  await flushUi();
+}
+
+describe("extension options page", () => {
+  beforeEach(() => {
+    mockSettings = {
+      apiBaseUrl: "https://api.mdtero.com",
+      token: undefined,
+      email: undefined,
+      uiLanguage: "en",
+      elsevierApiKey: undefined,
+      springerOpenAccessApiKey: undefined,
+    };
+    mockReadSettings.mockClear();
+    mockWriteSettings.mockClear();
+    mockMergeSettings.mockClear();
+    mockResolveUiLanguage.mockClear();
+    mockGetUsage.mockClear();
+    mockGetParserV2ShadowDiagnostics.mockClear();
+    mockGetMyTasks.mockClear();
+    mockStartEmailAuth.mockClear();
+    mockVerifyEmailAuth.mockClear();
+    mockLoginWithPassword.mockClear();
+    mockDownloadArtifact.mockClear();
+  });
+
+  it("shows signed-out usage guidance and an actionable helper message when the helper is unavailable", async () => {
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "unknown" } })) as any;
+
+    await loadOptionsModule();
+
+    expect(document.querySelector("#account-status")?.textContent).toBe("Not signed in.");
+    expect(document.querySelector("#usage-status")?.textContent).toBe("Balance and quota appear after sign-in.");
+    expect(document.querySelector("#helper-status")?.textContent).toBe(
+      "Local helper not detected yet. Install or restart mdtero to enable browser-assisted capture."
     );
-
-    expect(recent).toEqual([
-      {
-        input: "10.1016/j.same.2026.1",
-        label: "same2026paper",
-        parseTaskId: "task-same-2",
-        parseFilename: "same2026paper.zip",
-        translatedTaskId: "task-same-translate",
-        translatedFilename: "same2026paper.zh.md"
-      },
-      {
-        input: "10.1016/j.old.2025.1",
-        label: "old2025paper",
-        parseTaskId: "task-old",
-        parseFilename: "old2025paper.zip"
-      }
-    ]);
+    expect(document.querySelector("#shadow-status")?.textContent).toBe(
+      "Sign in to view experimental connector shadow status."
+    );
+    expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(true);
   });
 
-  it("restores a pending translate task for the same detected input", () => {
-    expect(
-      getPendingPopupTask(
-        {
-          input: "10.1016/j.conbuildmat.2026.145877",
-          parseTaskId: "task-1",
-          parseFilename: "tang2026simulation.zip",
-          parseMarkdownPath: "/tmp/tang2026simulation/paper.md",
-          pendingTaskId: "task-translate-1",
-          pendingTaskKind: "translate"
-        },
-        "10.1016/j.conbuildmat.2026.145877"
-      )
-    ).toEqual({
-      taskId: "task-translate-1",
-      kind: "translate"
-    });
-  });
+  it("shows signed-in usage and empty history messaging when the account has no tasks", async () => {
+    mockSettings = {
+      apiBaseUrl: "https://api.mdtero.com",
+      token: "token-1",
+      email: "reader@example.com",
+      uiLanguage: "en",
+      elsevierApiKey: undefined,
+      springerOpenAccessApiKey: undefined,
+    };
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 
-  it("reuses the same pending translation for the same parsed markdown path", () => {
-    expect(
-      getReconnectablePendingTranslationTask(
-        {
-          input: "10.1016/j.conbuildmat.2026.145877",
-          parseMarkdownPath: "/tmp/tang2026simulation/paper.md",
-          pendingTaskId: "task-translate-1",
-          pendingTaskKind: "translate"
-        },
-        "10.1016/j.conbuildmat.2026.145877",
-        "/tmp/tang2026simulation/paper.md"
-      )
-    ).toEqual({
-      taskId: "task-translate-1",
-      kind: "translate"
-    });
+    await loadOptionsModule();
 
-    expect(
-      getReconnectablePendingTranslationTask(
-        {
-          input: "10.1016/j.conbuildmat.2026.145877",
-          parseMarkdownPath: "/tmp/tang2026simulation/paper.md",
-          pendingTaskId: "task-translate-1",
-          pendingTaskKind: "translate"
-        },
-        "10.1016/j.conbuildmat.2026.145877",
-        "/tmp/other/paper.md"
-      )
-    ).toBeUndefined();
-  });
-
-  it("keeps the static options shell aligned with markdown-first download wording", () => {
-    const html = readFileSync(new URL("../src/options/index.html", import.meta.url), "utf-8");
-
-    expect(html).toContain("fallback ZIP");
-    expect(html).not.toContain("Markdown bundles");
+    expect(document.querySelector("#account-status")?.textContent).toBe("Signed in as reader@example.com");
+    expect(document.querySelector("#usage-status")?.textContent).toContain("Balance $12.00 · Parse 4 · Translation 2");
+    expect(document.querySelector("#helper-status")?.textContent).toBe("Local helper ready for browser-assisted capture.");
+    expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(false);
+    expect(document.querySelector("#history-list")?.textContent).toContain("No parsing or translation history found yet.");
   });
 });
