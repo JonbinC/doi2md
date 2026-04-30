@@ -23,10 +23,10 @@ import {
 const COPY = {
   en: {
     title: "Mdtero Account",
-    subtitle: "Sign in faster, check balance and quota, and tune preferences.",
-    supportSummary: "Keep the default acquisition path on your own machine and see which sources are ready with your current setup.",
+    subtitle: "Sign in faster, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
+    supportSummary: "Keep licensed retrieval on your own machine and see which publisher APIs, TDM routes, and local fallbacks are ready with your current setup.",
     browserAssistedNote:
-      "If a source needs browser help, just keep the article page open locally and Mdtero will guide the rest while the helper remains the default acquisition path.",
+      "When a source cannot use a direct publisher API or TDM route, Mdtero can still fall back to local browser capture or on-device cffi/curl retrieval where that route is supported.",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote:
       "Only fill the keys you actually need. Everything stays on your own machine.",
@@ -36,13 +36,13 @@ const COPY = {
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
     permissionsDownloads: "`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.",
-    permissionsNative: "`nativeMessaging` connects the extension to your local Mdtero helper for browser-assisted acquisition.",
+    permissionsNative: "`nativeMessaging` connects the extension to your local Mdtero runtime so supported routes can fall back to on-device acquisition when direct publisher APIs or TDM routes are unavailable.",
     permissionsHosts: "Publisher host permissions stay limited to supported scholarly sites and the Mdtero / publisher APIs already used by the product.",
-    helperReady: "Local helper ready for browser-assisted capture.",
-    helperBusy: "Local helper is connected and currently handling a browser task.",
-    helperUnavailable: "Local helper not detected yet. Install or restart mdtero to enable browser-assisted capture.",
-    helperDisconnected: "Local helper disconnected. Restart mdtero or reload the extension to reconnect.",
-    helperUnknown: "Local helper status unknown.",
+    helperReady: "Local runtime ready for on-device fallback and browser capture when needed.",
+    helperBusy: "Local runtime is connected and currently handling an on-device acquisition task.",
+    helperUnavailable: "Local runtime not detected yet. Install or restart mdtero to enable on-device fallback routes.",
+    helperDisconnected: "Local runtime disconnected. Restart mdtero or reload the extension to reconnect.",
+    helperUnknown: "Local runtime status unknown.",
     shadowSignedOut: "Sign in to view experimental connector shadow status.",
     shadowUnavailable: "Experimental connector shadow status unavailable.",
     notSignedIn: "Not signed in.",
@@ -62,6 +62,7 @@ const COPY = {
     uiLanguage: "Interface language",
     advanced: "Advanced",
     elsevierApiKey: "Elsevier API Key",
+    wileyTdmToken: "Wiley TDM Token",
     springerOpenAccessApiKey: "Springer OA API Key",
     apiUrl: "API URL",
     save: "Save",
@@ -77,10 +78,10 @@ const COPY = {
   },
   zh: {
     title: "Mdtero 账户",
-    subtitle: "优先用密码登录，再查看余额、额度与偏好设置。",
-    supportSummary: "把默认获取路径留在你自己的设备上，并查看当前这套配置已经适合哪些来源。",
+    subtitle: "登录后查看余额、额度，并配置 publisher API、TDM 与设备侧回退偏好。",
+    supportSummary: "把受限全文获取留在你自己的设备上，并查看当前这套 publisher API、TDM 与本地兜底已经适合哪些来源。",
     browserAssistedNote:
-      "如果某个来源需要浏览器辅助，只要在本地保持文章页面打开，剩下的交给 Mdtero 引导即可，而 helper 仍然是默认获取路径。",
+      "当某个来源不能直接走 publisher API 或 TDM 时，Mdtero 仍可在支持的链路上回退到本地浏览器抓取或设备侧 cffi/curl 获取。",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote: "只填写你实际需要的 key；这些信息都保留在你自己的机器上。",
     capabilityNeed: "你需要准备什么",
@@ -89,13 +90,13 @@ const COPY = {
     permissionsTitle: "为什么 Mdtero 需要这些权限",
     permissionsTabs: "`tabs` 用来复用或打开受支持的论文页面，以便在本机完成抓取。",
     permissionsDownloads: "`downloads` 用来把 Markdown、译文、兜底压缩包和源文件保存回你的电脑。",
-    permissionsNative: "`nativeMessaging` 用来把扩展连接到你本地的 Mdtero helper，完成浏览器协同抓取。",
+    permissionsNative: "`nativeMessaging` 用来把扩展连接到你本地的 Mdtero 运行时，在直连 publisher API 或 TDM 不可用时回退到设备侧获取链路。",
     permissionsHosts: "站点权限只覆盖已支持的学术站点，以及产品已经使用的 Mdtero / 出版商 API。",
-    helperReady: "本地 helper 已就绪，可处理浏览器协同抓取。",
-    helperBusy: "本地 helper 已连接，正在处理浏览器任务。",
-    helperUnavailable: "暂未检测到本地 helper。请安装或重启 mdtero 以启用浏览器协同抓取。",
-    helperDisconnected: "本地 helper 已断开。请重启 mdtero 或重载扩展后再试。",
-    helperUnknown: "本地 helper 状态未知。",
+    helperReady: "本地运行时已就绪，可在需要时处理设备侧回退与浏览器抓取。",
+    helperBusy: "本地运行时已连接，正在处理设备侧获取任务。",
+    helperUnavailable: "暂未检测到本地运行时。请安装或重启 mdtero 以启用设备侧回退链路。",
+    helperDisconnected: "本地运行时已断开。请重启 mdtero 或重载扩展后再试。",
+    helperUnknown: "本地运行时状态未知。",
     shadowSignedOut: "登录后可查看实验 connector shadow 状态。",
     shadowUnavailable: "暂时无法获取实验 connector shadow 状态。",
     notSignedIn: "尚未登录。",
@@ -115,6 +116,7 @@ const COPY = {
     uiLanguage: "界面语言",
     advanced: "高级设置",
     elsevierApiKey: "Elsevier API Key",
+    wileyTdmToken: "Wiley TDM Token",
     springerOpenAccessApiKey: "Springer OA API Key",
     apiUrl: "API 地址",
     save: "保存",
@@ -144,6 +146,7 @@ const permissionsNativeEl = document.querySelector<HTMLParagraphElement>("#permi
 const permissionsHostsEl = document.querySelector<HTMLParagraphElement>("#permissions-hosts");
 const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-toggle");
 const elsevierApiKeyInput = document.querySelector<HTMLInputElement>("#elsevier-api-key");
+const wileyTdmTokenInput = document.querySelector<HTMLInputElement>("#wiley-tdm-token");
 const springerOpenAccessApiKeyInput = document.querySelector<HTMLInputElement>("#springer-oa-api-key");
 const apiBaseUrlInput = document.querySelector<HTMLInputElement>("#api-base-url");
 const emailInput = document.querySelector<HTMLInputElement>("#email-input");
@@ -167,6 +170,7 @@ const codeLabel = document.querySelector<HTMLLabelElement>("#code-label");
 const uiLanguageLabel = document.querySelector<HTMLLabelElement>("#ui-language-label");
 const advancedSummary = document.querySelector<HTMLElement>("#advanced-summary");
 const elsevierApiKeyLabel = document.querySelector<HTMLLabelElement>("#elsevier-api-key-label");
+const wileyTdmTokenLabel = document.querySelector<HTMLLabelElement>("#wiley-tdm-token-label");
 const springerOpenAccessApiKeyLabel = document.querySelector<HTMLLabelElement>("#springer-oa-api-key-label");
 const apiBaseUrlLabel = document.querySelector<HTMLLabelElement>("#api-base-url-label");
 const historySection = document.querySelector<HTMLElement>("#history-section");
@@ -242,6 +246,7 @@ function renderPublisherCapabilityMatrix() {
   const settingsSnapshot = {
     helperState: currentHelperState,
     hasElsevierApiKey: Boolean(elsevierApiKeyInput?.value.trim()),
+    hasWileyTdmToken: Boolean(wileyTdmTokenInput?.value.trim()),
     hasSpringerOpenAccessApiKey: Boolean(springerOpenAccessApiKeyInput?.value.trim())
   };
 
@@ -368,6 +373,7 @@ function applyLanguage() {
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
   if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
+  if (wileyTdmTokenLabel) wileyTdmTokenLabel.textContent = copy.wileyTdmToken;
   if (springerOpenAccessApiKeyLabel) springerOpenAccessApiKeyLabel.textContent = copy.springerOpenAccessApiKey;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
   if (saveButton) saveButton.textContent = copy.save;
@@ -521,6 +527,7 @@ async function refreshView() {
   await refreshShadowDiagnostics();
 
   if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey ?? "";
+  if (wileyTdmTokenInput) wileyTdmTokenInput.value = settings.wileyTdmToken ?? "";
   if (springerOpenAccessApiKeyInput) springerOpenAccessApiKeyInput.value = settings.springerOpenAccessApiKey ?? "";
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
   if (emailInput) emailInput.value = settings.email ?? "";
@@ -574,11 +581,12 @@ if (refreshHistoryBtn) {
 saveButton?.addEventListener("click", async () => {
   const current = await readSettings();
   await writeSettings(
-    mergeSettings(current, {
-      elsevierApiKey: elsevierApiKeyInput?.value.trim() || undefined,
-      springerOpenAccessApiKey: springerOpenAccessApiKeyInput?.value.trim() || undefined,
-      apiBaseUrl: apiBaseUrlInput?.value.trim() || current.apiBaseUrl,
-      uiLanguage: resolveUiLanguage(uiLanguageSelect?.value as UiLanguage | undefined, globalThis.navigator?.language)
+      mergeSettings(current, {
+        elsevierApiKey: elsevierApiKeyInput?.value.trim() || undefined,
+        wileyTdmToken: wileyTdmTokenInput?.value.trim() || undefined,
+        springerOpenAccessApiKey: springerOpenAccessApiKeyInput?.value.trim() || undefined,
+        apiBaseUrl: apiBaseUrlInput?.value.trim() || current.apiBaseUrl,
+        uiLanguage: resolveUiLanguage(uiLanguageSelect?.value as UiLanguage | undefined, globalThis.navigator?.language)
     })
   );
   await refreshView();
