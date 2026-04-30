@@ -411,7 +411,7 @@ async function refreshBridgeStatus() {
     helperStatus.textContent = copy.helperUnavailable;
   } catch {
     currentHelperState = "unavailable";
-    helperStatus.textContent = copy.helperUnknown;
+    helperStatus.textContent = copy.helperUnavailable;
   }
   renderPublisherCapabilityMatrix();
 }
