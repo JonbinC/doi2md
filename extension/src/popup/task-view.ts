@@ -151,33 +151,33 @@ export function getBridgeStatusText(
 
   if (language === "zh") {
     if (state === "connected" && runnerState === "busy") {
-      return "本地 helper 已连接，正在处理浏览器任务。";
+      return "本地运行时已连接，正在处理设备侧获取任务。";
     }
     if (state === "connected") {
-      return "本地 helper 已就绪，可处理浏览器协同抓取。";
+      return "本地运行时已就绪，可在需要时处理设备侧回退与浏览器抓取。";
     }
     if (state === "disconnected") {
-      return "本地 helper 已断开。请重启 mdtero 或重载扩展。";
+      return "本地运行时已断开。请重启 mdtero 或重载扩展。";
     }
     if (state === "unavailable") {
-      return "暂未检测到本地 helper。请安装或启动 mdtero。";
+      return "暂未检测到本地运行时。请安装或启动 mdtero。";
     }
-    return "本地 helper 状态未知。";
+    return "本地运行时状态未知。";
   }
 
   if (state === "connected" && runnerState === "busy") {
-    return "Local helper is connected and handling a browser task.";
+    return "Local runtime is connected and handling an on-device acquisition task.";
   }
   if (state === "connected") {
-    return "Local helper ready for browser-assisted capture.";
+    return "Local runtime ready for on-device fallback and browser capture when needed.";
   }
   if (state === "disconnected") {
-    return "Local helper disconnected. Restart mdtero or reload the extension.";
+    return "Local runtime disconnected. Restart mdtero or reload the extension.";
   }
   if (state === "unavailable") {
-    return "Local helper not detected. Install or start mdtero.";
+    return "Local runtime not detected. Install or start mdtero.";
   }
-  return "Local helper status unknown.";
+  return "Local runtime status unknown.";
 }
 
 export function getPreflightHintText(
@@ -226,19 +226,19 @@ export function getPreflightHintText(
 
   if (bridgeMissing) {
     return language === "zh"
-      ? "当前页面支持浏览器态本地抓取，但还没检测到 helper。请先启动 `mdtero`。"
-      : "This page supports browser-managed local capture, but the helper is not ready. Start `mdtero` first.";
+      ? "当前页面可回退到本地浏览器抓取，但还没检测到设备侧运行时。请先启动 `mdtero`。"
+      : "This page can fall back to local browser capture, but the on-device runtime is not ready. Start `mdtero` first.";
   }
 
   if (bridgeReady) {
     return language === "zh"
-      ? "当前页面已满足浏览器态本地抓取条件，可优先走 helper-first 采集。"
-      : "This page is ready for browser-managed local capture through the helper-first path.";
+      ? "当前页面在直连 publisher API / TDM 不可用时，可回退到本地浏览器抓取。"
+      : "This page is ready for local browser capture if direct publisher APIs or TDM are not available.";
   }
 
   return language === "zh"
-    ? "当前页面支持浏览器态本地抓取。解析前请确认 helper 已连接。"
-    : "This page supports browser-managed local capture. Confirm the local helper is connected before parsing.";
+    ? "当前页面支持本地浏览器抓取。解析前请确认设备侧运行时已连接。"
+    : "This page supports local browser capture. Confirm the on-device runtime is connected before parsing.";
 }
 
 export function getSavedResultSummary(
