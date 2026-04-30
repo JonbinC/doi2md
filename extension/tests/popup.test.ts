@@ -265,15 +265,15 @@ describe("getUsageStatusText", () => {
 describe("getBridgeStatusText", () => {
   it("formats helper bridge status for popup surfaces", () => {
     expect(getBridgeStatusText({ state: "connected", runnerState: "idle" }, "en")).toBe(
-      "Local helper ready for browser-assisted capture."
+      "Local runtime ready for on-device fallback and browser capture when needed."
     );
     expect(getBridgeStatusText({ state: "connected", runnerState: "busy" }, "zh")).toBe(
-      "本地 helper 已连接，正在处理浏览器任务。"
+      "本地运行时已连接，正在处理设备侧获取任务。"
     );
     expect(getBridgeStatusText({ state: "unavailable", runnerState: "idle" }, "en")).toContain(
       "not detected"
     );
-    expect(getBridgeStatusText(undefined, "zh")).toBe("本地 helper 状态未知。");
+    expect(getBridgeStatusText(undefined, "zh")).toBe("本地运行时状态未知。");
   });
 });
 
@@ -313,7 +313,7 @@ describe("getPreflightHintText", () => {
     ).toContain("Start `mdtero`");
   });
 
-  it("confirms helper-first capture readiness on supported live pages", () => {
+  it("confirms local capture readiness on supported live pages", () => {
     expect(
       getPreflightHintText(
         {
@@ -324,7 +324,7 @@ describe("getPreflightHintText", () => {
         },
         "zh"
       )
-    ).toContain("helper-first");
+    ).toContain("本地浏览器抓取");
   });
 
   it("nudges users away from PDF or EPUB shells", () => {

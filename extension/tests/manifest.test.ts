@@ -74,7 +74,7 @@ describe("extension manifest", () => {
     });
   });
 
-  it("keeps outward-facing extension copy aligned with helper-first local capture", () => {
+  it("keeps outward-facing extension copy aligned with local runtime capture", () => {
     const en = JSON.parse(
       readFileSync(resolve("_locales/en/messages.json"), "utf-8")
     ) as { extDescription?: { message?: string } };
@@ -84,13 +84,14 @@ describe("extension manifest", () => {
     const popupSource = readFileSync(resolve("src/popup/index.ts"), "utf-8");
     const optionsSource = readFileSync(resolve("src/options/index.ts"), "utf-8");
 
-    expect(en.extDescription?.message).toContain("helper-first");
+    expect(en.extDescription?.message).toContain("local runtime");
     expect(en.extDescription?.message).toContain("Account");
     expect(en.extDescription?.message).toContain("supported live paper pages");
-    expect(zh.extDescription?.message).toContain("helper-first");
+    expect(zh.extDescription?.message).toContain("本地运行时");
     expect(zh.extDescription?.message).toContain("账户");
     expect(zh.extDescription?.message).toContain("支持的实时论文页");
-    expect(popupSource).toContain("browser capture only when needed");
-    expect(optionsSource).toContain("default acquisition path");
+    expect(popupSource).toContain("Prefer direct publisher APIs and TDM routes first");
+    expect(optionsSource).toContain("publisher API");
+    expect(optionsSource).toContain("TDM");
   });
 });
