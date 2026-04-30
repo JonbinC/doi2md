@@ -1,6 +1,6 @@
 {
   "name": "mdtero-install",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, and OpenClaw guidance.",
   "homepage": "https://mdtero.com",
   "repository": {
@@ -24,7 +24,8 @@
   },
   "type": "module",
   "bin": {
-    "mdtero-install": "bin/mdtero-install"
+    "mdtero-install": "bin/mdtero-install",
+    "mdtero": "bin/mdtero"
   },
   "files": [
     "bin",
