@@ -37,6 +37,7 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="auth-mode-password"');
     expect(optionsHtml).toContain('id="shadow-status"');
     expect(optionsHtml).toContain('id="springer-oa-api-key"');
+    expect(optionsHtml).toContain('id="wiley-tdm-token"');
     expect(optionsHtml).toContain('id="permissions-card"');
     expect(optionsHtml).toContain('id="permissions-title"');
     expect(optionsHtml).toContain('id="publisher-capability-groups"');

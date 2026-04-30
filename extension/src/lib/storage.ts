@@ -8,6 +8,7 @@ export interface MdteroSettings {
   email?: string;
   uiLanguage?: UiLanguage;
   elsevierApiKey?: string;
+  wileyTdmToken?: string;
   springerOpenAccessApiKey?: string;
 }
 
@@ -65,6 +66,7 @@ export async function readSettings(): Promise<MdteroSettings> {
     token: current.token,
     email: current.email,
     elsevierApiKey: current.elsevierApiKey,
+    wileyTdmToken: current.wileyTdmToken,
     springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };

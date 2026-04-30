@@ -16,6 +16,7 @@ export type CapabilityReadiness =
 export interface CapabilityContext {
   helperState: CapabilityHelperState;
   hasElsevierApiKey: boolean;
+  hasWileyTdmToken: boolean;
   hasSpringerOpenAccessApiKey: boolean;
 }
 
@@ -59,6 +60,9 @@ function hasRequiredApiKey(entry: LocalizedPublisherCapabilityEntry, context: Ca
   }
   if (entry.id === "elsevier") {
     return context.hasElsevierApiKey;
+  }
+  if (entry.id === "wiley") {
+    return context.hasWileyTdmToken;
   }
   if (entry.id === "springer_oa") {
     return context.hasSpringerOpenAccessApiKey;

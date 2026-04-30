@@ -370,23 +370,23 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     id: "wiley",
     label: { en: "Wiley", zh: "Wiley" },
     variantOf: "wiley",
-    accessVariant: "publisher_page",
-    presentationGroup: "browser_assisted",
+    accessVariant: "publisher_tdm",
+    presentationGroup: "api_key",
     rightsMode: "licensed",
-    acquisitionMode: "browser_page_capture",
-    requiresHelper: true,
-    requiresBrowser: true,
-    requiresApiKey: false,
+    acquisitionMode: "official_api",
+    requiresHelper: false,
+    requiresBrowser: false,
+    requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "安装本地 helper，并在浏览器中保持文章页面打开。可能需要机构登录。"
+      en: "Add your Wiley TDM token. Institutional sign-in or DOI-level entitlement may still be required.",
+      zh: "填写 Wiley TDM token。某些 DOI 仍可能要求机构登录或相应授权。"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Wiley article pages.",
-      zh: "通过 Wiley 文章页进行浏览器辅助抓取。"
+      en: "Wiley TDM PDF retrieval first, then local browser or on-device fallback if that route is unavailable.",
+      zh: "优先走 Wiley TDM PDF 接口；如果该链路不可用，再回退到本地浏览器或设备侧获取。"
     },
-    configureTarget: "browser_assisted_sources",
+    configureTarget: "connector_keys",
     status: "experimental",
     fallbacks: ["pdf"],
     validationRef: "acceptance:task-wiley-validation-1",
