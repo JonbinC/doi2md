@@ -9,6 +9,7 @@ let mockSettings = {
   email: undefined,
   uiLanguage: "en",
   elsevierApiKey: undefined,
+  wileyTdmToken: undefined,
   springerOpenAccessApiKey: undefined,
 };
 
@@ -82,6 +83,7 @@ describe("extension options page", () => {
       email: undefined,
       uiLanguage: "en",
       elsevierApiKey: undefined,
+      wileyTdmToken: undefined,
       springerOpenAccessApiKey: undefined,
     };
     mockReadSettings.mockClear();
@@ -105,7 +107,7 @@ describe("extension options page", () => {
     expect(document.querySelector("#account-status")?.textContent).toBe("Not signed in.");
     expect(document.querySelector("#usage-status")?.textContent).toBe("Balance and quota appear after sign-in.");
     expect(document.querySelector("#helper-status")?.textContent).toBe(
-      "Local helper not detected yet. Install or restart mdtero to enable browser-assisted capture."
+      "Local runtime not detected yet. Install or restart mdtero to enable on-device fallback routes."
     );
     expect(document.querySelector("#shadow-status")?.textContent).toBe(
       "Sign in to view experimental connector shadow status."
@@ -120,16 +122,45 @@ describe("extension options page", () => {
       email: "reader@example.com",
       uiLanguage: "en",
       elsevierApiKey: undefined,
+      wileyTdmToken: "wiley-demo-token",
       springerOpenAccessApiKey: undefined,
     };
     globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 
     await loadOptionsModule();
 
+    expect(document.querySelector("#wiley-tdm-token-label")?.textContent).toBe("Wiley TDM Token");
+    expect((document.querySelector("#wiley-tdm-token") as HTMLInputElement | null)?.value).toBe("wiley-demo-token");
     expect(document.querySelector("#account-status")?.textContent).toBe("Signed in as reader@example.com");
     expect(document.querySelector("#usage-status")?.textContent).toContain("Balance $12.00 · Parse 4 · Translation 2");
-    expect(document.querySelector("#helper-status")?.textContent).toBe("Local helper ready for browser-assisted capture.");
+    expect(document.querySelector("#helper-status")?.textContent).toBe("Local runtime ready for on-device fallback and browser capture when needed.");
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(false);
     expect(document.querySelector("#history-list")?.textContent).toContain("No parsing or translation history found yet.");
+    expect(document.querySelector("#settings-subtitle")?.textContent).toContain("publisher API, TDM, and on-device fallback preferences");
+    expect(document.querySelector("#support-summary")?.textContent).toContain("publisher APIs, TDM routes, and local fallbacks");
+  });
+
+  it("persists Elsevier, Wiley TDM, and Springer connector keys together", async () => {
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
+
+    await loadOptionsModule();
+
+    (document.querySelector("#elsevier-api-key") as HTMLInputElement).value = "elsevier-key";
+    document.querySelector("#elsevier-api-key")?.dispatchEvent(new Event("input", { bubbles: true }));
+    (document.querySelector("#wiley-tdm-token") as HTMLInputElement).value = "wiley-token";
+    document.querySelector("#wiley-tdm-token")?.dispatchEvent(new Event("input", { bubbles: true }));
+    (document.querySelector("#springer-oa-api-key") as HTMLInputElement).value = "springer-key";
+    document.querySelector("#springer-oa-api-key")?.dispatchEvent(new Event("input", { bubbles: true }));
+
+    (document.querySelector("#save-settings") as HTMLButtonElement).click();
+    await flushUi();
+
+    expect(mockWriteSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elsevierApiKey: "elsevier-key",
+        wileyTdmToken: "wiley-token",
+        springerOpenAccessApiKey: "springer-key",
+      })
+    );
   });
 });
