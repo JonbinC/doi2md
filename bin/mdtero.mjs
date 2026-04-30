@@ -2,7 +2,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -20,25 +20,25 @@ function usage() {
   mdtero doctor [--config-file PATH]
   mdtero setup
   mdtero parse <doi-or-url>
-  mdtero translate <task-id>
+  mdtero translate <task-id> [target-language]
   mdtero status <task-id>
   mdtero discover <doi-or-url>
-  mdtero download <task-id> <artifact>
+  mdtero download <task-id> <artifact> [--output-dir DIR]
 
 Supported today:
   mdtero version
   mdtero login
   mdtero doctor
   mdtero setup
+  mdtero parse
+  mdtero status
+  mdtero translate
+  mdtero download
 
 Placeholder guidance only:
-  mdtero parse
-  mdtero translate
-  mdtero status
   mdtero discover
   mdtero parse-bib
   mdtero parse-files
-  mdtero download
   mdtero shadow-status
 
 Mdtero's npm CLI uses API keys from https://mdtero.com/account.
@@ -66,6 +66,10 @@ function parseArgs(argv) {
     }
     if (current === "--site-url") {
       options.siteUrl = args.shift() || options.siteUrl;
+      continue;
+    }
+    if (current === "--output-dir") {
+      options.outputDir = resolve(args.shift() || process.cwd());
       continue;
     }
     if (current) {
@@ -96,6 +100,84 @@ async function readEnvFile(path) {
     }
     throw error;
   }
+}
+
+function getApiKeyFromEnvContent(content) {
+  const match = content.match(/^(?:export\s+)?MDTERO_API_KEY=(.+)$/m);
+  if (!match) return "";
+  const raw = match[1].trim();
+  if (!raw) return "";
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    return raw.slice(1, -1);
+  }
+  return raw;
+}
+
+async function resolveApiKey(options) {
+  const shellKey = String(process.env.MDTERO_API_KEY || "").trim();
+  if (shellKey) return shellKey;
+  const envContent = await readEnvFile(options.envFile);
+  return getApiKeyFromEnvContent(envContent).trim();
+}
+
+async function requestJson(path, options, init = {}) {
+  const apiKey = await resolveApiKey(options);
+  if (!apiKey) {
+    console.log(`mdtero ${path.includes("/tasks/") ? "status" : "parse"} needs MDTERO_API_KEY.`);
+    console.log("Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>.");
+    return null;
+  }
+  const headers = new Headers(init.headers ?? {});
+  if (!headers.has("Content-Type") && init.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("Authorization", `ApiKey ${apiKey}`);
+  const response = await fetch(`${DEFAULT_API_BASE}${path}`, {
+    ...init,
+    headers,
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.clone().json();
+      if (payload && typeof payload.detail === "string") {
+        detail = payload.detail;
+      }
+    } catch {}
+    throw new Error(detail || `API request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+async function requestBuffer(path, options) {
+  const apiKey = await resolveApiKey(options);
+  if (!apiKey) {
+    console.log("mdtero download needs MDTERO_API_KEY.");
+    console.log("Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>.");
+    return null;
+  }
+  const response = await fetch(`${DEFAULT_API_BASE}${path}`, {
+    headers: { Authorization: `ApiKey ${apiKey}` },
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.clone().json();
+      if (payload && typeof payload.detail === "string") {
+        detail = payload.detail;
+      }
+    } catch {}
+    throw new Error(detail || `API request failed: ${response.status}`);
+  }
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    contentDisposition: response.headers.get("content-disposition") || "",
+  };
+}
+
+function filenameFromDisposition(contentDisposition, artifact) {
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return match?.[1] || `${artifact}.bin`;
 }
 
 function upsertEnvValue(content, key, value) {
@@ -268,6 +350,83 @@ async function cmdDoctor(options) {
   }
 }
 
+async function cmdParse(rest, options) {
+  const input = String(rest[0] || "").trim();
+  if (!input) {
+    throw new Error("Missing parse input. Usage: mdtero parse <doi-or-url>");
+  }
+  const result = await requestJson("/tasks/parse", options, {
+    method: "POST",
+    body: JSON.stringify({ input }),
+  });
+  if (!result) return;
+  console.log(`Created parse task: ${result.task_id}`);
+  console.log(`Initial status: ${result.status}`);
+  console.log(`Next: mdtero status ${result.task_id}`);
+}
+
+async function cmdStatus(rest, options) {
+  const taskId = String(rest[0] || "").trim();
+  if (!taskId) {
+    throw new Error("Missing task ID. Usage: mdtero status <task-id>");
+  }
+  const task = await requestJson(`/tasks/${taskId}`, options);
+  if (!task) return;
+  console.log(`Task: ${task.task_id}`);
+  console.log(`Kind: ${task.task_kind}`);
+  console.log(`Status: ${task.status}`);
+  console.log(`Stage: ${task.stage}`);
+  console.log(`Input: ${task.input_summary}`);
+  if (task.result?.preferred_artifact) {
+    console.log(`Preferred artifact: ${task.result.preferred_artifact}`);
+  }
+  if (task.result?.artifacts) {
+    console.log(`Artifacts: ${Object.keys(task.result.artifacts).join(", ")}`);
+  }
+  if (task.error_message) {
+    console.log(`Error: ${task.error_message}`);
+  }
+}
+
+async function cmdTranslate(rest, options) {
+  const sourceTaskId = String(rest[0] || "").trim();
+  const targetLanguage = String(rest[1] || "zh").trim() || "zh";
+  if (!sourceTaskId) {
+    throw new Error("Missing parse task ID. Usage: mdtero translate <task-id> [target-language]");
+  }
+  const task = await requestJson(`/tasks/${sourceTaskId}`, options);
+  if (!task) return;
+  const sourceMarkdownPath = task.result?.artifacts?.paper_md?.path;
+  if (!sourceMarkdownPath) {
+    throw new Error("The source parse task does not expose result.artifacts.paper_md.path yet.");
+  }
+  const result = await requestJson("/tasks/translate", options, {
+    method: "POST",
+    body: JSON.stringify({ source_markdown_path: sourceMarkdownPath, target_language: targetLanguage, mode: "full" }),
+  });
+  if (!result) return;
+  console.log(`Created translate task: ${result.task_id}`);
+  console.log(`Initial status: ${result.status}`);
+  console.log(`Source artifact: ${sourceMarkdownPath}`);
+  console.log(`Next: mdtero status ${result.task_id}`);
+}
+
+async function cmdDownload(rest, options) {
+  const taskId = String(rest[0] || "").trim();
+  const artifact = String(rest[1] || "").trim();
+  const outputDir = options.outputDir || process.cwd();
+  if (!taskId || !artifact) {
+    throw new Error("Usage: mdtero download <task-id> <artifact> [--output-dir DIR]");
+  }
+  const result = await requestBuffer(`/tasks/${taskId}/download/${artifact}`, options);
+  if (!result) return;
+  const filename = filenameFromDisposition(result.contentDisposition, artifact);
+  await mkdir(outputDir, { recursive: true });
+  const targetPath = join(outputDir, filename);
+  await writeFile(targetPath, result.buffer);
+  console.log(`Downloaded artifact: ${targetPath}`);
+}
+
 function explainApiCommand(command, rest) {
   const suffix = rest.length ? ` ${rest.join(" ")}` : "";
   console.log(`mdtero ${command}${suffix} is not implemented in the npm CLI yet.`);
@@ -280,7 +439,7 @@ function explainApiCommand(command, rest) {
 async function main() {
   const { command, rest, options } = parseArgs(process.argv.slice(2));
 
-  if (!command || command === "--help" || command === "-h") {
+  if (!command || command === "--help" || command === "-h" || command === "help") {
     usage();
     return;
   }
@@ -305,7 +464,27 @@ async function main() {
     return;
   }
 
-  if (["parse", "translate", "status", "discover", "parse-bib", "parse-files", "download", "shadow-status"].includes(command)) {
+  if (command === "parse") {
+    await cmdParse(rest, options);
+    return;
+  }
+
+  if (command === "status") {
+    await cmdStatus(rest, options);
+    return;
+  }
+
+  if (command === "translate") {
+    await cmdTranslate(rest, options);
+    return;
+  }
+
+  if (command === "download") {
+    await cmdDownload(rest, options);
+    return;
+  }
+
+  if (["discover", "parse-bib", "parse-files", "shadow-status"].includes(command)) {
     explainApiCommand(command, rest);
     return;
   }
