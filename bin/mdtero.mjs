@@ -20,7 +20,26 @@ function usage() {
   mdtero doctor [--config-file PATH]
   mdtero setup
   mdtero parse <doi-or-url>
+  mdtero translate <task-id>
   mdtero status <task-id>
+  mdtero discover <doi-or-url>
+  mdtero download <task-id> <artifact>
+
+Supported today:
+  mdtero version
+  mdtero login
+  mdtero doctor
+  mdtero setup
+
+Placeholder guidance only:
+  mdtero parse
+  mdtero translate
+  mdtero status
+  mdtero discover
+  mdtero parse-bib
+  mdtero parse-files
+  mdtero download
+  mdtero shadow-status
 
 Mdtero's npm CLI uses API keys from https://mdtero.com/account.
 Run: mdtero login --api-key <your-key>`);
@@ -251,7 +270,9 @@ async function cmdDoctor(options) {
 
 function explainApiCommand(command, rest) {
   const suffix = rest.length ? ` ${rest.join(" ")}` : "";
-  console.log(`mdtero ${command}${suffix} needs MDTERO_API_KEY.`);
+  console.log(`mdtero ${command}${suffix} is not implemented in the npm CLI yet.`);
+  console.log("Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero version.");
+  console.log(`When this command is ready, it will need MDTERO_API_KEY.`);
   console.log("Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>.");
   console.log("Agent users can also run /mdtero-setup inside their workspace.");
 }

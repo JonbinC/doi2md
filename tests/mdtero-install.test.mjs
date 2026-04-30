@@ -163,14 +163,53 @@ test("mdtero CLI supports version, login, and doctor setup flow", async () => {
   assert.equal(doctor.code, 0, doctor.stderr);
   assert.match(doctor.stdout, /Mdtero CLI: 0\.1\.5/);
   assert.match(doctor.stdout, /MDTERO_API_KEY: set/);
+
+  const setup = await runNode([MDTERO_CLI_PATH, "setup"], { cwd: PROJECT_ROOT });
+  assert.equal(setup.code, 0, setup.stderr);
+  assert.match(setup.stdout, /Run mdtero login to open Mdtero Account in your browser/);
 });
 
 test("mdtero CLI explains API-key setup for parse commands", async () => {
   const completed = await runNode([MDTERO_CLI_PATH, "parse", "10.48550/arXiv.1706.03762"], { cwd: PROJECT_ROOT });
 
   assert.equal(completed.code, 0, completed.stderr);
-  assert.match(completed.stdout, /needs MDTERO_API_KEY/);
+  assert.match(completed.stdout, /is not implemented in the npm CLI yet/i);
+  assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero version\./);
   assert.match(completed.stdout, /mdtero login --api-key/);
+});
+
+test("mdtero CLI keeps every placeholder command on the same honest guidance surface", async () => {
+  const placeholderCommands = [
+    ["parse", "10.48550/arXiv.1706.03762"],
+    ["translate", "task-123"],
+    ["status", "task-123"],
+    ["discover", "10.48550/arXiv.1706.03762"],
+    ["parse-bib", "refs.bib"],
+    ["parse-files", "paper.pdf"],
+    ["download", "task-123", "paper_md"],
+    ["shadow-status"]
+  ];
+
+  for (const args of placeholderCommands) {
+    const completed = await runNode([MDTERO_CLI_PATH, ...args], { cwd: PROJECT_ROOT });
+    assert.equal(completed.code, 0, `${args.join(" ")} should stay non-fatal`);
+    assert.match(completed.stdout, /is not implemented in the npm CLI yet/i);
+    assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero version\./);
+    assert.match(completed.stdout, /Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>\./);
+  }
+});
+
+test("mdtero CLI usage lists the supported commands and placeholder surfaces clearly", async () => {
+  const completed = await runNode([MDTERO_CLI_PATH, "--help"], { cwd: PROJECT_ROOT });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.match(completed.stdout, /Supported today:/);
+  assert.match(completed.stdout, /mdtero login/);
+  assert.match(completed.stdout, /mdtero doctor/);
+  assert.match(completed.stdout, /Placeholder guidance only:/);
+  assert.match(completed.stdout, /mdtero parse <doi-or-url>/);
+  assert.match(completed.stdout, /mdtero translate <task-id>/);
+  assert.match(completed.stdout, /mdtero discover <doi-or-url>/);
 });
 
 
