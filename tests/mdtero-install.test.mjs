@@ -12,6 +12,7 @@ const CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero-install.mjs");
 const CLI_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero-install");
 const MDTERO_CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero.mjs");
 const MDTERO_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero");
+const PACKAGE_JSON_PATH = join(PROJECT_ROOT, "package.json");
 
 function runNode(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -167,10 +168,11 @@ test("show falls back to the bundled manifest when the remote manifest is unavai
 test("mdtero CLI supports version, login, and doctor setup flow", async () => {
   const root = await mkdtemp(join(tmpdir(), "mdtero-cli-"));
   const envFile = join(root, ".env");
+  const pkg = JSON.parse(await readFile(PACKAGE_JSON_PATH, "utf8"));
 
   const version = await runNode([MDTERO_CLI_PATH, "--version"], { cwd: PROJECT_ROOT });
   assert.equal(version.code, 0, version.stderr);
-  assert.match(version.stdout, /^0\.1\.6\n$/);
+  assert.equal(version.stdout, `${pkg.version}\n`);
 
   const login = await runNode([MDTERO_CLI_PATH, "login", "--api-key", "test-key", "--config-file", envFile], { cwd: PROJECT_ROOT });
   assert.equal(login.code, 0, login.stderr);
@@ -179,7 +181,7 @@ test("mdtero CLI supports version, login, and doctor setup flow", async () => {
 
   const doctor = await runNode([MDTERO_CLI_PATH, "doctor", "--config-file", envFile], { cwd: PROJECT_ROOT });
   assert.equal(doctor.code, 0, doctor.stderr);
-  assert.match(doctor.stdout, /Mdtero CLI: 0\.1\.6/);
+  assert.match(doctor.stdout, new RegExp(`Mdtero CLI: ${pkg.version.replaceAll(".", "\\.")}`));
   assert.match(doctor.stdout, /MDTERO_API_KEY: set/);
 
   const setup = await runNode([MDTERO_CLI_PATH, "setup"], { cwd: PROJECT_ROOT });
