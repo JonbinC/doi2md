@@ -11,7 +11,7 @@ Mdtero turns papers into reusable Markdown research packages.
 This repository is the public home for the two active launch surfaces:
 
 - the browser extension for local browser capture when a live paper page must stay on the user's machine
-- the npm-first installer CLI for Claude Code, Codex, and Gemini CLI
+- the npm-first installer CLI for Claude Code, Codex, Gemini CLI, and Hermes Agent
 
 Keyword discovery and API-key management stay in Mdtero Account.
 
@@ -22,6 +22,7 @@ Keyword discovery and API-key management stay in Mdtero Account.
 - Install for Claude Code: `npx mdtero-install install claude_code`
 - Install for Codex: `npx mdtero-install install codex`
 - Install for Gemini CLI: `npx mdtero-install install gemini_cli`
+- Install for Hermes Agent: `npx mdtero-install install hermes`
 - Then run browser login from the installed CLI: `mdtero login`
 - Verify the environment with `mdtero doctor`
 - OpenClaw keeps the dedicated route: `clawhub install mdtero`
@@ -30,7 +31,9 @@ For OpenClaw, confirm that the dedicated ClawHub route is available in your envi
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
 
-Claude Code, Codex, and Gemini CLI stay on the npm-first install path via `npx mdtero-install install <target>`.
+Claude Code, Codex, Gemini CLI, and Hermes Agent stay on the npm-first install path via `npx mdtero-install install <target>`.
+
+Hermes can load Mdtero as a `SKILL.md` workflow from `~/.hermes/skills/mdtero`. Hermes MCP configuration is a separate surface: Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.
 
 ## Extension boundary
 
@@ -53,6 +56,7 @@ Use the extension when you are already reading a supported paper page locally, w
 - [`shared`](./shared): public client contract used by the extension
 - [`install`](./install): public install manifest and entry docs
 - [`helper/openclaw/INSTALL.md`](./helper/openclaw/INSTALL.md): OpenClaw-specific route
+- [`skills`](./skills): agent-specific install notes for npm-first skill targets
 
 ## Local development
 
