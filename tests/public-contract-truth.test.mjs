@@ -107,6 +107,8 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
 
   expectContains(openclawInstallReadme, "The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "OpenClaw stays on the dedicated `clawhub install mdtero` path", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "Claude Code, Codex, Gemini CLI, and Hermes Agent", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "Do not present MCP as part of the OpenClaw/ClawHub install", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "Do not use `npx mdtero-install install openclaw`", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "GitHub Releases and the public `doi2md` repository only mirror the website-led release chain.", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "npm --prefix mdtero-frontend run test:launchability-proof", "mdtero-public/helper/openclaw/INSTALL.md");
