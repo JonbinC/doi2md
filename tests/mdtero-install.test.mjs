@@ -88,6 +88,24 @@ test("install writes the mdtero skill bundle into a codex workspace", async () =
   }
 });
 
+test("install writes the mdtero skill bundle into a Hermes workspace", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mdtero-hermes-install-"));
+
+  const completed = await runNode([CLI_PATH, "install", "hermes", "--root", root], {
+    cwd: PROJECT_ROOT,
+    env: {
+      ...process.env,
+      MDTERO_INSTALL_MANIFEST_URL: "http://127.0.0.1:9/unavailable-manifest.json"
+    }
+  });
+
+  assert.equal(completed.code, 0, completed.stderr);
+  const skillPath = join(root, ".hermes", "skills", "mdtero", "SKILL.md");
+  const content = await readFile(skillPath, "utf8");
+  assert.match(content, /name: mdtero/);
+  assert.match(completed.stdout, /Installed Mdtero skill for Hermes Agent/);
+});
+
 test("package metadata stays publishable for the unified install entry", async () => {
   const packageJsonPath = join(PROJECT_ROOT, "package.json");
   const content = await readFile(packageJsonPath, "utf8");

@@ -1,7 +1,7 @@
 {
   "name": "mdtero-install",
   "version": "0.1.6",
-  "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, and OpenClaw guidance.",
+  "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenClaw guidance.",
   "homepage": "https://mdtero.com",
   "repository": {
     "type": "git",
@@ -15,6 +15,7 @@
     "codex",
     "claude-code",
     "gemini-cli",
+    "hermes-agent",
     "openclaw",
     "skills",
     "installer"

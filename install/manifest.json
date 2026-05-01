@@ -41,6 +41,15 @@
       "descriptionZh": "适合把工作流写进 GEMINI.md 的 Gemini CLI 环境。",
       "installCommand": "npx mdtero-install install gemini_cli",
       "skillDirectory": ".gemini/skills/mdtero"
+    },
+    {
+      "target": "hermes",
+      "label": "Hermes Agent",
+      "description": "Best for Hermes Agent setups that load SKILL.md workflows from ~/.hermes/skills.",
+      "descriptionZh": "适合从 ~/.hermes/skills 加载 SKILL.md 工作流的 Hermes Agent 环境。",
+      "installCommand": "npx mdtero-install install hermes",
+      "skillDirectory": ".hermes/skills/mdtero",
+      "mcpNote": "Hermes supports MCP through ~/.hermes/config.yaml, but Mdtero's public MCP installer flow is not active yet. Use the Mdtero skill first; add MCP only when a maintained Mdtero MCP server is published."
     }
   ],
   "releaseTruth": {
@@ -61,7 +70,8 @@
         "installTargets": [
           "claude_code",
           "codex",
-          "gemini_cli"
+          "gemini_cli",
+          "hermes"
         ]
       },
       "desktop": {
@@ -88,7 +98,8 @@
         "installTargets": [
           "claude_code",
           "codex",
-          "gemini_cli"
+          "gemini_cli",
+          "hermes"
         ]
       },
       "desktop": {
