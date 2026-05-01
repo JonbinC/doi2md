@@ -16,15 +16,22 @@ Keyword discovery and API-key management stay in Mdtero Account.
 - Claude Code: `npx mdtero-install install claude_code`
 - Codex: `npx mdtero-install install codex`
 - Gemini CLI: `npx mdtero-install install gemini_cli`
+- Hermes Agent: `npx mdtero-install install hermes`
 - After install, run `mdtero login` to open `https://mdtero.com/auth` and hand the API key back to your terminal
 - Then run `mdtero doctor` to verify that the installed environment can actually see `MDTERO_API_KEY`
 - OpenClaw: `clawhub install mdtero`
 
-OpenClaw stays on its dedicated route. Claude Code, Codex, and Gemini CLI stay on the npm-first CLI route.
+OpenClaw stays on its dedicated route. Claude Code, Codex, Gemini CLI, and Hermes Agent stay on the npm-first CLI route.
 
 Confirm that the ClawHub route is available in your OpenClaw environment before relying on it. If the workflow later needs helper-first local acquisition, local PDF / EPUB intake, or licensed full-text retrieval, install the local `mdtero` helper on the user machine separately.
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
+
+## MCP boundary
+
+Hermes Agent supports MCP through its own `~/.hermes/config.yaml` `mcp_servers` configuration, but Mdtero does not currently expose a maintained public MCP installer flow through `mdtero-install`.
+
+Use the Mdtero skill install first. Add MCP only when a maintained Mdtero MCP server is published and documented as an active public surface.
 
 ## Scope
 
