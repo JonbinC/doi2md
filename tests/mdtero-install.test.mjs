@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -236,6 +236,67 @@ test("mdtero CLI can create a parse task with an API key", async () => {
     assert.match(completed.stdout, /Created parse task: task-parse-1/);
     assert.match(completed.stdout, /Initial status: queued/);
     assert.match(completed.stdout, /Next: mdtero status task-parse-1/);
+  } finally {
+    server.close();
+  }
+});
+
+test("mdtero CLI can submit a raw paper file through parser-v2 upload", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mdtero-cli-upload-"));
+  const paperPath = join(root, "paper.pdf");
+  await writeFile(paperPath, Buffer.from("%PDF-1.7\n% demo\n"));
+
+  const server = createServer((request, response) => {
+    if (request.method === "POST" && request.url === "/tasks/parse-upload-v2") {
+      assert.equal(request.headers.authorization, "ApiKey cli-key");
+      assert.match(request.headers["content-type"] ?? "", /^multipart\/form-data; boundary=/);
+      const chunks = [];
+      request.on("data", (chunk) => {
+        chunks.push(chunk);
+      });
+      request.on("end", () => {
+        const body = Buffer.concat(chunks).toString("latin1");
+        assert.match(body, /name="paper_file"; filename="paper\.pdf"/);
+        assert.match(body, /name="source_input"\r\n\r\nhttps:\/\/doi\.org\/10\.1000\/demo/);
+        assert.match(body, /name="source_doi"\r\n\r\n10\.1000\/demo/);
+        assert.match(body, /name="pdf_engine"\r\n\r\ngrobid/);
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ task_id: "task-upload-v2", status: "queued" }));
+      });
+      return;
+    }
+    response.writeHead(404);
+    response.end("not found");
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const completed = await runNode([
+      MDTERO_CLI_PATH,
+      "parse",
+      "--file",
+      paperPath,
+      "--source-input",
+      "https://doi.org/10.1000/demo",
+      "--source-doi",
+      "10.1000/demo",
+      "--pdf-engine",
+      "grobid"
+    ], {
+      cwd: PROJECT_ROOT,
+      env: {
+        ...process.env,
+        MDTERO_API_KEY: "cli-key",
+        MDTERO_API_URL: `http://127.0.0.1:${address.port}`,
+      },
+    });
+
+    assert.equal(completed.code, 0, completed.stderr);
+    assert.match(completed.stdout, /Created parse task: task-upload-v2/);
+    assert.match(completed.stdout, /Initial status: queued/);
   } finally {
     server.close();
   }

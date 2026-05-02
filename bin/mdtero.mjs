@@ -2,7 +2,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,7 @@ function usage() {
   mdtero doctor [--config-file PATH]
   mdtero setup
   mdtero parse <doi-or-url>
+  mdtero parse --file PATH [--source-input DOI_OR_URL] [--source-doi DOI] [--pdf-engine grobid|pymupdf]
   mdtero translate <task-id> [target-language]
   mdtero status <task-id>
   mdtero discover <doi-or-url>
@@ -70,6 +71,22 @@ function parseArgs(argv) {
     }
     if (current === "--output-dir") {
       options.outputDir = resolve(args.shift() || process.cwd());
+      continue;
+    }
+    if (current === "--file") {
+      options.filePath = resolve(args.shift() || "");
+      continue;
+    }
+    if (current === "--source-input") {
+      options.sourceInput = args.shift() || "";
+      continue;
+    }
+    if (current === "--source-doi") {
+      options.sourceDoi = args.shift() || "";
+      continue;
+    }
+    if (current === "--pdf-engine") {
+      options.pdfEngine = args.shift() || "";
       continue;
     }
     if (current) {
@@ -128,7 +145,7 @@ async function requestJson(path, options, init = {}) {
     return null;
   }
   const headers = new Headers(init.headers ?? {});
-  if (!headers.has("Content-Type") && init.body) {
+  if (!headers.has("Content-Type") && init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   headers.set("Authorization", `ApiKey ${apiKey}`);
@@ -147,6 +164,32 @@ async function requestJson(path, options, init = {}) {
     throw new Error(detail || `API request failed: ${response.status}`);
   }
   return response.json();
+}
+
+function inferDoi(input) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  const direct = value.match(/^(10\.\S+)$/i);
+  if (direct) return direct[1];
+  const fromUrl = value.match(/doi\.org\/(10\.[^?#\s]+)/i);
+  return fromUrl ? decodeURIComponent(fromUrl[1]) : "";
+}
+
+function mimeTypeForPaperFile(path) {
+  const extension = extname(path).toLowerCase();
+  if (extension === ".pdf") return "application/pdf";
+  if (extension === ".html" || extension === ".htm") return "text/html";
+  if (extension === ".xml") return "application/xml";
+  if (extension === ".epub") return "application/epub+zip";
+  return "application/octet-stream";
+}
+
+function assertSupportedPaperFile(path) {
+  const extension = extname(path).toLowerCase();
+  if ([".pdf", ".html", ".htm", ".xml", ".epub"].includes(extension)) {
+    return;
+  }
+  throw new Error("Unsupported parse file type. Use PDF, HTML, XML, or EPUB.");
 }
 
 async function requestBuffer(path, options) {
@@ -351,9 +394,38 @@ async function cmdDoctor(options) {
 }
 
 async function cmdParse(rest, options) {
+  if (options.filePath) {
+    assertSupportedPaperFile(options.filePath);
+    const sourceInput = String(options.sourceInput || rest[0] || "").trim();
+    const sourceDoi = String(options.sourceDoi || inferDoi(sourceInput)).trim();
+    const filename = basename(options.filePath);
+    const fileContent = await readFile(options.filePath);
+    const body = new FormData();
+    body.set("paper_file", new Blob([fileContent], { type: mimeTypeForPaperFile(options.filePath) }), filename);
+    if (sourceDoi) {
+      body.set("source_doi", sourceDoi);
+    }
+    if (sourceInput) {
+      body.set("source_input", sourceInput);
+    }
+    if (options.pdfEngine) {
+      body.set("pdf_engine", String(options.pdfEngine).trim());
+    }
+    const result = await requestJson("/tasks/parse-upload-v2", options, {
+      method: "POST",
+      body,
+    });
+    if (!result) return;
+    console.log(`Created parse task: ${result.task_id}`);
+    console.log(`Initial status: ${result.status}`);
+    console.log(`Source file: ${filename}`);
+    console.log(`Next: mdtero status ${result.task_id}`);
+    return;
+  }
+
   const input = String(rest[0] || "").trim();
   if (!input) {
-    throw new Error("Missing parse input. Usage: mdtero parse <doi-or-url>");
+    throw new Error("Missing parse input. Usage: mdtero parse <doi-or-url> or mdtero parse --file PATH");
   }
   const result = await requestJson("/tasks/parse", options, {
     method: "POST",
