@@ -6,7 +6,7 @@ import { requiresElsevierLocalAcquire } from "../lib/elsevier";
 import {
   createFileParseMessage,
   createDetectMessage,
-  createParseMessage,
+  createSsotParseMessage,
   createTranslateMessage,
   type LocalFileArtifactKind,
   type ParsePageContext
@@ -830,7 +830,7 @@ parseButton?.addEventListener("click", async () => {
 
   const pageContext = await resolveParsePageContext(input);
   const response = await chrome.runtime.sendMessage(
-    createParseMessage(input, settings.elsevierApiKey, pageContext)
+    createSsotParseMessage(input, pageContext)
   );
   if (!response?.ok) {
     isParsing = false;

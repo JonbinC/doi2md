@@ -26,6 +26,21 @@ export function createParseMessage(input: string, elsevierApiKey?: string, pageC
   return message;
 }
 
+export function createSsotParseMessage(input: string, pageContext?: ParsePageContext) {
+  const message: {
+    type: "mdtero.parse.ssot.request";
+    input: string;
+    pageContext?: ParsePageContext;
+  } = {
+    type: "mdtero.parse.ssot.request" as const,
+    input
+  };
+  if (pageContext) {
+    message.pageContext = pageContext;
+  }
+  return message;
+}
+
 export function createFileParseMessage(
   file: File,
   artifactKind: LocalFileArtifactKind,
