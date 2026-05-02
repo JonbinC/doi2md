@@ -136,6 +136,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           input: message.input,
           springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
           elsevierApiKey: settings.elsevierApiKey,
+          wileyTdmToken: settings.wileyTdmToken,
         }
       );
 
@@ -160,6 +161,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return runLegacyParseRequest(client, {
         input: message.input,
         elsevierApiKey: message.elsevierApiKey,
+        wileyTdmToken: settings.wileyTdmToken,
         springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
         pageContext: message.pageContext,
       });

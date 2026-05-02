@@ -66,6 +66,7 @@ describe("ssot-route", () => {
       tabId: 7,
       tabUrl: "https://example.org/paper",
       tabTitle: "Example Paper",
+      wileyTdmToken: "wiley-token",
     });
 
     expect(executeAction).toHaveBeenCalledWith(
@@ -73,6 +74,7 @@ describe("ssot-route", () => {
       expect.objectContaining({
         input: "10.1000/demo",
         tabId: 7,
+        wileyTdmToken: "wiley-token",
       }),
       expect.objectContaining({
         top_connector: "wiley_tdm",
