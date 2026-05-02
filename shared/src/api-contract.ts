@@ -57,6 +57,84 @@ export interface ParseHelperBundleV2Request {
   pdfEngine?: PdfEngine;
 }
 
+export type ActionType =
+  | "capture_current_tab_html"
+  | "native_arxiv_parse"
+  | "fetch_structured_xml"
+  | "fetch_elsevier_xml"
+  | "fetch_wiley_tdm_pdf"
+  | "fetch_springer_pdf"
+  | "fetch_remote_html"
+  | "fetch_epub_asset"
+  | "fetch_oa_repository"
+  | "fetch_helper_source"
+  | "fallback_pdf_parse";
+
+export interface AcquisitionCandidate {
+  connector: string;
+  priority?: number;
+  access?: "open" | "licensed" | "unknown";
+  format?: string;
+  url?: string;
+  html_url?: string;
+  pdf_url?: string;
+  epub_url?: string;
+  handoff?: string;
+  tier?: string;
+  reason?: string;
+  requires_api_key?: boolean;
+}
+
+export interface ExtensionRouteRequest {
+  input: string;
+  page_url?: string;
+  page_title?: string;
+}
+
+export interface ExtensionRouteResponse {
+  input_kind: string;
+  input_value: string;
+  top_connector: string;
+  route_kind: string;
+  acquisition_mode: string;
+  requires_helper: boolean;
+  allows_current_tab: boolean;
+  action_sequence: string[];
+  acceptance_rules: Record<string, unknown>;
+  fail_closed: boolean;
+  user_message?: string;
+  matched_connectors: string[];
+  provider_id?: string;
+  preferred_format?: string;
+  format_chain?: string[];
+  publisher_family?: string;
+  metadata_source?: string;
+  access_decision?: "open" | "subscription_or_user_entitled" | "unknown";
+  best_oa_url?: string;
+  acquisition_candidates?: AcquisitionCandidate[];
+}
+
+export interface ActionContext {
+  input: string;
+  tabId?: number;
+  tabUrl?: string;
+  tabTitle?: string;
+  springerOpenAccessApiKey?: string;
+  elsevierApiKey?: string;
+  wileyTdmToken?: string;
+}
+
+export interface ActionResult {
+  success: boolean;
+  taskId?: string;
+  helperBundle?: Blob;
+  filename?: string;
+  sourceDoi?: string;
+  error?: string;
+  requiresHelper?: boolean;
+  requiresUpload?: boolean;
+}
+
 export interface TranslateTaskRequest {
   source_markdown_path: string;
   target_language: string;
