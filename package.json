@@ -1,7 +1,7 @@
 {
   "name": "mdtero-install",
   "version": "0.1.7",
-  "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenClaw guidance.",
+  "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, OpenCode, and OpenClaw guidance.",
   "homepage": "https://mdtero.com",
   "repository": {
     "type": "git",
@@ -16,6 +16,7 @@
     "claude-code",
     "gemini-cli",
     "hermes-agent",
+    "opencode",
     "openclaw",
     "skills",
     "installer"
@@ -34,8 +35,8 @@
     "skills"
   ],
   "scripts": {
-    "test:install": "node --test tests/mdtero-install.test.mjs",
-    "test:public-contract": "node --test tests/public-contract-truth.test.mjs tests/mdtero-install.test.mjs"
+    "test:install": "node --test tests/mdtero-install.test.mjs tests/opencode-install.test.mjs",
+    "test:public-contract": "node --test tests/public-contract-truth.test.mjs tests/mdtero-install.test.mjs tests/opencode-install.test.mjs"
   },
   "license": "MIT"
 }

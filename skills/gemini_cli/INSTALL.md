@@ -23,7 +23,7 @@ This copies the Mdtero workflow into `.gemini/skills/mdtero` for the current wor
 
 Gemini CLI gets the same agent-side Mdtero workflow as the other npm-first targets.
 
-Keep browser capture, local files, and licensed full-text acquisition on the user's machine when required; use the browser extension or local helper path for those cases.
+Keep user-provided PDFs, local files, and licensed browser-context capture on the user's machine when required. Use the browser extension for those upload/capture cases; use the CLI/API/backend parser for normal DOI/URL parsing and Markdown generation.
 
 ## Direct API Notes
 

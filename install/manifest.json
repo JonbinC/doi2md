@@ -13,8 +13,8 @@
     {
       "target": "openclaw",
       "label": "OpenClaw",
-      "description": "OpenClaw stays on a separate ClawHub route; confirm that route in your OpenClaw environment before relying on it, and keep local helper setup separate when local acquisition is needed.",
-      "descriptionZh": "OpenClaw 保持独立的 ClawHub 路线；请先在你的 OpenClaw 环境里确认该路线可用，再按需单独补装本地 helper 处理本地采集。",
+      "description": "OpenClaw stays on a separate ClawHub route; confirm that route in your OpenClaw environment before relying on it. Normal parsing still uses Mdtero's CLI/API and backend parser; use the extension or dashboard when the user must upload a local paper file.",
+      "descriptionZh": "OpenClaw 保持独立的 ClawHub 路线；请先在你的 OpenClaw 环境里确认该路线可用。常规解析仍走 Mdtero CLI/API 和后端解析；需要上传本地论文文件时再使用扩展或网页端上传。",
       "installCommand": "clawhub install mdtero",
       "skillDirectory": ".openclaw/skills/mdtero"
     },
@@ -50,6 +50,14 @@
       "installCommand": "npx mdtero-install install hermes",
       "skillDirectory": ".hermes/skills/mdtero",
       "mcpNote": "Hermes supports MCP through ~/.hermes/config.yaml, but Mdtero's public MCP installer flow is not active yet. Use the Mdtero skill first; add MCP only when a maintained Mdtero MCP server is published."
+    },
+    {
+      "target": "opencode",
+      "label": "OpenCode",
+      "description": "Best for OpenCode workspaces that keep project skills in .opencode/skills.",
+      "descriptionZh": "适合把项目技能放进 .opencode/skills 的 OpenCode 工作区。",
+      "installCommand": "npx mdtero-install install opencode",
+      "skillDirectory": ".opencode/skills/mdtero"
     }
   ],
   "releaseTruth": {
@@ -71,7 +79,8 @@
           "claude_code",
           "codex",
           "gemini_cli",
-          "hermes"
+          "hermes",
+          "opencode"
         ]
       },
       "desktop": {
@@ -99,7 +108,8 @@
           "claude_code",
           "codex",
           "gemini_cli",
-          "hermes"
+          "hermes",
+          "opencode"
         ]
       },
       "desktop": {

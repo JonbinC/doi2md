@@ -1,6 +1,6 @@
 ---
 name: mdtero
-description: Install Mdtero into Codex and keep the extension as the local capture fallback
+description: Install Mdtero into Codex and keep parsing on the CLI/API/backend path
 ---
 
 # Mdtero For Codex
@@ -17,12 +17,11 @@ Keep Mdtero inside Codex for normal parse, translation, and review work.
 
 ## When The Extension Still Matters
 
-Use the browser extension only when a live paper page needs local capture on the user machine.
+Use the browser extension only when a user needs to upload a PDF/local file from their own machine, or when a live paper page needs browser-context raw data capture.
 
-- Elsevier and ScienceDirect local acquisition should stay on the user's own machine
-- the local helper is preferred for scripted local acquisition:
-  download `https://api.mdtero.com/helpers/install_mdtero_helper.sh`, inspect it locally, then run it
-- the browser extension is the fallback local capture path when the user is already in the browser
+- normal DOI/URL parsing should use the installed CLI/API and Mdtero backend parser
+- user-provided PDFs, local files, and licensed browser-context capture should stay on the user's own machine when required
+- the extension captures or uploads raw data; backend parsing still produces the Markdown package
 
 ## Output Rule
 

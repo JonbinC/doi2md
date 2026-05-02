@@ -7,13 +7,13 @@ It is being consolidated toward the `doi2md` GitHub repo while preserving the ex
 This is the intended SSOT for:
 
 - browser extension code
-- public helper surface
+- browser extension upload/capture surface
 - public skill/install surface
 
 ## Put Here
 
 - browser extension source and public packaging
-- local helper installers and helper-side public scripts
+- browser extension upload/capture docs and public local-file handoff notes
 - public skills and agent install documents
 - public install and troubleshooting docs
 

@@ -10,8 +10,8 @@ Mdtero turns papers into reusable Markdown research packages.
 
 This repository is the public home for the two active launch surfaces:
 
-- the browser extension for local browser capture when a live paper page must stay on the user's machine
-- the npm-first installer CLI for Claude Code, Codex, Gemini CLI, and Hermes Agent
+- the npm-first installer CLI for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode
+- the browser extension for paper pages or local files that should stay in the user's browser session
 
 Keyword discovery and API-key management stay in Mdtero Account.
 
@@ -23,25 +23,33 @@ Keyword discovery and API-key management stay in Mdtero Account.
 - Install for Codex: `npx mdtero-install install codex`
 - Install for Gemini CLI: `npx mdtero-install install gemini_cli`
 - Install for Hermes Agent: `npx mdtero-install install hermes`
+- Install for OpenCode: `npx mdtero-install install opencode`
 - Then run browser login from the installed CLI: `mdtero login`
 - Verify the environment with `mdtero doctor`
 - OpenClaw keeps the dedicated route: `clawhub install mdtero`
 
-For OpenClaw, confirm that the dedicated ClawHub route is available in your environment before relying on it. If the workflow later needs helper-first local acquisition, local PDF / EPUB intake, or licensed full-text retrieval, install the local `mdtero` helper on the user machine separately.
+For OpenClaw, confirm that the dedicated ClawHub route is available in your environment before relying on it. Normal parsing still runs through Mdtero's CLI/API and backend parser. If a paper has to stay local, use the extension or dashboard upload path for the user-provided PDF or file.
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
 
-Claude Code, Codex, Gemini CLI, and Hermes Agent stay on the npm-first install path via `npx mdtero-install install <target>`.
+Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`.
 
 Hermes can load Mdtero as a `SKILL.md` workflow from `~/.hermes/skills/mdtero`. Hermes MCP configuration is a separate surface: Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.
 
+## What each install gives you
+
+The npm CLI is a Node package. It installs the `mdtero-install` and `mdtero` commands plus the agent skill files; it does not bundle Python packages such as `curl_cffi` or `pyzotero`.
+
+Local Python tooling is a developer/backend concern, not the normal product install. Dependencies such as `curl_cffi` and `pyzotero` belong to that local backend tooling, not to the npm CLI or browser extension.
+
 ## Extension boundary
 
-Use the extension when you are already reading a supported paper page locally, when a local PDF / EPUB should stay on your own machine, or when you want helper-first local capture before downloading Markdown and handing translation off.
+Use the extension only as a local executor. The backend decides the route plan; the extension follows that plan when a user must upload a PDF/local file or capture browser-context raw data. Parsing, Markdown generation, figure handling, and artifact packaging still happen in the Mdtero backend.
 
 - the extension is not the backend
 - the extension is not the normal path for CLI automation
-- the extension is the helper-first local capture surface when the user is already in the browser or already has a local paper file
+- the extension is a JavaScript browser surface; it does not ship Python packages such as `curl_cffi`
+- the extension should preserve user PDF/local file upload; routine DOI/URL parsing should use the built-in CLI/API/backend path
 
 ## Release truth
 
