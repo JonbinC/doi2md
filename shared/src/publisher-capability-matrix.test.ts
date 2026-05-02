@@ -77,14 +77,14 @@ describe("publisher capability matrix", () => {
       "browser_assisted"
     ]);
     expect(enGroups.map((group) => group.label)).toEqual([
-      "Helper only",
-      "Helper + API key",
-      "Helper + browser extension"
+      "Built-in parsing",
+      "API key",
+      "Extension upload/capture"
     ]);
     expect(zhGroups.map((group) => group.label)).toEqual([
-      "只需本地 helper",
-      "需要 helper 和 API key",
-      "需要 helper 和浏览器扩展"
+      "内置解析",
+      "需要 API key",
+      "扩展上传/采集"
     ]);
   });
 });

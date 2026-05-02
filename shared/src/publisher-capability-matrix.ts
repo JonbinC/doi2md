@@ -84,34 +84,34 @@ const GROUPS: PublisherCapabilityGroupDefinition[] = [
   {
     id: "helper_only",
     label: {
-      en: "Helper only",
-      zh: "只需本地 helper"
+      en: "Built-in parsing",
+      zh: "内置解析"
     },
     description: {
-      en: "Install the local helper and parse directly from supported open full-text sources.",
-      zh: "安装本地 helper 后，直接从受支持的开放全文来源解析。"
+      en: "Use Mdtero's CLI/API and backend parser for supported open full-text sources.",
+      zh: "使用 Mdtero CLI/API 和后端解析器处理受支持的开放全文来源。"
     }
   },
   {
     id: "api_key",
     label: {
-      en: "Helper + API key",
-      zh: "需要 helper 和 API key"
+      en: "API key",
+      zh: "需要 API key"
     },
     description: {
-      en: "Install the local helper and add the required publisher key in settings.",
-      zh: "安装本地 helper，并在设置里填写所需的出版社 key。"
+      en: "Add the required publisher key when an official API route needs it.",
+      zh: "官方 API 路线需要时，在设置里填写对应出版社 key。"
     }
   },
   {
     id: "browser_assisted",
     label: {
-      en: "Helper + browser extension",
-      zh: "需要 helper 和浏览器扩展"
+      en: "Extension upload/capture",
+      zh: "扩展上传/采集"
     },
     description: {
-      en: "Keep the article page open locally when Mdtero needs browser-assisted capture.",
-      zh: "当 Mdtero 需要浏览器辅助抓取时，请在本地保持文章页面打开。"
+      en: "Cloud routing decides the route; the extension only executes local upload/capture instructions when raw data must come from the user's machine.",
+      zh: "云端路由决定链路；只有 raw data 必须来自用户机器时，扩展才执行本地上传/采集指令。"
     }
   }
 ];
@@ -141,8 +141,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "安装本地 helper。"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "使用 Mdtero 常规 CLI/API 路径。"
     },
     howMdteroGetsIt: {
       en: "Direct open full-text retrieval from arXiv.",
@@ -167,8 +167,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "安装本地 helper。"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "使用 Mdtero 常规 CLI/API 路径。"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PMC routes.",
@@ -193,8 +193,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "安装本地 helper。"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "使用 Mdtero 常规 CLI/API 路径。"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PLOS.",
@@ -219,8 +219,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "安装本地 helper。"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "使用 Mdtero 常规 CLI/API 路径。"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from the source site.",
@@ -245,8 +245,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "安装本地 helper。"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the source cannot provide full text.",
+      zh: "使用 Mdtero 常规 CLI/API 路径；源站无法提供全文时上传 PDF。"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from ChemRxiv when available.",
@@ -271,8 +271,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "安装本地 helper。"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the page route is unavailable.",
+      zh: "使用 Mdtero 常规 CLI/API 路径；页面路线不可用时上传 PDF。"
     },
     howMdteroGetsIt: {
       en: "Open publisher full text from MDPI pages.",
@@ -297,8 +297,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and add your Elsevier API key. Some papers may still require institutional access.",
-      zh: "安装本地 helper，并填写 Elsevier API key。部分论文仍可能需要机构权限。"
+      en: "Add your Elsevier API key. Some papers may still require institutional access or a user-provided PDF.",
+      zh: "填写 Elsevier API key。部分论文仍可能需要机构权限或用户上传 PDF。"
     },
     howMdteroGetsIt: {
       en: "Official full-text API for structured publisher retrieval.",
@@ -325,8 +325,8 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper. Add your Springer OA API key for the best XML path.",
-      zh: "安装本地 helper。填写 Springer OA API key 可优先走 XML 路径。"
+      en: "Add your Springer OA API key for the best XML path. Upload a PDF if the source route is unavailable.",
+      zh: "填写 Springer OA API key 可优先走 XML 路径；源站路线不可用时上传 PDF。"
     },
     howMdteroGetsIt: {
       en: "Springer OA XML when available, otherwise open full text.",
@@ -353,12 +353,12 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "安装本地 helper，并在浏览器中保持文章页面打开。可能需要机构登录。"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "先让 Mdtero 云端规划链路；如果计划需要本地 raw data，再用扩展上传授权 PDF 或采集浏览器上下文 raw data。"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from the live article page.",
-      zh: "通过实时文章页进行浏览器辅助抓取。"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "后端先负责路由规划和解析；扩展上传/采集只执行后端下发的本地 raw-data 指令。"
     },
     configureTarget: "browser_assisted_sources",
     status: "demo",
@@ -405,12 +405,12 @@ export const PUBLISHER_CAPABILITY_MATRIX: PublisherCapabilityEntry[] = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "安装本地 helper，并在浏览器中保持文章页面打开。可能需要机构登录。"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "先让 Mdtero 云端规划链路；如果计划需要本地 raw data，再用扩展上传授权 PDF 或采集浏览器上下文 raw data。"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Taylor & Francis pages.",
-      zh: "通过 Taylor & Francis 页面进行浏览器辅助抓取。"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "后端先负责路由规划和解析；扩展上传/采集只执行后端下发的本地 raw-data 指令。"
     },
     configureTarget: "browser_assisted_sources",
     status: "experimental",

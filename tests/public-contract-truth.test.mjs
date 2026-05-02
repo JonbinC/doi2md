@@ -60,12 +60,14 @@ test("install manifest stays mirrored with the active site manifest and keeps CL
   assert.equal(manifest.releaseTruth?.current?.cli?.version, pkg.version);
   assert.equal(manifest.releaseTruth?.latest?.cli?.version, pkg.version);
   assert.equal(manifest.releaseTruth?.current?.desktop?.version, desktopManifest.version);
-  assert.deepEqual(manifest.targets.map((target) => target.target), ["openclaw", "claude_code", "codex", "gemini_cli", "hermes"]);
+  assert.deepEqual(manifest.targets.map((target) => target.target), ["openclaw", "claude_code", "codex", "gemini_cli", "hermes", "opencode"]);
   const hermes = manifest.targets.find((target) => target.target === "hermes");
   assert.equal(hermes?.skillDirectory, ".hermes/skills/mdtero");
   assert.match(hermes?.mcpNote ?? "", /public MCP installer flow is not active yet/);
-  assert.deepEqual(manifest.releaseTruth?.current?.cli?.installTargets, ["claude_code", "codex", "gemini_cli", "hermes"]);
-  assert.deepEqual(manifest.releaseTruth?.latest?.cli?.installTargets, ["claude_code", "codex", "gemini_cli", "hermes"]);
+  const opencode = manifest.targets.find((target) => target.target === "opencode");
+  assert.equal(opencode?.skillDirectory, ".opencode/skills/mdtero");
+  assert.deepEqual(manifest.releaseTruth?.current?.cli?.installTargets, ["claude_code", "codex", "gemini_cli", "hermes", "opencode"]);
+  assert.deepEqual(manifest.releaseTruth?.latest?.cli?.installTargets, ["claude_code", "codex", "gemini_cli", "hermes", "opencode"]);
 });
 
 test("public install docs keep CLI + extension launch truth and desktop as deferred archive", async () => {
@@ -83,11 +85,12 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "npx mdtero-install install claude_code", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install gemini_cli", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install hermes", "mdtero-public/README.md");
+  expectContains(publicReadme, "npx mdtero-install install opencode", "mdtero-public/README.md");
   expectContains(publicReadme, "clawhub install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/README.md");
   expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
   expectContains(publicReadme, "OpenClaw keeps the dedicated route", "mdtero-public/README.md");
-  expectContains(publicReadme, "Claude Code, Codex, Gemini CLI, and Hermes Agent stay on the npm-first install path via `npx mdtero-install install <target>`.", "mdtero-public/README.md");
+  expectContains(publicReadme, "Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`.", "mdtero-public/README.md");
   expectContains(publicReadme, "Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.", "mdtero-public/README.md");
   expectContains(publicReadme, "Desktop preview artifacts remain a deferred archive / preview surface", "mdtero-public/README.md");
 
@@ -97,6 +100,7 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(installReadme, "npx mdtero-install install claude_code", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install gemini_cli", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install hermes", "mdtero-public/install/README.md");
+  expectContains(installReadme, "npx mdtero-install install opencode", "mdtero-public/install/README.md");
   expectContains(installReadme, "clawhub install mdtero", "mdtero-public/install/README.md");
   expectContains(installReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/install/README.md");
   expectContains(installReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/install/README.md");
@@ -107,7 +111,7 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
 
   expectContains(openclawInstallReadme, "The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "OpenClaw stays on the dedicated `clawhub install mdtero` path", "mdtero-public/helper/openclaw/INSTALL.md");
-  expectContains(openclawInstallReadme, "Claude Code, Codex, Gemini CLI, and Hermes Agent", "mdtero-public/helper/openclaw/INSTALL.md");
+  expectContains(openclawInstallReadme, "Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "Do not present MCP as part of the OpenClaw/ClawHub install", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "Do not use `npx mdtero-install install openclaw`", "mdtero-public/helper/openclaw/INSTALL.md");
   expectContains(openclawInstallReadme, "GitHub Releases and the public `doi2md` repository only mirror the website-led release chain.", "mdtero-public/helper/openclaw/INSTALL.md");
@@ -131,11 +135,11 @@ test("public package metadata stays aligned with the installer contract", async 
   const [pkg, manifest] = await Promise.all([readJson(PUBLIC_PACKAGE_PATH), readJson(MANIFEST_PATH)]);
 
   assert.equal(pkg.name, manifest.cli.packageName);
-  assert.equal(pkg.description, "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenClaw guidance.");
+  assert.equal(pkg.description, "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, OpenCode, and OpenClaw guidance.");
   assert.deepEqual(pkg.files, ["bin", "install", "skills"]);
-  assert.equal(pkg.scripts?.["test:install"], "node --test tests/mdtero-install.test.mjs");
-  assert.equal(pkg.scripts?.["test:public-contract"], "node --test tests/public-contract-truth.test.mjs tests/mdtero-install.test.mjs");
-  for (const keyword of ["mdtero", "installer", "claude-code", "codex", "gemini-cli", "hermes-agent", "openclaw"]) {
+  assert.equal(pkg.scripts?.["test:install"], "node --test tests/mdtero-install.test.mjs tests/opencode-install.test.mjs");
+  assert.equal(pkg.scripts?.["test:public-contract"], "node --test tests/public-contract-truth.test.mjs tests/mdtero-install.test.mjs tests/opencode-install.test.mjs");
+  for (const keyword of ["mdtero", "installer", "claude-code", "codex", "gemini-cli", "hermes-agent", "opencode", "openclaw"]) {
     assert.ok(pkg.keywords?.includes(keyword), `mdtero-public/package.json keywords must include ${keyword}`);
   }
 });

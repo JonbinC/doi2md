@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-Public local-install/download surface: browser extension, public install manifest, helper-facing assets, agent skill materials, and desktop preview mirrors.
+Public local-install/download surface: browser extension, public install manifest, local-file handoff assets, agent skill materials, and desktop preview mirrors.
 
 ## STRUCTURE
 
@@ -12,7 +12,7 @@ mdtero-public/
 ├── shared/     # public contract subset used by extension/public code
 ├── install/    # canonical public install manifest and docs
 ├── desktop/    # public desktop preview ledger mirror
-├── helper/     # helper-facing public assets/docs
+├── helper/     # legacy local-file handoff notes/docs
 ├── skills/     # agent skill/install bundles
 ├── tests/      # public release/install contract tests
 └── archive/    # historical/reference-only assets

@@ -13,9 +13,9 @@ Use the normal path in this order:
 
 The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.
 
-OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first CLI release truth used by Claude Code, Codex, Gemini CLI, and Hermes Agent.
+OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first CLI release truth used by Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode.
 
-Confirm that the ClawHub route is available in your OpenClaw environment before relying on it. If the workflow later needs helper-first local acquisition, local PDF / EPUB intake, or licensed full-text retrieval, install the local `mdtero` helper on the user machine separately.
+Confirm that the ClawHub route is available in your OpenClaw environment before relying on it. Normal parsing still runs through Mdtero's CLI/API and backend parser. If a paper has to stay local, use the extension or dashboard upload path for the user-provided PDF or file.
 
 GitHub Releases and the public `doi2md` repository only mirror the website-led release chain.
 
@@ -29,7 +29,7 @@ Do not use `npx mdtero-install install openclaw`; OpenClaw stays on `clawhub ins
 
 ## Other agent targets
 
-The npm-first installer supports Claude Code, Codex, Gemini CLI, and Hermes Agent. OpenClaw should still use ClawHub even though the public manifest lists all five supported environments.
+The npm-first installer supports Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode. OpenClaw should still use ClawHub even though the public manifest lists all six supported environments.
 
 Hermes Agent supports MCP through its own `~/.hermes/config.yaml` `mcp_servers` configuration, but Mdtero does not currently publish an active MCP installer flow through `mdtero-install`. Do not present MCP as part of the OpenClaw/ClawHub install until a maintained Mdtero MCP server is published and documented.
 
@@ -37,9 +37,9 @@ Hermes Agent supports MCP through its own `~/.hermes/config.yaml` `mcp_servers` 
 
 If OpenClaw is running on a server, do not force campus-only or institutional acquisition through the server.
 
-- keep Elsevier and ScienceDirect local acquisition on the user's own machine
-- use the Mdtero local helper when you need scripted local acquisition
-- use the browser extension when the user is already reading the paper locally in the browser
+- keep user-provided PDFs, local files, and licensed full-text capture on the user's own machine when required
+- use the browser extension when the user needs to upload a local PDF/file or capture browser-context raw data
+- use Mdtero's CLI/API/backend parser for the actual parse and Markdown generation
 - then hand the Markdown package back to OpenClaw
 
 ## Output rule
