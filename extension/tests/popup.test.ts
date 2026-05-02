@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createFileParseMessage,
   createParseMessage,
+  createSsotParseMessage,
   createTranslateMessage
 } from "../src/lib/runtime";
 import {
@@ -38,6 +39,24 @@ describe("createParseMessage", () => {
       pageContext: {
         tabId: 42,
         tabUrl: "https://example.com/paper"
+      }
+    });
+  });
+});
+
+describe("createSsotParseMessage", () => {
+  it("builds the popup parse message for backend SSOT route planning", () => {
+    expect(
+      createSsotParseMessage("10.1002/demo", {
+        tabId: 42,
+        tabUrl: "https://onlinelibrary.wiley.com/doi/full/10.1002/demo"
+      })
+    ).toEqual({
+      type: "mdtero.parse.ssot.request",
+      input: "10.1002/demo",
+      pageContext: {
+        tabId: 42,
+        tabUrl: "https://onlinelibrary.wiley.com/doi/full/10.1002/demo"
       }
     });
   });
