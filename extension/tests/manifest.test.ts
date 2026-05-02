@@ -20,6 +20,7 @@ describe("extension manifest", () => {
     expect(manifest.host_permissions).toEqual([
       "https://api.mdtero.com/*",
       "https://api.elsevier.com/*",
+      "https://api.wiley.com/*",
       "https://api.springernature.com/*",
       "https://doi.org/*",
       "*://*.arxiv.org/*",

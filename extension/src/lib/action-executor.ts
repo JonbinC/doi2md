@@ -41,6 +41,13 @@ export async function executeAction(
     case "fetch_elsevier_xml":
       return executeFetchElsevierXml(context, routePlan);
 
+    case "fetch_wiley_tdm_pdf":
+      return executeFetchWileyTdmPdf(context, routePlan);
+
+    case "fetch_springer_pdf":
+    case "fetch_remote_html":
+      return executeFetchHelperSource(context, routePlan);
+
     case "fetch_epub_asset":
       return executeFetchEpubAsset(context, routePlan);
 
@@ -247,6 +254,56 @@ async function executeFetchElsevierXml(
     };
   } catch (error) {
     return { success: false, error: String(error) };
+  }
+}
+
+async function executeFetchWileyTdmPdf(
+  context: ActionContext,
+  routePlan: { user_message?: string }
+): Promise<ActionResult> {
+  if (!context.wileyTdmToken) {
+    return {
+      success: false,
+      requiresUpload: true,
+      error: routePlan.user_message || "Wiley TDM requires your Wiley TDM token in extension settings.",
+    };
+  }
+
+  const sourceDoi = inferSourceDoi(context.input);
+  if (!sourceDoi) {
+    return { success: false, requiresUpload: true, error: "Wiley TDM needs a DOI input." };
+  }
+
+  try {
+    const response = await fetch(`https://api.wiley.com/onlinelibrary/tdm/v1/articles/${encodeURIComponent(sourceDoi)}`, {
+      headers: {
+        "Wiley-TDM-Client-Token": context.wileyTdmToken,
+      },
+    });
+    if (!response.ok) {
+      return { success: false, requiresUpload: true, error: `Wiley TDM fetch failed: ${response.status}` };
+    }
+
+    const payload = await response.arrayBuffer();
+    const helperBundle = buildHelperBundleBlob({
+      connector: "wiley_tdm",
+      artifactKind: "pdf",
+      payload,
+      payloadName: "paper.pdf",
+      sourceDoi,
+      sourceUrl: response.url,
+      access: "licensed",
+      acquisitionHeaders: { "Wiley-TDM-Client-Token": "<user-provided>" },
+    });
+
+    return {
+      success: true,
+      helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi,
+    };
+  } catch (error) {
+    return { success: false, requiresUpload: true, error: String(error) };
   }
 }
 
