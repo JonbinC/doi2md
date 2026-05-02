@@ -17,6 +17,7 @@ interface BuildHelperBundleBlobOptions {
   licenseName?: string;
   acquisitionMode?: string;
   userPrivateRetention?: boolean;
+  acquisitionHeaders?: Record<string, string>;
 }
 
 interface ZipEntry {
@@ -57,6 +58,34 @@ const CONNECTOR_PRESETS: Record<string, { access: AccessKind; sourceName: string
   arxiv_native: {
     access: "open",
     sourceName: "arxiv_native"
+  },
+  cairn_html: {
+    access: "unknown",
+    sourceName: "cairn_html"
+  },
+  rsc_html: {
+    access: "unknown",
+    sourceName: "rsc_html"
+  },
+  nature_html: {
+    access: "unknown",
+    sourceName: "nature_html"
+  },
+  mdpi_html: {
+    access: "open",
+    sourceName: "mdpi_html"
+  },
+  ieee_html: {
+    access: "unknown",
+    sourceName: "ieee_html"
+  },
+  bepress: {
+    access: "open",
+    sourceName: "bepress"
+  },
+  pure: {
+    access: "open",
+    sourceName: "pure"
   }
 };
 
@@ -85,7 +114,8 @@ export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Bl
       options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
     ),
     payload_name: options.payloadName,
-    extra_files: extraFiles.map((entry) => entry.name)
+    extra_files: extraFiles.map((entry) => entry.name),
+    acquisition_headers: options.acquisitionHeaders || null
   };
 
   const archive = buildStoredZip([
@@ -105,6 +135,39 @@ export function buildHelperBundleBlob(options: BuildHelperBundleBlobOptions): Bl
 
 export function inferBrowserHelperBundleConnector(input: string, pageUrl?: string): string {
   const haystack = `${String(input || "").toLowerCase()} ${String(pageUrl || "").toLowerCase()}`;
+  if (haystack.includes("cairn.info") || haystack.includes("shs.cairn.info")) {
+    return "cairn_html";
+  }
+  if (
+    haystack.includes("pubs.rsc.org") ||
+    haystack.includes("10.1039/") ||
+    haystack.includes("10.1039")
+  ) {
+    return "rsc_html";
+  }
+  if (haystack.includes("nature.com/articles/") || haystack.includes("10.1038/")) {
+    return "nature_html";
+  }
+  if (haystack.includes("mdpi.com/")) {
+    return "mdpi_html";
+  }
+  if (haystack.includes("ieeexplore.ieee.org") || haystack.includes("10.1109/")) {
+    return "ieee_html";
+  }
+  if (
+    haystack.includes("academicworks.cuny.edu") ||
+    haystack.includes("digitalcommons.liberty.edu") ||
+    haystack.includes("scholar.utc.edu")
+  ) {
+    return "bepress";
+  }
+  if (
+    haystack.includes("research.birmingham.ac.uk") ||
+    haystack.includes("pure.au.dk") ||
+    haystack.includes("pure.eur.nl")
+  ) {
+    return "pure";
+  }
   if (haystack.includes("arxiv.org") || haystack.includes("arxiv:")) {
     return "arxiv_native";
   }

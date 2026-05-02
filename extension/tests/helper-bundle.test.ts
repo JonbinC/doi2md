@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildHelperBundleBlob } from "../src/lib/helper-bundle";
+import { buildHelperBundleBlob, inferBrowserHelperBundleConnector } from "../src/lib/helper-bundle";
 
 describe("buildHelperBundleBlob", () => {
   it("packages a browser-captured html payload into a helper bundle zip", async () => {
@@ -59,5 +59,34 @@ describe("buildHelperBundleBlob", () => {
     expect(text).toContain("\"extra_files\":[\"assets/figure-1.png\"]");
     expect(text).toContain("paper.html");
     expect(text).toContain("assets/figure-1.png");
+  });
+
+  it("records provider header provenance without storing user connector secrets", async () => {
+    const blob = buildHelperBundleBlob({
+      connector: "wiley_tdm",
+      artifactKind: "pdf",
+      payload: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      payloadName: "paper.pdf",
+      sourceDoi: "10.1002/demo",
+      access: "licensed",
+      acquisitionHeaders: {
+        "Wiley-TDM-Client-Token": "<user-provided>"
+      }
+    });
+
+    const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+    expect(text).toContain("\"connector\":\"wiley_tdm\"");
+    expect(text).toContain("\"acquisition_headers\":{\"Wiley-TDM-Client-Token\":\"<user-provided>\"}");
+    expect(text).not.toContain("wiley-secret-token");
+  });
+
+  it("infers provider-aware connector hints for common HTML-first captures", () => {
+    expect(inferBrowserHelperBundleConnector("", "https://www.cairn.info/revue-demo-2026-1-page-1.htm")).toBe("cairn_html");
+    expect(inferBrowserHelperBundleConnector("", "https://research.birmingham.ac.uk/en/publications/demo")).toBe("pure");
+    expect(inferBrowserHelperBundleConnector("", "https://academicworks.cuny.edu/gc_etds/6615/")).toBe("bepress");
+    expect(inferBrowserHelperBundleConnector("10.1039/D0TA03080E", "https://pubs.rsc.org/en/content/articlehtml/2020/ta/d0ta03080e")).toBe("rsc_html");
+    expect(inferBrowserHelperBundleConnector("", "https://www.nature.com/articles/s41586-026-00001-1")).toBe("nature_html");
+    expect(inferBrowserHelperBundleConnector("", "https://www.mdpi.com/2072-4292/18/1/1")).toBe("mdpi_html");
+    expect(inferBrowserHelperBundleConnector("", "https://ieeexplore.ieee.org/document/1234567")).toBe("ieee_html");
   });
 });
