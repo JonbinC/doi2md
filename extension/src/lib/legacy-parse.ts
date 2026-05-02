@@ -37,6 +37,7 @@ interface LegacyPageContext {
 interface LegacyParseMessage {
   input: string;
   elsevierApiKey?: string;
+  wileyTdmToken?: string;
   springerOpenAccessApiKey?: string;
   pageContext?: LegacyPageContext;
 }
