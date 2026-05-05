@@ -86,11 +86,15 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "npx mdtero-install install gemini_cli", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install hermes", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install opencode", "mdtero-public/README.md");
+  expectContains(publicReadme, "mdtero-install show` prints the active public manifest", "mdtero-public/README.md");
+  expectContains(publicReadme, "mdtero doctor` checks that `MDTERO_API_KEY` is available", "mdtero-public/README.md");
+  expectContains(publicReadme, "For headless agents, create a fresh API key in Mdtero Account", "mdtero-public/README.md");
   expectContains(publicReadme, "clawhub install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/README.md");
   expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
   expectContains(publicReadme, "OpenClaw keeps the dedicated route", "mdtero-public/README.md");
   expectContains(publicReadme, "Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`.", "mdtero-public/README.md");
+  expectContains(publicReadme, "https://github.com/JonbinC/doi2md", "mdtero-public/README.md");
   expectContains(publicReadme, "Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.", "mdtero-public/README.md");
   expectContains(publicReadme, "Desktop preview artifacts remain a deferred archive / preview surface", "mdtero-public/README.md");
 
@@ -101,6 +105,9 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(installReadme, "npx mdtero-install install gemini_cli", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install hermes", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install opencode", "mdtero-public/install/README.md");
+  expectContains(installReadme, "mdtero-install install <target>` writes the Mdtero skill bundle", "mdtero-public/install/README.md");
+  expectContains(installReadme, "For a headless agent, create a fresh API key in Mdtero Account", "mdtero-public/install/README.md");
+  expectContains(installReadme, "https://github.com/JonbinC/doi2md", "mdtero-public/install/README.md");
   expectContains(installReadme, "clawhub install mdtero", "mdtero-public/install/README.md");
   expectContains(installReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/install/README.md");
   expectContains(installReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/install/README.md");

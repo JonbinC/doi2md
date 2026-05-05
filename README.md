@@ -17,16 +17,28 @@ Keyword discovery and API-key management stay in Mdtero Account.
 
 ## Canonical install paths
 
-- Inspect the public contract: `npx mdtero-install show`
-- Check the packaged installer version: `npx mdtero-install version`
-- Install for Claude Code: `npx mdtero-install install claude_code`
-- Install for Codex: `npx mdtero-install install codex`
-- Install for Gemini CLI: `npx mdtero-install install gemini_cli`
-- Install for Hermes Agent: `npx mdtero-install install hermes`
-- Install for OpenCode: `npx mdtero-install install opencode`
-- Then run browser login from the installed CLI: `mdtero login`
-- Verify the environment with `mdtero doctor`
+Use the npm-first installer when Mdtero should run inside an agent or terminal workspace:
+
+```bash
+npx mdtero-install show
+npx mdtero-install version
+npx mdtero-install install codex        # or claude_code / gemini_cli / hermes / opencode
+mdtero login                            # browser handoff for an interactive terminal
+mdtero doctor                           # confirms MDTERO_API_KEY is visible to the CLI
+```
+
+Choose the install target that matches the agent workspace:
+
+- Claude Code: `npx mdtero-install install claude_code`
+- Codex: `npx mdtero-install install codex`
+- Gemini CLI: `npx mdtero-install install gemini_cli`
+- Hermes Agent: `npx mdtero-install install hermes`
+- OpenCode: `npx mdtero-install install opencode`
 - OpenClaw keeps the dedicated route: `clawhub install mdtero`
+
+`mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
+
+For headless agents, create a fresh API key in Mdtero Account and copy the dashboard install prompt into the agent. Use `mdtero login` when you are sitting at an interactive terminal; use the dashboard prompt when the agent cannot open a browser.
 
 For OpenClaw, confirm that the dedicated ClawHub route is available in your environment before relying on it. Normal parsing still runs through Mdtero's CLI/API and backend parser. If a paper has to stay local, use the extension or dashboard upload path for the user-provided PDF or file.
 
@@ -54,7 +66,7 @@ Use the extension only as a local executor. The backend decides the route plan; 
 ## Release truth
 
 - The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.
-- GitHub Releases and the public `doi2md` repository only mirror the website-led release chain.
+- GitHub Releases and the public [`JonbinC/doi2md`](https://github.com/JonbinC/doi2md) repository only mirror the website-led release chain.
 - The current launchability proof for the active launch surfaces is `npm --prefix mdtero-frontend run test:launchability-proof`.
 - Desktop preview artifacts remain a deferred archive / preview surface and are not part of the current extension-and-CLI launch path.
 
