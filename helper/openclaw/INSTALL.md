@@ -13,7 +13,7 @@ Use the normal path in this order:
 
 The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.
 
-OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first CLI release truth used by Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode.
+OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the npm-first agent-skill release truth used by Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode. For those npm-first targets, the preferred user-facing command after `uv tool install mdtero` is `mdtero bootstrap --agent <target>`; for OpenClaw, keep using the dashboard prompt and ClawHub route.
 
 Confirm that the ClawHub route is available in your OpenClaw environment before relying on it. Normal parsing still runs through Mdtero's CLI/API and backend parser. If a paper has to stay local, use the extension or dashboard upload path for the user-provided PDF or file.
 
@@ -25,7 +25,7 @@ Helpful public checks:
 - `npx mdtero-install show`
 - `npm --prefix mdtero-frontend run test:launchability-proof`
 
-Do not use `npx mdtero-install install openclaw`; OpenClaw stays on `clawhub install mdtero`.
+Do not use `npx mdtero-install install openclaw` or `mdtero bootstrap --agent openclaw`; OpenClaw stays on `clawhub install mdtero`.
 
 ## Other agent targets
 
