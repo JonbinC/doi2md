@@ -98,6 +98,9 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "clawhub install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/README.md");
   expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
+  expectContains(publicReadme, "Humans", "mdtero-public/README.md");
+  expectContains(publicReadme, "Agents", "mdtero-public/README.md");
+  expectContains(publicReadme, "uv` owns the Python CLI", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero bootstrap --agent <target>", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero setup --agent <target>", "mdtero-public/README.md");
   expectContains(publicReadme, "keeps runtime setup, login guidance, and agent skill install in one place", "mdtero-public/README.md");
@@ -108,6 +111,9 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "Desktop preview artifacts remain a deferred archive / preview surface", "mdtero-public/README.md");
 
   expectContains(installReadme, "npx mdtero-install show", "mdtero-public/install/README.md");
+  expectContains(installReadme, "human install guide and an agent handoff contract", "mdtero-public/install/README.md");
+  expectContains(installReadme, "never claim npm owns the Python runtime", "mdtero-public/install/README.md");
+  expectContains(installReadme, "never delete user papers or Markdown", "mdtero-public/install/README.md");
   expectContains(installReadme, "uv tool install mdtero", "mdtero-public/install/README.md");
   expectContains(installReadme, "mdtero bootstrap --agent codex", "mdtero-public/install/README.md");
   expectContains(installReadme, "mdtero setup --agent <target>", "mdtero-public/install/README.md");

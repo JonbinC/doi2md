@@ -4,6 +4,15 @@ This directory is the umbrella entry point for the current Mdtero public install
 
 Keyword discovery and API-key management stay in Mdtero Account.
 
+## Who this page is for
+
+This page is both a human install guide and an agent handoff contract.
+
+- **Humans** should be able to copy the quick-start, connect their agent, run Mdtero, update, uninstall, and recover from PATH issues.
+- **Agents** should be able to read the same page and act safely: install only the selected skill bundle, never claim npm owns the Python runtime, never delete user papers or Markdown, and keep OpenClaw on ClawHub.
+
+The short version: humans run `uv tool install mdtero` and then `mdtero bootstrap --agent <target>`; agents preserve the boundary that `uv` owns the runtime and `mdtero-install` owns only skill files.
+
 ## Inspect the canonical public contract
 
 - `npx mdtero-install show`

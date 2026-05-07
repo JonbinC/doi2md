@@ -15,6 +15,15 @@ This repository is the public home for the two active launch surfaces:
 
 Keyword discovery and API-key management stay in Mdtero Account.
 
+## Who this is for
+
+This public install surface must work for two readers:
+
+- **Humans** who want one clear path to install, connect an agent, use Mdtero, update, uninstall, and troubleshoot.
+- **Agents** that receive a dashboard or documentation handoff and need to execute the right commands without confusing the uv-managed Python runtime with npm-managed skill files.
+
+If you are human, start with the quick commands below. If you are an agent, preserve the runtime boundary: `uv` owns the Python CLI, `mdtero-install` owns only agent skill files, and OpenClaw stays on ClawHub.
+
 ## Canonical install paths
 
 Use `uv` for the local Python CLI runtime, then let the Python CLI bootstrap the matching agent skill bundle:
