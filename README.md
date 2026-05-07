@@ -10,21 +10,35 @@ Mdtero turns papers into reusable Markdown research packages.
 
 This repository is the public home for the two active launch surfaces:
 
-- the npm-first installer CLI for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode
+- the npm-first agent-skill installer for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode
 - the browser extension for paper pages or local files that should stay in the user's browser session
 
 Keyword discovery and API-key management stay in Mdtero Account.
 
 ## Canonical install paths
 
-Use the npm-first installer when Mdtero should run inside an agent or terminal workspace:
+Use `uv` for the local Python CLI runtime, then let the Python CLI bootstrap the matching agent skill bundle:
+
+```bash
+uv tool install mdtero                  # installs the Python CLI runtime and local deps
+mdtero bootstrap --agent codex          # installs the Codex skill bundle and prints next steps
+mdtero login                            # browser handoff for an interactive terminal
+mdtero doctor                           # confirms MDTERO_API_KEY is visible to the CLI
+```
+
+The one-command bootstrap form after `uv` is:
+
+```bash
+mdtero bootstrap --agent <target>        # or: mdtero setup --agent <target>
+```
+
+Under the hood, the uv-managed Python runtime delegates only the agent skill files to npm:
 
 ```bash
 npx mdtero-install show
 npx mdtero-install version
 npx mdtero-install install codex        # or claude_code / gemini_cli / hermes / opencode
-mdtero login                            # browser handoff for an interactive terminal
-mdtero doctor                           # confirms MDTERO_API_KEY is visible to the CLI
+npx mdtero-install uninstall codex      # removes only the selected agent skill bundle
 ```
 
 Choose the install target that matches the agent workspace:
@@ -36,7 +50,7 @@ Choose the install target that matches the agent workspace:
 - OpenCode: `npx mdtero-install install opencode`
 - OpenClaw keeps the dedicated route: `clawhub install mdtero`
 
-`mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
+`uv tool install mdtero` installs the actual Python CLI runtime with local dependencies such as `curl_cffi` and `pyzotero`. `mdtero bootstrap --agent <target>` and `mdtero setup --agent <target>` keep that runtime uv-managed while calling `npx mdtero-install install <target>` for the agent skill bundle. `mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
 
 For headless agents, create a fresh API key in Mdtero Account and copy the dashboard install prompt into the agent. Use `mdtero login` when you are sitting at an interactive terminal; use the dashboard prompt when the agent cannot open a browser.
 
@@ -44,15 +58,17 @@ For OpenClaw, confirm that the dedicated ClawHub route is available in your envi
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
 
-Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`.
+Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`. The recommended user-facing entry is still the uv-managed Python command `mdtero bootstrap --agent <target>` because it keeps runtime setup, login guidance, and agent skill install in one place.
 
 Hermes can load Mdtero as a `SKILL.md` workflow from `~/.hermes/skills/mdtero`. Hermes MCP configuration is a separate surface: Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.
 
 ## What each install gives you
 
-The npm CLI is a Node package. It installs the `mdtero-install` and `mdtero` commands plus the agent skill files; it does not bundle Python packages such as `curl_cffi` or `pyzotero`.
+The `mdtero` runtime CLI is a Python package installed with `uv tool install mdtero`; that package declares local runtime dependencies such as `curl_cffi` and `pyzotero`.
 
-Local Python tooling is a developer/backend concern, not the normal product install. Dependencies such as `curl_cffi` and `pyzotero` belong to that local backend tooling, not to the npm CLI or browser extension.
+The next Python package direction is an importable Cloud Parse SDK. That SDK should let developers use `from mdtero import Mdtero` to create hosted parse tasks, wait for completion, and download Markdown artifacts. It should not expose the local parser engine or backend routing internals.
+
+The npm package `mdtero-install` remains the Node-based agent-skill installer. It writes or removes target-specific skill files for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode; it does not own the Python runtime or the canonical `mdtero` command. If a shell runs an npm-style `mdtero` shim that reports commands as "not implemented in the npm CLI yet", fix the `PATH` collision and use the Python runtime instead. The browser extension also is not a Python runtime and does not bundle `curl_cffi` or `pyzotero`.
 
 ## Extension boundary
 
@@ -82,8 +98,6 @@ Use the extension only as a local executor. The backend decides the route plan; 
 
 ```bash
 npm install
-npm test
-npm run build
 npm run test:install
 npm run test:public-contract
 ```

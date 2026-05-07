@@ -79,6 +79,7 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   ]);
 
   expectContains(publicReadme, "Mdtero turns papers into reusable Markdown research packages.", "mdtero-public/README.md");
+  expectContains(publicReadme, "uv tool install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install show", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install version", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install codex", "mdtero-public/README.md");
@@ -87,11 +88,19 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "npx mdtero-install install hermes", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install opencode", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero-install show` prints the active public manifest", "mdtero-public/README.md");
+  expectContains(publicReadme, "installs the actual Python CLI runtime with local dependencies such as `curl_cffi` and `pyzotero`", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero doctor` checks that `MDTERO_API_KEY` is available", "mdtero-public/README.md");
+  expectContains(publicReadme, "importable Cloud Parse SDK", "mdtero-public/README.md");
+  expectContains(publicReadme, "should not expose the local parser engine", "mdtero-public/README.md");
+  expectContains(publicReadme, "does not own the Python runtime or the canonical `mdtero` command", "mdtero-public/README.md");
+  expectContains(publicReadme, "fix the `PATH` collision", "mdtero-public/README.md");
   expectContains(publicReadme, "For headless agents, create a fresh API key in Mdtero Account", "mdtero-public/README.md");
   expectContains(publicReadme, "clawhub install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/README.md");
   expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
+  expectContains(publicReadme, "mdtero bootstrap --agent <target>", "mdtero-public/README.md");
+  expectContains(publicReadme, "mdtero setup --agent <target>", "mdtero-public/README.md");
+  expectContains(publicReadme, "keeps runtime setup, login guidance, and agent skill install in one place", "mdtero-public/README.md");
   expectContains(publicReadme, "OpenClaw keeps the dedicated route", "mdtero-public/README.md");
   expectContains(publicReadme, "Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`.", "mdtero-public/README.md");
   expectContains(publicReadme, "https://github.com/JonbinC/doi2md", "mdtero-public/README.md");
@@ -99,13 +108,29 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "Desktop preview artifacts remain a deferred archive / preview surface", "mdtero-public/README.md");
 
   expectContains(installReadme, "npx mdtero-install show", "mdtero-public/install/README.md");
+  expectContains(installReadme, "uv tool install mdtero", "mdtero-public/install/README.md");
+  expectContains(installReadme, "mdtero bootstrap --agent codex", "mdtero-public/install/README.md");
+  expectContains(installReadme, "mdtero setup --agent <target>", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Connect an agent workspace", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Use Mdtero after setup", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Update or uninstall", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Troubleshooting", "mdtero-public/install/README.md");
+  expectContains(installReadme, "uv tool uninstall mdtero", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Python runtime remains managed by `uv`", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install version", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install codex", "mdtero-public/install/README.md");
+  expectContains(installReadme, "npx mdtero-install uninstall <target>", "mdtero-public/install/README.md");
+  expectContains(installReadme, "does not remove the Python runtime, API keys, generated Markdown, downloaded papers, or user project data", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install claude_code", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install gemini_cli", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install hermes", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install opencode", "mdtero-public/install/README.md");
-  expectContains(installReadme, "mdtero-install install <target>` writes the Mdtero skill bundle", "mdtero-public/install/README.md");
+  expectContains(installReadme, "mdtero-install install <target>` writes only the Mdtero skill bundle", "mdtero-public/install/README.md");
+  expectContains(installReadme, "installs the Python CLI runtime in an isolated environment with local dependencies such as `curl_cffi` and `pyzotero`", "mdtero-public/install/README.md");
+  expectContains(installReadme, "planned Python import API is a Cloud Parse SDK", "mdtero-public/install/README.md");
+  expectContains(installReadme, "hosted parse tasks, task polling, and Markdown artifact download", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Python runtime should own the canonical `mdtero` command", "mdtero-public/install/README.md");
+  expectContains(installReadme, "not implemented in the npm CLI yet", "mdtero-public/install/README.md");
   expectContains(installReadme, "For a headless agent, create a fresh API key in Mdtero Account", "mdtero-public/install/README.md");
   expectContains(installReadme, "https://github.com/JonbinC/doi2md", "mdtero-public/install/README.md");
   expectContains(installReadme, "clawhub install mdtero", "mdtero-public/install/README.md");
