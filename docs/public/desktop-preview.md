@@ -18,5 +18,5 @@ This page now exists only to document the deferred public preview archive:
 ## What the active launch path is instead
 
 - extension for local browser capture when needed
-- npm-first CLI install for Claude Code, Codex, and Gemini CLI
+- npm-first agent-skill install for Claude Code, Codex, and Gemini CLI
 - dedicated OpenClaw install through `clawhub install mdtero`
