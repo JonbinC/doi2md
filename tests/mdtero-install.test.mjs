@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,6 +105,117 @@ test("install writes the mdtero skill bundle into a Hermes workspace", async () 
   const content = await readFile(skillPath, "utf8");
   assert.match(content, /name: mdtero/);
   assert.match(completed.stdout, /Installed Mdtero skill for Hermes Agent/);
+});
+
+test("uninstall removes only the selected mdtero skill bundle and is idempotent", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mdtero-uninstall-"));
+  const skillDir = join(root, ".codex", "skills", "mdtero");
+  const userOutputDir = join(root, "papers");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(join(skillDir, "SKILL.md"), "name: mdtero\n");
+  await mkdir(userOutputDir, { recursive: true });
+  await writeFile(join(userOutputDir, "paper.md"), "# user paper\n");
+
+  const first = await runNode([CLI_PATH, "uninstall", "codex", "--root", root], {
+    cwd: PROJECT_ROOT,
+  });
+  assert.equal(first.code, 0, first.stderr);
+  assert.match(first.stdout, /Removed Mdtero skill for Codex/);
+  await assert.rejects(stat(join(skillDir, "SKILL.md")), /ENOENT/);
+  assert.equal(await readFile(join(userOutputDir, "paper.md"), "utf8"), "# user paper\n");
+
+  const second = await runNode([CLI_PATH, "uninstall", "codex", "--root", root], {
+    cwd: PROJECT_ROOT,
+  });
+  assert.equal(second.code, 0, second.stderr);
+  assert.match(second.stdout, /No Mdtero skill install found for Codex/);
+  assert.equal(await readFile(join(userOutputDir, "paper.md"), "utf8"), "# user paper\n");
+});
+
+test("install rejects manifest skill directories that escape the selected root", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mdtero-unsafe-install-"));
+  const manifest = {
+    version: 1,
+    manifestUrl: "http://127.0.0.1/install/manifest.json",
+    targets: [
+      {
+        target: "codex",
+        label: "Codex",
+        installCommand: "npx mdtero-install install codex",
+        skillDirectory: "../outside-root"
+      }
+    ]
+  };
+
+  const server = createServer((request, response) => {
+    if (request.url === "/install/manifest.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(manifest));
+      return;
+    }
+    response.writeHead(404);
+    response.end("not found");
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const manifestUrl = `http://127.0.0.1:${address.port}/install/manifest.json`;
+    const completed = await runNode(
+      [CLI_PATH, "install", "codex", "--root", root, "--manifest-url", manifestUrl],
+      { cwd: PROJECT_ROOT }
+    );
+
+    assert.equal(completed.code, 1);
+    assert.match(completed.stderr, /Refusing unsafe skillDirectory outside install root/);
+  } finally {
+    server.close();
+  }
+});
+
+test("install rejects manifest skill directories that resolve to the selected root", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mdtero-root-install-"));
+  const manifest = {
+    version: 1,
+    manifestUrl: "http://127.0.0.1/install/manifest.json",
+    targets: [
+      {
+        target: "codex",
+        label: "Codex",
+        installCommand: "npx mdtero-install install codex",
+        skillDirectory: "."
+      }
+    ]
+  };
+
+  const server = createServer((request, response) => {
+    if (request.url === "/install/manifest.json") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(manifest));
+      return;
+    }
+    response.writeHead(404);
+    response.end("not found");
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const manifestUrl = `http://127.0.0.1:${address.port}/install/manifest.json`;
+    const completed = await runNode(
+      [CLI_PATH, "install", "codex", "--root", root, "--manifest-url", manifestUrl],
+      { cwd: PROJECT_ROOT }
+    );
+
+    assert.equal(completed.code, 1);
+    assert.match(completed.stderr, /Refusing unsafe skillDirectory outside install root/);
+  } finally {
+    server.close();
+  }
 });
 
 test("package metadata stays publishable for the unified install entry", async () => {
