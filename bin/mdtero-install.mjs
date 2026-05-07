@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { copyFile, mkdir, readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -13,7 +13,8 @@ function printUsage() {
   console.log(`Usage:
   mdtero-install show [--manifest-url URL]
   mdtero-install version [--manifest-url URL]
-  mdtero-install install <target> [--root DIR] [--manifest-url URL]`);
+  mdtero-install install <target> [--root DIR] [--manifest-url URL]
+  mdtero-install uninstall <target> [--root DIR] [--manifest-url URL]`);
 }
 
 function parseArgs(argv) {
@@ -85,6 +86,16 @@ function bundledSkillDir() {
   return join(PROJECT_ROOT, "skills", "mdtero");
 }
 
+function resolveSkillInstallDir(rootDir, skillDirectory) {
+  const rootPath = resolve(rootDir);
+  const targetPath = resolve(rootPath, skillDirectory);
+  const relativePath = relative(rootPath, targetPath);
+  if (!relativePath || relativePath.startsWith("..") || relativePath === ".") {
+    throw new Error(`Refusing unsafe skillDirectory outside install root: ${skillDirectory}`);
+  }
+  return targetPath;
+}
+
 async function showManifest(manifest) {
   console.log(`Mdtero install manifest v${manifest.version}`);
   console.log(`Manifest URL: ${manifest.manifestUrl}`);
@@ -119,10 +130,35 @@ async function installSkill(manifest, target, rootDir) {
     throw new Error(`Target ${target} did not expose a skillDirectory.`);
   }
 
-  const targetDir = join(rootDir, definition.skillDirectory);
+  const targetDir = resolveSkillInstallDir(rootDir, definition.skillDirectory);
   await copyDirectory(bundledSkillDir(), targetDir);
 
   console.log(`Installed Mdtero skill for ${definition.label} at ${targetDir}`);
+}
+
+async function uninstallSkill(manifest, target, rootDir) {
+  const definition = (manifest.targets || []).find((item) => item.target === target);
+  if (!definition) {
+    throw new Error(`Unsupported target: ${target}`);
+  }
+  if (definition.target === "openclaw") {
+    throw new Error("OpenClaw uses clawhub uninstall flows, not npx mdtero-install uninstall openclaw.");
+  }
+  if (!definition.skillDirectory) {
+    throw new Error(`Target ${target} did not expose a skillDirectory.`);
+  }
+
+  const targetDir = resolveSkillInstallDir(rootDir, definition.skillDirectory);
+  try {
+    await rm(targetDir, { recursive: true, force: false });
+    console.log(`Removed Mdtero skill for ${definition.label} at ${targetDir}`);
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      console.log(`No Mdtero skill install found for ${definition.label} at ${targetDir}`);
+      return;
+    }
+    throw error;
+  }
 }
 
 async function main() {
@@ -149,6 +185,14 @@ async function main() {
       throw new Error("Missing install target.");
     }
     await installSkill(manifest, target, options.root);
+    return;
+  }
+
+  if (command === "uninstall") {
+    if (!target) {
+      throw new Error("Missing uninstall target.");
+    }
+    await uninstallSkill(manifest, target, options.root);
     return;
   }
 
