@@ -27,11 +27,29 @@ Use the browser extension only when a user needs to upload a PDF/local file from
 
 Treat PDF as optional input. Prefer the Markdown package first and only fall back to PDF when the workflow truly requires it.
 
+## Cloud CLI Workflow
+
+```bash
+mdtero parse <doi-or-url>
+mdtero status <task-id>
+mdtero download <task-id> paper_md --output-dir .
+mdtero translate <parse-task-id> zh
+mdtero download <task-id> translated_md --output-dir .
+```
+
+For user-provided PDF/HTML/XML/EPUB files, use:
+
+```bash
+mdtero parse --file <path> [--source-input DOI_OR_URL] [--source-doi DOI]
+```
+
 ## Direct API Notes
 
 - base URL: `https://api.mdtero.com`
 - auth header: `Authorization: ApiKey ${MDTERO_API_KEY}`
 - parse endpoint: `POST /tasks/parse`
+- upload endpoint: `POST /tasks/parse-upload-v2`
+- status endpoint: `GET /tasks/<task_id>`
 - translate endpoint: `POST /tasks/translate`
 - Markdown download: `/tasks/<task_id>/download/paper_md`
 - translated Markdown download: `/tasks/<task_id>/download/translated_md`

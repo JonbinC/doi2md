@@ -25,11 +25,29 @@ Gemini CLI gets the same agent-side Mdtero workflow as the other npm-first targe
 
 Keep user-provided PDFs, local files, and licensed browser-context capture on the user's machine when required. Use the browser extension for those upload/capture cases; use the CLI/API/backend parser for normal DOI/URL parsing and Markdown generation.
 
+## Cloud CLI Workflow
+
+```bash
+mdtero parse <doi-or-url>
+mdtero status <task-id>
+mdtero download <task-id> paper_md --output-dir .
+mdtero translate <parse-task-id> zh
+mdtero download <task-id> translated_md --output-dir .
+```
+
+For user-provided PDF/HTML/XML/EPUB files, use:
+
+```bash
+mdtero parse --file <path> [--source-input DOI_OR_URL] [--source-doi DOI]
+```
+
 ## Direct API Notes
 
 - base URL: `https://api.mdtero.com`
 - auth header: `Authorization: ApiKey ${MDTERO_API_KEY}`
 - parse endpoint: `POST /tasks/parse`
+- upload endpoint: `POST /tasks/parse-upload-v2`
+- status endpoint: `GET /tasks/<task_id>`
 - translate endpoint: `POST /tasks/translate`
 - Markdown download: `/tasks/<task_id>/download/paper_md`
 - translated Markdown download: `/tasks/<task_id>/download/translated_md`
