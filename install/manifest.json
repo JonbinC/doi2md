@@ -6,7 +6,7 @@
   "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
   "cli": {
     "packageName": "mdtero-install",
-    "packageVersion": "0.1.7",
+    "packageVersion": "0.1.8",
     "npxCommand": "npx mdtero-install"
   },
   "targets": [
@@ -71,7 +71,7 @@
     },
     "current": {
       "cli": {
-        "version": "0.1.7",
+        "version": "0.1.8",
         "packageName": "mdtero-install",
         "packageManager": "npm",
         "installCommand": "npx mdtero-install",
@@ -100,7 +100,7 @@
     },
     "latest": {
       "cli": {
-        "version": "0.1.7",
+        "version": "0.1.8",
         "packageName": "mdtero-install",
         "packageManager": "npm",
         "installCommand": "npx mdtero-install",
