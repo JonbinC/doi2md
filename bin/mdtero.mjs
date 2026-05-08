@@ -502,7 +502,7 @@ async function cmdDownload(rest, options) {
 function explainApiCommand(command, rest) {
   const suffix = rest.length ? ` ${rest.join(" ")}` : "";
   console.log(`mdtero ${command}${suffix} is not implemented in the npm CLI yet.`);
-  console.log("Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero version.");
+  console.log("Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero parse, mdtero status, mdtero translate, mdtero download, mdtero version.");
   console.log(`When this command is ready, it will need MDTERO_API_KEY.`);
   console.log("Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>.");
   console.log("Agent users can also run /mdtero-setup inside their workspace.");

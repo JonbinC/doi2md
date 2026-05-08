@@ -305,7 +305,7 @@ test("mdtero CLI explains API-key setup for discover commands", async () => {
 
   assert.equal(completed.code, 0, completed.stderr);
   assert.match(completed.stdout, /is not implemented in the npm CLI yet/i);
-  assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero version\./);
+  assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero parse, mdtero status, mdtero translate, mdtero download, mdtero version\./);
   assert.match(completed.stdout, /mdtero login --api-key/);
 });
 
@@ -585,7 +585,7 @@ test("mdtero CLI keeps every placeholder command on the same honest guidance sur
     const completed = await runNode([MDTERO_CLI_PATH, ...args], { cwd: PROJECT_ROOT });
     assert.equal(completed.code, 0, `${args.join(" ")} should stay non-fatal`);
     assert.match(completed.stdout, /is not implemented in the npm CLI yet/i);
-    assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero version\./);
+    assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero parse, mdtero status, mdtero translate, mdtero download, mdtero version\./);
     assert.match(completed.stdout, /Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>\./);
   }
 });

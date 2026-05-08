@@ -110,7 +110,7 @@ npx mdtero-install uninstall codex      # remove only that agent skill bundle
 ## Troubleshooting
 
 - If `mdtero` is missing, run `uv tool install mdtero`.
-- If `mdtero version` prints an npm-style version such as `0.1.7`, your shell is hitting a stale npm shim. Run `which -a mdtero`, put the uv tool path first, or remove the stale shim after backing it up.
+- If `mdtero version` prints an npm-style version such as `0.1.8`, your shell is hitting a stale npm shim. Run `which -a mdtero`, put the uv tool path first, or remove the stale shim after backing it up.
 - If `mdtero bootstrap --agent <target>` says `npx` is missing, install Node/npm only for the agent skill bundle route. This does not affect the uv-managed Python runtime.
 - If `mdtero doctor` cannot see `MDTERO_API_KEY`, run `mdtero login` again or paste a fresh key from Mdtero Account into the runtime environment.
 
@@ -122,7 +122,7 @@ The planned Python import API is a Cloud Parse SDK. It should expose `from mdter
 
 `mdtero-install` is a Node installer for agent skills. It writes workflow files for the selected agent target; it does not own the Python runtime.
 
-The Python runtime should own the canonical `mdtero` command. If `which -a mdtero` shows both a Python runtime and an npm shim, put the Python runtime first or remove/rename the stale shim after backing it up. The symptom of the wrong command is an npm-style version such as `0.1.7` or a message that `discover` is "not implemented in the npm CLI yet".
+The Python runtime should own the canonical `mdtero` command. If `which -a mdtero` shows both a Python runtime and an npm shim, put the Python runtime first or remove/rename the stale shim after backing it up. The symptom of the wrong command is an npm-style version such as `0.1.8` or a message that `discover` is "not implemented in the npm CLI yet".
 
 The browser extension is also not a Python runtime. It can upload a user-provided PDF/local file or hand browser-context raw data to Mdtero, but it does not include `curl_cffi`, `pyzotero`, or other Python packages. Parsing still happens in the backend.
 
