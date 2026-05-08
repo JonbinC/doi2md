@@ -21,6 +21,17 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - the browser extension is only needed for user PDF/local file upload or browser-context raw data capture
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 
+## Cloud CLI Workflow
+
+- parse a DOI/URL: `mdtero parse <doi-or-url>`
+- parse a local paper file through the cloud parser: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> [--source-input DOI_OR_URL] [--source-doi DOI]`
+- poll status: `mdtero status <task-id>`
+- download Markdown: `mdtero download <task-id> paper_md --output-dir <dir>`
+- translate from a completed parse task: `mdtero translate <parse-task-id> zh`
+- download translated Markdown: `mdtero download <task-id> translated_md --output-dir <dir>`
+
+The CLI talks to `https://api.mdtero.com` by default and sends `Authorization: ApiKey ${MDTERO_API_KEY}`. Use `MDTERO_API_URL` only for staging or local verification.
+
 ## Output Rule
 
 - prefer Markdown first
