@@ -6,10 +6,10 @@ The helper is not the normal public install path. Mdtero's regular product flow 
 
 Dependency boundary:
 
-- `uv tool install mdtero` owns the Python runtime CLI and local Python dependencies.
-- `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>` is the preferred one-command bootstrap for CLI runtime plus agent skill files.
-- `mdtero setup --agent <target>` installs agent skill files after the uv runtime is present; `npx mdtero-install install <target>` is the fallback skill-only route.
-- `mdtero-install` is a Node installer/uninstaller for agent skill files; it does not own the Python runtime CLI.
+- `npm install -g mdtero-install@0.1.8` owns the currently published public CLI package.
+- `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>` is the preferred one-command bootstrap for CLI package plus agent skill files.
+- `npx mdtero-install install <target>` installs agent skill files and is the reviewable skill-only route.
+- `mdtero-install` is the Node CLI package and installer/uninstaller for agent skill files.
 - The browser extension is JavaScript/browser code and does not bundle `curl_cffi`.
 - Local Python/backend tooling may use local-only Python dependencies such as `curl_cffi` and `pyzotero`.
 
