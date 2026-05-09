@@ -20,13 +20,13 @@ Keyword discovery and API-key management stay in Mdtero Account.
 This public install surface must work for two readers:
 
 - **Humans** who want one clear path to install, connect an agent, use Mdtero, update, uninstall, and troubleshoot.
-- **Agents** that receive a dashboard or documentation handoff and need to execute the right commands without confusing the uv-managed Python runtime with npm-managed skill files.
+- **Agents** that receive a dashboard or documentation handoff and need to execute the right commands without confusing the currently published npm CLI package with future Python-package plans.
 
-If you are human, start with the one-command installer below. If you are an agent, preserve the runtime boundary: the install script installs the uv-managed Python CLI, `mdtero-install` owns only fallback agent skill files, and OpenClaw stays on ClawHub.
+If you are human, start with the one-command installer below. If you are an agent, preserve the runtime boundary: the install script installs the currently published npm CLI package, `mdtero-install` owns agent skill files, and OpenClaw stays on ClawHub.
 
 ## Canonical install paths
 
-Use the install script for the local Python CLI runtime and matching agent skill bundle:
+Use the install script for the local npm CLI package and matching agent skill bundle:
 
 ```bash
 curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
@@ -41,7 +41,7 @@ curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
 sh install-mdtero.sh --agent codex
 ```
 
-Under the hood, the install script runs `uv tool install mdtero`, then `mdtero setup --agent <target>`. The npm installer remains available as a skill-only fallback:
+Under the hood, the install script runs `npm install -g mdtero-install@0.1.8`, then `npx --yes mdtero-install install <target>`. The same npm installer remains available for reviewable skill-only updates:
 
 ```bash
 npx mdtero-install show
@@ -59,7 +59,7 @@ Choose the install target that matches the agent workspace:
 - OpenCode: `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode`
 - OpenClaw keeps the dedicated route: `clawhub install mdtero`
 
-`uv tool install mdtero` installs the actual Python CLI runtime with local dependencies such as `curl_cffi` and `pyzotero`. `mdtero setup --agent <target>` installs the requested agent skill bundle after the runtime exists. `mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
+`npm install -g mdtero-install@0.1.8` installs the currently published public CLI package, including the `mdtero` command for login, doctor, parse, status, translate, and download workflows. `npx --yes mdtero-install install <target>` installs the requested agent skill bundle. `mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
 
 For headless agents, create a fresh API key in Mdtero Account and copy the dashboard install prompt into the agent. Use `mdtero login` when you are sitting at an interactive terminal; use the dashboard prompt when the agent cannot open a browser.
 
@@ -67,17 +67,17 @@ For OpenClaw, confirm that the dedicated ClawHub route is available in your envi
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
 
-Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode use the install script as the primary path. `npx mdtero-install install <target>` remains a fallback for installing only skill files when the Python runtime is already managed elsewhere.
+Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode use the install script as the primary path. `npx mdtero-install install <target>` remains available for reinstalling only skill files when the CLI package is already managed elsewhere.
 
 Hermes can load Mdtero as a `SKILL.md` workflow from `~/.hermes/skills/mdtero`. Hermes MCP configuration is a separate surface: Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.
 
 ## What each install gives you
 
-The `mdtero` runtime CLI is a Python package installed with `uv tool install mdtero`; that package declares local runtime dependencies such as `curl_cffi` and `pyzotero`.
+The current public `mdtero` command is exposed by the npm package `mdtero-install@0.1.8`. It calls the hosted Mdtero API for login, doctor, parse, status, translate, and download workflows.
 
 The next Python package direction is an importable Cloud Parse SDK. That SDK should let developers use `from mdtero import Mdtero` to create hosted parse tasks, wait for completion, and download Markdown artifacts. It should not expose the local parser engine or backend routing internals.
 
-The npm package `mdtero-install` remains the Node-based agent-skill installer. It writes or removes target-specific skill files for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode; it does not own the Python runtime or the canonical `mdtero` command. If a shell runs an npm-style `mdtero` shim that reports commands as "not implemented in the npm CLI yet", fix the `PATH` collision and use the Python runtime instead. The browser extension also is not a Python runtime and does not bundle `curl_cffi` or `pyzotero`.
+The npm package `mdtero-install` is the Node-based public CLI and agent-skill installer. It writes or removes target-specific skill files for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode, and it exposes the current `mdtero` command. Some planned commands may still report "not implemented in the npm CLI yet"; use the supported commands printed by `mdtero --help` until those surfaces ship. The browser extension is a separate browser surface and does not own CLI installation.
 
 ## Extension boundary
 
