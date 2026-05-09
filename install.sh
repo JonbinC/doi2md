@@ -3,14 +3,14 @@ set -eu
 
 TARGET=""
 DRY_RUN="0"
-UV_INSTALL_URL="https://astral.sh/uv/install.sh"
+MDTERO_NPM_PACKAGE="mdtero-install@0.1.8"
 
 usage() {
   cat <<'EOF'
 Usage:
   install.sh --agent <claude_code|codex|gemini_cli|hermes|opencode> [--dry-run]
 
-Installs the Mdtero Python CLI with uv, then asks the CLI to install the
+Installs the currently published Mdtero npm CLI package, then installs the
 matching agent skill bundle.
 
 Examples:
@@ -44,22 +44,12 @@ run() {
   fi
 }
 
-ensure_uv() {
-  if command_exists uv; then
+ensure_npm() {
+  if command_exists npm; then
     return 0
   fi
 
-  if ! command_exists curl; then
-    fail "uv is not installed and curl is unavailable. Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
-  fi
-
-  printf '%s\n' "uv was not found. Installing uv from $UV_INSTALL_URL ..."
-  run sh -c "curl -LsSf '$UV_INSTALL_URL' | sh"
-  export PATH="$HOME/.local/bin:$PATH"
-
-  if [ "$DRY_RUN" = "0" ] && ! command_exists uv; then
-    fail "uv installation finished, but uv is still not on PATH. Add $HOME/.local/bin to PATH and rerun this installer."
-  fi
+  fail "npm is required because the current public Mdtero CLI ships as mdtero-install on npm. Install Node.js/npm first: https://nodejs.org/"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -90,10 +80,9 @@ done
 validate_target "$TARGET"
 
 printf '%s\n' "Installing Mdtero for agent: $TARGET"
-ensure_uv
-run uv tool install mdtero
-export PATH="$HOME/.local/bin:$PATH"
-run mdtero setup --agent "$TARGET"
+ensure_npm
+run npm install -g "$MDTERO_NPM_PACKAGE"
+run npx --yes mdtero-install install "$TARGET"
 
 cat <<'EOF'
 
