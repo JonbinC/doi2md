@@ -3,7 +3,7 @@
   "manifestUrl": "https://mdtero.com/install/manifest.json",
   "installGuideUrl": "https://api.mdtero.com/skills/install.md",
   "helperCommand": "mdtero",
-  "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. Use the agent install for parse, translate, task-status, and download workflows.",
+  "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. The current public CLI ships through mdtero-install on npm for parse, translate, task-status, download, and agent-skill workflows.",
   "cli": {
     "packageName": "mdtero-install",
     "packageVersion": "0.1.8",
@@ -87,7 +87,8 @@
           "hermes",
           "opencode"
         ],
-        "skillInstallCommand": "npx mdtero-install install <target>"
+        "skillInstallCommand": "npx mdtero-install install <target>",
+        "globalInstallCommand": "npm install -g mdtero-install@0.1.8"
       },
       "desktop": {
         "version": "0.1.0-preview.1",
@@ -117,7 +118,8 @@
           "hermes",
           "opencode"
         ],
-        "skillInstallCommand": "npx mdtero-install install <target>"
+        "skillInstallCommand": "npx mdtero-install install <target>",
+        "globalInstallCommand": "npm install -g mdtero-install@0.1.8"
       },
       "desktop": {
         "version": "0.1.0-preview.1",
