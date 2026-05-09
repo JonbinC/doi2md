@@ -13,7 +13,7 @@ This repository is the public home for the two active launch surfaces:
 - the low-friction install script and fallback agent-skill installer for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode
 - the browser extension for paper pages or local files that should stay in the user's browser session
 
-Keyword discovery and API-key management stay in Mdtero Account.
+Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The `mdtero` CLI is the unified runtime entry for discovery, parse, translate, task-status, download, and agent-skill workflows.
 
 ## Who this is for
 
@@ -22,7 +22,7 @@ This public install surface must work for two readers:
 - **Humans** who want one clear path to install, connect an agent, use Mdtero, update, uninstall, and troubleshoot.
 - **Agents** that receive a dashboard or documentation handoff and need to execute the right commands without confusing the currently published npm CLI package with future Python-package plans.
 
-If you are human, start with the one-command installer below. If you are an agent, preserve the runtime boundary: the install script installs the currently published npm CLI package, `mdtero-install` owns agent skill files, and OpenClaw stays on ClawHub.
+If you are human, start with the one-command installer below. If you are an agent, preserve the runtime boundary: the install script installs the currently published npm CLI package, `mdtero-install` owns agent skill files, Account remains the control plane, the `mdtero` CLI remains the runtime entry, and OpenClaw stays on ClawHub.
 
 ## Canonical install paths
 

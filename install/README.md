@@ -2,7 +2,7 @@
 
 This directory is the umbrella entry point for the current Mdtero public install surface.
 
-Keyword discovery and API-key management stay in Mdtero Account.
+Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The `mdtero` CLI is the unified runtime entry for discovery, parse, translate, task-status, download, and agent-skill workflows.
 
 ## Who this page is for
 
@@ -11,7 +11,7 @@ This page is both a human install guide and an agent handoff contract.
 - **Humans** should be able to copy the quick-start, connect their agent, run Mdtero, update, uninstall, and recover from PATH issues.
 - **Agents** should be able to read the same page and act safely: install only the selected public CLI package and skill bundle, never claim the unpublished uv/PyPI route is currently available, never delete user papers or Markdown, and keep OpenClaw on ClawHub.
 
-The short version: humans run one install script for their agent; the script installs the currently published `mdtero-install@0.1.8` npm CLI package and then installs the matching skill bundle. Agents preserve the boundary that npm owns the current public CLI package while the uv/PyPI route is not available.
+The short version: humans run one install script for their agent; the script installs the currently published `mdtero-install@0.1.8` npm CLI package and then installs the matching skill bundle. Agents preserve the boundary that Account manages keys/history/quota, the `mdtero` CLI owns runtime work, and npm owns the current public CLI package while the uv/PyPI route is not available.
 
 ## Inspect the canonical public contract
 
