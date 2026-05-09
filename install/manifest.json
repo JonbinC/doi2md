@@ -3,7 +3,7 @@
   "manifestUrl": "https://mdtero.com/install/manifest.json",
   "installGuideUrl": "https://api.mdtero.com/skills/install.md",
   "helperCommand": "mdtero",
-  "accountBoundaryNote": "Keyword discovery and API-key management stay in Mdtero Account. The current public CLI ships through mdtero-install on npm for parse, translate, task-status, download, and agent-skill workflows.",
+  "accountBoundaryNote": "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The current public CLI ships through mdtero-install on npm as the unified runtime entry for discovery, parse, translate, task-status, download, and agent-skill workflows.",
   "cli": {
     "packageName": "mdtero-install",
     "packageVersion": "0.1.8",
