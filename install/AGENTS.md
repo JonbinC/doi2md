@@ -17,8 +17,9 @@ Canonical public install contract. The manifest is website-first release truth a
 ## CONVENTIONS
 
 - `manifestUrl` points to `https://mdtero.com/install/manifest.json`.
-- Claude Code, Codex, and Gemini CLI use `npx mdtero-install ...`.
-- OpenClaw uses `clawhub install mdtero` and stays separate from npm-first targets.
+- Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode use `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>` as the primary path.
+- `npx mdtero-install ...` is a fallback for installing/removing skill files only.
+- OpenClaw uses `clawhub install mdtero` and stays separate from install-script targets.
 - Account boundary note must preserve: discovery/API-key management stay in Mdtero Account.
 - Desktop release truth is mirrored from public desktop ledger, not invented here.
 

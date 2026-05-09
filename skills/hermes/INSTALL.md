@@ -5,13 +5,13 @@ description: Install Mdtero into Hermes Agent using its SKILL.md workflow direct
 
 # Mdtero For Hermes Agent
 
-Use the npm-first installer:
+Use the one-command installer:
 
 ```bash
-npx mdtero-install install hermes
+curl -Ls https://mdtero.com/install.sh | sh -s -- --agent hermes
 ```
 
-This copies the Mdtero skill into `.hermes/skills/mdtero` for the current workspace. Hermes can load `SKILL.md` workflows from its skills directory and expose them as slash-command style workflows.
+This installs the Mdtero CLI runtime, then copies the Mdtero skill into `.hermes/skills/mdtero` for the current workspace. Hermes can load `SKILL.md` workflows from its skills directory and expose them as slash-command style workflows.
 
 ## After Install
 

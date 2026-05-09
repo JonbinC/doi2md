@@ -51,6 +51,8 @@ test("install manifest stays mirrored with the active site manifest and keeps CL
 
   assert.deepEqual(manifest, siteManifest, "mdtero-public/install/manifest.json must stay mirrored with the site manifest");
   assert.equal(manifest.manifestUrl, "https://mdtero.com/install/manifest.json");
+  assert.equal(manifest.installScriptUrl, "https://mdtero.com/install.sh");
+  assert.equal(manifest.quickInstallCommand, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>");
   assert.equal(manifest.cli?.npxCommand, "npx mdtero-install");
   assert.equal(manifest.cli?.packageVersion, pkg.version);
   assert.equal(manifest.releaseTruth?.source, "website-first");
@@ -59,8 +61,16 @@ test("install manifest stays mirrored with the active site manifest and keeps CL
   assert.equal(manifest.releaseTruth?.boundaries?.desktopSourceOfTruth, "mdtero-public/desktop/releases/installer-manifest.json");
   assert.equal(manifest.releaseTruth?.current?.cli?.version, pkg.version);
   assert.equal(manifest.releaseTruth?.latest?.cli?.version, pkg.version);
+  assert.equal(manifest.releaseTruth?.current?.cli?.installCommand, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>");
+  assert.equal(manifest.releaseTruth?.latest?.cli?.installCommand, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>");
+  assert.equal(manifest.releaseTruth?.current?.cli?.skillInstallCommand, "npx mdtero-install install <target>");
+  assert.equal(manifest.releaseTruth?.latest?.cli?.skillInstallCommand, "npx mdtero-install install <target>");
   assert.equal(manifest.releaseTruth?.current?.desktop?.version, desktopManifest.version);
   assert.deepEqual(manifest.targets.map((target) => target.target), ["openclaw", "claude_code", "codex", "gemini_cli", "hermes", "opencode"]);
+  for (const target of manifest.targets.filter((item) => item.target !== "openclaw")) {
+    assert.equal(target.installCommand, `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent ${target.target}`);
+    assert.equal(target.skillInstallCommand, `npx mdtero-install install ${target.target}`);
+  }
   const hermes = manifest.targets.find((target) => target.target === "hermes");
   assert.equal(hermes?.skillDirectory, ".hermes/skills/mdtero");
   assert.match(hermes?.mcpNote ?? "", /public MCP installer flow is not active yet/);
@@ -79,14 +89,16 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   ]);
 
   expectContains(publicReadme, "Mdtero turns papers into reusable Markdown research packages.", "mdtero-public/README.md");
+  expectContains(publicReadme, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex", "mdtero-public/README.md");
+  expectContains(publicReadme, "curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh", "mdtero-public/README.md");
   expectContains(publicReadme, "uv tool install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install show", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install version", "mdtero-public/README.md");
   expectContains(publicReadme, "npx mdtero-install install codex", "mdtero-public/README.md");
-  expectContains(publicReadme, "npx mdtero-install install claude_code", "mdtero-public/README.md");
-  expectContains(publicReadme, "npx mdtero-install install gemini_cli", "mdtero-public/README.md");
-  expectContains(publicReadme, "npx mdtero-install install hermes", "mdtero-public/README.md");
-  expectContains(publicReadme, "npx mdtero-install install opencode", "mdtero-public/README.md");
+  expectContains(publicReadme, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent claude_code", "mdtero-public/README.md");
+  expectContains(publicReadme, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent gemini_cli", "mdtero-public/README.md");
+  expectContains(publicReadme, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent hermes", "mdtero-public/README.md");
+  expectContains(publicReadme, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero-install show` prints the active public manifest", "mdtero-public/README.md");
   expectContains(publicReadme, "installs the actual Python CLI runtime with local dependencies such as `curl_cffi` and `pyzotero`", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero doctor` checks that `MDTERO_API_KEY` is available", "mdtero-public/README.md");
@@ -100,29 +112,29 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
   expectContains(publicReadme, "Humans", "mdtero-public/README.md");
   expectContains(publicReadme, "Agents", "mdtero-public/README.md");
-  expectContains(publicReadme, "uv` owns the Python CLI", "mdtero-public/README.md");
-  expectContains(publicReadme, "mdtero bootstrap --agent <target>", "mdtero-public/README.md");
+  expectContains(publicReadme, "the install script installs the uv-managed Python CLI", "mdtero-public/README.md");
   expectContains(publicReadme, "mdtero setup --agent <target>", "mdtero-public/README.md");
-  expectContains(publicReadme, "keeps runtime setup, login guidance, and agent skill install in one place", "mdtero-public/README.md");
+  expectContains(publicReadme, "install script as the primary path", "mdtero-public/README.md");
   expectContains(publicReadme, "OpenClaw keeps the dedicated route", "mdtero-public/README.md");
-  expectContains(publicReadme, "Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`.", "mdtero-public/README.md");
+  expectContains(publicReadme, "`npx mdtero-install install <target>` remains a fallback", "mdtero-public/README.md");
   expectContains(publicReadme, "https://github.com/JonbinC/doi2md", "mdtero-public/README.md");
   expectContains(publicReadme, "Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.", "mdtero-public/README.md");
   expectContains(publicReadme, "Desktop preview artifacts remain a deferred archive / preview surface", "mdtero-public/README.md");
 
   expectContains(installReadme, "npx mdtero-install show", "mdtero-public/install/README.md");
+  expectContains(installReadme, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex", "mdtero-public/install/README.md");
+  expectContains(installReadme, "curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh", "mdtero-public/install/README.md");
   expectContains(installReadme, "human install guide and an agent handoff contract", "mdtero-public/install/README.md");
   expectContains(installReadme, "never claim npm owns the Python runtime", "mdtero-public/install/README.md");
   expectContains(installReadme, "never delete user papers or Markdown", "mdtero-public/install/README.md");
   expectContains(installReadme, "uv tool install mdtero", "mdtero-public/install/README.md");
-  expectContains(installReadme, "mdtero bootstrap --agent codex", "mdtero-public/install/README.md");
   expectContains(installReadme, "mdtero setup --agent <target>", "mdtero-public/install/README.md");
   expectContains(installReadme, "Connect an agent workspace", "mdtero-public/install/README.md");
   expectContains(installReadme, "Use Mdtero after setup", "mdtero-public/install/README.md");
   expectContains(installReadme, "Update or uninstall", "mdtero-public/install/README.md");
   expectContains(installReadme, "Troubleshooting", "mdtero-public/install/README.md");
   expectContains(installReadme, "uv tool uninstall mdtero", "mdtero-public/install/README.md");
-  expectContains(installReadme, "Python runtime remains managed by `uv`", "mdtero-public/install/README.md");
+  expectContains(installReadme, "npm remains only the fallback skill-bundle route", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install version", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install install codex", "mdtero-public/install/README.md");
   expectContains(installReadme, "npx mdtero-install uninstall <target>", "mdtero-public/install/README.md");
@@ -174,7 +186,7 @@ test("public package metadata stays aligned with the installer contract", async 
 
   assert.equal(pkg.name, manifest.cli.packageName);
   assert.equal(pkg.description, "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, OpenCode, and OpenClaw guidance.");
-  assert.deepEqual(pkg.files, ["bin", "install", "skills"]);
+  assert.deepEqual(pkg.files, ["bin", "install", "install.sh", "skills"]);
   assert.equal(pkg.scripts?.["test:install"], "node --test tests/mdtero-install.test.mjs tests/opencode-install.test.mjs");
   assert.equal(pkg.scripts?.["test:public-contract"], "node --test tests/public-contract-truth.test.mjs tests/mdtero-install.test.mjs tests/opencode-install.test.mjs");
   for (const keyword of ["mdtero", "installer", "claude-code", "codex", "gemini-cli", "hermes-agent", "opencode", "openclaw"]) {

@@ -5,13 +5,13 @@ description: Install Mdtero into Gemini CLI and keep the workflow in the local G
 
 # Mdtero For Gemini CLI
 
-Use the npm-first installer:
+Use the one-command installer:
 
 ```bash
-npx mdtero-install install gemini_cli
+curl -Ls https://mdtero.com/install.sh | sh -s -- --agent gemini_cli
 ```
 
-This copies the Mdtero workflow into `.gemini/skills/mdtero` for the current workspace.
+This installs the Mdtero CLI runtime, then copies the Mdtero workflow into `.gemini/skills/mdtero` for the current workspace.
 
 ## After Install
 
@@ -21,7 +21,7 @@ This copies the Mdtero workflow into `.gemini/skills/mdtero` for the current wor
 
 ## Usage Boundary
 
-Gemini CLI gets the same agent-side Mdtero workflow as the other npm-first targets.
+Gemini CLI gets the same agent-side Mdtero workflow as the other install-script targets.
 
 Keep user-provided PDFs, local files, and licensed browser-context capture on the user's machine when required. Use the browser extension for those upload/capture cases; use the CLI/API/backend parser for normal DOI/URL parsing and Markdown generation.
 
