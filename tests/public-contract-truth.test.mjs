@@ -111,7 +111,8 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(publicReadme, "For headless agents, create a fresh API key in Mdtero Account", "mdtero-public/README.md");
   expectContains(publicReadme, "clawhub install mdtero", "mdtero-public/README.md");
   expectContains(publicReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/README.md");
-  expectContains(publicReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/README.md");
+  expectContains(publicReadme, "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts.", "mdtero-public/README.md");
+  expectContains(publicReadme, "The `mdtero` CLI is the unified runtime entry for discovery, parse, translate, task-status, download, and agent-skill workflows.", "mdtero-public/README.md");
   expectContains(publicReadme, "Humans", "mdtero-public/README.md");
   expectContains(publicReadme, "Agents", "mdtero-public/README.md");
   expectContains(publicReadme, "the install script installs the currently published npm CLI package", "mdtero-public/README.md");
@@ -155,7 +156,8 @@ test("public install docs keep CLI + extension launch truth and desktop as defer
   expectContains(installReadme, "https://github.com/JonbinC/doi2md", "mdtero-public/install/README.md");
   expectContains(installReadme, "clawhub install mdtero", "mdtero-public/install/README.md");
   expectContains(installReadme, "`npx mdtero-install install openclaw` is intentionally unsupported.", "mdtero-public/install/README.md");
-  expectContains(installReadme, "Keyword discovery and API-key management stay in Mdtero Account.", "mdtero-public/install/README.md");
+  expectContains(installReadme, "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts.", "mdtero-public/install/README.md");
+  expectContains(installReadme, "The `mdtero` CLI is the unified runtime entry for discovery, parse, translate, task-status, download, and agent-skill workflows.", "mdtero-public/install/README.md");
   expectContains(installReadme, "https://mdtero.com/install/manifest.json", "mdtero-public/install/README.md");
   expectContains(installReadme, "https://api.mdtero.com/skills/install.md", "mdtero-public/install/README.md");
   expectContains(installReadme, "Hermes Agent supports MCP through its own `~/.hermes/config.yaml` `mcp_servers` configuration", "mdtero-public/install/README.md");
