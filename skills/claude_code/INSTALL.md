@@ -5,13 +5,13 @@ description: Install Mdtero into Claude Code and keep account setup in Mdtero Ac
 
 # Mdtero For Claude Code
 
-Use the npm-first installer:
+Use the one-command installer:
 
 ```bash
-npx mdtero-install install claude_code
+curl -Ls https://mdtero.com/install.sh | sh -s -- --agent claude_code
 ```
 
-This copies the Mdtero skill into `.claude/skills/mdtero` for the current workspace.
+This installs the Mdtero CLI runtime, then copies the Mdtero skill into `.claude/skills/mdtero` for the current workspace.
 
 ## After Install
 

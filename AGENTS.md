@@ -34,7 +34,7 @@ mdtero-public/
 
 - If users download, install, or run it locally, default here.
 - Website/dashboard/backend behavior is not owned here.
-- OpenClaw is separate from npm-first agent-skill install targets.
+- OpenClaw is separate from install-script agent-skill targets.
 - Public desktop is preview/testing unless docs/tests promote it.
 - Generated `extension/dist` is output; source edits belong under `extension/src`.
 

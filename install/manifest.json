@@ -23,41 +23,46 @@
       "label": "Claude Code",
       "description": "Best for workspaces that keep Mdtero in .claude/skills.",
       "descriptionZh": "适合把 Mdtero 放进 .claude/skills 的 Claude Code 工作区。",
-      "installCommand": "npx mdtero-install install claude_code",
-      "skillDirectory": ".claude/skills/mdtero"
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent claude_code",
+      "skillDirectory": ".claude/skills/mdtero",
+      "skillInstallCommand": "npx mdtero-install install claude_code"
     },
     {
       "target": "codex",
       "label": "Codex",
       "description": "Best for workspaces that keep Mdtero in .codex/skills.",
       "descriptionZh": "适合把 Mdtero 放进 .codex/skills 的 Codex 工作区。",
-      "installCommand": "npx mdtero-install install codex",
-      "skillDirectory": ".codex/skills/mdtero"
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex",
+      "skillDirectory": ".codex/skills/mdtero",
+      "skillInstallCommand": "npx mdtero-install install codex"
     },
     {
       "target": "gemini_cli",
       "label": "Gemini CLI",
       "description": "Best for Gemini CLI setups that keep the workflow in GEMINI.md.",
       "descriptionZh": "适合把工作流写进 GEMINI.md 的 Gemini CLI 环境。",
-      "installCommand": "npx mdtero-install install gemini_cli",
-      "skillDirectory": ".gemini/skills/mdtero"
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent gemini_cli",
+      "skillDirectory": ".gemini/skills/mdtero",
+      "skillInstallCommand": "npx mdtero-install install gemini_cli"
     },
     {
       "target": "hermes",
       "label": "Hermes Agent",
       "description": "Best for Hermes Agent setups that load SKILL.md workflows from ~/.hermes/skills.",
       "descriptionZh": "适合从 ~/.hermes/skills 加载 SKILL.md 工作流的 Hermes Agent 环境。",
-      "installCommand": "npx mdtero-install install hermes",
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent hermes",
       "skillDirectory": ".hermes/skills/mdtero",
-      "mcpNote": "Hermes supports MCP through ~/.hermes/config.yaml, but Mdtero's public MCP installer flow is not active yet. Use the Mdtero skill first; add MCP only when a maintained Mdtero MCP server is published."
+      "mcpNote": "Hermes supports MCP through ~/.hermes/config.yaml, but Mdtero's public MCP installer flow is not active yet. Use the Mdtero skill first; add MCP only when a maintained Mdtero MCP server is published.",
+      "skillInstallCommand": "npx mdtero-install install hermes"
     },
     {
       "target": "opencode",
       "label": "OpenCode",
       "description": "Best for OpenCode workspaces that keep project skills in .opencode/skills.",
       "descriptionZh": "适合把项目技能放进 .opencode/skills 的 OpenCode 工作区。",
-      "installCommand": "npx mdtero-install install opencode",
-      "skillDirectory": ".opencode/skills/mdtero"
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode",
+      "skillDirectory": ".opencode/skills/mdtero",
+      "skillInstallCommand": "npx mdtero-install install opencode"
     }
   ],
   "releaseTruth": {
@@ -74,14 +79,15 @@
         "version": "0.1.8",
         "packageName": "mdtero-install",
         "packageManager": "npm",
-        "installCommand": "npx mdtero-install",
+        "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>",
         "installTargets": [
           "claude_code",
           "codex",
           "gemini_cli",
           "hermes",
           "opencode"
-        ]
+        ],
+        "skillInstallCommand": "npx mdtero-install install <target>"
       },
       "desktop": {
         "version": "0.1.0-preview.1",
@@ -103,14 +109,15 @@
         "version": "0.1.8",
         "packageName": "mdtero-install",
         "packageManager": "npm",
-        "installCommand": "npx mdtero-install",
+        "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>",
         "installTargets": [
           "claude_code",
           "codex",
           "gemini_cli",
           "hermes",
           "opencode"
-        ]
+        ],
+        "skillInstallCommand": "npx mdtero-install install <target>"
       },
       "desktop": {
         "version": "0.1.0-preview.1",
@@ -127,5 +134,7 @@
         "autoUpdate": false
       }
     }
-  }
+  },
+  "installScriptUrl": "https://mdtero.com/install.sh",
+  "quickInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>"
 }

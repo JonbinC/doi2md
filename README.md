@@ -10,7 +10,7 @@ Mdtero turns papers into reusable Markdown research packages.
 
 This repository is the public home for the two active launch surfaces:
 
-- the npm-first agent-skill installer for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode
+- the low-friction install script and fallback agent-skill installer for Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode
 - the browser extension for paper pages or local files that should stay in the user's browser session
 
 Keyword discovery and API-key management stay in Mdtero Account.
@@ -22,26 +22,26 @@ This public install surface must work for two readers:
 - **Humans** who want one clear path to install, connect an agent, use Mdtero, update, uninstall, and troubleshoot.
 - **Agents** that receive a dashboard or documentation handoff and need to execute the right commands without confusing the uv-managed Python runtime with npm-managed skill files.
 
-If you are human, start with the quick commands below. If you are an agent, preserve the runtime boundary: `uv` owns the Python CLI, `mdtero-install` owns only agent skill files, and OpenClaw stays on ClawHub.
+If you are human, start with the one-command installer below. If you are an agent, preserve the runtime boundary: the install script installs the uv-managed Python CLI, `mdtero-install` owns only fallback agent skill files, and OpenClaw stays on ClawHub.
 
 ## Canonical install paths
 
-Use `uv` for the local Python CLI runtime, then let the Python CLI bootstrap the matching agent skill bundle:
+Use the install script for the local Python CLI runtime and matching agent skill bundle:
 
 ```bash
-uv tool install mdtero                  # installs the Python CLI runtime and local deps
-mdtero bootstrap --agent codex          # installs the Codex skill bundle and prints next steps
-mdtero login                            # browser handoff for an interactive terminal
-mdtero doctor                           # confirms MDTERO_API_KEY is visible to the CLI
+curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
+mdtero login
+mdtero doctor
 ```
 
-The one-command bootstrap form after `uv` is:
+For a reviewable install, download the script first:
 
 ```bash
-mdtero bootstrap --agent <target>        # or: mdtero setup --agent <target>
+curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
+sh install-mdtero.sh --agent codex
 ```
 
-Under the hood, the uv-managed Python runtime delegates only the agent skill files to npm:
+Under the hood, the install script runs `uv tool install mdtero`, then `mdtero setup --agent <target>`. The npm installer remains available as a skill-only fallback:
 
 ```bash
 npx mdtero-install show
@@ -52,14 +52,14 @@ npx mdtero-install uninstall codex      # removes only the selected agent skill 
 
 Choose the install target that matches the agent workspace:
 
-- Claude Code: `npx mdtero-install install claude_code`
-- Codex: `npx mdtero-install install codex`
-- Gemini CLI: `npx mdtero-install install gemini_cli`
-- Hermes Agent: `npx mdtero-install install hermes`
-- OpenCode: `npx mdtero-install install opencode`
+- Claude Code: `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent claude_code`
+- Codex: `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex`
+- Gemini CLI: `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent gemini_cli`
+- Hermes Agent: `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent hermes`
+- OpenCode: `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode`
 - OpenClaw keeps the dedicated route: `clawhub install mdtero`
 
-`uv tool install mdtero` installs the actual Python CLI runtime with local dependencies such as `curl_cffi` and `pyzotero`. `mdtero bootstrap --agent <target>` and `mdtero setup --agent <target>` keep that runtime uv-managed while calling `npx mdtero-install install <target>` for the agent skill bundle. `mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
+`uv tool install mdtero` installs the actual Python CLI runtime with local dependencies such as `curl_cffi` and `pyzotero`. `mdtero setup --agent <target>` installs the requested agent skill bundle after the runtime exists. `mdtero-install show` prints the active public manifest, `mdtero-install version` confirms the packaged installer version, `mdtero login` opens the Mdtero browser handoff, and `mdtero doctor` checks that `MDTERO_API_KEY` is available before an agent tries to parse, translate, inspect task status, or download artifacts.
 
 For headless agents, create a fresh API key in Mdtero Account and copy the dashboard install prompt into the agent. Use `mdtero login` when you are sitting at an interactive terminal; use the dashboard prompt when the agent cannot open a browser.
 
@@ -67,7 +67,7 @@ For OpenClaw, confirm that the dedicated ClawHub route is available in your envi
 
 `npx mdtero-install install openclaw` is intentionally unsupported.
 
-Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode stay on the npm-first install path via `npx mdtero-install install <target>`. The recommended user-facing entry is still the uv-managed Python command `mdtero bootstrap --agent <target>` because it keeps runtime setup, login guidance, and agent skill install in one place.
+Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode use the install script as the primary path. `npx mdtero-install install <target>` remains a fallback for installing only skill files when the Python runtime is already managed elsewhere.
 
 Hermes can load Mdtero as a `SKILL.md` workflow from `~/.hermes/skills/mdtero`. Hermes MCP configuration is a separate surface: Mdtero does not yet publish an active public MCP installer flow through `mdtero-install`.
 
@@ -101,7 +101,7 @@ Use the extension only as a local executor. The backend decides the route plan; 
 - [`shared`](./shared): public client contract used by the extension
 - [`install`](./install): public install manifest and entry docs
 - [`helper/openclaw/INSTALL.md`](./helper/openclaw/INSTALL.md): OpenClaw-specific route
-- [`skills`](./skills): agent-specific install notes for npm-first skill targets
+- [`skills`](./skills): agent-specific install notes for install-script targets
 
 ## Local development
 
