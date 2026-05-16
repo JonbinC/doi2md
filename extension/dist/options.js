@@ -178,6 +178,9 @@ function createApiClient(getSettings) {
   };
 }
 
+// src/lib/auth-bridge.ts
+var MDTERO_ACCOUNT_URL = "https://mdtero.com/account";
+
 // src/lib/download.ts
 var defaultDeps = {
   createObjectURL(blob) {
@@ -211,34 +214,34 @@ var GROUPS = [
   {
     id: "helper_only",
     label: {
-      en: "Helper only",
-      zh: "\u53EA\u9700\u672C\u5730 helper"
+      en: "Built-in parsing",
+      zh: "\u5185\u7F6E\u89E3\u6790"
     },
     description: {
-      en: "Install the local helper and parse directly from supported open full-text sources.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper \u540E\uFF0C\u76F4\u63A5\u4ECE\u53D7\u652F\u6301\u7684\u5F00\u653E\u5168\u6587\u6765\u6E90\u89E3\u6790\u3002"
+      en: "Use Mdtero's CLI/API and backend parser for supported open full-text sources.",
+      zh: "\u4F7F\u7528 Mdtero CLI/API \u548C\u540E\u7AEF\u89E3\u6790\u5668\u5904\u7406\u53D7\u652F\u6301\u7684\u5F00\u653E\u5168\u6587\u6765\u6E90\u3002"
     }
   },
   {
     id: "api_key",
     label: {
-      en: "Helper + API key",
-      zh: "\u9700\u8981 helper \u548C API key"
+      en: "API key",
+      zh: "\u9700\u8981 API key"
     },
     description: {
-      en: "Install the local helper and add the required publisher key in settings.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u8BBE\u7F6E\u91CC\u586B\u5199\u6240\u9700\u7684\u51FA\u7248\u793E key\u3002"
+      en: "Add the required publisher key when an official API route needs it.",
+      zh: "\u5B98\u65B9 API \u8DEF\u7EBF\u9700\u8981\u65F6\uFF0C\u5728\u8BBE\u7F6E\u91CC\u586B\u5199\u5BF9\u5E94\u51FA\u7248\u793E key\u3002"
     }
   },
   {
     id: "browser_assisted",
     label: {
-      en: "Helper + browser extension",
-      zh: "\u9700\u8981 helper \u548C\u6D4F\u89C8\u5668\u6269\u5C55"
+      en: "Extension upload/capture",
+      zh: "\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6"
     },
     description: {
-      en: "Keep the article page open locally when Mdtero needs browser-assisted capture.",
-      zh: "\u5F53 Mdtero \u9700\u8981\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u65F6\uFF0C\u8BF7\u5728\u672C\u5730\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002"
+      en: "Cloud routing decides the route; the extension only executes local upload/capture instructions when raw data must come from the user's machine.",
+      zh: "\u4E91\u7AEF\u8DEF\u7531\u51B3\u5B9A\u94FE\u8DEF\uFF1B\u53EA\u6709 raw data \u5FC5\u987B\u6765\u81EA\u7528\u6237\u673A\u5668\u65F6\uFF0C\u6269\u5C55\u624D\u6267\u884C\u672C\u5730\u4E0A\u4F20/\u91C7\u96C6\u6307\u4EE4\u3002"
     }
   }
 ];
@@ -265,8 +268,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Direct open full-text retrieval from arXiv.",
@@ -291,8 +294,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PMC routes.",
@@ -317,8 +320,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PLOS.",
@@ -343,8 +346,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from the source site.",
@@ -369,8 +372,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the source cannot provide full text.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u65E0\u6CD5\u63D0\u4F9B\u5168\u6587\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from ChemRxiv when available.",
@@ -395,8 +398,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the page route is unavailable.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u9875\u9762\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Open publisher full text from MDPI pages.",
@@ -421,8 +424,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and add your Elsevier API key. Some papers may still require institutional access.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u3002"
+      en: "Add your Elsevier API key. Some papers may still require institutional access or a user-provided PDF.",
+      zh: "\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u6216\u7528\u6237\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Official full-text API for structured publisher retrieval.",
@@ -449,8 +452,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper. Add your Springer OA API key for the best XML path.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\u3002"
+      en: "Add your Springer OA API key for the best XML path. Upload a PDF if the source route is unavailable.",
+      zh: "\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Springer OA XML when available, otherwise open full text.",
@@ -477,12 +480,12 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from the live article page.",
-      zh: "\u901A\u8FC7\u5B9E\u65F6\u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
     },
     configureTarget: "browser_assisted_sources",
     status: "demo",
@@ -529,12 +532,12 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Taylor & Francis pages.",
-      zh: "\u901A\u8FC7 Taylor & Francis \u9875\u9762\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
     },
     configureTarget: "browser_assisted_sources",
     status: "experimental",
@@ -712,7 +715,7 @@ function describeCapabilityReadiness(readiness, language) {
 var COPY = {
   en: {
     title: "Mdtero Account",
-    subtitle: "Sign in faster, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
+    subtitle: "Use the website account for sign-in, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
     supportSummary: "Keep licensed retrieval on your own machine and see which publisher APIs, TDM routes, and local fallbacks are ready with your current setup.",
     browserAssistedNote: "When a source cannot use a direct publisher API or TDM route, Mdtero can still fall back to local browser capture or on-device cffi/curl retrieval where that route is supported.",
     connectorKeysTitle: "Connector keys",
@@ -736,15 +739,19 @@ var COPY = {
     usagePending: "Balance and quota appear after sign-in.",
     signedIn: (email) => `Signed in as ${email}`,
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
-    email: "Email",
-    password: "Password",
-    passwordMode: "Password",
-    codeMode: "Email Code",
-    signIn: "Sign In",
-    useEmailCode: "Use Email Code",
-    sendCode: "Send Code",
-    verifyLogin: "Verify Login",
-    code: "Verification Code",
+    openAccount: "Open Mdtero Account",
+    websiteAuthTitle: "Website sign-in",
+    websiteAuthNote: "The extension does not run a separate account system. Sign in on mdtero.com/account; the website sends this extension a Mdtero token through the trusted auth bridge. The email/password fields below stay as a fallback until the website exposes a single-use extension handoff code.",
+    fallbackAuthTitle: "Fallback extension login",
+    email: "Fallback email",
+    password: "Fallback password",
+    passwordMode: "Fallback password",
+    codeMode: "Fallback email code",
+    signIn: "Fallback sign in",
+    useEmailCode: "Use fallback email code",
+    sendCode: "Send fallback code",
+    verifyLogin: "Verify fallback login",
+    code: "Fallback verification code",
     uiLanguage: "Interface language",
     advanced: "Advanced",
     elsevierApiKey: "Elsevier API Key",
@@ -754,7 +761,7 @@ var COPY = {
     save: "Save",
     sent: (email) => `Verification code sent to ${email}.`,
     passwordLoginFailed: "Password login failed.",
-    historyTitle: "Document History",
+    historyTitle: "Account history",
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
     historyError: "Failed to load history: ",
@@ -764,7 +771,7 @@ var COPY = {
   },
   zh: {
     title: "Mdtero \u8D26\u6237",
-    subtitle: "\u767B\u5F55\u540E\u67E5\u770B\u4F59\u989D\u3001\u989D\u5EA6\uFF0C\u5E76\u914D\u7F6E publisher API\u3001TDM \u4E0E\u8BBE\u5907\u4FA7\u56DE\u9000\u504F\u597D\u3002",
+    subtitle: "\u4F7F\u7528\u5B98\u7F51\u767B\u5F55\u6388\u6743\u6269\u5C55\uFF0C\u540C\u65F6\u628A\u672C\u5730 publisher \u8BBF\u95EE\u4E0E\u4E0B\u8F7D\u4FDD\u7559\u5728\u8FD9\u53F0\u7535\u8111\u4E0A\u3002",
     supportSummary: "\u628A\u53D7\u9650\u5168\u6587\u83B7\u53D6\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u8BBE\u5907\u4E0A\uFF0C\u5E76\u67E5\u770B\u5F53\u524D\u8FD9\u5957 publisher API\u3001TDM \u4E0E\u672C\u5730\u515C\u5E95\u5DF2\u7ECF\u9002\u5408\u54EA\u4E9B\u6765\u6E90\u3002",
     browserAssistedNote: "\u5F53\u67D0\u4E2A\u6765\u6E90\u4E0D\u80FD\u76F4\u63A5\u8D70 publisher API \u6216 TDM \u65F6\uFF0CMdtero \u4ECD\u53EF\u5728\u652F\u6301\u7684\u94FE\u8DEF\u4E0A\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u6216\u8BBE\u5907\u4FA7 cffi/curl \u83B7\u53D6\u3002",
     connectorKeysTitle: "Connector keys",
@@ -784,19 +791,23 @@ var COPY = {
     helperUnknown: "\u672C\u5730\u8FD0\u884C\u65F6\u72B6\u6001\u672A\u77E5\u3002",
     shadowSignedOut: "\u767B\u5F55\u540E\u53EF\u67E5\u770B\u5B9E\u9A8C connector shadow \u72B6\u6001\u3002",
     shadowUnavailable: "\u6682\u65F6\u65E0\u6CD5\u83B7\u53D6\u5B9E\u9A8C connector shadow \u72B6\u6001\u3002",
-    notSignedIn: "\u5C1A\u672A\u767B\u5F55\u3002",
-    usagePending: "\u767B\u5F55\u540E\u53EF\u67E5\u770B\u4F59\u989D\u4E0E\u989D\u5EA6\u3002",
+    notSignedIn: "\u5C1A\u672A\u767B\u5F55\u3002\u8BF7\u6253\u5F00 Mdtero Account \u6388\u6743\u6269\u5C55\u3002",
+    usagePending: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\u4EE5\u540C\u6B65\u4F59\u989D\u3001\u989D\u5EA6\u548C\u5386\u53F2\u3002",
     signedIn: (email) => `\u5DF2\u767B\u5F55\uFF1A${email}`,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
-    email: "\u90AE\u7BB1",
-    password: "\u5BC6\u7801",
-    passwordMode: "\u5BC6\u7801\u767B\u5F55",
-    codeMode: "\u90AE\u7BB1\u9A8C\u8BC1\u7801",
-    signIn: "\u767B\u5F55",
-    useEmailCode: "\u6539\u7528\u9A8C\u8BC1\u7801",
-    sendCode: "\u53D1\u9001\u9A8C\u8BC1\u7801",
-    verifyLogin: "\u9A8C\u8BC1\u767B\u5F55",
-    code: "\u9A8C\u8BC1\u7801",
+    openAccount: "\u6253\u5F00 Mdtero Account",
+    websiteAuthTitle: "\u5B98\u7F51\u767B\u5F55",
+    websiteAuthNote: "\u6269\u5C55\u4E0D\u518D\u7EF4\u62A4\u53E6\u4E00\u5957\u8D26\u6237\u7CFB\u7EDF\u3002\u8BF7\u5728 mdtero.com/account \u767B\u5F55\uFF1B\u5B98\u7F51\u4F1A\u901A\u8FC7\u53D7\u4FE1\u4EFB auth bridge \u628A Mdtero token \u4EA4\u7ED9\u6269\u5C55\u3002\u4E0B\u9762\u7684\u90AE\u7BB1/\u5BC6\u7801\u5165\u53E3\u4EC5\u4F5C\u4E3A\u517C\u5BB9\u515C\u5E95\uFF0C\u76F4\u5230\u5B98\u7F51\u63D0\u4F9B\u4E00\u6B21\u6027\u6269\u5C55\u6388\u6743\u7801\u3002",
+    fallbackAuthTitle: "\u6269\u5C55\u515C\u5E95\u767B\u5F55",
+    email: "\u515C\u5E95\u90AE\u7BB1",
+    password: "\u515C\u5E95\u5BC6\u7801",
+    passwordMode: "\u515C\u5E95\u5BC6\u7801\u767B\u5F55",
+    codeMode: "\u515C\u5E95\u90AE\u7BB1\u9A8C\u8BC1\u7801",
+    signIn: "\u515C\u5E95\u767B\u5F55",
+    useEmailCode: "\u6539\u7528\u515C\u5E95\u9A8C\u8BC1\u7801",
+    sendCode: "\u53D1\u9001\u515C\u5E95\u9A8C\u8BC1\u7801",
+    verifyLogin: "\u9A8C\u8BC1\u515C\u5E95\u767B\u5F55",
+    code: "\u515C\u5E95\u9A8C\u8BC1\u7801",
     uiLanguage: "\u754C\u9762\u8BED\u8A00",
     advanced: "\u9AD8\u7EA7\u8BBE\u7F6E",
     elsevierApiKey: "Elsevier API Key",
@@ -806,7 +817,7 @@ var COPY = {
     save: "\u4FDD\u5B58",
     sent: (email) => `\u9A8C\u8BC1\u7801\u5DF2\u53D1\u9001\u5230 ${email}\u3002`,
     passwordLoginFailed: "\u5BC6\u7801\u767B\u5F55\u5931\u8D25\u3002",
-    historyTitle: "\u5386\u53F2\u6587\u6863",
+    historyTitle: "\u8D26\u6237\u5386\u53F2",
     historyNote: "\u4ECE\u5386\u53F2\u8BB0\u5F55\u4E0B\u8F7D\u5185\u5BB9\u6C38\u8FDC\u514D\u8D39\uFF0C\u4E0D\u6263\u9664\u989D\u5EA6\u3002",
     historyEmpty: "\u6682\u65E0\u89E3\u6790\u6216\u7FFB\u8BD1\u8BB0\u5F55\u3002",
     historyError: "\u52A0\u8F7D\u5386\u53F2\u6587\u6863\u5931\u8D25\uFF1A",
@@ -841,6 +852,10 @@ var usageStatus = document.querySelector("#usage-status");
 var helperStatus = document.querySelector("#helper-status");
 var shadowStatus = document.querySelector("#shadow-status");
 var saveButton = document.querySelector("#save-settings");
+var openAccountButton = document.querySelector("#open-account");
+var websiteAuthTitleEl = document.querySelector("#website-auth-title");
+var websiteAuthNoteEl = document.querySelector("#website-auth-note");
+var fallbackAuthTitleEl = document.querySelector("#fallback-auth-title");
 var sendCodeButton = document.querySelector("#send-code");
 var verifyButton = document.querySelector("#verify-code");
 var passwordLoginButton = document.querySelector("#password-login");
@@ -891,6 +906,9 @@ function copyFor(language) {
 }
 function toggleLanguageLabel(language) {
   return language === "en" ? "\u4E2D\u6587" : "EN";
+}
+async function openMdteroAccount() {
+  await chrome.tabs.create({ url: MDTERO_ACCOUNT_URL });
 }
 function applyAuthMode() {
   const passwordActive = authMode === "password";
@@ -1022,10 +1040,14 @@ function applyLanguage() {
   if (wileyTdmTokenLabel) wileyTdmTokenLabel.textContent = copy.wileyTdmToken;
   if (springerOpenAccessApiKeyLabel) springerOpenAccessApiKeyLabel.textContent = copy.springerOpenAccessApiKey;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
+  if (openAccountButton) openAccountButton.textContent = copy.openAccount;
+  if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
+  if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
+  if (fallbackAuthTitleEl) fallbackAuthTitleEl.textContent = copy.fallbackAuthTitle;
   if (saveButton) saveButton.textContent = copy.save;
-  if (historyTitle) historyTitle.textContent = copy.historyTitle || "Document History";
-  if (historyNote) historyNote.textContent = copy.historyNote || "Downloads from your history are always free.";
-  if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh || "Refresh";
+  if (historyTitle) historyTitle.textContent = copy.historyTitle;
+  if (historyNote) historyNote.textContent = copy.historyNote;
+  if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
   applyAuthMode();
   renderPublisherCapabilityMatrix();
 }
@@ -1088,7 +1110,7 @@ async function refreshHistory() {
   try {
     const { items } = await client.getMyTasks();
     if (items.length === 0) {
-      renderHistoryNotice(copy.historyEmpty || "No history found.");
+      renderHistoryNotice(copy.historyEmpty);
       return;
     }
     historyList.textContent = "";
@@ -1099,8 +1121,8 @@ async function refreshHistory() {
       header.className = "history-item-header";
       const inputDiv = document.createElement("div");
       inputDiv.className = "history-item-input";
-      const rawTask = task;
-      const inputVal = rawTask.paper_input || "Unknown Input";
+      const historyTask = task;
+      const inputVal = historyTask.paper_input || "Unknown Input";
       inputDiv.textContent = inputVal.length > 50 ? inputVal.substring(0, 50) + "..." : inputVal;
       const statusBadge = document.createElement("span");
       statusBadge.className = "history-status-badge";
@@ -1135,7 +1157,7 @@ async function refreshHistory() {
         }
         row.appendChild(artifactsRow);
       }
-      const dateStr = rawTask.created_at ? new Date(rawTask.created_at).toLocaleString() : "";
+      const dateStr = historyTask.created_at ? new Date(historyTask.created_at).toLocaleString() : "";
       if (dateStr) {
         const timeDiv = document.createElement("div");
         timeDiv.className = "history-item-time";
@@ -1145,7 +1167,7 @@ async function refreshHistory() {
       historyList.appendChild(row);
     }
   } catch (error) {
-    const errorPrefix = copy.historyError || "Failed to load history: ";
+    const errorPrefix = copy.historyError;
     renderHistoryNotice(`${errorPrefix}${error.message}`, "#f44336");
   }
 }
@@ -1193,12 +1215,15 @@ async function refreshView() {
 }
 if (refreshHistoryBtn) {
   refreshHistoryBtn.addEventListener("click", () => {
-    refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefreshing || "...";
+    refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefreshing;
     refreshHistory().then(() => {
-      refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefresh || "Refresh";
+      refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefresh;
     });
   });
 }
+openAccountButton?.addEventListener("click", () => {
+  void openMdteroAccount();
+});
 saveButton?.addEventListener("click", async () => {
   const current = await readSettings();
   await writeSettings(

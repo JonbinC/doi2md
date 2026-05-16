@@ -178,6 +178,9 @@ function createApiClient(getSettings) {
   };
 }
 
+// src/lib/auth-bridge.ts
+var MDTERO_ACCOUNT_URL = "https://mdtero.com/account";
+
 // src/lib/download.ts
 var defaultDeps = {
   createObjectURL(blob) {
@@ -235,14 +238,11 @@ function requiresElsevierLocalAcquire(input) {
 }
 
 // src/lib/runtime.ts
-function createParseMessage(input, elsevierApiKey, pageContext) {
+function createSsotParseMessage(input, pageContext) {
   const message = {
-    type: "mdtero.parse.request",
+    type: "mdtero.parse.ssot.request",
     input
   };
-  if (elsevierApiKey) {
-    message.elsevierApiKey = elsevierApiKey;
-  }
   if (pageContext) {
     message.pageContext = pageContext;
   }
@@ -299,8 +299,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Direct open full-text retrieval from arXiv.",
@@ -325,8 +325,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PMC routes.",
@@ -351,8 +351,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PLOS.",
@@ -377,8 +377,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from the source site.",
@@ -403,8 +403,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the source cannot provide full text.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u65E0\u6CD5\u63D0\u4F9B\u5168\u6587\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from ChemRxiv when available.",
@@ -429,8 +429,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the page route is unavailable.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u9875\u9762\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Open publisher full text from MDPI pages.",
@@ -455,8 +455,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and add your Elsevier API key. Some papers may still require institutional access.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u3002"
+      en: "Add your Elsevier API key. Some papers may still require institutional access or a user-provided PDF.",
+      zh: "\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u6216\u7528\u6237\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Official full-text API for structured publisher retrieval.",
@@ -483,8 +483,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper. Add your Springer OA API key for the best XML path.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\u3002"
+      en: "Add your Springer OA API key for the best XML path. Upload a PDF if the source route is unavailable.",
+      zh: "\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Springer OA XML when available, otherwise open full text.",
@@ -511,12 +511,12 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from the live article page.",
-      zh: "\u901A\u8FC7\u5B9E\u65F6\u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
     },
     configureTarget: "browser_assisted_sources",
     status: "demo",
@@ -563,12 +563,12 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Taylor & Francis pages.",
-      zh: "\u901A\u8FC7 Taylor & Francis \u9875\u9762\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
     },
     configureTarget: "browser_assisted_sources",
     status: "experimental",
@@ -846,14 +846,14 @@ function getResultWarningText(result, language = "en") {
 var COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Parse papers from this computer",
+    subtitle: "Paper parsing connected to Mdtero Account",
     guest: "Guest mode",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
-    signInHint: "Sign in in Mdtero Account to unlock Markdown downloads, translation, and task history.",
-    signInButton: "Sign in",
+    signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
+    signInButton: "Open Mdtero Account",
     freeHint: "PDF/XML free",
-    supportSummary: "Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using. Prefer direct publisher APIs and TDM routes first, then fall back locally when needed.",
+    supportSummary: "Start from a paper tab, DOI, PDF, or EPUB. Prefer direct publisher APIs and TDM routes first through the backend route plan, use this browser only when local access is needed, then return Markdown and translation downloads.",
     supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
@@ -867,7 +867,7 @@ var COPY = {
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
-    localFileParsing: (filename) => `Uploading ${filename} for on-device parsing...`,
+    localFileParsing: (filename) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
     parsingButton: "Parsing...",
@@ -888,11 +888,11 @@ var COPY = {
     sourceFiles: "Source files",
     recentTasks: "Recent items",
     noRecentTasks: "No recent papers yet.",
-    openPaper: "Use DOI",
-    enterDoi: "Enter a DOI first.",
-    translateFirst: "Parse a paper successfully before translating.",
-    parseReady: (filename) => `Ready: ${filename}`,
-    translateReady: (filename) => `Ready: ${filename}`,
+    openPaper: "Reuse input",
+    enterDoi: "Enter a DOI or use the detected paper page first.",
+    translateFirst: "Parse a paper to Markdown first; translation uses that paper_md artifact path.",
+    parseReady: (filename) => `Markdown ready: ${filename}. Download it or translate from the parsed Markdown.`,
+    translateReady: (filename) => `Translation ready: ${filename}.`,
     parseFailed: "Parse failed. Please try again.",
     translationFailed: "Translation failed. Please try again.",
     detected: (kind) => `Detected ${kind}.`,
@@ -904,14 +904,14 @@ var COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u5904\u7406\u8BBA\u6587",
+    subtitle: "\u8FDE\u63A5 Mdtero \u8D26\u6237\u7684\u672C\u5730\u8BBA\u6587\u89E3\u6790",
     guest: "\u6E38\u5BA2\u6A21\u5F0F",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
-    signInHint: "\u5148\u53BB Mdtero Account \u767B\u5F55\uFF0C\u4E4B\u540E\u624D\u80FD\u4F7F\u7528 Markdown \u4E0B\u8F7D\u3001\u7FFB\u8BD1\u548C\u4EFB\u52A1\u5386\u53F2\u3002",
-    signInButton: "\u53BB\u767B\u5F55",
+    signInHint: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\uFF0C\u7136\u540E\u56DE\u5230\u6269\u5C55\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
+    signInButton: "\u6253\u5F00 Mdtero Account",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u628A\u8BBA\u6587\u9875\u6216\u672C\u5730\u6587\u4EF6\u7559\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\uFF0C\u518D\u8BA9 Mdtero \u628A\u5B83\u6574\u7406\u6210\u53EF\u7EE7\u7EED\u4F7F\u7528\u7684 Markdown\u3002\u4F18\u5148\u8D70 publisher API / TDM\uFF0C\u5FC5\u8981\u65F6\u518D\u672C\u5730\u56DE\u9000\u3002",
+    supportSummary: "\u4ECE\u8BBA\u6587\u6807\u7B7E\u9875\u3001DOI\u3001PDF \u6216 EPUB \u5F00\u59CB\u3002Mdtero \u5148\u5411\u540E\u7AEF\u8BF7\u6C42 route plan\uFF0C\u53EA\u5728\u8DEF\u7531\u9700\u8981\u672C\u5730\u8BBF\u95EE\u65F6\u4F7F\u7528\u8FD9\u4E2A\u6D4F\u89C8\u5668\uFF0C\u7136\u540E\u8FD4\u56DE Markdown \u4E0E\u8BD1\u6587\u4E0B\u8F7D\u3002",
     supportStableTitle: "\u8FD9\u53F0\u673A\u5668\u4E0A\u5DF2\u7ECF\u6BD4\u8F83\u987A\u624B",
     supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
     supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
@@ -947,10 +947,10 @@ var COPY = {
     recentTasks: "\u6700\u8FD1\u5904\u7406",
     noRecentTasks: "\u8FD8\u6CA1\u6709\u6700\u8FD1\u8BBA\u6587\u3002",
     openPaper: "\u586B\u5165 DOI",
-    enterDoi: "\u8BF7\u5148\u8F93\u5165 DOI\u3002",
+    enterDoi: "\u8BF7\u5148\u8F93\u5165 DOI \u6216\u4F7F\u7528\u68C0\u6D4B\u5230\u7684\u8BBA\u6587\u9875\u9762\u3002",
     translateFirst: "\u8BF7\u5148\u6210\u529F\u89E3\u6790\u8BBA\u6587\uFF0C\u518D\u8FDB\u884C\u7FFB\u8BD1\u3002",
-    parseReady: (filename) => `\u5DF2\u5C31\u7EEA\uFF1A${filename}`,
-    translateReady: (filename) => `\u5DF2\u5C31\u7EEA\uFF1A${filename}`,
+    parseReady: (filename) => `Markdown \u5DF2\u5C31\u7EEA\uFF1A${filename}\u3002\u53EF\u4EE5\u4E0B\u8F7D\u6216\u57FA\u4E8E\u8BE5 Markdown \u7FFB\u8BD1\u3002`,
+    translateReady: (filename) => `\u8BD1\u6587\u5DF2\u5C31\u7EEA\uFF1A${filename}\u3002`,
     parseFailed: "\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     translationFailed: "\u7FFB\u8BD1\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     detected: (kind) => `\u5DF2\u8BC6\u522B${kind}\u3002`,
@@ -999,7 +999,6 @@ var secondaryDownloadsEl = document.querySelector("#secondary-downloads");
 var sourceFilesEl = document.querySelector("#source-files");
 var sourceFilesSummaryEl = document.querySelector("#source-files-summary");
 var sourceDownloadsEl = document.querySelector("#source-downloads");
-var recentTasksEl = document.querySelector("#recent-tasks");
 var recentTasksSummaryEl = document.querySelector("#recent-tasks-summary");
 var recentTaskListEl = document.querySelector("#recent-task-list");
 var client = createApiClient(readSettings);
@@ -1012,6 +1011,9 @@ var detectedPageContext = null;
 var currentBridgeStatus = null;
 function copyFor(language) {
   return COPY[language];
+}
+async function openMdteroAccount() {
+  await chrome.tabs.create({ url: MDTERO_ACCOUNT_URL });
 }
 function setResult(message) {
   if (resultEl) {
@@ -1527,6 +1529,7 @@ async function submitLocalFile(file, artifactKind) {
     isParsing = false;
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
     return;
   }
   const response = await chrome.runtime.sendMessage(createFileParseMessage(file, artifactKind));
@@ -1562,6 +1565,7 @@ parseButton?.addEventListener("click", async () => {
     isParsing = false;
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
     return;
   }
   if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
@@ -1575,7 +1579,7 @@ parseButton?.addEventListener("click", async () => {
   }
   const pageContext = await resolveParsePageContext(input);
   const response = await chrome.runtime.sendMessage(
-    createParseMessage(input, settings.elsevierApiKey, pageContext)
+    createSsotParseMessage(input, pageContext)
   );
   if (!response?.ok) {
     isParsing = false;
@@ -1641,7 +1645,7 @@ openSettingsButton?.addEventListener("click", () => {
   void chrome.runtime.openOptionsPage();
 });
 openSettingsLoginButton?.addEventListener("click", () => {
-  void chrome.runtime.openOptionsPage();
+  void openMdteroAccount();
 });
 inputEl?.addEventListener("input", () => {
   currentInput = inputEl.value.trim() || currentInput;

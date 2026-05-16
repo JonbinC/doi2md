@@ -940,6 +940,34 @@ var CONNECTOR_PRESETS = {
   arxiv_native: {
     access: "open",
     sourceName: "arxiv_native"
+  },
+  cairn_html: {
+    access: "unknown",
+    sourceName: "cairn_html"
+  },
+  rsc_html: {
+    access: "unknown",
+    sourceName: "rsc_html"
+  },
+  nature_html: {
+    access: "unknown",
+    sourceName: "nature_html"
+  },
+  mdpi_html: {
+    access: "open",
+    sourceName: "mdpi_html"
+  },
+  ieee_html: {
+    access: "unknown",
+    sourceName: "ieee_html"
+  },
+  bepress: {
+    access: "open",
+    sourceName: "bepress"
+  },
+  pure: {
+    access: "open",
+    sourceName: "pure"
   }
 };
 function buildHelperBundleBlob(options) {
@@ -965,7 +993,8 @@ function buildHelperBundleBlob(options) {
       options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
     ),
     payload_name: options.payloadName,
-    extra_files: extraFiles.map((entry) => entry.name)
+    extra_files: extraFiles.map((entry) => entry.name),
+    acquisition_headers: options.acquisitionHeaders || null
   };
   const archive = buildStoredZip([
     {
@@ -982,6 +1011,27 @@ function buildHelperBundleBlob(options) {
 }
 function inferBrowserHelperBundleConnector(input, pageUrl) {
   const haystack = `${String(input || "").toLowerCase()} ${String(pageUrl || "").toLowerCase()}`;
+  if (haystack.includes("cairn.info") || haystack.includes("shs.cairn.info")) {
+    return "cairn_html";
+  }
+  if (haystack.includes("pubs.rsc.org") || haystack.includes("10.1039/") || haystack.includes("10.1039")) {
+    return "rsc_html";
+  }
+  if (haystack.includes("nature.com/articles/") || haystack.includes("10.1038/")) {
+    return "nature_html";
+  }
+  if (haystack.includes("mdpi.com/")) {
+    return "mdpi_html";
+  }
+  if (haystack.includes("ieeexplore.ieee.org") || haystack.includes("10.1109/")) {
+    return "ieee_html";
+  }
+  if (haystack.includes("academicworks.cuny.edu") || haystack.includes("digitalcommons.liberty.edu") || haystack.includes("scholar.utc.edu")) {
+    return "bepress";
+  }
+  if (haystack.includes("research.birmingham.ac.uk") || haystack.includes("pure.au.dk") || haystack.includes("pure.eur.nl")) {
+    return "pure";
+  }
   if (haystack.includes("arxiv.org") || haystack.includes("arxiv:")) {
     return "arxiv_native";
   }
@@ -1458,6 +1508,11 @@ async function executeAction(action, context, routePlan) {
       return executeFetchStructuredXml(context, routePlan);
     case "fetch_elsevier_xml":
       return executeFetchElsevierXml(context, routePlan);
+    case "fetch_wiley_tdm_pdf":
+      return executeFetchWileyTdmPdf(context, routePlan);
+    case "fetch_springer_pdf":
+    case "fetch_remote_html":
+      return executeFetchHelperSource(context, routePlan);
     case "fetch_epub_asset":
       return executeFetchEpubAsset(context, routePlan);
     case "fetch_oa_repository":
@@ -1614,6 +1669,48 @@ async function executeFetchElsevierXml(context, routePlan) {
     };
   } catch (error) {
     return { success: false, error: String(error) };
+  }
+}
+async function executeFetchWileyTdmPdf(context, routePlan) {
+  if (!context.wileyTdmToken) {
+    return {
+      success: false,
+      requiresUpload: true,
+      error: routePlan.user_message || "Wiley TDM requires your Wiley TDM token in extension settings."
+    };
+  }
+  const sourceDoi = inferSourceDoi2(context.input);
+  if (!sourceDoi) {
+    return { success: false, requiresUpload: true, error: "Wiley TDM needs a DOI input." };
+  }
+  try {
+    const response = await fetch(`https://api.wiley.com/onlinelibrary/tdm/v1/articles/${encodeURIComponent(sourceDoi)}`, {
+      headers: {
+        "Wiley-TDM-Client-Token": context.wileyTdmToken
+      }
+    });
+    if (!response.ok) {
+      return { success: false, requiresUpload: true, error: `Wiley TDM fetch failed: ${response.status}` };
+    }
+    const payload = await response.arrayBuffer();
+    const helperBundle = buildHelperBundleBlob({
+      connector: "wiley_tdm",
+      artifactKind: "pdf",
+      payload,
+      payloadName: "paper.pdf",
+      sourceDoi,
+      sourceUrl: response.url,
+      access: "licensed",
+      acquisitionHeaders: { "Wiley-TDM-Client-Token": "<user-provided>" }
+    });
+    return {
+      success: true,
+      helperBundle,
+      filename: "helper-bundle.zip",
+      sourceDoi
+    };
+  } catch (error) {
+    return { success: false, requiresUpload: true, error: String(error) };
   }
 }
 async function executeFetchEpubAsset(context, routePlan) {
@@ -1823,8 +1920,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Direct open full-text retrieval from arXiv.",
@@ -1849,8 +1946,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PMC routes.",
@@ -1875,8 +1972,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Structured open-access full text from PLOS.",
@@ -1901,8 +1998,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from the source site.",
@@ -1927,8 +2024,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the source cannot provide full text.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u65E0\u6CD5\u63D0\u4F9B\u5168\u6587\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Preprint full text from ChemRxiv when available.",
@@ -1953,8 +2050,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002"
+      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the page route is unavailable.",
+      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u9875\u9762\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Open publisher full text from MDPI pages.",
@@ -1979,8 +2076,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and add your Elsevier API key. Some papers may still require institutional access.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u3002"
+      en: "Add your Elsevier API key. Some papers may still require institutional access or a user-provided PDF.",
+      zh: "\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u6216\u7528\u6237\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Official full-text API for structured publisher retrieval.",
@@ -2007,8 +2104,8 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: true,
     mayNeedInstitutionAccess: false,
     whatYouNeed: {
-      en: "Install the local helper. Add your Springer OA API key for the best XML path.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\u3002\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\u3002"
+      en: "Add your Springer OA API key for the best XML path. Upload a PDF if the source route is unavailable.",
+      zh: "\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
     },
     howMdteroGetsIt: {
       en: "Springer OA XML when available, otherwise open full text.",
@@ -2035,12 +2132,12 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from the live article page.",
-      zh: "\u901A\u8FC7\u5B9E\u65F6\u6587\u7AE0\u9875\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
     },
     configureTarget: "browser_assisted_sources",
     status: "demo",
@@ -2087,12 +2184,12 @@ var PUBLISHER_CAPABILITY_MATRIX = [
     requiresApiKey: false,
     mayNeedInstitutionAccess: true,
     whatYouNeed: {
-      en: "Install the local helper and keep the article page open in your browser. Institutional sign-in may be required.",
-      zh: "\u5B89\u88C5\u672C\u5730 helper\uFF0C\u5E76\u5728\u6D4F\u89C8\u5668\u4E2D\u4FDD\u6301\u6587\u7AE0\u9875\u9762\u6253\u5F00\u3002\u53EF\u80FD\u9700\u8981\u673A\u6784\u767B\u5F55\u3002"
+      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
+      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
     },
     howMdteroGetsIt: {
-      en: "Browser-assisted page capture from Taylor & Francis pages.",
-      zh: "\u901A\u8FC7 Taylor & Francis \u9875\u9762\u8FDB\u884C\u6D4F\u89C8\u5668\u8F85\u52A9\u6293\u53D6\u3002"
+      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
+      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
     },
     configureTarget: "browser_assisted_sources",
     status: "experimental",
@@ -2228,7 +2325,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           tabTitle: message.pageContext?.tabTitle,
           input: message.input,
           springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
-          elsevierApiKey: settings.elsevierApiKey
+          elsevierApiKey: settings.elsevierApiKey,
+          wileyTdmToken: settings.wileyTdmToken
         }
       );
       if (result.success && result.taskId) {
@@ -2247,6 +2345,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return runLegacyParseRequest(client, {
         input: message.input,
         elsevierApiKey: message.elsevierApiKey,
+        wileyTdmToken: settings.wileyTdmToken,
         springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
         pageContext: message.pageContext
       });

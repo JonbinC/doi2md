@@ -1,3 +1,5 @@
+export const MDTERO_ACCOUNT_URL = "https://mdtero.com/account";
+
 const TRUSTED_SITE_ORIGINS = new Set([
   "https://mdtero.com",
   "https://www.mdtero.com"
@@ -14,13 +16,13 @@ export interface MdteroAuthBridgeEvent {
   data: unknown;
 }
 
-interface MdteroAuthTokenPayload {
+export interface MdteroAuthTokenPayload {
   type: "mdtero.auth.token";
   token: string;
   email: string;
 }
 
-function isMdteroAuthTokenPayload(data: unknown): data is MdteroAuthTokenPayload {
+export function isMdteroAuthTokenPayload(data: unknown): data is MdteroAuthTokenPayload {
   return Boolean(
     data &&
       typeof data === "object" &&
