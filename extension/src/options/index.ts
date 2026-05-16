@@ -1,4 +1,7 @@
+import type { TaskRecord } from "@mdtero/shared";
+
 import { createApiClient } from "../lib/api";
+import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
 import {
   getPublisherCapabilityGroups,
@@ -23,7 +26,7 @@ import {
 const COPY = {
   en: {
     title: "Mdtero Account",
-    subtitle: "Sign in faster, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
+    subtitle: "Use the website account for sign-in, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
     supportSummary: "Keep licensed retrieval on your own machine and see which publisher APIs, TDM routes, and local fallbacks are ready with your current setup.",
     browserAssistedNote:
       "When a source cannot use a direct publisher API or TDM route, Mdtero can still fall back to local browser capture or on-device cffi/curl retrieval where that route is supported.",
@@ -50,15 +53,19 @@ const COPY = {
     signedIn: (email: string) => `Signed in as ${email}`,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
-    email: "Email",
-    password: "Password",
-    passwordMode: "Password",
-    codeMode: "Email Code",
-    signIn: "Sign In",
-    useEmailCode: "Use Email Code",
-    sendCode: "Send Code",
-    verifyLogin: "Verify Login",
-    code: "Verification Code",
+    openAccount: "Open Mdtero Account",
+    websiteAuthTitle: "Website sign-in",
+    websiteAuthNote: "The extension does not run a separate account system. Sign in on mdtero.com/account; the website sends this extension a Mdtero token through the trusted auth bridge. The email/password fields below stay as a fallback until the website exposes a single-use extension handoff code.",
+    fallbackAuthTitle: "Fallback extension login",
+    email: "Fallback email",
+    password: "Fallback password",
+    passwordMode: "Fallback password",
+    codeMode: "Fallback email code",
+    signIn: "Fallback sign in",
+    useEmailCode: "Use fallback email code",
+    sendCode: "Send fallback code",
+    verifyLogin: "Verify fallback login",
+    code: "Fallback verification code",
     uiLanguage: "Interface language",
     advanced: "Advanced",
     elsevierApiKey: "Elsevier API Key",
@@ -68,7 +75,7 @@ const COPY = {
     save: "Save",
     sent: (email: string) => `Verification code sent to ${email}.`,
     passwordLoginFailed: "Password login failed.",
-    historyTitle: "Document History",
+    historyTitle: "Account history",
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
     historyError: "Failed to load history: ",
@@ -78,7 +85,7 @@ const COPY = {
   },
   zh: {
     title: "Mdtero 账户",
-    subtitle: "登录后查看余额、额度，并配置 publisher API、TDM 与设备侧回退偏好。",
+    subtitle: "使用官网登录授权扩展，同时把本地 publisher 访问与下载保留在这台电脑上。",
     supportSummary: "把受限全文获取留在你自己的设备上，并查看当前这套 publisher API、TDM 与本地兜底已经适合哪些来源。",
     browserAssistedNote:
       "当某个来源不能直接走 publisher API 或 TDM 时，Mdtero 仍可在支持的链路上回退到本地浏览器抓取或设备侧 cffi/curl 获取。",
@@ -99,20 +106,24 @@ const COPY = {
     helperUnknown: "本地运行时状态未知。",
     shadowSignedOut: "登录后可查看实验 connector shadow 状态。",
     shadowUnavailable: "暂时无法获取实验 connector shadow 状态。",
-    notSignedIn: "尚未登录。",
-    usagePending: "登录后可查看余额与额度。",
+    notSignedIn: "尚未登录。请打开 Mdtero Account 授权扩展。",
+    usagePending: "请在 mdtero.com/account 登录以同步余额、额度和历史。",
     signedIn: (email: string) => `已登录：${email}`,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
-    email: "邮箱",
-    password: "密码",
-    passwordMode: "密码登录",
-    codeMode: "邮箱验证码",
-    signIn: "登录",
-    useEmailCode: "改用验证码",
-    sendCode: "发送验证码",
-    verifyLogin: "验证登录",
-    code: "验证码",
+    openAccount: "打开 Mdtero Account",
+    websiteAuthTitle: "官网登录",
+    websiteAuthNote: "扩展不再维护另一套账户系统。请在 mdtero.com/account 登录；官网会通过受信任 auth bridge 把 Mdtero token 交给扩展。下面的邮箱/密码入口仅作为兼容兜底，直到官网提供一次性扩展授权码。",
+    fallbackAuthTitle: "扩展兜底登录",
+    email: "兜底邮箱",
+    password: "兜底密码",
+    passwordMode: "兜底密码登录",
+    codeMode: "兜底邮箱验证码",
+    signIn: "兜底登录",
+    useEmailCode: "改用兜底验证码",
+    sendCode: "发送兜底验证码",
+    verifyLogin: "验证兜底登录",
+    code: "兜底验证码",
     uiLanguage: "界面语言",
     advanced: "高级设置",
     elsevierApiKey: "Elsevier API Key",
@@ -122,7 +133,7 @@ const COPY = {
     save: "保存",
     sent: (email: string) => `验证码已发送到 ${email}。`,
     passwordLoginFailed: "密码登录失败。",
-    historyTitle: "历史文档",
+    historyTitle: "账户历史",
     historyNote: "从历史记录下载内容永远免费，不扣除额度。",
     historyEmpty: "暂无解析或翻译记录。",
     historyError: "加载历史文档失败：",
@@ -158,6 +169,10 @@ const usageStatus = document.querySelector<HTMLParagraphElement>("#usage-status"
 const helperStatus = document.querySelector<HTMLParagraphElement>("#helper-status");
 const shadowStatus = document.querySelector<HTMLParagraphElement>("#shadow-status");
 const saveButton = document.querySelector<HTMLButtonElement>("#save-settings");
+const openAccountButton = document.querySelector<HTMLButtonElement>("#open-account");
+const websiteAuthTitleEl = document.querySelector<HTMLHeadingElement>("#website-auth-title");
+const websiteAuthNoteEl = document.querySelector<HTMLParagraphElement>("#website-auth-note");
+const fallbackAuthTitleEl = document.querySelector<HTMLElement>("#fallback-auth-title");
 const sendCodeButton = document.querySelector<HTMLButtonElement>("#send-code");
 const verifyButton = document.querySelector<HTMLButtonElement>("#verify-code");
 const passwordLoginButton = document.querySelector<HTMLButtonElement>("#password-login");
@@ -180,6 +195,8 @@ const historyNote = document.querySelector<HTMLParagraphElement>("#history-note"
 const refreshHistoryBtn = document.querySelector<HTMLButtonElement>("#refresh-history");
 const passwordAuthPanel = document.querySelector<HTMLElement>("#password-auth-panel");
 const codeAuthPanel = document.querySelector<HTMLElement>("#code-auth-panel");
+
+type HistoryTaskRecord = TaskRecord & { paper_input?: string };
 
 const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
@@ -208,11 +225,15 @@ function renderHistoryNotice(message: string, color?: string) {
 }
 
 function copyFor(language: UiLanguage) {
-  return COPY[language] as any;
+  return COPY[language];
 }
 
 function toggleLanguageLabel(language: UiLanguage) {
   return language === "en" ? "中文" : "EN";
+}
+
+async function openMdteroAccount() {
+  await chrome.tabs.create({ url: MDTERO_ACCOUNT_URL });
 }
 
 function applyAuthMode() {
@@ -227,7 +248,7 @@ function formatUsageSummary(usage: {
   wallet_balance_display?: string;
   parse_quota_remaining?: number;
   translation_quota_remaining?: number;
-}) {
+}): string {
   const wallet = usage.wallet_balance_display?.trim() || (uiLanguage === "zh" ? "¥0.00" : "$0.00");
   const parse = Number.isFinite(usage.parse_quota_remaining) ? Number(usage.parse_quota_remaining) : 0;
   const translation = Number.isFinite(usage.translation_quota_remaining)
@@ -376,10 +397,14 @@ function applyLanguage() {
   if (wileyTdmTokenLabel) wileyTdmTokenLabel.textContent = copy.wileyTdmToken;
   if (springerOpenAccessApiKeyLabel) springerOpenAccessApiKeyLabel.textContent = copy.springerOpenAccessApiKey;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
+  if (openAccountButton) openAccountButton.textContent = copy.openAccount;
+  if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
+  if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
+  if (fallbackAuthTitleEl) fallbackAuthTitleEl.textContent = copy.fallbackAuthTitle;
   if (saveButton) saveButton.textContent = copy.save;
-  if (historyTitle) historyTitle.textContent = (copy as any).historyTitle || "Document History";
-  if (historyNote) historyNote.textContent = (copy as any).historyNote || "Downloads from your history are always free.";
-  if (refreshHistoryBtn) refreshHistoryBtn.textContent = (copy as any).historyRefresh || "Refresh";
+  if (historyTitle) historyTitle.textContent = copy.historyTitle;
+  if (historyNote) historyNote.textContent = copy.historyNote;
+  if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
   applyAuthMode();
   renderPublisherCapabilityMatrix();
 }
@@ -448,7 +473,7 @@ async function refreshHistory() {
   try {
     const { items } = await client.getMyTasks();
     if (items.length === 0) {
-      renderHistoryNotice((copy as any).historyEmpty || "No history found.");
+      renderHistoryNotice(copy.historyEmpty);
       return;
     }
 
@@ -462,8 +487,8 @@ async function refreshHistory() {
       
       const inputDiv = document.createElement("div");
       inputDiv.className = "history-item-input";
-      const rawTask = task as any; 
-      const inputVal = rawTask.paper_input || "Unknown Input";
+      const historyTask = task as HistoryTaskRecord;
+      const inputVal = historyTask.paper_input || "Unknown Input";
       inputDiv.textContent = inputVal.length > 50 ? inputVal.substring(0, 50) + "..." : inputVal;
       
       const statusBadge = document.createElement("span");
@@ -503,7 +528,7 @@ async function refreshHistory() {
         row.appendChild(artifactsRow);
       }
 
-      const dateStr = rawTask.created_at ? new Date(rawTask.created_at).toLocaleString() : "";
+      const dateStr = historyTask.created_at ? new Date(historyTask.created_at).toLocaleString() : "";
       if (dateStr) {
         const timeDiv = document.createElement("div");
         timeDiv.className = "history-item-time";
@@ -514,7 +539,7 @@ async function refreshHistory() {
       historyList.appendChild(row);
     }
   } catch (error) {
-    const errorPrefix = (copy as any).historyError || "Failed to load history: ";
+    const errorPrefix = copy.historyError;
     renderHistoryNotice(`${errorPrefix}${(error as Error).message}`, "#f44336");
   }
 }
@@ -571,12 +596,16 @@ async function refreshView() {
 
 if (refreshHistoryBtn) {
   refreshHistoryBtn.addEventListener("click", () => {
-    refreshHistoryBtn.textContent = (copyFor(uiLanguage) as any).historyRefreshing || "...";
+    refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefreshing;
     refreshHistory().then(() => {
-      refreshHistoryBtn.textContent = (copyFor(uiLanguage) as any).historyRefresh || "Refresh";
+      refreshHistoryBtn.textContent = copyFor(uiLanguage).historyRefresh;
     });
   });
 }
+
+openAccountButton?.addEventListener("click", () => {
+  void openMdteroAccount();
+});
 
 saveButton?.addEventListener("click", async () => {
   const current = await readSettings();

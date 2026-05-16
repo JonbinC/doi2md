@@ -70,29 +70,37 @@
       </section>
 
       <section class="card auth-card">
-        <label id="email-label" for="email-input">Email</label>
-        <input id="email-input" type="email" placeholder="you@example.com" />
-
-        <div class="auth-mode-row">
-          <button id="auth-mode-password" type="button" class="ghost-chip">Password</button>
-          <button id="auth-mode-code" type="button" class="ghost-chip">Email Code</button>
+        <div class="auth-website-panel">
+          <h2 id="website-auth-title">Website sign-in</h2>
+          <p id="website-auth-note" class="meta-label">The extension uses Mdtero Account on the website for sign-in and token handoff.</p>
+          <button id="open-account" type="button" class="primary-button">Open Mdtero Account</button>
         </div>
+        <details class="fallback-auth-details">
+          <summary id="fallback-auth-title">Fallback extension login</summary>
+          <label id="email-label" for="email-input">Email</label>
+          <input id="email-input" type="email" placeholder="you@example.com" />
 
-        <div id="password-auth-panel">
-          <label id="password-label" for="password-input">Password</label>
-          <input id="password-input" type="password" placeholder="••••••••" />
-          <div class="button-row">
-            <button id="password-login" type="button" class="primary-button">Sign In</button>
-            <button id="password-use-code" type="button" class="secondary-button">Use Email Code</button>
+          <div class="auth-mode-row">
+            <button id="auth-mode-password" type="button" class="ghost-chip">Password</button>
+            <button id="auth-mode-code" type="button" class="ghost-chip">Email Code</button>
           </div>
-        </div>
 
-        <div id="code-auth-panel" hidden>
-          <button id="send-code" type="button" class="secondary-button">Send Code</button>
-          <label id="code-label" for="code-input">Verification Code</label>
-          <input id="code-input" type="text" placeholder="123456" />
-          <button id="verify-code" type="button" class="primary-button">Verify Login</button>
-        </div>
+          <div id="password-auth-panel">
+            <label id="password-label" for="password-input">Password</label>
+            <input id="password-input" type="password" placeholder="••••••••" />
+            <div class="button-row">
+              <button id="password-login" type="button" class="primary-button">Sign In</button>
+              <button id="password-use-code" type="button" class="secondary-button">Use Email Code</button>
+            </div>
+          </div>
+
+          <div id="code-auth-panel" hidden>
+            <button id="send-code" type="button" class="secondary-button">Send Code</button>
+            <label id="code-label" for="code-input">Verification Code</label>
+            <input id="code-input" type="text" placeholder="123456" />
+            <button id="verify-code" type="button" class="primary-button">Verify Login</button>
+          </div>
+        </details>
       </section>
 
       <section class="card">

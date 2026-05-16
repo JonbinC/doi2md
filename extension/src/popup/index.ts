@@ -1,6 +1,7 @@
 import type { TaskRecord } from "@mdtero/shared";
 
 import { createApiClient } from "../lib/api";
+import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
 import { requiresElsevierLocalAcquire } from "../lib/elsevier";
 import {
@@ -41,15 +42,15 @@ import {
 const COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Parse papers from this computer",
+    subtitle: "Paper parsing connected to Mdtero Account",
     guest: "Guest mode",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
-    signInHint: "Sign in in Mdtero Account to unlock Markdown downloads, translation, and task history.",
-    signInButton: "Sign in",
+    signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
+    signInButton: "Open Mdtero Account",
     freeHint: "PDF/XML free",
-    supportSummary: "Keep the paper page or local file on this machine, then let Mdtero turn it into Markdown you can keep using. Prefer direct publisher APIs and TDM routes first, then fall back locally when needed.",
+    supportSummary: "Start from a paper tab, DOI, PDF, or EPUB. Prefer direct publisher APIs and TDM routes first through the backend route plan, use this browser only when local access is needed, then return Markdown and translation downloads.",
     supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
@@ -63,7 +64,7 @@ const COPY = {
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
-    localFileParsing: (filename: string) => `Uploading ${filename} for on-device parsing...`,
+    localFileParsing: (filename: string) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
     parsingButton: "Parsing...",
@@ -84,11 +85,11 @@ const COPY = {
     sourceFiles: "Source files",
     recentTasks: "Recent items",
     noRecentTasks: "No recent papers yet.",
-    openPaper: "Use DOI",
-    enterDoi: "Enter a DOI first.",
-    translateFirst: "Parse a paper successfully before translating.",
-    parseReady: (filename: string) => `Ready: ${filename}`,
-    translateReady: (filename: string) => `Ready: ${filename}`,
+    openPaper: "Reuse input",
+    enterDoi: "Enter a DOI or use the detected paper page first.",
+    translateFirst: "Parse a paper to Markdown first; translation uses that paper_md artifact path.",
+    parseReady: (filename: string) => `Markdown ready: ${filename}. Download it or translate from the parsed Markdown.`,
+    translateReady: (filename: string) => `Translation ready: ${filename}.`,
     parseFailed: "Parse failed. Please try again.",
     translationFailed: "Translation failed. Please try again.",
     detected: (kind: string) => `Detected ${kind}.`,
@@ -100,15 +101,15 @@ const COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "在这台机器上处理论文",
+    subtitle: "连接 Mdtero 账户的本地论文解析",
     guest: "游客模式",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
-    signInHint: "先去 Mdtero Account 登录，之后才能使用 Markdown 下载、翻译和任务历史。",
-    signInButton: "去登录",
+    signInHint: "请在 mdtero.com/account 登录，然后回到扩展解析、翻译和下载。",
+    signInButton: "打开 Mdtero Account",
     freeHint: "PDF/XML 免费",
-    supportSummary: "把论文页或本地文件留在这台机器上，再让 Mdtero 把它整理成可继续使用的 Markdown。优先走 publisher API / TDM，必要时再本地回退。",
+    supportSummary: "从论文标签页、DOI、PDF 或 EPUB 开始。Mdtero 先向后端请求 route plan，只在路由需要本地访问时使用这个浏览器，然后返回 Markdown 与译文下载。",
     supportStableTitle: "这台机器上已经比较顺手",
     supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access 等开放来源最顺手。",
     supportShadowTitle: "使用你自己的访问权限",
@@ -144,10 +145,10 @@ const COPY = {
     recentTasks: "最近处理",
     noRecentTasks: "还没有最近论文。",
     openPaper: "填入 DOI",
-    enterDoi: "请先输入 DOI。",
+    enterDoi: "请先输入 DOI 或使用检测到的论文页面。",
     translateFirst: "请先成功解析论文，再进行翻译。",
-    parseReady: (filename: string) => `已就绪：${filename}`,
-    translateReady: (filename: string) => `已就绪：${filename}`,
+    parseReady: (filename: string) => `Markdown 已就绪：${filename}。可以下载或基于该 Markdown 翻译。`,
+    translateReady: (filename: string) => `译文已就绪：${filename}。`,
     parseFailed: "解析失败，请重试。",
     translationFailed: "翻译失败，请重试。",
     detected: (kind: string) => `已识别${kind}。`,
@@ -197,7 +198,6 @@ const secondaryDownloadsEl = document.querySelector<HTMLDivElement>("#secondary-
 const sourceFilesEl = document.querySelector<HTMLDetailsElement>("#source-files");
 const sourceFilesSummaryEl = document.querySelector<HTMLElement>("#source-files-summary");
 const sourceDownloadsEl = document.querySelector<HTMLDivElement>("#source-downloads");
-const recentTasksEl = document.querySelector<HTMLDetailsElement>("#recent-tasks");
 const recentTasksSummaryEl = document.querySelector<HTMLElement>("#recent-tasks-summary");
 const recentTaskListEl = document.querySelector<HTMLDivElement>("#recent-task-list");
 
@@ -212,6 +212,10 @@ let currentBridgeStatus: { state?: string | null; runnerState?: string | null } 
 
 function copyFor(language: UiLanguage) {
   return COPY[language];
+}
+
+async function openMdteroAccount() {
+  await chrome.tabs.create({ url: MDTERO_ACCOUNT_URL });
 }
 
 function setResult(message: string) {
@@ -774,6 +778,7 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
     isParsing = false;
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
     return;
   }
 
@@ -816,12 +821,13 @@ parseButton?.addEventListener("click", async () => {
     isParsing = false;
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
     return;
   }
   if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
     isParsing = false;
     renderActionButtons();
-    setResult(getCurrentCopy().elsevierKeyRequired as string);
+    setResult(getCurrentCopy().elsevierKeyRequired);
     setTimeout(() => {
       void chrome.runtime.openOptionsPage();
     }, 2000);
@@ -905,7 +911,7 @@ openSettingsButton?.addEventListener("click", () => {
 });
 
 openSettingsLoginButton?.addEventListener("click", () => {
-  void chrome.runtime.openOptionsPage();
+  void openMdteroAccount();
 });
 
 inputEl?.addEventListener("input", () => {
