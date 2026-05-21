@@ -4,6 +4,7 @@ from pathlib import Path
 
 import httpx
 
+from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import detect_targets, install_targets, uninstall_targets
 from mdtero.cli import build_parser
 from mdtero.client import MdteroClient
@@ -98,6 +99,113 @@ def test_client_falls_back_to_legacy_discovery_when_v1_is_not_deployed(monkeypat
     assert result["items"][0]["title"] == "Demo"
     assert result["source"] == "openalex_server"
     assert [call[1] for call in calls] == ["/api/v1/discovery/search", "/me/discovery/search"]
+
+
+def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
+    route = {
+        "route_kind": "html_helper_first",
+        "acquisition_mode": "native_source_adapter",
+        "requires_raw_upload": False,
+        "action_sequence": ["fetch_remote_html"],
+        "acquisition_candidates": [
+            {"connector": "best_oa_location_html", "html_url": "https://example.test/paper"}
+        ],
+    }
+    acquired_path = tmp_path / "paper.html"
+    acquired_path.write_text("<html><body><article>Demo</article></body></html>", encoding="utf-8")
+
+    def fake_acquire(route_arg, input_arg, *, timeout):
+        assert route_arg is route
+        assert input_arg == "10.1000/demo"
+        assert timeout == 45.0
+        return AcquiredArtifact(
+            url="https://example.test/paper",
+            path=acquired_path,
+            artifact_kind="html",
+            source="curl_cffi",
+            status_code=200,
+            content_type="text/html",
+        )
+
+    uploads = []
+
+    def fake_request(self, method, path, **kwargs):
+        if path == "/api/v1/route":
+            return route
+        if path == "/api/v1/tasks/upload":
+            uploads.append(kwargs)
+            return {"task_id": "task-local", "status": "queued"}
+        raise AssertionError(path)
+
+    monkeypatch.setattr("mdtero.client.acquire_from_route", fake_acquire)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    route_result, task, acquisition = MdteroClient(timeout=60.0).parse_with_route("10.1000/demo")
+
+    assert route_result is route
+    assert task["task_id"] == "task-local"
+    assert task["client_acquisition"]["source"] == "curl_cffi"
+    assert acquisition["artifact_kind"] == "html"
+    assert uploads[0]["data"]["source_url"] == "https://example.test/paper"
+    assert uploads[0]["data"]["client_fetch_engine"] == "curl_cffi"
+    assert not acquired_path.exists()
+
+
+def test_acquisition_failure_returns_agent_friendly_error(monkeypatch):
+    def fake_acquire(route_arg, input_arg, *, timeout):
+        raise AcquisitionError("client_acquisition_fetch_failed", "Upload the PDF manually.", diagnostics={"attempts": []})
+
+    monkeypatch.setattr("mdtero.client.acquire_from_route", fake_acquire)
+    monkeypatch.setattr(MdteroClient, "route", lambda self, input_value: {"requires_raw_upload": True})
+
+    try:
+        MdteroClient().parse_with_route("10.1000/demo")
+    except AcquisitionError as exc:
+        assert exc.reason_code == "client_acquisition_fetch_failed"
+        assert "Upload" in exc.action_hint
+    else:
+        raise AssertionError("expected AcquisitionError")
+
+
+def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
+    calls = []
+
+    def fake_cffi(url, *, artifact_kind, timeout):
+        calls.append(("curl_cffi", url, artifact_kind, timeout))
+        raise AcquisitionError("client_curl_cffi_http_error", "403", diagnostics={"status_code": 403})
+
+    def fake_httpx(url, *, artifact_kind, timeout):
+        calls.append(("httpx", url, artifact_kind, timeout))
+        return AcquiredArtifact(url=url, path=Path("/tmp/demo.html"), artifact_kind=artifact_kind, source="httpx", status_code=200, content_type="text/html")
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    artifact = acquire_from_route(
+        {
+            "action_sequence": ["fetch_remote_html"],
+            "acquisition_candidates": [{"html_url": "https://example.test/paper"}],
+        },
+        "10.1000/demo",
+        timeout=12,
+    )
+
+    assert artifact.source == "httpx"
+    assert calls == [
+        ("curl_cffi", "https://example.test/paper", "html", 12),
+        ("httpx", "https://example.test/paper", "html", 12),
+    ]
+
+
+def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
+    assert should_acquire_locally({"action_sequence": ["fetch_remote_html"], "requires_raw_upload": False}, "10.1000/demo") is False
+    assert (
+        should_acquire_locally(
+            {"action_sequence": ["fetch_remote_html"], "acquisition_candidates": [{"html_url": "https://example.test"}]},
+            "10.1000/demo",
+        )
+        is True
+    )
 
 
 def test_project_init_creates_local_project_state(tmp_path: Path):
@@ -290,6 +398,30 @@ def test_workflow_traces_expose_agent_friendly_steps(tmp_path: Path):
     assert status["steps"][-1]["name"] == "download_artifacts"
 
 
+def test_workflow_trace_marks_completed_client_acquisition():
+    trace = parse_trace_from_route(
+        "10.1000/demo",
+        {
+            "route_kind": "html_helper_first",
+            "acquisition_mode": "native_source_adapter",
+            "requires_raw_upload": False,
+            "action_sequence": ["fetch_remote_html"],
+        },
+        {
+            "task_id": "task-local",
+            "client_acquisition": {
+                "source": "curl_cffi",
+                "artifact_kind": "html",
+                "url": "https://example.test/paper",
+                "status_code": 200,
+            },
+        },
+    ).to_dict()
+
+    assert [step["name"] for step in trace["steps"]] == ["route", "client_acquire_raw", "upload_raw"]
+    assert trace["steps"][1]["metadata"]["source"] == "curl_cffi"
+
+
 def test_python_agent_installer_writes_packaged_skill_without_npm(tmp_path: Path):
     results = install_targets(["codex"], root=tmp_path)
     skill_path = tmp_path / ".codex" / "skills" / "mdtero" / "SKILL.md"
@@ -297,7 +429,7 @@ def test_python_agent_installer_writes_packaged_skill_without_npm(tmp_path: Path
     assert results[0].target == "codex"
     assert results[0].action == "installed"
     assert skill_path.exists()
-    assert "uv tool install mdtero" in skill_path.read_text(encoding="utf-8")
+    assert "uv tool install git+https://github.com/JonbinC/doi2md.git" in skill_path.read_text(encoding="utf-8")
 
 
 def test_python_agent_installer_detects_and_uninstalls_targets(tmp_path: Path):

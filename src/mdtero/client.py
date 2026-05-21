@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_locally
 from .config import MdteroConfig, load_config
 
 
@@ -43,6 +44,22 @@ class MdteroClient:
     def parse(self, input_value: str) -> dict[str, Any]:
         return self._request_with_fallback("POST", "/api/v1/tasks/parse", "/tasks/parse", json={"input": input_value})
 
+    def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+        route = self.route(input_value)
+        if should_acquire_locally(route, input_value):
+            artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0))
+            acquisition = artifact.to_dict()
+            try:
+                result = self.upload_acquired(artifact, source_input=input_value)
+            finally:
+                artifact.path.unlink(missing_ok=True)
+            result["route"] = route
+            result["client_acquisition"] = acquisition
+            return route, result, acquisition
+        result = self.parse(input_value)
+        result["route"] = route
+        return route, result, None
+
     def upload(self, file_path: Path, *, source_input: str | None = None, source_doi: str | None = None) -> dict[str, Any]:
         data = {}
         if source_input:
@@ -51,6 +68,20 @@ class MdteroClient:
             data["source_doi"] = source_doi
         with file_path.open("rb") as handle:
             files = {"paper_file": (file_path.name, handle, _mime_type(file_path))}
+            return self._request_with_fallback("POST", "/api/v1/tasks/upload", "/tasks/parse-upload-v2", data=data, files=files)
+
+    def upload_acquired(self, artifact: AcquiredArtifact, *, source_input: str | None = None, source_doi: str | None = None) -> dict[str, Any]:
+        data = {
+            "source_url": artifact.url,
+            "source_input": source_input or artifact.url,
+            "acquisition_mode": f"python_{artifact.source}",
+            "artifact_kind": artifact.artifact_kind,
+            "client_fetch_engine": artifact.source,
+        }
+        if source_doi:
+            data["source_doi"] = source_doi
+        with artifact.path.open("rb") as handle:
+            files = {"paper_file": (artifact.path.name, handle, _mime_type(artifact.path))}
             return self._request_with_fallback("POST", "/api/v1/tasks/upload", "/tasks/parse-upload-v2", data=data, files=files)
 
     def task(self, task_id: str) -> dict[str, Any]:
