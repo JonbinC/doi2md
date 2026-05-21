@@ -1,10 +1,10 @@
 # Mdtero Extension
 
-Mdtero Extension is the local browser product surface for turning papers into Markdown and translated Markdown. It uses Mdtero Account on the website for sign-in, asks the backend for the canonical route plan, and only uses this browser or the local helper when the selected route needs local access.
+Mdtero Extension is the browser surface for login, current-page/DOI parse, user-selected PDF/EPUB upload, task polling, translation, and artifact download. It uses Mdtero Account for sign-in and the Mdtero backend for routing, parsing, packaging, translation, and quota.
 
 ## Install
 
-Build or install the packaged extension, then load the extension folder in a Chromium browser. The extension needs storage for your Mdtero token and connector keys, downloads for Markdown and translation artifacts, tabs for supported paper pages, native messaging for the optional local runtime, and host access for Mdtero plus supported scholarly sources.
+Build or install the packaged extension, then load the extension folder in a Chromium browser. The extension needs storage for your Mdtero token, downloads for Markdown/zip/translation artifacts, tabs for supported paper pages, and host access for Mdtero plus scholarly sources it may inspect from the active tab.
 
 ```bash
 npm install
@@ -13,18 +13,31 @@ npm run build
 
 ## Sign In
 
-Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/account`; the website can hand the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The options page keeps email/password and email-code fields as a fallback only until the website exposes a single-use extension handoff code.
+Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/account`; the website can hand the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The options page keeps email/password and email-code fields as a fallback until the website exposes a single-use extension handoff code.
 
 ## Parse Papers
 
-Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension sends the input to the backend SSOT route endpoint, executes the returned route plan, creates the parse task, polls it, and shows the returned artifacts. Markdown is the primary download when `paper_md` is available; source PDF/XML and fallback bundles appear as separate artifact actions.
+Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension creates a backend task, polls it, and shows returned artifacts. Markdown is the primary download when `paper_md` is available; when figure/assets are packaged separately, the backend returns a `paper_bundle` zip.
 
-Supported paths work best for arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and publisher pages where your browser or connector keys already have access. Elsevier, Wiley, Springer, and similar publisher routes may need connector keys, institution access, or the local helper.
+Supported paths work best for DOI/arXiv pages, open publisher pages, and user-selected PDF/EPUB files. PDF parsing is MinerU-first on the backend and uses the URL API path for uploaded files when available. GROBID is not exposed as a public engine choice in the extension.
 
 ## Translate
 
-After a parse task succeeds, the Translate button uses the parsed `paper_md.path` as `source_markdown_path` for `POST /tasks/translate`. The extension does not invent alternate source selection; it only submits the backend-supported Markdown path, polls the translation task, and exposes the returned `translated_md` artifact for download.
+After a parse task succeeds, the Translate button uses the parsed Markdown artifact as the source for the backend translation task. The extension polls the translation task and exposes the returned translated Markdown artifact for download.
 
 ## Privacy And Local Files
 
-Tokens, email, UI language, and optional publisher connector keys are stored in browser local storage. Local PDF/EPUB intake uploads the chosen file to create a parse task. Publisher page capture and native-helper acquisition stay on your machine unless the backend route plan asks the extension to submit the acquired helper bundle or artifact for parsing.
+Tokens, email, and UI language are stored in browser local storage. Local PDF/EPUB intake uploads the chosen file to create a parse task. The extension does not bundle Python dependencies such as `curl_cffi`, `pyzotero`, or `fastmcp`; those belong to the Python CLI.
+
+## 中文版
+
+Mdtero 浏览器扩展只保留主线能力：登录、当前页/DOI 解析、PDF/EPUB 上传、任务轮询、翻译和下载。解析、MinerU PDF 处理、打包、额度和翻译都由后端完成；扩展不内置 Python 依赖，也不暴露 GROBID 引擎选择。
+
+常规路径：
+
+1. 在扩展弹窗或设置页登录 Mdtero Account。
+2. 从当前论文页、DOI、PDF 或 EPUB 创建解析任务。
+3. 等待任务完成后下载 `paper_md` 或 `paper_bundle`。
+4. 需要中文版本时，对成功任务发起翻译并下载翻译后的 Markdown。
+
+如果需要项目管理、BibTeX/Zotero 导入、RAG、MCP 或 agent skill，请使用 Python CLI：`uv tool install git+https://github.com/JonbinC/doi2md.git`。

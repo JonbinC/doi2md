@@ -7,10 +7,12 @@ Mdtero Account is the control plane for API keys, quota, billing, history, diagn
 ## Recommended Quick Start
 
 ```bash
-uv tool install mdtero
+uv tool install git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 mdtero agent install --target codex
 ```
+
+This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a1` client.
 
 For a one-command install:
 
@@ -25,7 +27,7 @@ curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
 sh install-mdtero.sh --agent codex
 ```
 
-The install script requires `uv`, installs the Python runtime, then runs `mdtero agent install --target <target>`.
+The install script requires `uv`, installs the Python runtime from the public GitHub repo during alpha, then runs `mdtero agent install --target <target>`.
 
 ## Connect An Agent Workspace
 
@@ -72,6 +74,21 @@ mdtero rag query "What are the strongest findings?" --project-id <server-project
 mdtero mcp serve
 ```
 
+What is validated in the current alpha:
+
+- DOI/arXiv parse, status polling, Markdown download, and bundle download.
+- PDF upload through the backend MinerU URL API path. The backend fetches the uploaded file URL for MinerU instead of relying on the older external OSS upload path.
+- local project state, BibTeX import, de-duplication, project parse/refresh/download.
+- Zotero read-only metadata import into the current Mdtero project.
+- discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback.
+- agent skill installation without npm for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode.
+
+Current boundaries:
+
+- RAG is server-side Voyage RAG and currently requires a server project id.
+- `mdtero zotero sync` is present, but reverse sync back to Zotero is not yet a completed public workflow.
+- GROBID is not exposed as a user-selectable public engine; PDF parsing is MinerU-first on the backend.
+
 For headless agents, create a fresh API key in Mdtero Account and use:
 
 ```bash
@@ -91,7 +108,7 @@ uv tool uninstall mdtero
 
 ## Troubleshooting
 
-- If `mdtero` is missing, run `uv tool install mdtero`.
+- If `mdtero` is missing during alpha, run `uv tool install git+https://github.com/JonbinC/doi2md.git`.
 - If `uv` is missing, install it from `https://docs.astral.sh/uv/getting-started/installation/`.
 - If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero login --api-key <key>`.
 - If no agent workspace is detected, pass an explicit `--target`.
@@ -102,3 +119,36 @@ uv tool uninstall mdtero
 The Python runtime owns setup, login, discovery, parse, task polling, download, BibTeX/Zotero import, project state, RAG commands, MCP context, TUI, and agent skill installation.
 
 The browser extension owns browser-context capture, OAuth bridge, user-selected PDF/EPUB upload, translation requests, polling, and artifact download. It does not include Python packages or local parser engines.
+
+## 中文版
+
+Mdtero 当前公开主线是 Python/uv 客户端。alpha 阶段推荐：
+
+```bash
+uv tool install git+https://github.com/JonbinC/doi2md.git
+mdtero setup
+mdtero doctor
+```
+
+安装 agent skill 不再依赖 npm：
+
+```bash
+mdtero agent install --target codex
+mdtero agent install --all
+```
+
+常用验证流程：
+
+```bash
+mdtero project init --name alpha-test
+mdtero parse 10.48550/arXiv.1706.03762 --json
+mdtero parse --file paper.pdf --json
+mdtero status <task-id> --wait --json
+mdtero download <task-id> paper_md --output-dir ./out
+mdtero project import-bib references.bib
+mdtero config zotero
+mdtero zotero import --limit 20 --json
+mdtero mcp serve
+```
+
+当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载和 agent skill 安装。RAG 走后端 Voyage，但目前需要服务端 project id。Zotero 反向同步还不是已完成的公开能力。npm `mdtero-install` 只保留给旧提示词兼容，不是主安装路径。
