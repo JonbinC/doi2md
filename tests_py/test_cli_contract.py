@@ -79,6 +79,27 @@ def test_client_falls_back_to_legacy_parse_when_v1_route_is_not_deployed(monkeyp
     assert [call[1] for call in calls] == ["/api/v1/route", "/api/v1/tasks/parse", "/tasks/parse"]
 
 
+def test_client_falls_back_to_legacy_discovery_when_v1_is_not_deployed(monkeypatch):
+    calls = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if path == "/api/v1/discovery/search":
+            request = httpx.Request(method, "https://api.mdtero.test/api/v1/discovery/search")
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+        if path == "/me/discovery/search":
+            return {"items": [{"title": "Demo"}]}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+    result = MdteroClient().discover("rag", limit=1)
+
+    assert result["items"][0]["title"] == "Demo"
+    assert result["source"] == "openalex_server"
+    assert [call[1] for call in calls] == ["/api/v1/discovery/search", "/me/discovery/search"]
+
+
 def test_project_init_creates_local_project_state(tmp_path: Path):
     target = init_project(tmp_path, name="demo")
     state = load_project(tmp_path)

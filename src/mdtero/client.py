@@ -59,7 +59,14 @@ class MdteroClient:
     def download(self, task_id: str, artifact: str, output_dir: Path) -> Path:
         output_dir.mkdir(parents=True, exist_ok=True)
         response = self._raw_request_with_fallback("GET", f"/api/v1/tasks/{task_id}/download/{artifact}", f"/tasks/{task_id}/download/{artifact}")
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise FileNotFoundError(
+                    f"artifact '{artifact}' is not available for task {task_id}; check `mdtero status {task_id} --json` for the task reason_code"
+                ) from exc
+            raise
         filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact)
         target = output_dir / filename
         target.write_bytes(response.content)
@@ -78,7 +85,9 @@ class MdteroClient:
     def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
         if self.config.has_semantic_scholar_key:
             return self._semantic_scholar_search(query, limit=limit)
-        return self._request("GET", "/api/v1/discovery/search", params={"query": query, "limit": limit})
+        result = self._request_with_fallback("GET", "/api/v1/discovery/search", "/me/discovery/search", params={"query": query, "limit": limit})
+        result.setdefault("source", "openalex_server")
+        return result
 
     def translate_text(self, markdown: str, *, filename: str = "paper.md", target_language: str = "zh-CN") -> dict[str, Any]:
         return self._request_with_fallback(
