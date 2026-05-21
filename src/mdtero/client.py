@@ -24,10 +24,24 @@ class MdteroClient:
         return f"{self.config.api_base_url.rstrip('/')}{path}"
 
     def route(self, input_value: str) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/route", json={"input": input_value})
+        try:
+            return self._request("POST", "/api/v1/route", json={"input": input_value})
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            return {
+                "route_kind": "server",
+                "acquisition_mode": "legacy_parse",
+                "requires_raw_upload": False,
+                "action_hint": "Production backend has not enabled /api/v1/route yet; using legacy /tasks/parse.",
+                "server_entrypoint": "/tasks/parse",
+                "upload_entrypoint": "/tasks/parse-upload-v2",
+                "client_command": f"mdtero parse {input_value}",
+                "legacy_fallback": True,
+            }
 
     def parse(self, input_value: str) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/tasks/parse", json={"input": input_value})
+        return self._request_with_fallback("POST", "/api/v1/tasks/parse", "/tasks/parse", json={"input": input_value})
 
     def upload(self, file_path: Path, *, source_input: str | None = None, source_doi: str | None = None) -> dict[str, Any]:
         data = {}
@@ -37,15 +51,14 @@ class MdteroClient:
             data["source_doi"] = source_doi
         with file_path.open("rb") as handle:
             files = {"paper_file": (file_path.name, handle, _mime_type(file_path))}
-            return self._request("POST", "/api/v1/tasks/upload", data=data, files=files)
+            return self._request_with_fallback("POST", "/api/v1/tasks/upload", "/tasks/parse-upload-v2", data=data, files=files)
 
     def task(self, task_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/v1/tasks/{task_id}")
+        return self._request_with_fallback("GET", f"/api/v1/tasks/{task_id}", f"/tasks/{task_id}")
 
     def download(self, task_id: str, artifact: str, output_dir: Path) -> Path:
         output_dir.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-            response = client.get(self._url(f"/api/v1/tasks/{task_id}/download/{artifact}"), headers=self._headers())
+        response = self._raw_request_with_fallback("GET", f"/api/v1/tasks/{task_id}/download/{artifact}", f"/tasks/{task_id}/download/{artifact}")
         response.raise_for_status()
         filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact)
         target = output_dir / filename
@@ -68,9 +81,10 @@ class MdteroClient:
         return self._request("GET", "/api/v1/discovery/search", params={"query": query, "limit": limit})
 
     def translate_text(self, markdown: str, *, filename: str = "paper.md", target_language: str = "zh-CN") -> dict[str, Any]:
-        return self._request(
+        return self._request_with_fallback(
             "POST",
             "/api/v1/tasks/translate",
+            "/tasks/translate",
             json={
                 "source_markdown_text": markdown,
                 "source_markdown_filename": filename,
@@ -93,6 +107,21 @@ class MdteroClient:
         if not isinstance(payload, dict):
             raise ValueError("Mdtero API returned a non-object payload")
         return payload
+
+    def _request_with_fallback(self, method: str, primary_path: str, fallback_path: str, **kwargs: Any) -> dict[str, Any]:
+        try:
+            return self._request(method, primary_path, **kwargs)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            return self._request(method, fallback_path, **kwargs)
+
+    def _raw_request_with_fallback(self, method: str, primary_path: str, fallback_path: str, **kwargs: Any) -> httpx.Response:
+        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+            response = client.request(method, self._url(primary_path), headers=self._headers(), **kwargs)
+            if response.status_code == 404:
+                response = client.request(method, self._url(fallback_path), headers=self._headers(), **kwargs)
+        return response
 
     def _semantic_scholar_search(self, query: str, *, limit: int) -> dict[str, Any]:
         headers = {"x-api-key": self.config.academic.semantic_scholar_api_key or ""}

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
+
 from mdtero.agent import detect_targets, install_targets, uninstall_targets
 from mdtero.cli import build_parser
+from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.projects import (
@@ -45,6 +48,35 @@ def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: 
 
     assert cfg.api_key == "key"
     assert cfg.has_semantic_scholar_key is True
+
+
+def test_client_falls_back_to_legacy_parse_when_v1_route_is_not_deployed(monkeypatch):
+    calls = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if path == "/api/v1/route":
+            request = httpx.Request(method, "https://api.mdtero.test/api/v1/route")
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+        if path == "/api/v1/tasks/parse":
+            request = httpx.Request(method, "https://api.mdtero.test/api/v1/tasks/parse")
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+        if path == "/tasks/parse":
+            return {"task_id": "legacy-task", "status": "queued"}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+    client = MdteroClient()
+
+    route = client.route("10.1000/demo")
+    task = client.parse("10.1000/demo")
+
+    assert route["legacy_fallback"] is True
+    assert route["server_entrypoint"] == "/tasks/parse"
+    assert task["task_id"] == "legacy-task"
+    assert [call[1] for call in calls] == ["/api/v1/route", "/api/v1/tasks/parse", "/tasks/parse"]
 
 
 def test_project_init_creates_local_project_state(tmp_path: Path):
