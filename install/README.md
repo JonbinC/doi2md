@@ -12,7 +12,7 @@ mdtero setup
 mdtero agent install --target codex
 ```
 
-This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a1` client.
+This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a2` client.
 
 For a one-command install:
 
@@ -57,6 +57,7 @@ The legacy npm package `mdtero-install` remains available only as a compatibilit
 mdtero doctor
 mdtero discover "thermochemical energy storage" --limit 5
 mdtero parse 10.48550/arXiv.1706.03762
+mdtero parse https://example.org/open-paper --trace
 mdtero parse --file paper.pdf
 mdtero parse --batch ./papers
 mdtero project init
@@ -78,6 +79,7 @@ What is validated in the current alpha:
 
 - DOI/arXiv parse, status polling, Markdown download, and bundle download.
 - PDF upload through the backend MinerU URL API path. The backend fetches the uploaded file URL for MinerU instead of relying on the older external OSS upload path.
+- backend-planned local source acquisition through `curl_cffi` for HTML/XML/EPUB/PDF URLs, with `httpx` fallback and `--trace` visibility.
 - local project state, BibTeX import, de-duplication, project parse/refresh/download.
 - Zotero read-only metadata import into the current Mdtero project.
 - discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback.

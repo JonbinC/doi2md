@@ -1,6 +1,6 @@
 [project]
 name = "mdtero"
-version = "0.2.0a1"
+version = "0.2.0a2"
 description = "Python TUI and CLI client for Mdtero / doi2md."
 readme = "README.md"
 requires-python = ">=3.10"

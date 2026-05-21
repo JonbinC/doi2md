@@ -37,6 +37,10 @@ class WorkflowTrace:
 
 def parse_trace_from_route(input_value: str, route: dict[str, Any], task: dict[str, Any] | None = None) -> WorkflowTrace:
     trace = WorkflowTrace(kind="parse", input=input_value)
+    client_acquisition = task.get("client_acquisition") if isinstance(task, dict) and isinstance(task.get("client_acquisition"), dict) else None
+    local_actions = {"fetch_remote_html", "fetch_epub_asset", "fetch_structured_xml", "fallback_pdf_parse"}
+    action_sequence = {str(action) for action in route.get("action_sequence") or []}
+    local_acquisition_planned = bool(route.get("requires_raw_upload") or action_sequence.intersection(local_actions))
     trace.add(
         "route",
         "succeeded",
@@ -45,8 +49,19 @@ def parse_trace_from_route(input_value: str, route: dict[str, Any], task: dict[s
         requires_raw_upload=route.get("requires_raw_upload"),
         action_hint=route.get("action_hint"),
     )
-    if route.get("requires_raw_upload"):
-        trace.add("acquire_raw", "pending", action_hint=route.get("action_hint"))
+    if client_acquisition:
+        trace.add(
+            "client_acquire_raw",
+            "succeeded",
+            source=client_acquisition.get("source"),
+            artifact_kind=client_acquisition.get("artifact_kind"),
+            url=client_acquisition.get("url"),
+            status_code=client_acquisition.get("status_code"),
+            content_type=client_acquisition.get("content_type"),
+        )
+        trace.add("upload_raw", "succeeded" if task and task.get("task_id") else "pending", task_id=(task or {}).get("task_id"))
+    elif local_acquisition_planned:
+        trace.add("client_acquire_raw", "pending", action_hint=route.get("action_hint"))
     else:
         trace.add("server_parse", "succeeded" if task and task.get("task_id") else "pending", task_id=(task or {}).get("task_id"))
     return trace
@@ -76,4 +91,3 @@ def status_trace(task: dict[str, Any]) -> WorkflowTrace:
     if artifacts:
         trace.add("download_artifacts", "pending", artifacts=artifacts)
     return trace
-

@@ -1,0 +1,268 @@
+from __future__ import annotations
+
+import mimetypes
+import re
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+
+DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$", re.I)
+URL_PATTERN = re.compile(r"^https?://", re.I)
+
+
+@dataclass
+class AcquiredArtifact:
+    url: str
+    path: Path
+    artifact_kind: str
+    source: str
+    status_code: int | None = None
+    content_type: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "url": self.url,
+            "path": str(self.path),
+            "artifact_kind": self.artifact_kind,
+            "source": self.source,
+            "status_code": self.status_code,
+            "content_type": self.content_type,
+        }
+
+
+class AcquisitionError(RuntimeError):
+    def __init__(self, reason_code: str, action_hint: str, *, diagnostics: dict[str, Any] | None = None) -> None:
+        super().__init__(action_hint)
+        self.reason_code = reason_code
+        self.action_hint = action_hint
+        self.diagnostics = diagnostics or {}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "reason_code": self.reason_code,
+            "action_hint": self.action_hint,
+            "diagnostics": self.diagnostics,
+        }
+
+
+def should_acquire_locally(route: dict[str, Any], input_value: str) -> bool:
+    if route.get("legacy_fallback"):
+        return False
+    if route.get("requires_raw_upload"):
+        return True
+    actions = {str(action) for action in route.get("action_sequence") or []}
+    local_actions = {"fetch_remote_html", "fetch_epub_asset", "fetch_structured_xml", "fallback_pdf_parse"}
+    if actions.intersection(local_actions) and _candidate_urls(route, input_value):
+        return True
+    return False
+
+
+def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: float = 45.0) -> AcquiredArtifact:
+    candidates = _candidate_urls(route, input_value)
+    if not candidates:
+        raise AcquisitionError(
+            "client_acquisition_no_candidate_url",
+            "Route requires local acquisition but did not include a fetchable URL; use the browser extension or upload a local PDF/EPUB/XML/HTML file.",
+            diagnostics={"route_kind": route.get("route_kind"), "action_sequence": route.get("action_sequence")},
+        )
+
+    errors: list[dict[str, Any]] = []
+    for candidate in candidates:
+        url = str(candidate.get("url") or "").strip()
+        if not url:
+            continue
+        artifact_kind = _artifact_kind(candidate, route, url)
+        try:
+            return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout)
+        except AcquisitionError as exc:
+            errors.append({"url": url, "source": "curl_cffi", **exc.to_dict()})
+        try:
+            return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout)
+        except AcquisitionError as exc:
+            errors.append({"url": url, "source": "httpx", **exc.to_dict()})
+
+    raise AcquisitionError(
+        "client_acquisition_fetch_failed",
+        "Mdtero could not fetch the routed source locally; retry from a browser session or upload the PDF/EPUB/XML/HTML file directly.",
+        diagnostics={"attempts": errors[-6:]},
+    )
+
+
+def curl_cffi_available() -> bool:
+    try:
+        import curl_cffi.requests  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, str]]:
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add(url: object, *, kind: str | None = None, connector: str | None = None) -> None:
+        value = str(url or "").strip()
+        if not value or not URL_PATTERN.match(value) or value in seen:
+            return
+        seen.add(value)
+        item = {"url": value}
+        if kind:
+            item["artifact_kind"] = kind
+        if connector:
+            item["connector"] = connector
+        candidates.append(item)
+
+    for candidate in route.get("acquisition_candidates") or []:
+        if not isinstance(candidate, dict):
+            continue
+        connector = str(candidate.get("connector") or "") or None
+        add(candidate.get("url"), connector=connector)
+        add(candidate.get("html_url"), kind="html", connector=connector)
+        add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector)
+        add(candidate.get("epub_url"), kind="epub", connector=connector)
+        add(candidate.get("pdf_url"), kind="pdf", connector=connector)
+
+    add(route.get("best_oa_url"))
+    if URL_PATTERN.match(str(input_value or "")) and not DOI_PATTERN.match(input_value):
+        add(input_value)
+    return candidates
+
+
+def _artifact_kind(candidate: dict[str, str], route: dict[str, Any], url: str) -> str:
+    explicit = str(candidate.get("artifact_kind") or "").strip().lower()
+    if explicit in {"html", "xml", "epub", "pdf"}:
+        return explicit
+    route_kind = str(route.get("route_kind") or "").lower()
+    actions = {str(action) for action in route.get("action_sequence") or []}
+    lowered = url.lower()
+    if "fetch_epub_asset" in actions or ".epub" in lowered or "/epub/" in lowered:
+        return "epub"
+    if "fallback_pdf_parse" in actions or ".pdf" in lowered or "/pdf" in lowered:
+        return "pdf"
+    if "fetch_structured_xml" in actions or "jats" in route_kind or ".xml" in lowered or "fulltextxml" in lowered:
+        return "xml"
+    return "html"
+
+
+def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> AcquiredArtifact:
+    try:
+        from curl_cffi import requests as curl_requests
+    except Exception as exc:
+        raise AcquisitionError(
+            "client_curl_cffi_unavailable",
+            "curl_cffi is not available in this Python environment; falling back to httpx.",
+            diagnostics={"error": exc.__class__.__name__},
+        ) from exc
+    try:
+        response = curl_requests.get(
+            url,
+            timeout=timeout,
+            impersonate="chrome",
+            allow_redirects=True,
+            headers=_fetch_headers(),
+        )
+    except Exception as exc:
+        raise AcquisitionError(
+            "client_curl_cffi_request_failed",
+            "curl_cffi failed to fetch the routed source.",
+            diagnostics={"error": exc.__class__.__name__},
+        ) from exc
+    if response.status_code >= 400:
+        raise AcquisitionError(
+            "client_curl_cffi_http_error",
+            f"curl_cffi fetch returned HTTP {response.status_code}.",
+            diagnostics={"status_code": response.status_code},
+        )
+    content = bytes(response.content or b"")
+    content_type = str(response.headers.get("content-type") or "")
+    path = _write_payload(content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source="curl_cffi")
+    return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source="curl_cffi", status_code=response.status_code, content_type=content_type)
+
+
+def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float) -> AcquiredArtifact:
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers()) as client:
+            response = client.get(url)
+    except Exception as exc:
+        raise AcquisitionError(
+            "client_httpx_request_failed",
+            "httpx failed to fetch the routed source.",
+            diagnostics={"error": exc.__class__.__name__},
+        ) from exc
+    if response.status_code >= 400:
+        raise AcquisitionError(
+            "client_httpx_http_error",
+            f"httpx fetch returned HTTP {response.status_code}.",
+            diagnostics={"status_code": response.status_code},
+        )
+    content_type = str(response.headers.get("content-type") or "")
+    path = _write_payload(response.content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source="httpx")
+    return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source="httpx", status_code=response.status_code, content_type=content_type)
+
+
+def _write_payload(content: bytes, *, url: str, artifact_kind: str, source: str) -> Path:
+    if not content:
+        raise AcquisitionError(
+            "client_acquisition_empty_payload",
+            "The routed source returned an empty payload.",
+            diagnostics={"url": url, "source": source},
+        )
+    suffix = _suffix_for_kind(artifact_kind, url)
+    handle = tempfile.NamedTemporaryFile(prefix="mdtero-acquired-", suffix=suffix, delete=False)
+    try:
+        handle.write(content)
+        return Path(handle.name)
+    finally:
+        handle.close()
+
+
+def _fetch_headers() -> dict[str, str]:
+    return {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,application/epub+zip;q=0.8,*/*;q=0.7",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36 Mdtero/0.2",
+    }
+
+
+def _kind_from_content_type(default: str, content_type: str) -> str:
+    lowered = content_type.lower()
+    if "pdf" in lowered:
+        return "pdf"
+    if "epub" in lowered:
+        return "epub"
+    if "xml" in lowered:
+        return "xml"
+    if "html" in lowered:
+        return "html"
+    return default
+
+
+def _suffix_for_kind(kind: str, url: str) -> str:
+    lowered = kind.lower()
+    if lowered == "pdf":
+        return ".pdf"
+    if lowered == "epub":
+        return ".epub"
+    if lowered == "xml":
+        return ".xml"
+    if lowered == "html":
+        return ".html"
+    guessed = mimetypes.guess_extension(mimetypes.guess_type(url)[0] or "")
+    return guessed or ".bin"
+
+
+def _artifact_kind_from_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix == ".epub":
+        return "epub"
+    if suffix == ".xml":
+        return "xml"
+    if suffix in {".html", ".htm"}:
+        return "html"
+    return "raw"

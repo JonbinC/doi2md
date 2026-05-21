@@ -7,7 +7,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 ## Quick Start
 
-1. Install the Python runtime with `uv tool install mdtero`
+1. During alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
 2. Run `mdtero setup`
 3. Use `mdtero login --api-key <key>` when the environment is headless
 4. Run `mdtero doctor` before parse, translate, status, download, Zotero, RAG, or MCP work
@@ -16,6 +16,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
+- when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace` to inspect `client_acquisition`
 - local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path>`
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
@@ -51,5 +52,5 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 ## Verification Rule
 
 - do not treat installation as complete until `mdtero doctor` reports an API key source
-- if `mdtero` is missing, install the Python runtime with `uv tool install mdtero`
+- if `mdtero` is missing during alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
 - if a task fails, report `reason_code` and the server action hint before retrying

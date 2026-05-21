@@ -11,6 +11,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from . import __version__
+from .acquisition import AcquisitionError, curl_cffi_available
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config, save_config
 from .projects import (
@@ -207,6 +208,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     table.add_row("API key", "ok" if cfg.api_key else "missing", key_source)
     table.add_row("Config", "ok" if config_path().exists() else "not created", str(config_path()))
     table.add_row("API base", "ok", cfg.api_base_url)
+    table.add_row("curl_cffi", "ok" if curl_cffi_available() else "missing", "local route acquisition" if curl_cffi_available() else "httpx fallback only")
     current_project = project_path(Path.cwd())
     table.add_row("Project", "ok" if current_project.exists() else "not initialized", str(current_project))
     console.print(table)
@@ -247,9 +249,17 @@ def cmd_parse(args: argparse.Namespace) -> int:
     else:
         if not args.input:
             raise SystemExit("parse requires <doi-or-url>, --file, or --batch")
-        route = client.route(args.input)
-        result = client.parse(args.input)
-        result["route"] = route
+        try:
+            route, result, acquisition = client.parse_with_route(args.input)
+        except AcquisitionError as exc:
+            failure = {
+                "status": "failed",
+                "reason_code": exc.reason_code,
+                "action_hint": exc.action_hint,
+                "diagnostics": exc.diagnostics,
+            }
+            _print_result(failure, json_output=args.json or args.trace)
+            return 2
         results.append(result)
         traces.append(parse_trace_from_route(args.input, route, result).to_dict())
     for result in results:
@@ -524,9 +534,7 @@ def _submit_project_paper(client: MdteroClient, paper: PaperRecord) -> dict[str,
     path = Path(paper.input).expanduser()
     if path.exists() and path.is_file():
         return client.upload(path, source_input=paper.doi or paper.title)
-    route = client.route(paper.input)
-    result = client.parse(paper.input)
-    result["route"] = route
+    _route, result, _acquisition = client.parse_with_route(paper.input)
     return result
 
 
