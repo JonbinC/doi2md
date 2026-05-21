@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TaskRecord } from "@mdtero/shared";
-import { createApiClient } from "../src/lib/api";
+import { createApiClient, createRouterSSOTClient } from "../src/lib/api";
 
 describe("createApiClient", () => {
   beforeEach(() => {
@@ -189,6 +189,43 @@ describe("createApiClient", () => {
         body: expect.any(FormData)
       })
     );
+  });
+
+  it("falls back to legacy parse routes when v1 task endpoints are not deployed", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ task_id: "legacy-task", status: "queued" }), { status: 200 }));
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const result = await client.createParseTask({ input: "10.1000/demo" });
+
+    expect(result.task_id).toBe("legacy-task");
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8000/api/v1/tasks/parse", expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:8000/tasks/parse", expect.any(Object));
+  });
+
+  it("synthesizes a legacy route plan when v1 route is not deployed", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }));
+
+    const client = createRouterSSOTClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const route = await client.fetchRoutePlan({ input: "10.1000/demo" }) as any;
+
+    expect(route.legacy_fallback).toBe(true);
+    expect(route.server_entrypoint).toBe("/tasks/parse");
   });
 
   it("uploads fulltext payloads through the v1 upload route", async () => {

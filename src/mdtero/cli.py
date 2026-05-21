@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from . import __version__
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config, save_config
 from .projects import (
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mdtero")
+    parser.add_argument("--version", action="version", version=f"mdtero {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     _cmd(sub, "setup", "Run the onboarding wizard.", cmd_setup)
