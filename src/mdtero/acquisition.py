@@ -12,6 +12,17 @@ import httpx
 
 DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$", re.I)
 URL_PATTERN = re.compile(r"^https?://", re.I)
+CHALLENGE_MARKERS = (
+    "akamai/interstitial",
+    "bm-verify=",
+    "cf-browser-verification",
+    "checking if the site connection is secure",
+    "enable javascript and cookies to continue",
+    "interstitialchallenge",
+    "just a moment",
+    "verify you are human",
+    "window._cf_chl_opt",
+)
 
 
 @dataclass
@@ -179,6 +190,7 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> Ac
         )
     content = bytes(response.content or b"")
     content_type = str(response.headers.get("content-type") or "")
+    _validate_payload(content, url=url, expected_kind=artifact_kind, content_type=content_type, source="curl_cffi")
     path = _write_payload(content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source="curl_cffi")
     return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source="curl_cffi", status_code=response.status_code, content_type=content_type)
 
@@ -200,6 +212,7 @@ def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float) -> Acquir
             diagnostics={"status_code": response.status_code},
         )
     content_type = str(response.headers.get("content-type") or "")
+    _validate_payload(response.content, url=url, expected_kind=artifact_kind, content_type=content_type, source="httpx")
     path = _write_payload(response.content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source="httpx")
     return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source="httpx", status_code=response.status_code, content_type=content_type)
 
@@ -218,6 +231,32 @@ def _write_payload(content: bytes, *, url: str, artifact_kind: str, source: str)
         return Path(handle.name)
     finally:
         handle.close()
+
+
+def _validate_payload(content: bytes, *, url: str, expected_kind: str, content_type: str, source: str) -> None:
+    if not content:
+        return
+    head = content[:120_000]
+    text_head = head.decode("utf-8", errors="ignore").lower()
+    if any(marker in text_head for marker in CHALLENGE_MARKERS):
+        raise AcquisitionError(
+            "client_acquisition_challenge_page",
+            "The publisher returned an anti-bot or JavaScript challenge page instead of article content; use the browser extension with your logged-in browser session or upload the PDF/EPUB/XML file directly.",
+            diagnostics={"url": url, "source": source, "content_type": content_type},
+        )
+    normalized_type = content_type.lower()
+    if expected_kind == "pdf" and not head.startswith(b"%PDF"):
+        raise AcquisitionError(
+            "client_acquisition_unexpected_content_type",
+            "The routed PDF URL did not return a PDF payload; use the browser extension or upload the PDF directly.",
+            diagnostics={"url": url, "source": source, "content_type": content_type},
+        )
+    if expected_kind in {"xml", "epub"} and "html" in normalized_type:
+        raise AcquisitionError(
+            "client_acquisition_unexpected_content_type",
+            f"The routed {expected_kind.upper()} URL returned HTML instead of {expected_kind.upper()} content; use the browser extension or upload the file directly.",
+            diagnostics={"url": url, "source": source, "content_type": content_type},
+        )
 
 
 def _fetch_headers() -> dict[str, str]:
