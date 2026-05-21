@@ -3,7 +3,6 @@ import type { TaskRecord } from "@mdtero/shared";
 import { createApiClient } from "../lib/api";
 import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
-import { requiresElsevierLocalAcquire } from "../lib/elsevier";
 import {
   createFileParseMessage,
   createDetectMessage,
@@ -28,7 +27,6 @@ import {
 } from "../lib/storage";
 import {
   getActionStatusText,
-  getBridgeStatusText,
   getDownloadLabel,
   getPreflightHintText,
   getPreferredArtifactKey,
@@ -50,7 +48,7 @@ const COPY = {
     signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
     signInButton: "Open Mdtero Account",
     freeHint: "PDF/XML free",
-    supportSummary: "Start from a paper tab, DOI, PDF, or EPUB. Prefer direct publisher APIs and TDM routes first through the backend route plan, use this browser only when local access is needed, then return Markdown and translation downloads.",
+    supportSummary: "",
     supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
@@ -109,7 +107,7 @@ const COPY = {
     signInHint: "请在 mdtero.com/account 登录，然后回到扩展解析、翻译和下载。",
     signInButton: "打开 Mdtero Account",
     freeHint: "PDF/XML 免费",
-    supportSummary: "从论文标签页、DOI、PDF 或 EPUB 开始。Mdtero 先向后端请求 route plan，只在路由需要本地访问时使用这个浏览器，然后返回 Markdown 与译文下载。",
+    supportSummary: "",
     supportStableTitle: "这台机器上已经比较顺手",
     supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access 等开放来源最顺手。",
     supportShadowTitle: "使用你自己的访问权限",
@@ -167,12 +165,8 @@ const accountEmailEl = document.querySelector<HTMLParagraphElement>("#account-em
 const usageStatusEl = document.querySelector<HTMLParagraphElement>("#usage-status");
 const helperStatusEl = document.querySelector<HTMLParagraphElement>("#helper-status");
 const freeHintEl = document.querySelector<HTMLParagraphElement>("#free-hint");
-const supportSummaryEl = document.querySelector<HTMLParagraphElement>("#support-summary");
-const supportStableTitleEl = document.querySelector<HTMLParagraphElement>("#support-stable-title");
 const supportStableItemsEl = document.querySelector<HTMLParagraphElement>("#support-stable-items");
-const supportShadowTitleEl = document.querySelector<HTMLParagraphElement>("#support-shadow-title");
 const supportShadowItemsEl = document.querySelector<HTMLParagraphElement>("#support-shadow-items");
-const supportExperimentalTitleEl = document.querySelector<HTMLParagraphElement>("#support-experimental-title");
 const supportExperimentalItemsEl = document.querySelector<HTMLParagraphElement>("#support-experimental-items");
 const inputLabelEl = document.querySelector<HTMLLabelElement>("#paper-input-label");
 const inputEl = document.querySelector<HTMLInputElement>("#paper-input");
@@ -305,12 +299,8 @@ function applyLanguage() {
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (freeHintEl) freeHintEl.textContent = copy.freeHint;
-  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
-  if (supportStableTitleEl) supportStableTitleEl.textContent = copy.supportStableTitle;
   if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
-  if (supportShadowTitleEl) supportShadowTitleEl.textContent = copy.supportShadowTitle;
   if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
-  if (supportExperimentalTitleEl) supportExperimentalTitleEl.textContent = copy.supportExperimentalTitle;
   if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
@@ -676,20 +666,8 @@ async function refreshUsage() {
 }
 
 async function refreshBridgeStatus() {
-  if (!helperStatusEl) {
-    return;
-  }
-
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "mdtero.bridge.status"
-    });
-    currentBridgeStatus = response?.result ?? null;
-    helperStatusEl.textContent = getBridgeStatusText(currentBridgeStatus, uiLanguage);
-  } catch {
-    currentBridgeStatus = null;
-    helperStatusEl.textContent = getBridgeStatusText(undefined, uiLanguage);
-  }
+  currentBridgeStatus = null;
+  if (helperStatusEl) helperStatusEl.hidden = true;
   await updatePreflightHint();
 }
 
@@ -824,16 +802,6 @@ parseButton?.addEventListener("click", async () => {
     await openMdteroAccount();
     return;
   }
-  if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
-    isParsing = false;
-    renderActionButtons();
-    setResult(getCurrentCopy().elsevierKeyRequired);
-    setTimeout(() => {
-      void chrome.runtime.openOptionsPage();
-    }, 2000);
-    return;
-  }
-
   const pageContext = await resolveParsePageContext(input);
   const response = await chrome.runtime.sendMessage(
     createSsotParseMessage(input, pageContext)

@@ -108,21 +108,25 @@ function createApiClient(getSettings) {
       return request("/me/tasks", void 0, { requireAuth: true }).then((response) => response.json());
     },
     createParseTask(payload) {
-      return request("/tasks/parse", {
+      return request("/api/v1/tasks/parse", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
     createUploadedParseTask(payload) {
       const body = new FormData();
-      body.set("xml_file", payload.xmlFile, payload.filename ?? "paper.xml");
+      const upload = payload.paperFile ?? payload.xmlFile;
+      if (!upload) {
+        throw new Error("No file was provided for upload.");
+      }
+      body.set("paper_file", upload, payload.filename ?? "paper.fulltext");
       if (payload.sourceDoi) {
         body.set("source_doi", payload.sourceDoi);
       }
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
-      return request("/tasks/parse-upload", {
+      return request("/api/v1/tasks/upload", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json());
@@ -135,9 +139,18 @@ function createApiClient(getSettings) {
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      return request("/tasks/parse-fulltext-v2", {
+      const normalizedBody = new FormData();
+      const upload = body.get("fulltext_file");
+      if (upload instanceof Blob) {
+        normalizedBody.set("paper_file", upload, payload.filename ?? "paper.fulltext");
+      }
+      const sourceDoi = body.get("source_doi");
+      const sourceInput = body.get("source_input");
+      if (typeof sourceDoi === "string") normalizedBody.set("source_doi", sourceDoi);
+      if (typeof sourceInput === "string") normalizedBody.set("source_input", sourceInput);
+      return request("/api/v1/tasks/upload", {
         method: "POST",
-        body
+        body: normalizedBody
       }, { requireAuth: true }).then((response) => response.json());
     },
     createParseHelperBundleV2Task(payload) {
@@ -157,16 +170,16 @@ function createApiClient(getSettings) {
       }, { requireAuth: true }).then((response) => response.json());
     },
     createTranslateTask(payload) {
-      return request("/tasks/translate", {
+      return request("/api/v1/tasks/translate", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
     getTask(taskId) {
-      return request(`/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
+      return request(`/api/v1/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
     },
     downloadArtifact(taskId, artifact, preferredFilename) {
-      return request(`/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
+      return request(`/api/v1/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
         filename: extractFilename(
           response.headers.get("Content-Disposition"),
@@ -204,37 +217,6 @@ function triggerBlobDownload(blob, filename, deps = defaultDeps) {
   } finally {
     deps.revokeObjectURL(objectUrl);
   }
-}
-
-// src/lib/elsevier.ts
-var LOCAL_XML_DOI_PREFIXES = ["10.1016/"];
-var DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
-var PII_PATTERN = /^S[0-9A-Z]{16,}$/i;
-var SCIENCEDIRECT_PII_PATTERN = /sciencedirect\.com\/science\/article\/pii\/(S[0-9A-Z]{16,})/i;
-function usesLocalXmlAcquire(doi) {
-  const lowered = doi.toLowerCase();
-  return LOCAL_XML_DOI_PREFIXES.some((prefix) => lowered.startsWith(prefix));
-}
-function normalizeElsevierInput(input) {
-  const trimmed = input.trim();
-  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN);
-  if (doiUrlMatch && usesLocalXmlAcquire(doiUrlMatch[1])) {
-    return { kind: "doi", value: doiUrlMatch[1] };
-  }
-  if (usesLocalXmlAcquire(trimmed)) {
-    return { kind: "doi", value: trimmed };
-  }
-  const piiUrlMatch = trimmed.match(SCIENCEDIRECT_PII_PATTERN);
-  if (piiUrlMatch) {
-    return { kind: "pii", value: piiUrlMatch[1] };
-  }
-  if (PII_PATTERN.test(trimmed)) {
-    return { kind: "pii", value: trimmed };
-  }
-  return null;
-}
-function requiresElsevierLocalAcquire(input) {
-  return normalizeElsevierInput(input) !== null;
 }
 
 // src/lib/runtime.ts
@@ -641,6 +623,37 @@ function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkd
   };
 }
 
+// src/lib/elsevier.ts
+var LOCAL_XML_DOI_PREFIXES = ["10.1016/"];
+var DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
+var PII_PATTERN = /^S[0-9A-Z]{16,}$/i;
+var SCIENCEDIRECT_PII_PATTERN = /sciencedirect\.com\/science\/article\/pii\/(S[0-9A-Z]{16,})/i;
+function usesLocalXmlAcquire(doi) {
+  const lowered = doi.toLowerCase();
+  return LOCAL_XML_DOI_PREFIXES.some((prefix) => lowered.startsWith(prefix));
+}
+function normalizeElsevierInput(input) {
+  const trimmed = input.trim();
+  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN);
+  if (doiUrlMatch && usesLocalXmlAcquire(doiUrlMatch[1])) {
+    return { kind: "doi", value: doiUrlMatch[1] };
+  }
+  if (usesLocalXmlAcquire(trimmed)) {
+    return { kind: "doi", value: trimmed };
+  }
+  const piiUrlMatch = trimmed.match(SCIENCEDIRECT_PII_PATTERN);
+  if (piiUrlMatch) {
+    return { kind: "pii", value: piiUrlMatch[1] };
+  }
+  if (PII_PATTERN.test(trimmed)) {
+    return { kind: "pii", value: trimmed };
+  }
+  return null;
+}
+function requiresElsevierLocalAcquire(input) {
+  return normalizeElsevierInput(input) !== null;
+}
+
 // src/lib/bridge-wake.ts
 var BRIDGE_SUPPORTED_URL_PATTERNS = [
   "arxiv.org",
@@ -767,38 +780,6 @@ function getUsageStatusText(usage, language = "en", errorMessage) {
   const translation = Number.isFinite(usage?.translation_quota_remaining) ? Number(usage?.translation_quota_remaining) : 0;
   return language === "zh" ? `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}` : `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`;
 }
-function getBridgeStatusText(status, language = "en") {
-  const state = String(status?.state || "").trim().toLowerCase();
-  const runnerState = String(status?.runnerState || "").trim().toLowerCase();
-  if (language === "zh") {
-    if (state === "connected" && runnerState === "busy") {
-      return "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u8FDE\u63A5\uFF0C\u6B63\u5728\u5904\u7406\u8BBE\u5907\u4FA7\u83B7\u53D6\u4EFB\u52A1\u3002";
-    }
-    if (state === "connected") {
-      return "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5728\u9700\u8981\u65F6\u5904\u7406\u8BBE\u5907\u4FA7\u56DE\u9000\u4E0E\u6D4F\u89C8\u5668\u6293\u53D6\u3002";
-    }
-    if (state === "disconnected") {
-      return "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero \u6216\u91CD\u8F7D\u6269\u5C55\u3002";
-    }
-    if (state === "unavailable") {
-      return "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730\u8FD0\u884C\u65F6\u3002\u8BF7\u5B89\u88C5\u6216\u542F\u52A8 mdtero\u3002";
-    }
-    return "\u672C\u5730\u8FD0\u884C\u65F6\u72B6\u6001\u672A\u77E5\u3002";
-  }
-  if (state === "connected" && runnerState === "busy") {
-    return "Local runtime is connected and handling an on-device acquisition task.";
-  }
-  if (state === "connected") {
-    return "Local runtime ready for on-device fallback and browser capture when needed.";
-  }
-  if (state === "disconnected") {
-    return "Local runtime disconnected. Restart mdtero or reload the extension.";
-  }
-  if (state === "unavailable") {
-    return "Local runtime not detected. Install or start mdtero.";
-  }
-  return "Local runtime status unknown.";
-}
 function getPreflightHintText(params, language = "en") {
   const input = String(params.input || "").trim();
   const pageUrl = String(params.pageUrl || "").trim();
@@ -853,7 +834,7 @@ var COPY = {
     signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
     signInButton: "Open Mdtero Account",
     freeHint: "PDF/XML free",
-    supportSummary: "Start from a paper tab, DOI, PDF, or EPUB. Prefer direct publisher APIs and TDM routes first through the backend route plan, use this browser only when local access is needed, then return Markdown and translation downloads.",
+    supportSummary: "",
     supportStableTitle: "Ready on this machine",
     supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
     supportShadowTitle: "Use your own access",
@@ -911,7 +892,7 @@ var COPY = {
     signInHint: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\uFF0C\u7136\u540E\u56DE\u5230\u6269\u5C55\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
     signInButton: "\u6253\u5F00 Mdtero Account",
     freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "\u4ECE\u8BBA\u6587\u6807\u7B7E\u9875\u3001DOI\u3001PDF \u6216 EPUB \u5F00\u59CB\u3002Mdtero \u5148\u5411\u540E\u7AEF\u8BF7\u6C42 route plan\uFF0C\u53EA\u5728\u8DEF\u7531\u9700\u8981\u672C\u5730\u8BBF\u95EE\u65F6\u4F7F\u7528\u8FD9\u4E2A\u6D4F\u89C8\u5668\uFF0C\u7136\u540E\u8FD4\u56DE Markdown \u4E0E\u8BD1\u6587\u4E0B\u8F7D\u3002",
+    supportSummary: "",
     supportStableTitle: "\u8FD9\u53F0\u673A\u5668\u4E0A\u5DF2\u7ECF\u6BD4\u8F83\u987A\u624B",
     supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
     supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
@@ -968,12 +949,8 @@ var accountEmailEl = document.querySelector("#account-email");
 var usageStatusEl = document.querySelector("#usage-status");
 var helperStatusEl = document.querySelector("#helper-status");
 var freeHintEl = document.querySelector("#free-hint");
-var supportSummaryEl = document.querySelector("#support-summary");
-var supportStableTitleEl = document.querySelector("#support-stable-title");
 var supportStableItemsEl = document.querySelector("#support-stable-items");
-var supportShadowTitleEl = document.querySelector("#support-shadow-title");
 var supportShadowItemsEl = document.querySelector("#support-shadow-items");
-var supportExperimentalTitleEl = document.querySelector("#support-experimental-title");
 var supportExperimentalItemsEl = document.querySelector("#support-experimental-items");
 var inputLabelEl = document.querySelector("#paper-input-label");
 var inputEl = document.querySelector("#paper-input");
@@ -1088,12 +1065,8 @@ function applyLanguage() {
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (freeHintEl) freeHintEl.textContent = copy.freeHint;
-  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
-  if (supportStableTitleEl) supportStableTitleEl.textContent = copy.supportStableTitle;
   if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
-  if (supportShadowTitleEl) supportShadowTitleEl.textContent = copy.supportShadowTitle;
   if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
-  if (supportExperimentalTitleEl) supportExperimentalTitleEl.textContent = copy.supportExperimentalTitle;
   if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
@@ -1439,19 +1412,8 @@ async function refreshUsage() {
   }
 }
 async function refreshBridgeStatus() {
-  if (!helperStatusEl) {
-    return;
-  }
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "mdtero.bridge.status"
-    });
-    currentBridgeStatus = response?.result ?? null;
-    helperStatusEl.textContent = getBridgeStatusText(currentBridgeStatus, uiLanguage);
-  } catch {
-    currentBridgeStatus = null;
-    helperStatusEl.textContent = getBridgeStatusText(void 0, uiLanguage);
-  }
+  currentBridgeStatus = null;
+  if (helperStatusEl) helperStatusEl.hidden = true;
   await updatePreflightHint();
 }
 async function detectCurrentTab() {
@@ -1566,15 +1528,6 @@ parseButton?.addEventListener("click", async () => {
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
     await openMdteroAccount();
-    return;
-  }
-  if (requiresElsevierLocalAcquire(input) && !settings.elsevierApiKey) {
-    isParsing = false;
-    renderActionButtons();
-    setResult(getCurrentCopy().elsevierKeyRequired);
-    setTimeout(() => {
-      void chrome.runtime.openOptionsPage();
-    }, 2e3);
     return;
   }
   const pageContext = await resolveParsePageContext(input);

@@ -3,15 +3,14 @@ set -eu
 
 TARGET=""
 DRY_RUN="0"
-MDTERO_NPM_PACKAGE="mdtero-install@0.1.8"
 
 usage() {
   cat <<'EOF'
 Usage:
   install.sh --agent <claude_code|codex|gemini_cli|hermes|opencode> [--dry-run]
 
-Installs the currently published Mdtero npm CLI package, then installs the
-matching agent skill bundle.
+Installs the Python Mdtero runtime with uv, then installs the matching agent
+skill bundle through `mdtero agent install`. npm is not required.
 
 Examples:
   curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
@@ -44,12 +43,12 @@ run() {
   fi
 }
 
-ensure_npm() {
-  if command_exists npm; then
+ensure_uv() {
+  if command_exists uv; then
     return 0
   fi
 
-  fail "npm is required because the current public Mdtero CLI ships as mdtero-install on npm. Install Node.js/npm first: https://nodejs.org/"
+  fail "uv is required for the Python Mdtero runtime. Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -80,15 +79,14 @@ done
 validate_target "$TARGET"
 
 printf '%s\n' "Installing Mdtero for agent: $TARGET"
-ensure_npm
-run npm install -g "$MDTERO_NPM_PACKAGE"
-run npx --yes mdtero-install install "$TARGET"
+ensure_uv
+run uv tool install mdtero
+run mdtero agent install --target "$TARGET"
 
 cat <<'EOF'
 
 Mdtero is installed. Next steps:
-  mdtero login
-  mdtero doctor
+  mdtero setup
 
 For headless agents, create an API key in Mdtero Account and paste the dashboard install prompt into the agent.
 EOF

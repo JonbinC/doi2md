@@ -1,7 +1,7 @@
 {
   "name": "mdtero-install",
   "version": "0.1.8",
-  "description": "Unified installer for Mdtero agent skill bundles across Claude Code, Codex, Gemini CLI, Hermes Agent, OpenCode, and OpenClaw guidance.",
+  "description": "Compatibility installer for Mdtero agent skill bundles. The Mdtero runtime CLI is the Python package.",
   "homepage": "https://mdtero.com",
   "repository": {
     "type": "git",
@@ -26,8 +26,7 @@
   },
   "type": "module",
   "bin": {
-    "mdtero-install": "bin/mdtero-install",
-    "mdtero": "bin/mdtero"
+    "mdtero-install": "bin/mdtero-install"
   },
   "files": [
     "bin",

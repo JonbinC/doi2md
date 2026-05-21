@@ -10,8 +10,6 @@ import { spawn } from "node:child_process";
 const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero-install.mjs");
 const CLI_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero-install");
-const MDTERO_CLI_PATH = join(PROJECT_ROOT, "bin", "mdtero.mjs");
-const MDTERO_WRAPPER_PATH = join(PROJECT_ROOT, "bin", "mdtero");
 const PACKAGE_JSON_PATH = join(PROJECT_ROOT, "package.json");
 
 function runNode(args, options = {}) {
@@ -228,7 +226,9 @@ test("package metadata stays publishable for the unified install entry", async (
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   assert.notEqual(pkg.private, true);
   assert.equal(pkg.bin?.["mdtero-install"], "bin/mdtero-install");
-  assert.equal(pkg.bin?.mdtero, "bin/mdtero");
+  assert.equal(pkg.bin?.mdtero, undefined);
+  assert.match(pkg.description, /skill bundles/i);
+  assert.match(pkg.description, /Python package/i);
   assert.equal(pkg.publishConfig?.access, "public");
   assert.equal(pkg.repository?.type, "git");
   assert.match(pkg.repository?.url ?? "", /JonbinC\/doi2md/);
@@ -238,8 +238,6 @@ test("package metadata stays publishable for the unified install entry", async (
 test("bin entry stays executable for npm-run installs", async () => {
   const stats = await stat(CLI_WRAPPER_PATH);
   assert.ok((stats.mode & 0o111) !== 0, "mdtero-install CLI must keep its executable bit");
-  const mdteroStats = await stat(MDTERO_WRAPPER_PATH);
-  assert.ok((mdteroStats.mode & 0o111) !== 0, "mdtero CLI must keep its executable bit");
 });
 
 test("show falls back to the bundled manifest when the remote manifest is unavailable", async () => {
@@ -270,349 +268,14 @@ test("show falls back to the bundled manifest when the remote manifest is unavai
 
     assert.equal(completed.code, 0, completed.stderr);
     assert.match(completed.stdout, /Mdtero install manifest v1/);
-    assert.match(completed.stdout, /npx mdtero-install/);
+    assert.match(completed.stdout, /Runtime CLI: mdtero/);
+    assert.match(completed.stdout, /Runtime install: uv tool install mdtero/);
+    assert.match(completed.stdout, /Skill install: mdtero agent install --target <target>/);
+    assert.match(completed.stdout, /Legacy npm compatibility: npx mdtero-install/);
   } finally {
     server.close();
   }
 });
-
-test("mdtero CLI supports version, login, and doctor setup flow", async () => {
-  const root = await mkdtemp(join(tmpdir(), "mdtero-cli-"));
-  const envFile = join(root, ".env");
-  const pkg = JSON.parse(await readFile(PACKAGE_JSON_PATH, "utf8"));
-
-  const version = await runNode([MDTERO_CLI_PATH, "--version"], { cwd: PROJECT_ROOT });
-  assert.equal(version.code, 0, version.stderr);
-  assert.equal(version.stdout, `${pkg.version}\n`);
-
-  const login = await runNode([MDTERO_CLI_PATH, "login", "--api-key", "test-key", "--config-file", envFile], { cwd: PROJECT_ROOT });
-  assert.equal(login.code, 0, login.stderr);
-  assert.match(login.stdout, /Saved MDTERO_API_KEY/);
-  assert.equal(await readFile(envFile, "utf8"), 'MDTERO_API_KEY="test-key"\n');
-
-  const doctor = await runNode([MDTERO_CLI_PATH, "doctor", "--config-file", envFile], { cwd: PROJECT_ROOT });
-  assert.equal(doctor.code, 0, doctor.stderr);
-  assert.match(doctor.stdout, new RegExp(`Mdtero CLI: ${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(doctor.stdout, /MDTERO_API_KEY: set/);
-
-  const setup = await runNode([MDTERO_CLI_PATH, "setup"], { cwd: PROJECT_ROOT });
-  assert.equal(setup.code, 0, setup.stderr);
-  assert.match(setup.stdout, /Run mdtero login to open Mdtero Account in your browser/);
-});
-
-test("mdtero CLI explains API-key setup for discover commands", async () => {
-  const completed = await runNode([MDTERO_CLI_PATH, "discover", "10.48550/arXiv.1706.03762"], { cwd: PROJECT_ROOT });
-
-  assert.equal(completed.code, 0, completed.stderr);
-  assert.match(completed.stdout, /is not implemented in the npm CLI yet/i);
-  assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero parse, mdtero status, mdtero translate, mdtero download, mdtero version\./);
-  assert.match(completed.stdout, /mdtero login --api-key/);
-});
-
-test("mdtero CLI can create a parse task with an API key", async () => {
-  const server = createServer((request, response) => {
-    if (request.method === "POST" && request.url === "/tasks/parse") {
-      assert.equal(request.headers.authorization, "ApiKey cli-key");
-      let body = "";
-      request.setEncoding("utf8");
-      request.on("data", (chunk) => {
-        body += chunk;
-      });
-      request.on("end", () => {
-        assert.equal(body, JSON.stringify({ input: "10.48550/arXiv.1706.03762" }));
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ task_id: "task-parse-1", status: "queued" }));
-      });
-      return;
-    }
-    response.writeHead(404);
-    response.end("not found");
-  });
-
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  try {
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
-    const completed = await runNode([MDTERO_CLI_PATH, "parse", "10.48550/arXiv.1706.03762"], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        MDTERO_API_KEY: "cli-key",
-        MDTERO_API_URL: `http://127.0.0.1:${address.port}`,
-      },
-    });
-
-    assert.equal(completed.code, 0, completed.stderr);
-    assert.match(completed.stdout, /Created parse task: task-parse-1/);
-    assert.match(completed.stdout, /Initial status: queued/);
-    assert.match(completed.stdout, /Next: mdtero status task-parse-1/);
-  } finally {
-    server.close();
-  }
-});
-
-test("mdtero CLI can submit a raw paper file through parser-v2 upload", async () => {
-  const root = await mkdtemp(join(tmpdir(), "mdtero-cli-upload-"));
-  const paperPath = join(root, "paper.pdf");
-  await writeFile(paperPath, Buffer.from("%PDF-1.7\n% demo\n"));
-
-  const server = createServer((request, response) => {
-    if (request.method === "POST" && request.url === "/tasks/parse-upload-v2") {
-      assert.equal(request.headers.authorization, "ApiKey cli-key");
-      assert.match(request.headers["content-type"] ?? "", /^multipart\/form-data; boundary=/);
-      const chunks = [];
-      request.on("data", (chunk) => {
-        chunks.push(chunk);
-      });
-      request.on("end", () => {
-        const body = Buffer.concat(chunks).toString("latin1");
-        assert.match(body, /name="paper_file"; filename="paper\.pdf"/);
-        assert.match(body, /name="source_input"\r\n\r\nhttps:\/\/doi\.org\/10\.1000\/demo/);
-        assert.match(body, /name="source_doi"\r\n\r\n10\.1000\/demo/);
-        assert.match(body, /name="pdf_engine"\r\n\r\ngrobid/);
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ task_id: "task-upload-v2", status: "queued" }));
-      });
-      return;
-    }
-    response.writeHead(404);
-    response.end("not found");
-  });
-
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  try {
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
-    const completed = await runNode([
-      MDTERO_CLI_PATH,
-      "parse",
-      "--file",
-      paperPath,
-      "--source-input",
-      "https://doi.org/10.1000/demo",
-      "--source-doi",
-      "10.1000/demo",
-      "--pdf-engine",
-      "grobid"
-    ], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        MDTERO_API_KEY: "cli-key",
-        MDTERO_API_URL: `http://127.0.0.1:${address.port}`,
-      },
-    });
-
-    assert.equal(completed.code, 0, completed.stderr);
-    assert.match(completed.stdout, /Created parse task: task-upload-v2/);
-    assert.match(completed.stdout, /Initial status: queued/);
-  } finally {
-    server.close();
-  }
-});
-
-test("mdtero CLI can inspect task status with an API key", async () => {
-  const server = createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/tasks/task-123") {
-      assert.equal(request.headers.authorization, "ApiKey cli-key");
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({
-        task_id: "task-123",
-        status: "succeeded",
-        task_kind: "parse",
-        input_summary: "10.48550/arXiv.1706.03762",
-        stage: "completed",
-        created_at: "2026-04-30T14:00:00Z",
-        result: {
-          preferred_artifact: "paper_md",
-          artifacts: {
-            paper_md: {
-              path: "/tmp/paper.md",
-              filename: "paper.md",
-              media_type: "text/markdown"
-            }
-          }
-        }
-      }));
-      return;
-    }
-    response.writeHead(404);
-    response.end("not found");
-  });
-
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  try {
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
-    const completed = await runNode([MDTERO_CLI_PATH, "status", "task-123"], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        MDTERO_API_KEY: "cli-key",
-        MDTERO_API_URL: `http://127.0.0.1:${address.port}`,
-      },
-    });
-
-    assert.equal(completed.code, 0, completed.stderr);
-    assert.match(completed.stdout, /Task: task-123/);
-    assert.match(completed.stdout, /Kind: parse/);
-    assert.match(completed.stdout, /Status: succeeded/);
-    assert.match(completed.stdout, /Stage: completed/);
-    assert.match(completed.stdout, /Preferred artifact: paper_md/);
-    assert.match(completed.stdout, /Artifacts: paper_md/);
-  } finally {
-    server.close();
-  }
-});
-
-test("mdtero CLI can create a translate task from a parse task id with an API key", async () => {
-  const server = createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/tasks/task-parse-1") {
-      assert.equal(request.headers.authorization, "ApiKey cli-key");
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({
-        task_id: "task-parse-1",
-        status: "succeeded",
-        task_kind: "parse",
-        input_summary: "10.48550/arXiv.1706.03762",
-        stage: "completed",
-        created_at: "2026-04-30T14:00:00Z",
-        result: {
-          preferred_artifact: "paper_md",
-          artifacts: {
-            paper_md: {
-              path: "/tmp/paper.md",
-              filename: "paper.md",
-              media_type: "text/markdown"
-            }
-          }
-        }
-      }));
-      return;
-    }
-    if (request.method === "POST" && request.url === "/tasks/translate") {
-      assert.equal(request.headers.authorization, "ApiKey cli-key");
-      let body = "";
-      request.setEncoding("utf8");
-      request.on("data", (chunk) => {
-        body += chunk;
-      });
-      request.on("end", () => {
-        assert.equal(body, JSON.stringify({ source_markdown_path: "/tmp/paper.md", target_language: "zh", mode: "full" }));
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ task_id: "task-translate-1", status: "queued" }));
-      });
-      return;
-    }
-    response.writeHead(404);
-    response.end("not found");
-  });
-
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  try {
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
-    const completed = await runNode([MDTERO_CLI_PATH, "translate", "task-parse-1", "zh"], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        MDTERO_API_KEY: "cli-key",
-        MDTERO_API_URL: `http://127.0.0.1:${address.port}`,
-      },
-    });
-
-    assert.equal(completed.code, 0, completed.stderr);
-    assert.match(completed.stdout, /Created translate task: task-translate-1/);
-    assert.match(completed.stdout, /Source artifact: \/tmp\/paper.md/);
-    assert.match(completed.stdout, /Next: mdtero status task-translate-1/);
-  } finally {
-    server.close();
-  }
-});
-
-test("mdtero CLI can download an artifact with an API key", async () => {
-  const root = await mkdtemp(join(tmpdir(), "mdtero-download-"));
-  const server = createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/tasks/task-123/download/paper_md") {
-      assert.equal(request.headers.authorization, "ApiKey cli-key");
-      response.writeHead(200, {
-        "content-type": "text/markdown",
-        "content-disposition": 'attachment; filename="paper.md"',
-      });
-      response.end("# translated\n");
-      return;
-    }
-    response.writeHead(404);
-    response.end("not found");
-  });
-
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-  try {
-    const address = server.address();
-    assert.ok(address && typeof address === "object");
-    const completed = await runNode([MDTERO_CLI_PATH, "download", "task-123", "paper_md", "--output-dir", root], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        MDTERO_API_KEY: "cli-key",
-        MDTERO_API_URL: `http://127.0.0.1:${address.port}`,
-      },
-    });
-
-    assert.equal(completed.code, 0, completed.stderr);
-    assert.match(completed.stdout, /Downloaded artifact: /);
-    const saved = await readFile(join(root, "paper.md"), "utf8");
-    assert.equal(saved, "# translated\n");
-  } finally {
-    server.close();
-  }
-});
-
-test("mdtero CLI keeps every placeholder command on the same honest guidance surface", async () => {
-  const placeholderCommands = [
-    ["discover", "10.48550/arXiv.1706.03762"],
-    ["parse-bib", "refs.bib"],
-    ["parse-files", "paper.pdf"],
-    ["shadow-status"]
-  ];
-
-  for (const args of placeholderCommands) {
-    const completed = await runNode([MDTERO_CLI_PATH, ...args], { cwd: PROJECT_ROOT });
-    assert.equal(completed.code, 0, `${args.join(" ")} should stay non-fatal`);
-    assert.match(completed.stdout, /is not implemented in the npm CLI yet/i);
-    assert.match(completed.stdout, /Supported today: mdtero login, mdtero doctor, mdtero setup, mdtero parse, mdtero status, mdtero translate, mdtero download, mdtero version\./);
-    assert.match(completed.stdout, /Run mdtero login to open Mdtero Account in your browser, or mdtero login --api-key <key>\./);
-  }
-});
-
-test("mdtero CLI usage lists the supported commands and placeholder surfaces clearly", async () => {
-  const completed = await runNode([MDTERO_CLI_PATH, "--help"], { cwd: PROJECT_ROOT });
-
-  assert.equal(completed.code, 0, completed.stderr);
-  assert.match(completed.stdout, /Supported today:/);
-  assert.match(completed.stdout, /mdtero login/);
-  assert.match(completed.stdout, /mdtero doctor/);
-  assert.match(completed.stdout, /mdtero parse <doi-or-url>/);
-  assert.match(completed.stdout, /mdtero status <task-id>/);
-  assert.match(completed.stdout, /Placeholder guidance only:/);
-  assert.match(completed.stdout, /mdtero translate <task-id>/);
-  assert.match(completed.stdout, /mdtero discover <doi-or-url>/);
-});
-
-test("mdtero CLI accepts help as a first-class command", async () => {
-  const completed = await runNode([MDTERO_CLI_PATH, "help"], { cwd: PROJECT_ROOT });
-
-  assert.equal(completed.code, 0, completed.stderr);
-  assert.match(completed.stdout, /Supported today:/);
-  assert.match(completed.stdout, /Placeholder guidance only:/);
-  assert.doesNotMatch(completed.stdout, /Unknown command:/);
-});
-
 
 test("install rejects openclaw because it stays on the dedicated ClawHub path", async () => {
   const completed = await runNode([CLI_PATH, "install", "openclaw"], {

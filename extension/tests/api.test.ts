@@ -57,7 +57,7 @@ describe("createApiClient", () => {
     expect(artifact.filename).toBe("zhou2025performance.zip");
     expect(artifact.mediaType).toBe("application/zip");
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/tasks/task-123/download/paper_bundle",
+      "http://127.0.0.1:8000/api/v1/tasks/task-123/download/paper_bundle",
       expect.any(Object)
     );
   });
@@ -164,7 +164,7 @@ describe("createApiClient", () => {
     );
   });
 
-  it("uploads local XML as multipart parse input", async () => {
+  it("uploads local XML as v1 multipart parse input", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ task_id: "task-upload", status: "queued" }), { status: 200 }));
 
@@ -183,7 +183,7 @@ describe("createApiClient", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/tasks/parse-upload",
+      "http://127.0.0.1:8000/api/v1/tasks/upload",
       expect.objectContaining({
         method: "POST",
         body: expect.any(FormData)
@@ -191,7 +191,7 @@ describe("createApiClient", () => {
     );
   });
 
-  it("uploads helper-first payloads through the v2 parse routes", async () => {
+  it("uploads fulltext payloads through the v1 upload route", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async () => new Response(JSON.stringify({ task_id: "task-v2", status: "queued" }), { status: 200 }));
 
@@ -207,24 +207,9 @@ describe("createApiClient", () => {
       filename: "paper.html",
       sourceInput: "https://example.org/paper"
     });
-    await client.createParseHelperBundleV2Task({
-      helperBundleFile: new Blob(["zip"], { type: "application/zip" }),
-      filename: "helper-bundle.zip",
-      sourceDoi: "10.1016/j.energy.2026.140192",
-      pdfEngine: "grobid"
-    });
-
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://127.0.0.1:8000/tasks/parse-fulltext-v2",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.any(FormData)
-      })
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "http://127.0.0.1:8000/tasks/parse-helper-bundle-v2",
+      "http://127.0.0.1:8000/api/v1/tasks/upload",
       expect.objectContaining({
         method: "POST",
         body: expect.any(FormData)
@@ -232,13 +217,8 @@ describe("createApiClient", () => {
     );
 
     const fulltextBody = fetchMock.mock.calls[0]?.[1]?.body as FormData;
-    expect(fulltextBody.get("fulltext_file")).toBeTruthy();
+    expect(fulltextBody.get("paper_file")).toBeTruthy();
     expect(fulltextBody.get("source_input")).toBe("https://example.org/paper");
-
-    const helperBundleBody = fetchMock.mock.calls[1]?.[1]?.body as FormData;
-    expect(helperBundleBody.get("helper_bundle")).toBeTruthy();
-    expect(helperBundleBody.get("source_doi")).toBe("10.1016/j.energy.2026.140192");
-    expect(helperBundleBody.get("pdf_engine")).toBe("grobid");
   });
 
   it("loads parser-v2 shadow diagnostics through the authenticated diagnostics route", async () => {
