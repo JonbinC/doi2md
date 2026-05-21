@@ -48,7 +48,7 @@ test("install manifest stays mirrored and names Python as the runtime truth", as
   assert.equal(manifest.quickInstallCommand, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>");
   assert.equal(manifest.cli?.packageName, "mdtero");
   assert.equal(manifest.cli?.packageManager, "uv");
-  assert.equal(manifest.cli?.runtimeInstallCommand, "uv tool install mdtero");
+  assert.equal(manifest.cli?.runtimeInstallCommand, "uv tool install git+https://github.com/JonbinC/doi2md.git");
   assert.equal(manifest.cli?.skillInstallCommand, "mdtero agent install --target <target>");
   assert.equal(manifest.cli?.legacyNpmCompatibility?.npxCommand, "npx mdtero-install");
   assert.equal(manifest.releaseTruth?.boundaries?.pythonRuntimeSourceOfTruth, "cli.runtimeInstallCommand");
@@ -67,7 +67,7 @@ test("public install docs present uv and Python agent install as the default pat
     ["README.md", publicReadme],
     ["install/README.md", installReadme]
   ]) {
-    expectContains(content, "uv tool install mdtero", label);
+    expectContains(content, "uv tool install git+https://github.com/JonbinC/doi2md.git", label);
     expectContains(content, "mdtero setup", label);
     expectContains(content, "mdtero agent install --target codex", label);
     expectContains(content, "mdtero project import-bib references.bib", label);

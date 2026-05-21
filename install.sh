@@ -9,8 +9,8 @@ usage() {
 Usage:
   install.sh --agent <claude_code|codex|gemini_cli|hermes|opencode> [--dry-run]
 
-Installs the Python Mdtero runtime with uv, then installs the matching agent
-skill bundle through `mdtero agent install`. npm is not required.
+Installs the Python Mdtero alpha runtime from GitHub with uv, then installs the
+matching agent skill bundle through `mdtero agent install`. npm is not required.
 
 Examples:
   curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
@@ -80,7 +80,7 @@ validate_target "$TARGET"
 
 printf '%s\n' "Installing Mdtero for agent: $TARGET"
 ensure_uv
-run uv tool install mdtero
+run uv tool install git+https://github.com/JonbinC/doi2md.git
 run mdtero agent install --target "$TARGET"
 
 cat <<'EOF'

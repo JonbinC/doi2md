@@ -8,9 +8,9 @@
   "accountBoundaryNote": "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
     "packageName": "mdtero",
-    "packageVersion": "0.2.0a0",
+    "packageVersion": "0.2.0a1",
     "packageManager": "uv",
-    "runtimeInstallCommand": "uv tool install mdtero",
+    "runtimeInstallCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git",
     "runtimeCommand": "mdtero",
     "skillInstallCommand": "mdtero agent install --target <target>",
     "legacyNpmCompatibility": {
@@ -87,10 +87,10 @@
     },
     "current": {
       "cli": {
-        "version": "0.2.0a0",
+        "version": "0.2.0a1",
         "packageName": "mdtero",
         "packageManager": "uv",
-        "installCommand": "uv tool install mdtero",
+        "installCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git",
         "skillInstallCommand": "mdtero agent install --target <target>",
         "installTargets": [
           "claude_code",

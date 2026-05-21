@@ -269,7 +269,7 @@ test("show falls back to the bundled manifest when the remote manifest is unavai
     assert.equal(completed.code, 0, completed.stderr);
     assert.match(completed.stdout, /Mdtero install manifest v1/);
     assert.match(completed.stdout, /Runtime CLI: mdtero/);
-    assert.match(completed.stdout, /Runtime install: uv tool install mdtero/);
+    assert.match(completed.stdout, /Runtime install: uv tool install git\+https:\/\/github\.com\/JonbinC\/doi2md\.git/);
     assert.match(completed.stdout, /Skill install: mdtero agent install --target <target>/);
     assert.match(completed.stdout, /Legacy npm compatibility: npx mdtero-install/);
   } finally {
