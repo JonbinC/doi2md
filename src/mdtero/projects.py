@@ -1,0 +1,231 @@
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+from .core import ArtifactRef, PaperDocument, ProviderResult
+
+
+PROJECT_DIR_NAME = ".mdtero"
+PROJECT_FILE_NAME = "project.json"
+BIB_DOI_FIELD_PATTERN = re.compile(r'\bdoi\s*=\s*[{"]?\s*(10\.\d{4,9}/[^\s}",]+)', re.I)
+BIB_URL_FIELD_PATTERN = re.compile(r'\burl\s*=\s*[{"]?\s*(https?://[^\s}",]+)', re.I)
+
+
+@dataclass
+class PaperRecord:
+    input: str
+    task_id: str | None = None
+    status: str = "pending"
+    reason_code: str | None = None
+    title: str | None = None
+    doi: str | None = None
+    source: str | None = None
+    artifact: str | None = None
+    provider: str | None = None
+    parser_strategy: str | None = None
+
+
+@dataclass
+class ProjectState:
+    name: str
+    papers: list[PaperRecord] = field(default_factory=list)
+
+
+def project_path(root: Path) -> Path:
+    return root / PROJECT_DIR_NAME / PROJECT_FILE_NAME
+
+
+def init_project(root: Path, *, name: str | None = None) -> Path:
+    target = project_path(root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        state = ProjectState(name=name or root.resolve().name)
+        target.write_text(json.dumps(asdict(state), indent=2) + "\n", encoding="utf-8")
+    return target
+
+
+def save_project(root: Path, state: ProjectState) -> Path:
+    target = project_path(root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(asdict(state), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return target
+
+
+def load_project(root: Path) -> ProjectState:
+    payload = json.loads(project_path(root).read_text(encoding="utf-8"))
+    return ProjectState(
+        name=str(payload.get("name") or root.resolve().name),
+        papers=[PaperRecord(**paper) for paper in payload.get("papers") or []],
+    )
+
+
+def ensure_project(root: Path) -> ProjectState:
+    init_project(root)
+    return load_project(root)
+
+
+def add_paper(root: Path, paper: PaperRecord) -> ProjectState:
+    state = ensure_project(root)
+    state.papers = [existing for existing in state.papers if existing.input != paper.input]
+    state.papers.append(paper)
+    save_project(root, state)
+    return state
+
+
+def remove_paper(root: Path, input_or_task_id: str) -> ProjectState:
+    state = ensure_project(root)
+    needle = input_or_task_id.strip()
+    state.papers = [paper for paper in state.papers if paper.input != needle and paper.task_id != needle]
+    save_project(root, state)
+    return state
+
+
+def update_paper_submission(root: Path, input_value: str, result: dict) -> ProjectState:
+    state = ensure_project(root)
+    for paper in state.papers:
+        if paper.input == input_value:
+            paper.task_id = str(result.get("task_id") or paper.task_id or "")
+            paper.status = str(result.get("status") or paper.status or "queued")
+            paper.reason_code = _reason_code(result) or paper.reason_code
+            paper.artifact = _preferred_artifact(result) or paper.artifact
+            paper.provider = _selected_provider(result) or paper.provider
+            paper.parser_strategy = _parser_strategy(result) or paper.parser_strategy
+            break
+    save_project(root, state)
+    return state
+
+
+def project_pending_papers(state: ProjectState, *, include_failed: bool = False) -> list[PaperRecord]:
+    selected = [paper for paper in state.papers if not paper.task_id and paper.status in {"pending", "created"}]
+    if include_failed:
+        selected.extend(paper for paper in state.papers if paper.status == "failed")
+    return selected
+
+
+def project_task_ids(state: ProjectState) -> list[str]:
+    return [paper.task_id for paper in state.papers if paper.task_id]
+
+
+def import_bib(root: Path, paths: list[Path]) -> dict:
+    imported = 0
+    skipped = 0
+    seen: set[str] = set()
+    state = ensure_project(root)
+    existing = {paper.input for paper in state.papers}
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        for target in extract_bib_targets(text):
+            value = target["value"]
+            if value in seen or value in existing:
+                skipped += 1
+                continue
+            seen.add(value)
+            state.papers.append(
+                PaperRecord(
+                    input=value,
+                    doi=value if target["kind"] == "doi" else None,
+                    source=f"bib:{path.name}",
+                )
+            )
+            imported += 1
+    save_project(root, state)
+    return {"imported_count": imported, "skipped_count": skipped, "paper_count": len(state.papers)}
+
+
+def extract_bib_targets(text: str) -> list[dict[str, str]]:
+    targets: list[dict[str, str]] = []
+    for match in BIB_DOI_FIELD_PATTERN.finditer(text):
+        targets.append({"kind": "doi", "value": _clean_bib_value(match.group(1))})
+    for match in BIB_URL_FIELD_PATTERN.finditer(text):
+        url = _clean_bib_value(match.group(1))
+        if "doi.org/10." in url.lower():
+            doi = url.split("doi.org/", 1)[1]
+            targets.append({"kind": "doi", "value": _clean_bib_value(doi)})
+        else:
+            targets.append({"kind": "url", "value": url})
+    unique: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for target in targets:
+        value = target["value"]
+        if value and value not in seen:
+            unique.append(target)
+            seen.add(value)
+    return unique
+
+
+def update_task(root: Path, task: dict) -> ProjectState:
+    state = ensure_project(root)
+    task_id = str(task.get("task_id") or "")
+    for paper in state.papers:
+        if paper.task_id == task_id:
+            paper.status = str(task.get("status") or paper.status)
+            paper.reason_code = _reason_code(task) or paper.reason_code
+            paper.artifact = _preferred_artifact(task) or paper.artifact
+            paper.provider = _selected_provider(task) or paper.provider
+            paper.parser_strategy = _parser_strategy(task) or paper.parser_strategy
+    save_project(root, state)
+    return state
+
+
+def project_documents(root: Path) -> list[PaperDocument]:
+    state = ensure_project(root)
+    return [paper_to_document(paper) for paper in state.papers]
+
+
+def paper_to_document(paper: PaperRecord) -> PaperDocument:
+    artifacts = []
+    if paper.artifact:
+        artifacts.append(ArtifactRef(key=paper.artifact, kind="unknown"))
+    return PaperDocument(
+        input=paper.input,
+        title=paper.title,
+        doi=paper.doi,
+        task_id=paper.task_id,
+        status=paper.status,
+        provider=ProviderResult(
+            provider=paper.provider,
+            strategy=paper.parser_strategy,
+            reason_code=paper.reason_code,
+        ),
+        artifacts=artifacts,
+    )
+
+
+def _reason_code(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    return task.get("reason_code") or result.get("reason_code") or quality.get("reason_code") or task.get("error_code")
+
+
+def _preferred_artifact(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    preferred = result.get("preferred_artifact")
+    if preferred:
+        return str(preferred)
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    if "paper_md" in artifacts:
+        return "paper_md"
+    if artifacts:
+        return str(next(iter(artifacts)))
+    return None
+
+
+def _selected_provider(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    value = result.get("selected_provider") or quality.get("selected_pdf_provider") or quality.get("provider")
+    return str(value) if value else None
+
+
+def _parser_strategy(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    value = result.get("parser_strategy") or quality.get("parser_strategy")
+    return str(value) if value else None
+
+
+def _clean_bib_value(value: str) -> str:
+    return str(value or "").strip().rstrip("}.,;")

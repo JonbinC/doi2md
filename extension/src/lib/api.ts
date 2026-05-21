@@ -31,7 +31,8 @@ export interface ClientConfigResponse {
 }
 
 export interface UploadedParseTaskPayload {
-  xmlFile: Blob;
+  xmlFile?: Blob;
+  paperFile?: Blob;
   filename?: string;
   sourceDoi?: string;
   sourceInput?: string;
@@ -164,21 +165,25 @@ export function createApiClient(
       return request("/me/tasks", undefined, { requireAuth: true }).then((response) => response.json() as Promise<{items: TaskRecord[]}>);
     },
     createParseTask(payload: ParseTaskRequest) {
-      return request("/tasks/parse", {
+      return request("/api/v1/tasks/parse", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
     },
     createUploadedParseTask(payload: UploadedParseTaskPayload) {
       const body = new FormData();
-      body.set("xml_file", payload.xmlFile, payload.filename ?? "paper.xml");
+      const upload = payload.paperFile ?? payload.xmlFile;
+      if (!upload) {
+        throw new Error("No file was provided for upload.");
+      }
+      body.set("paper_file", upload, payload.filename ?? "paper.fulltext");
       if (payload.sourceDoi) {
         body.set("source_doi", payload.sourceDoi);
       }
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
-      return request("/tasks/parse-upload", {
+      return request("/api/v1/tasks/upload", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
@@ -191,9 +196,18 @@ export function createApiClient(
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      return request("/tasks/parse-fulltext-v2", {
+      const normalizedBody = new FormData();
+      const upload = body.get("fulltext_file");
+      if (upload instanceof Blob) {
+        normalizedBody.set("paper_file", upload, payload.filename ?? "paper.fulltext");
+      }
+      const sourceDoi = body.get("source_doi");
+      const sourceInput = body.get("source_input");
+      if (typeof sourceDoi === "string") normalizedBody.set("source_doi", sourceDoi);
+      if (typeof sourceInput === "string") normalizedBody.set("source_input", sourceInput);
+      return request("/api/v1/tasks/upload", {
         method: "POST",
-        body
+        body: normalizedBody
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
     },
     createParseHelperBundleV2Task(payload: ParseHelperBundleV2Request) {
@@ -213,16 +227,16 @@ export function createApiClient(
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
     },
     createTranslateTask(payload: TranslateTaskRequest) {
-      return request("/tasks/translate", {
+      return request("/api/v1/tasks/translate", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
     getTask(taskId: string) {
-      return request(`/tasks/${taskId}`, undefined, { requireAuth: true }).then((response) => response.json() as Promise<TaskRecord>);
+      return request(`/api/v1/tasks/${taskId}`, undefined, { requireAuth: true }).then((response) => response.json() as Promise<TaskRecord>);
     },
     downloadArtifact(taskId: string, artifact: string, preferredFilename?: string | null) {
-      return request(`/tasks/${taskId}/download/${artifact}`, undefined, { requireAuth: true }).then(async (response) => ({
+      return request(`/api/v1/tasks/${taskId}/download/${artifact}`, undefined, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
         filename: extractFilename(
           response.headers.get("Content-Disposition"),
@@ -292,7 +306,7 @@ export function createRouterSSOTClient(
      * Extension should use this instead of local routing rules.
      */
     fetchRoutePlan(payload: ExtensionRouteRequest) {
-      return request("/api/v1/extension/route", {
+      return request("/api/v1/route", {
         method: "POST",
         body: JSON.stringify(payload),
       }).then((response) => response.json() as Promise<ExtensionRouteResponse>);

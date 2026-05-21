@@ -99,7 +99,17 @@ function resolveSkillInstallDir(rootDir, skillDirectory) {
 async function showManifest(manifest) {
   console.log(`Mdtero install manifest v${manifest.version}`);
   console.log(`Manifest URL: ${manifest.manifestUrl}`);
-  console.log(`Unified CLI: ${manifest.cli?.npxCommand || "n/a"}`);
+  console.log(`Runtime CLI: ${manifest.cli?.runtimeCommand || manifest.cli?.npxCommand || "n/a"}`);
+  if (manifest.cli?.runtimeInstallCommand) {
+    console.log(`Runtime install: ${manifest.cli.runtimeInstallCommand}`);
+  }
+  if (manifest.cli?.skillInstallCommand) {
+    console.log(`Skill install: ${manifest.cli.skillInstallCommand}`);
+  }
+  const legacyNpx = manifest.cli?.legacyNpmCompatibility?.npxCommand || manifest.cli?.npxCommand;
+  if (legacyNpx) {
+    console.log(`Legacy npm compatibility: ${legacyNpx}`);
+  }
   if (manifest.fallbackNotice) {
     console.log(`Notice: ${manifest.fallbackNotice}`);
   }

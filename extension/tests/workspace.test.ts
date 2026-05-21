@@ -15,21 +15,18 @@ describe("workspace", () => {
 
     expect(popupHtml).toContain('href="./styles.css"');
     expect(popupHtml).toContain('src="./popup.js"');
-    expect(popupHtml).toContain('id="supported-sources-inline"');
     expect(popupHtml).toContain('id="helper-status"');
     expect(popupHtml).toContain('id="open-settings-login"');
-    expect(popupHtml).toContain("Elsevier");
-    expect(popupHtml).toContain("arXiv");
-    expect(popupHtml).toContain('id="support-stable-title"');
-    expect(popupHtml).toContain('id="support-shadow-title"');
-    expect(popupHtml).toContain('id="support-experimental-title"');
+    expect(popupHtml).not.toContain('id="supported-sources-inline"');
+    expect(popupHtml).not.toContain('id="support-shadow-title"');
+    expect(popupHtml).not.toContain('id="support-experimental-title"');
     expect(popupHtml).toContain('id="file-intake-card"');
     expect(popupHtml).toContain('id="local-file-input"');
     expect(popupHtml).not.toContain('id="pdf-engine-select"');
     expect(popupHtml).not.toContain("Docling");
     expect(popupHtml).not.toContain("MinerU");
-    expect(popupHtml).toContain("PMC");
-    expect(popupHtml).toContain("Wiley");
+    expect(popupHtml).not.toContain("PMC");
+    expect(popupHtml).not.toContain("Wiley");
     expect(optionsHtml).toContain('href="./styles.css"');
     expect(optionsHtml).toContain('src="./options.js"');
     expect(optionsHtml).toContain('id="settings-overview-card"');
@@ -49,7 +46,7 @@ describe("workspace", () => {
   it("keeps the public repo scoped away from the site workspace", () => {
     const repoReadme = readFileSync(resolve("../README.md"), "utf-8");
 
-    expect(repoReadme).toContain("public local-client and install surface");
+    expect(repoReadme).toContain("Python/uv CLI, TUI, browser extension, and agent skill bundle");
     expect(() => readFileSync(resolve("../site/package.json"), "utf-8")).toThrow();
     expect(() => readFileSync(resolve("../site/src/index.html"), "utf-8")).toThrow();
   });

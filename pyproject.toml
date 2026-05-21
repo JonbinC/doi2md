@@ -1,0 +1,35 @@
+[project]
+name = "mdtero"
+version = "0.2.0a0"
+description = "Python TUI and CLI client for Mdtero / doi2md."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Mdtero" }]
+dependencies = [
+  "curl_cffi>=0.7",
+  "fastmcp>=2",
+  "httpx>=0.27",
+  "pyzotero>=1.5",
+  "requests>=2.31",
+  "rich>=13.7",
+  "textual>=0.80",
+]
+
+[project.urls]
+Homepage = "https://mdtero.com"
+Repository = "https://github.com/JonbinC/doi2md"
+
+[project.scripts]
+mdtero = "mdtero.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mdtero"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests_py"]
+pythonpath = ["src"]

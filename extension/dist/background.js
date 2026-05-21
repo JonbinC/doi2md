@@ -108,21 +108,25 @@ function createApiClient(getSettings) {
       return request("/me/tasks", void 0, { requireAuth: true }).then((response) => response.json());
     },
     createParseTask(payload) {
-      return request("/tasks/parse", {
+      return request("/api/v1/tasks/parse", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
     createUploadedParseTask(payload) {
       const body = new FormData();
-      body.set("xml_file", payload.xmlFile, payload.filename ?? "paper.xml");
+      const upload = payload.paperFile ?? payload.xmlFile;
+      if (!upload) {
+        throw new Error("No file was provided for upload.");
+      }
+      body.set("paper_file", upload, payload.filename ?? "paper.fulltext");
       if (payload.sourceDoi) {
         body.set("source_doi", payload.sourceDoi);
       }
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
-      return request("/tasks/parse-upload", {
+      return request("/api/v1/tasks/upload", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json());
@@ -135,9 +139,18 @@ function createApiClient(getSettings) {
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      return request("/tasks/parse-fulltext-v2", {
+      const normalizedBody = new FormData();
+      const upload = body.get("fulltext_file");
+      if (upload instanceof Blob) {
+        normalizedBody.set("paper_file", upload, payload.filename ?? "paper.fulltext");
+      }
+      const sourceDoi = body.get("source_doi");
+      const sourceInput = body.get("source_input");
+      if (typeof sourceDoi === "string") normalizedBody.set("source_doi", sourceDoi);
+      if (typeof sourceInput === "string") normalizedBody.set("source_input", sourceInput);
+      return request("/api/v1/tasks/upload", {
         method: "POST",
-        body
+        body: normalizedBody
       }, { requireAuth: true }).then((response) => response.json());
     },
     createParseHelperBundleV2Task(payload) {
@@ -157,16 +170,16 @@ function createApiClient(getSettings) {
       }, { requireAuth: true }).then((response) => response.json());
     },
     createTranslateTask(payload) {
-      return request("/tasks/translate", {
+      return request("/api/v1/tasks/translate", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
     getTask(taskId) {
-      return request(`/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
+      return request(`/api/v1/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
     },
     downloadArtifact(taskId, artifact, preferredFilename) {
-      return request(`/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
+      return request(`/api/v1/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
         filename: extractFilename(
           response.headers.get("Content-Disposition"),
@@ -219,7 +232,7 @@ function createRouterSSOTClient(getSettings) {
      * Extension should use this instead of local routing rules.
      */
     fetchRoutePlan(payload) {
-      return request("/api/v1/extension/route", {
+      return request("/api/v1/route", {
         method: "POST",
         body: JSON.stringify(payload)
       }).then((response) => response.json());

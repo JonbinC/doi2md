@@ -2,19 +2,29 @@
   "version": 1,
   "manifestUrl": "https://mdtero.com/install/manifest.json",
   "installGuideUrl": "https://api.mdtero.com/skills/install.md",
+  "installScriptUrl": "https://mdtero.com/install.sh",
+  "quickInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>",
   "helperCommand": "mdtero",
-  "accountBoundaryNote": "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The current public CLI ships through mdtero-install on npm as the unified runtime entry for discovery, parse, translate, task-status, download, and agent-skill workflows.",
+  "accountBoundaryNote": "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
-    "packageName": "mdtero-install",
-    "packageVersion": "0.1.8",
-    "npxCommand": "npx mdtero-install"
+    "packageName": "mdtero",
+    "packageVersion": "0.2.0a0",
+    "packageManager": "uv",
+    "runtimeInstallCommand": "uv tool install mdtero",
+    "runtimeCommand": "mdtero",
+    "skillInstallCommand": "mdtero agent install --target <target>",
+    "legacyNpmCompatibility": {
+      "packageName": "mdtero-install",
+      "packageVersion": "0.1.8",
+      "npxCommand": "npx mdtero-install"
+    }
   },
   "targets": [
     {
       "target": "openclaw",
       "label": "OpenClaw",
-      "description": "OpenClaw stays on a separate ClawHub route; confirm that route in your OpenClaw environment before relying on it. Normal parsing still uses Mdtero's CLI/API and backend parser; use the extension or dashboard when the user must upload a local paper file.",
-      "descriptionZh": "OpenClaw 保持独立的 ClawHub 路线；请先在你的 OpenClaw 环境里确认该路线可用。常规解析仍走 Mdtero CLI/API 和后端解析；需要上传本地论文文件时再使用扩展或网页端上传。",
+      "description": "OpenClaw stays on a separate ClawHub route. Normal parsing still uses Mdtero's Python CLI/API and backend parser.",
+      "descriptionZh": "OpenClaw 保持独立的 ClawHub 路线。常规解析仍走 Mdtero Python CLI/API 和后端解析。",
       "installCommand": "clawhub install mdtero",
       "skillDirectory": ".openclaw/skills/mdtero"
     },
@@ -25,7 +35,7 @@
       "descriptionZh": "适合把 Mdtero 放进 .claude/skills 的 Claude Code 工作区。",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent claude_code",
       "skillDirectory": ".claude/skills/mdtero",
-      "skillInstallCommand": "npx mdtero-install install claude_code"
+      "skillInstallCommand": "mdtero agent install --target claude_code"
     },
     {
       "target": "codex",
@@ -34,16 +44,16 @@
       "descriptionZh": "适合把 Mdtero 放进 .codex/skills 的 Codex 工作区。",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex",
       "skillDirectory": ".codex/skills/mdtero",
-      "skillInstallCommand": "npx mdtero-install install codex"
+      "skillInstallCommand": "mdtero agent install --target codex"
     },
     {
       "target": "gemini_cli",
       "label": "Gemini CLI",
-      "description": "Best for Gemini CLI setups that keep the workflow in GEMINI.md.",
-      "descriptionZh": "适合把工作流写进 GEMINI.md 的 Gemini CLI 环境。",
+      "description": "Best for Gemini CLI setups that keep the workflow in .gemini/skills.",
+      "descriptionZh": "适合把工作流放进 .gemini/skills 的 Gemini CLI 环境。",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent gemini_cli",
       "skillDirectory": ".gemini/skills/mdtero",
-      "skillInstallCommand": "npx mdtero-install install gemini_cli"
+      "skillInstallCommand": "mdtero agent install --target gemini_cli"
     },
     {
       "target": "hermes",
@@ -52,8 +62,8 @@
       "descriptionZh": "适合从 ~/.hermes/skills 加载 SKILL.md 工作流的 Hermes Agent 环境。",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent hermes",
       "skillDirectory": ".hermes/skills/mdtero",
-      "mcpNote": "Hermes supports MCP through ~/.hermes/config.yaml, but Mdtero's public MCP installer flow is not active yet. Use the Mdtero skill first; add MCP only when a maintained Mdtero MCP server is published.",
-      "skillInstallCommand": "npx mdtero-install install hermes"
+      "skillInstallCommand": "mdtero agent install --target hermes",
+      "mcpNote": "Run `mdtero mcp serve` when a local agent needs project context over FastMCP."
     },
     {
       "target": "opencode",
@@ -62,24 +72,26 @@
       "descriptionZh": "适合把项目技能放进 .opencode/skills 的 OpenCode 工作区。",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode",
       "skillDirectory": ".opencode/skills/mdtero",
-      "skillInstallCommand": "npx mdtero-install install opencode"
+      "skillInstallCommand": "mdtero agent install --target opencode"
     }
   ],
   "releaseTruth": {
     "source": "website-first",
     "manifestPath": "/install/manifest.json",
     "boundaries": {
-      "cliInstallSourceOfTruth": "targets[*] except openclaw",
+      "pythonRuntimeSourceOfTruth": "cli.runtimeInstallCommand",
+      "agentSkillInstallSourceOfTruth": "targets[*].skillInstallCommand except openclaw",
       "openclawInstallSourceOfTruth": "targets[target=openclaw]",
       "desktopSourceOfTruth": "mdtero-public/desktop/releases/installer-manifest.json",
       "desktopPublicationMode": "deferred public preview archive with GitHub Release asset download fallback; not part of the current extension-and-CLI launchability proof"
     },
     "current": {
       "cli": {
-        "version": "0.1.8",
-        "packageName": "mdtero-install",
-        "packageManager": "npm",
-        "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>",
+        "version": "0.2.0a0",
+        "packageName": "mdtero",
+        "packageManager": "uv",
+        "installCommand": "uv tool install mdtero",
+        "skillInstallCommand": "mdtero agent install --target <target>",
         "installTargets": [
           "claude_code",
           "codex",
@@ -87,39 +99,7 @@
           "hermes",
           "opencode"
         ],
-        "skillInstallCommand": "npx mdtero-install install <target>",
-        "globalInstallCommand": "npm install -g mdtero-install@0.1.8"
-      },
-      "desktop": {
-        "version": "0.1.0-preview.1",
-        "channel": "public-preview",
-        "installerManifestPath": "desktop/releases/installer-manifest.json",
-        "publicArtifactTypes": [
-          "mac-universal-dmg",
-          "win-x64-exe"
-        ],
-        "downloadPaths": [
-          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-mac-universal.dmg",
-          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-win-x64.exe"
-        ],
-        "autoUpdate": false
-      }
-    },
-    "latest": {
-      "cli": {
-        "version": "0.1.8",
-        "packageName": "mdtero-install",
-        "packageManager": "npm",
-        "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>",
-        "installTargets": [
-          "claude_code",
-          "codex",
-          "gemini_cli",
-          "hermes",
-          "opencode"
-        ],
-        "skillInstallCommand": "npx mdtero-install install <target>",
-        "globalInstallCommand": "npm install -g mdtero-install@0.1.8"
+        "legacyNpmCompatibility": "npx mdtero-install install <target>"
       },
       "desktop": {
         "version": "0.1.0-preview.1",
@@ -136,7 +116,5 @@
         "autoUpdate": false
       }
     }
-  },
-  "installScriptUrl": "https://mdtero.com/install.sh",
-  "quickInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>"
+  }
 }
