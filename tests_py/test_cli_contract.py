@@ -237,6 +237,53 @@ def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
         )
         is True
     )
+    assert should_acquire_locally({"action_sequence": [], "requires_raw_upload": False}, "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML") is True
+
+
+def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_legacy(monkeypatch, tmp_path: Path):
+    acquired_path = tmp_path / "paper.xml"
+    acquired_path.write_text("<article><front><article-meta /></front></article>", encoding="utf-8")
+
+    def fake_acquire(route_arg, input_arg, *, timeout):
+        assert route_arg["route_kind"] == "legacy_parse"
+        assert input_arg.endswith("/fullTextXML")
+        return AcquiredArtifact(
+            url=input_arg,
+            path=acquired_path,
+            artifact_kind="xml",
+            source="curl_cffi",
+            status_code=200,
+            content_type="application/xml",
+        )
+
+    uploads = []
+
+    def fake_request(self, method, path, **kwargs):
+        if path == "/api/v1/route":
+            return {
+                "route_kind": "legacy_parse",
+                "acquisition_mode": "legacy_parse",
+                "requires_raw_upload": False,
+                "action_hint": "Submit the DOI or URL to /api/v1/tasks/parse.",
+            }
+        if path == "/api/v1/tasks/upload":
+            uploads.append(kwargs)
+            return {"task_id": "task-xml", "status": "queued"}
+        raise AssertionError(path)
+
+    monkeypatch.setattr("mdtero.client.acquire_from_route", fake_acquire)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    input_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML"
+    route_result, task, acquisition = MdteroClient(timeout=60.0).parse_with_route(input_url)
+
+    assert route_result["route_kind"] == "legacy_parse"
+    assert task["task_id"] == "task-xml"
+    assert task["client_acquisition"]["artifact_kind"] == "xml"
+    assert acquisition["source"] == "curl_cffi"
+    assert uploads[0]["data"]["artifact_kind"] == "xml"
+    assert uploads[0]["data"]["source_url"] == input_url
+    assert not acquired_path.exists()
 
 
 def test_mdpi_url_candidates_prefer_epub_before_page_fetch(monkeypatch):
