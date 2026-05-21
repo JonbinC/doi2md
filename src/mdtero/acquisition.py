@@ -62,6 +62,8 @@ class AcquisitionError(RuntimeError):
 
 
 def should_acquire_locally(route: dict[str, Any], input_value: str) -> bool:
+    if _is_direct_local_artifact_url(input_value):
+        return True
     if route.get("legacy_fallback"):
         return False
     if route.get("requires_raw_upload"):
@@ -71,6 +73,13 @@ def should_acquire_locally(route: dict[str, Any], input_value: str) -> bool:
     if actions.intersection(local_actions) and _candidate_urls(route, input_value):
         return True
     return False
+
+
+def _is_direct_local_artifact_url(input_value: str) -> bool:
+    value = str(input_value or "").strip()
+    if not URL_PATTERN.match(value) or DOI_PATTERN.match(value):
+        return False
+    return bool(_direct_artifact_kind_from_url(value) or _infer_mdpi_epub_url(value))
 
 
 def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: float = 45.0) -> AcquiredArtifact:
@@ -170,6 +179,9 @@ def _artifact_kind(candidate: dict[str, str], route: dict[str, Any], url: str) -
     explicit = str(candidate.get("artifact_kind") or "").strip().lower()
     if explicit in {"html", "xml", "epub", "pdf"}:
         return explicit
+    direct_kind = _direct_artifact_kind_from_url(url)
+    if direct_kind:
+        return direct_kind
     route_kind = str(route.get("route_kind") or "").lower()
     actions = {str(action) for action in route.get("action_sequence") or []}
     lowered = url.lower()
@@ -180,6 +192,23 @@ def _artifact_kind(candidate: dict[str, str], route: dict[str, Any], url: str) -
     if "fetch_structured_xml" in actions or "jats" in route_kind or ".xml" in lowered or "fulltextxml" in lowered:
         return "xml"
     return "html"
+
+
+def _direct_artifact_kind_from_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(str(url or "").strip())
+    lowered_path = parsed.path.lower().rstrip("/")
+    lowered_url = urllib.parse.urlunparse(parsed._replace(fragment="")).lower()
+    if not lowered_path:
+        return ""
+    if lowered_path.endswith((".epub", "/epub")) or "/doi/epub/" in lowered_url:
+        return "epub"
+    if lowered_path.endswith((".pdf", "/pdf")) or "/doi/pdf/" in lowered_url or "/doi/epdf/" in lowered_url:
+        return "pdf"
+    if lowered_path.endswith((".xml", "/xml", "/fulltextxml")) or "fulltextxml" in lowered_url:
+        return "xml"
+    if lowered_path.endswith((".html", ".htm", "/html", "/full")) or "/doi/full/" in lowered_url:
+        return "html"
+    return ""
 
 
 def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> AcquiredArtifact:
