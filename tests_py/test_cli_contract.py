@@ -239,6 +239,33 @@ def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
     )
 
 
+def test_mdpi_url_candidates_prefer_epub_before_page_fetch(monkeypatch):
+    calls = []
+
+    def fake_cffi(url, *, artifact_kind, timeout):
+        calls.append((url, artifact_kind))
+        raise AcquisitionError("client_acquisition_challenge_page", "challenge")
+
+    def fake_httpx(url, *, artifact_kind, timeout):
+        raise AcquisitionError("client_httpx_http_error", "403")
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    try:
+        acquire_from_route(
+            {"action_sequence": ["fetch_remote_html"], "acquisition_candidates": [{"html_url": "https://www.mdpi.com/2071-1050/17/5/2018"}]},
+            "10.3390/su17052018",
+            timeout=12,
+        )
+    except AcquisitionError:
+        pass
+    else:
+        raise AssertionError("expected AcquisitionError")
+
+    assert calls[0] == ("https://www.mdpi.com/2071-1050/17/5/2018/epub", "epub")
+
+
 def test_project_init_creates_local_project_state(tmp_path: Path):
     target = init_project(tmp_path, name="demo")
     state = load_project(tmp_path)

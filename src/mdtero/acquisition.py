@@ -3,6 +3,7 @@ from __future__ import annotations
 import mimetypes
 import re
 import tempfile
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -115,10 +116,14 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
     candidates: list[dict[str, str]] = []
     seen: set[str] = set()
 
-    def add(url: object, *, kind: str | None = None, connector: str | None = None) -> None:
+    def add(url: object, *, kind: str | None = None, connector: str | None = None, prefer_mdpi_epub: bool = True) -> None:
         value = str(url or "").strip()
         if not value or not URL_PATTERN.match(value) or value in seen:
             return
+        if prefer_mdpi_epub:
+            mdpi_epub = _infer_mdpi_epub_url(value)
+            if mdpi_epub and mdpi_epub != value:
+                add(mdpi_epub, kind="epub", connector="mdpi_epub_asset", prefer_mdpi_epub=False)
         seen.add(value)
         item = {"url": value}
         if kind:
@@ -141,6 +146,24 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
     if URL_PATTERN.match(str(input_value or "")) and not DOI_PATTERN.match(input_value):
         add(input_value)
     return candidates
+
+
+def _infer_mdpi_epub_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(str(url or "").strip())
+    if "mdpi.com" not in parsed.netloc.lower():
+        return ""
+    path = parsed.path.rstrip("/")
+    if not path:
+        return ""
+    if path.endswith("/epub"):
+        return urllib.parse.urlunparse(parsed._replace(query="", fragment=""))
+    if path.endswith("/xml") or path.endswith("/pdf") or path.endswith("/html"):
+        path = path.rsplit("/", 1)[0]
+    # MDPI article paths look like /journal/volume/issue/article. Avoid
+    # rewriting site-level pages such as /about or /search.
+    if len([part for part in path.split("/") if part]) < 4:
+        return ""
+    return urllib.parse.urlunparse(parsed._replace(path=f"{path}/epub", query="", fragment=""))
 
 
 def _artifact_kind(candidate: dict[str, str], route: dict[str, Any], url: str) -> str:
