@@ -197,6 +197,37 @@ def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
     ]
 
 
+def test_acquire_from_route_rejects_challenge_pages(monkeypatch):
+    def fake_cffi(url, *, artifact_kind, timeout):
+        raise AcquisitionError(
+            "client_acquisition_challenge_page",
+            "challenge",
+            diagnostics={"url": url, "source": "curl_cffi", "content_type": "text/html"},
+        )
+
+    def fake_httpx(url, *, artifact_kind, timeout):
+        raise AcquisitionError(
+            "client_acquisition_challenge_page",
+            "challenge",
+            diagnostics={"url": url, "source": "httpx", "content_type": "text/html"},
+        )
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    try:
+        acquire_from_route(
+            {"action_sequence": ["fetch_remote_html"], "acquisition_candidates": [{"html_url": "https://www.mdpi.com/demo"}]},
+            "10.3390/demo",
+            timeout=12,
+        )
+    except AcquisitionError as exc:
+        assert exc.reason_code == "client_acquisition_fetch_failed"
+        assert exc.diagnostics["attempts"][0]["reason_code"] == "client_acquisition_challenge_page"
+    else:
+        raise AssertionError("expected AcquisitionError")
+
+
 def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
     assert should_acquire_locally({"action_sequence": ["fetch_remote_html"], "requires_raw_upload": False}, "10.1000/demo") is False
     assert (
