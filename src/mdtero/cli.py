@@ -12,7 +12,7 @@ from rich.table import Table
 
 from . import __version__
 from .acquisition import AcquisitionError, curl_cffi_available
-from .client import MdteroClient
+from .client import DiscoveryError, MdteroClient
 from .config import MdteroConfig, config_path, load_config, save_config
 from .projects import (
     PaperRecord,
@@ -284,7 +284,15 @@ def cmd_parse(args: argparse.Namespace) -> int:
 
 
 def cmd_discover(args: argparse.Namespace) -> int:
-    result = MdteroClient().discover(args.query, limit=args.limit)
+    try:
+        result = MdteroClient().discover(args.query, limit=args.limit)
+    except DiscoveryError as exc:
+        if args.json:
+            print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print(f"Discovery failed: {exc.payload.get('error_code')}")
+            Console().print(str(exc.payload.get("action_hint") or ""))
+        return 2
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0

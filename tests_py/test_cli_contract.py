@@ -122,6 +122,30 @@ def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monk
     assert calls[0][1] == "/api/v1/discovery/search"
 
 
+def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch):
+    def fake_s2(self, query, *, limit):
+        raise httpx.ConnectError("socks tls failed")
+
+    def fake_request(self, method, path, **kwargs):
+        request = httpx.Request(method, "https://api.mdtero.test/me/discovery/search")
+        response = httpx.Response(503, json={"error_code": "discovery_provider_disabled"}, request=request)
+        raise httpx.HTTPStatusError("disabled", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    try:
+        MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
+    except Exception as exc:
+        payload = exc.payload
+    else:
+        raise AssertionError("expected discovery failure")
+
+    assert payload["error_code"] == "discovery_provider_disabled"
+    assert payload["local_semantic_scholar_error"] == "ConnectError"
+    assert payload["status_code"] == 503
+
+
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
     route = {
         "route_kind": "html_helper_first",

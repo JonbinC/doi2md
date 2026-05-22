@@ -12,7 +12,7 @@ mdtero setup
 mdtero agent install --target codex
 ```
 
-This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a2` client.
+This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a5` client.
 
 For a one-command install:
 
