@@ -112,6 +112,19 @@ def test_login_command_saves_web_callback_key(monkeypatch, tmp_path: Path, capsy
     assert "Saved web login API key" in capsys.readouterr().out
 
 
+def test_doctor_accepts_api_key_from_environment(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+
+    assert cli.cmd_doctor(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+
+    assert "API key" in output
+    assert "MDTERO_API_KEY" in output
+
+
 def test_rag_status_accepts_agent_friendly_flags():
     parser = build_parser()
 

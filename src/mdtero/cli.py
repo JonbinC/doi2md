@@ -277,17 +277,19 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     cfg = load_config()
     console = Console()
     table = Table("Check", "Status", "Detail")
+    has_api_key = bool(cfg.api_key)
     key_source = "saved config" if cfg.api_key else "missing"
     if os.environ.get("MDTERO_API_KEY"):
+        has_api_key = True
         key_source = "MDTERO_API_KEY"
-    table.add_row("API key", "ok" if cfg.api_key else "missing", key_source)
+    table.add_row("API key", "ok" if has_api_key else "missing", key_source)
     table.add_row("Config", "ok" if config_path().exists() else "not created", str(config_path()))
     table.add_row("API base", "ok", cfg.api_base_url)
     table.add_row("curl_cffi", "ok" if curl_cffi_available() else "missing", "local route acquisition" if curl_cffi_available() else "httpx fallback only")
     current_project = project_path(Path.cwd())
     table.add_row("Project", "ok" if current_project.exists() else "not initialized", str(current_project))
     console.print(table)
-    return 0 if cfg.api_key else 1
+    return 0 if has_api_key else 1
 
 
 def cmd_config_academic(_args: argparse.Namespace) -> int:
