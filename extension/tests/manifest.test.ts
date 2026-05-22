@@ -97,6 +97,7 @@ describe("extension manifest", () => {
     expect(popupSource).toContain("Use PDF");
     expect(popupSource).toContain("Use EPUB");
     expect(popupSource).toContain("Open Mdtero Account");
+    expect(popupSource).toContain("Copy CLI command");
     expect(optionsSource).toContain("Website sign-in");
     expect(optionsSource).toContain("browser capture, upload, translation, and download settings");
     expect(optionsSource).toContain("Browser capture reuses the active tab");

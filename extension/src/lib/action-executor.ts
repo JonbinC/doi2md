@@ -172,7 +172,7 @@ async function executeFetchStructuredXml(
 }
 
 /**
- * Fetch Elsevier XML via API (requires helper + API key)
+ * Fetch Elsevier XML via API when the user has configured an Elsevier key.
  */
 async function executeFetchElsevierXml(
   context: ActionContext,
@@ -181,7 +181,7 @@ async function executeFetchElsevierXml(
   if (!context.elsevierApiKey) {
     return {
       success: false,
-      requiresHelper: true,
+      requiresUpload: true,
       error: routePlan.user_message || "Elsevier requires API key. Configure in settings.",
     };
   }
@@ -330,7 +330,7 @@ async function executeFetchOaRepository(
 }
 
 /**
- * Generic helper source fetch (for licensed/subscription content)
+ * Generic browser source fetch for licensed/subscription content.
  */
 async function executeFetchHelperSource(
   context: ActionContext,
@@ -343,7 +343,7 @@ async function executeFetchHelperSource(
   if (!context.tabId) {
     return {
       success: false,
-      requiresHelper: true,
+      requiresUpload: true,
       error: "This source requires browser capture. Open the article page and retry.",
     };
   }
