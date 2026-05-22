@@ -12,6 +12,7 @@ from rich.table import Table
 
 from . import __version__
 from .acquisition import AcquisitionError, curl_cffi_available
+from .auth import run_web_login
 from .client import DiscoveryError, MdteroClient
 from .config import MdteroConfig, config_path, load_config, save_config
 from .projects import (
@@ -77,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
     login.add_argument("--api-key", default="")
+    login.add_argument("--no-browser", action="store_true", help="Print the web login URL instead of opening a browser.")
+    login.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the browser login callback.")
 
     config = sub.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command")
@@ -218,7 +221,7 @@ def cmd_setup(_args: argparse.Namespace) -> int:
             cfg.api_key = Prompt.ask("Paste Mdtero API key", password=True)
             save_config(cfg)
         else:
-            console.print(f"Open {cfg.site_base_url}/auth to sign in with OAuth, then run `mdtero login --api-key <key>` when you have a key.")
+            _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False)
     _configure_academic(cfg, console)
     console.print("\n[bold green]Configuration complete.[/bold green]")
     _print_next_steps(console)
@@ -233,9 +236,24 @@ def cmd_login(args: argparse.Namespace) -> int:
         path = save_config(cfg)
         console.print(f"Saved API key to {path}")
         return 0
-    console.print(f"Open {cfg.site_base_url}/auth, create an API key, then run:")
-    console.print("  mdtero login --api-key <key>")
+    _login_with_browser(cfg, console, timeout_seconds=args.timeout, no_browser=args.no_browser)
     return 0
+
+
+def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds: float, no_browser: bool) -> None:
+    if no_browser:
+        console.print("Open the Mdtero login URL below in a browser on this machine. Waiting for the local callback...")
+        opener = lambda url: console.print(f"  {url}")
+    else:
+        console.print(f"Opening {cfg.site_base_url}/auth for Mdtero web login...")
+        opener = None
+    result = run_web_login(cfg.site_base_url, timeout_seconds=timeout_seconds, open_browser=opener) if opener else run_web_login(cfg.site_base_url, timeout_seconds=timeout_seconds)
+    cfg.api_key = result.api_key
+    path = save_config(cfg)
+    if result.prefix:
+        console.print(f"Saved web login API key ({result.prefix}) to {path}")
+    else:
+        console.print(f"Saved web login API key to {path}")
 
 
 def cmd_doctor(_args: argparse.Namespace) -> int:

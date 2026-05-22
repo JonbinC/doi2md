@@ -58,6 +58,7 @@ clawhub install mdtero
 
 ```bash
 mdtero doctor
+mdtero login
 mdtero login --api-key <key>
 mdtero config academic
 mdtero project init
