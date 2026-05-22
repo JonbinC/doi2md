@@ -1540,7 +1540,7 @@ def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path
     assert cli._server_project_id(type("Args", (), {"project_id": "99"})()) == "99"
 
 
-def test_rag_requires_project_binding_when_project_id_is_omitted(monkeypatch, tmp_path: Path):
+def test_rag_project_id_helper_points_unlinked_projects_to_bootstrap_build(monkeypatch, tmp_path: Path):
     from mdtero import cli
 
     init_project(tmp_path, name="local-demo")
@@ -1553,7 +1553,8 @@ def test_rag_requires_project_binding_when_project_id_is_omitted(monkeypatch, tm
     else:
         raise AssertionError("expected missing binding error")
 
-    assert "mdtero project create-server" in message
+    assert "mdtero rag build --json" in message
+    assert "create, bind, import, and build" in message
 
 
 def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tmp_path: Path, capsys):
@@ -1774,7 +1775,8 @@ def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypa
     output = capsys.readouterr().out
 
     assert "1/1 local paper(s)" in output
-    assert "mdtero project create-server" in output
+    assert "mdtero rag build --json" in output
+    assert "mdtero rag query \"<question>\" --json" in output
 
 
 def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path, capsys):
@@ -1788,7 +1790,8 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
 
     assert payload["status"] == "not_ready"
     assert payload["reason_code"] == "server_project_not_linked"
-    assert "project create-server" in payload["action_hint"]
+    assert "mdtero rag build --json" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
 
 
 def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch, tmp_path: Path, capsys):
@@ -1842,8 +1845,8 @@ def test_rag_query_unlinked_project_plain_output_is_actionable(monkeypatch, tmp_
     output = capsys.readouterr().out
 
     assert "RAG query not ready: server_project_not_linked" in output
-    assert "mdtero project create-server" in output
-    assert "mdtero project ingest" in output
+    assert "mdtero rag build --json" in output
+    assert "mdtero project ingest" not in output
     assert "mdtero rag query \"<question>\"" in output
 
 
