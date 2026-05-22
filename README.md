@@ -72,6 +72,7 @@ mdtero config zotero
 mdtero zotero import
 mdtero zotero sync
 mdtero discover "thermochemical energy storage" --limit 5
+mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace
@@ -96,7 +97,7 @@ Validated in the current alpha:
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
 - local project init/add/remove/list, BibTeX import with de-duplication, project parse/refresh/download
 - Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`
-- discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; use `mdtero discover "<query>" --add --select 1,3` to add results directly to the local project queue
+- discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; use `mdtero discover "<query>" --interactive` to inspect results and multi-select papers into the local project queue, or `--add --select 1,3` for scripts
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests for local Markdown files
 - local FastMCP project context server, including live server RAG readiness for agents, and agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
