@@ -30,11 +30,29 @@ from .projects import (
 )
 from .workflow import parse_trace_from_route, status_trace, upload_trace
 
-ACADEMIC_LINKS = {
-    "Elsevier key": "https://dev.elsevier.com/apikey/manage",
-    "Wiley TDM": "https://onlinelibrary.wiley.com/library-info/resources/text-and-datamining",
-    "Semantic Scholar API Key": "https://www.semanticscholar.org/product/api#api-key-form",
-}
+ACADEMIC_OPTIONS = [
+    {
+        "index": "1",
+        "label": "Elsevier key",
+        "url": "https://dev.elsevier.com/apikey/manage",
+        "field": "elsevier_api_key",
+        "prompt": "Elsevier API key",
+    },
+    {
+        "index": "2",
+        "label": "Wiley TDM",
+        "url": "https://onlinelibrary.wiley.com/library-info/resources/text-and-datamining",
+        "field": "wiley_tdm_token",
+        "prompt": "Wiley TDM token",
+    },
+    {
+        "index": "3",
+        "label": "Semantic Scholar API Key",
+        "url": "https://www.semanticscholar.org/product/api#api-key-form",
+        "field": "semantic_scholar_api_key",
+        "prompt": "Semantic Scholar API key",
+    },
+]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,7 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"mdtero {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    _cmd(sub, "setup", "Run the onboarding wizard.", cmd_setup)
+    setup = _cmd(sub, "setup", "Run the onboarding wizard.", cmd_setup)
+    setup.add_argument("--api-key", default="", help="Save an API key during setup for headless servers.")
     _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
     login.add_argument("--api-key", default="")
@@ -182,13 +201,17 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     console = Console()
     console.rule("[bold]Mdtero setup")
     cfg = load_config()
-    if not cfg.api_key:
+    if getattr(_args, "api_key", ""):
+        cfg.api_key = str(_args.api_key).strip()
+        save_config(cfg)
+        console.print("Step 1: saved API-key login for this machine.")
+    elif not cfg.api_key:
         console.print("Step 1: authenticate.")
         if Confirm.ask("Use API-key login for this machine?", default=True):
             cfg.api_key = Prompt.ask("Paste Mdtero API key", password=True)
             save_config(cfg)
         else:
-            console.print(f"Open {cfg.site_base_url}/auth and run `mdtero login --api-key <key>` on headless servers.")
+            console.print(f"Open {cfg.site_base_url}/auth to sign in with OAuth, then run `mdtero login --api-key <key>` when you have a key.")
     _configure_academic(cfg, console)
     console.print("\n[bold green]Configuration complete.[/bold green]")
     _print_next_steps(console)
@@ -617,16 +640,42 @@ def _server_project_id(args: argparse.Namespace) -> str:
 
 def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
     console.print("\nStep 2: optional academic resource keys.")
-    for label, url in ACADEMIC_LINKS.items():
-        console.print(f"{label}: {url}")
-    if Confirm.ask("Configure Elsevier API key?", default=False):
-        cfg.academic.elsevier_api_key = Prompt.ask("Elsevier API key", password=True)
-    if Confirm.ask("Configure Wiley TDM token?", default=False):
-        cfg.academic.wiley_tdm_token = Prompt.ask("Wiley TDM token", password=True)
-    if Confirm.ask("Configure Semantic Scholar API key for local discover?", default=False):
-        cfg.academic.semantic_scholar_api_key = Prompt.ask("Semantic Scholar API key", password=True)
+    for option in ACADEMIC_OPTIONS:
+        console.print(f"  ({option['index']}) {option['label']}: {option['url']}")
+    console.print("Press Enter to skip. Choose one or more numbers, for example `1 3`.")
+    while True:
+        selection = Prompt.ask("Configure optional keys", default="").strip()
+        try:
+            selected = _parse_academic_selection(selection)
+            break
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+    for option in ACADEMIC_OPTIONS:
+        if str(option["index"]) not in selected:
+            continue
+        value = Prompt.ask(str(option["prompt"]), password=True).strip()
+        if value:
+            setattr(cfg.academic, str(option["field"]), value)
     path = save_config(cfg)
     console.print(f"Saved config to {path}")
+    if cfg.academic.semantic_scholar_api_key:
+        console.print("Discover will use local Semantic Scholar first, with server OpenAlex as fallback.")
+    else:
+        console.print("Discover will use server OpenAlex. Add Semantic Scholar later with `mdtero config academic` if needed.")
+
+
+def _parse_academic_selection(selection: str) -> set[str]:
+    cleaned = selection.strip().lower()
+    if not cleaned:
+        return set()
+    if cleaned in {"all", "a", "*"}:
+        return {str(option["index"]) for option in ACADEMIC_OPTIONS}
+    allowed = {str(option["index"]) for option in ACADEMIC_OPTIONS}
+    tokens = [token for token in cleaned.replace(",", " ").split() if token]
+    invalid = [token for token in tokens if token not in allowed]
+    if invalid:
+        raise ValueError(f"Unknown academic key option(s): {', '.join(invalid)}. Choose 1, 2, 3, all, or Enter to skip.")
+    return set(tokens)
 
 
 def _print_next_steps(console: Console) -> None:
