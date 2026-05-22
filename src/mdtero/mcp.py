@@ -52,6 +52,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         commands["rag_build"] = "mdtero rag build"
         commands["rag_query"] = "mdtero rag query \"<question>\""
     else:
+        commands["bootstrap_rag"] = "mdtero rag build"
         commands["create_server_project"] = "mdtero project create-server"
         commands["bind_server_project"] = "mdtero project link --server-project-id <id>"
     return {
@@ -61,9 +62,8 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "workflow": [
             "mdtero project parse --wait",
             "mdtero project refresh --wait",
-            "mdtero project create-server" if not state.server_project_id else "mdtero project ingest",
+            "mdtero rag build" if not state.server_project_id else "mdtero project ingest",
             "mdtero rag status --json",
-            "mdtero rag build",
             "mdtero rag query \"<question>\"",
         ],
     }
@@ -96,7 +96,8 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "server_project_id": None,
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
-            "next_commands": [commands["create_server_project"], commands["parse_pending"], commands["refresh"]],
+            "action_hint": "Run `mdtero rag build` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
+            "next_commands": [commands["bootstrap_rag"], commands["parse_pending"], commands["refresh"]],
         }
 
     try:

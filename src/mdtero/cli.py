@@ -566,21 +566,13 @@ def cmd_project_download(args: argparse.Namespace) -> int:
 
 
 def cmd_project_ingest(args: argparse.Namespace) -> int:
-    state = load_project(Path.cwd())
+    root = Path.cwd()
+    state = load_project(root)
     project_id = _server_project_id(args)
     client = MdteroClient()
-    results = []
-    failures = []
-    for paper in state.papers:
-        if paper.status != "succeeded" or not paper.task_id:
-            continue
-        try:
-            result = client.import_task_to_project(project_id, paper.task_id)
-        except httpx.HTTPStatusError as exc:
-            failure = _project_ingest_failure(project_id, paper, exc)
-            failures.append(failure)
-            continue
-        results.append({"input": paper.input, "task_id": paper.task_id, "result": result})
+    ingest = _import_succeeded_tasks_to_server_project(client, state, project_id)
+    results = ingest["items"]
+    failures = ingest["failures"]
     payload = {
         "server_project_id": project_id,
         "imported_count": len(results),
@@ -675,15 +667,41 @@ def cmd_zotero_sync(_args: argparse.Namespace) -> int:
 
 
 def cmd_rag_build(_args: argparse.Namespace) -> int:
-    project_id = _server_project_id_or_report(_args, command="build")
-    if project_id is None:
-        return 1
+    root = Path.cwd()
+    state = load_project(root)
+    client = MdteroClient()
     try:
-        result = MdteroClient().rag_build(project_id)
+        project_id, bootstrap = _ensure_server_project_for_rag(client, root, state, getattr(_args, "project_id", None))
     except Exception as exc:
-        payload = _rag_command_failure("build", project_id, exc)
+        payload = _rag_bootstrap_failure("build", exc)
         _print_rag_command_failure(payload, json_output=_args.json)
         return 1
+    ingest = _import_succeeded_tasks_to_server_project(client, state, project_id)
+    if ingest["failures"]:
+        payload = {
+            "status": "failed",
+            "command": "rag_build",
+            "reason_code": "server_project_import_failed",
+            "error_code": "rag_precondition_failed",
+            "server_project_id": project_id,
+            "bootstrap": bootstrap,
+            "ingest": ingest,
+            "action_hint": "Some succeeded parse tasks could not be imported into the server project. Fix the import failures, rerun `mdtero project ingest`, then rerun `mdtero rag build`.",
+            "next_commands": ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"],
+        }
+        _print_rag_command_failure(payload, json_output=_args.json)
+        return 1
+    try:
+        result = client.rag_build(project_id)
+    except Exception as exc:
+        payload = _rag_command_failure("build", project_id, exc)
+        payload["bootstrap"] = bootstrap
+        payload["ingest"] = ingest
+        _print_rag_command_failure(payload, json_output=_args.json)
+        return 1
+    result.setdefault("server_project_id", project_id)
+    result.setdefault("bootstrap", bootstrap)
+    result.setdefault("ingest", ingest)
     _print_result(result, json_output=_args.json)
     return 0
 
@@ -854,6 +872,46 @@ def _submit_project_paper(client: MdteroClient, paper: PaperRecord) -> dict[str,
     return result
 
 
+def _ensure_server_project_for_rag(client: MdteroClient, root: Path, state: Any, project_id: str | None) -> tuple[str, dict[str, Any]]:
+    explicit_project_id = str(project_id or "").strip()
+    if explicit_project_id:
+        return explicit_project_id, {"created_server_project": False, "bound_local_project": False, "used_explicit_project_id": True}
+    if state.server_project_id:
+        return state.server_project_id, {"created_server_project": False, "bound_local_project": True, "used_explicit_project_id": False}
+    result = client.create_project(state.name, description=f"Mdtero local project: {state.name}")
+    server_project_id = str(result.get("id") or "").strip()
+    if not server_project_id:
+        raise RuntimeError("server_project_id_missing")
+    bind_server_project(root, server_project_id)
+    return server_project_id, {
+        "created_server_project": True,
+        "bound_local_project": True,
+        "used_explicit_project_id": False,
+        "project": result,
+    }
+
+
+def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, project_id: str) -> dict[str, Any]:
+    results = []
+    failures = []
+    for paper in state.papers:
+        if paper.status != "succeeded" or not paper.task_id:
+            continue
+        try:
+            result = client.import_task_to_project(project_id, paper.task_id)
+        except httpx.HTTPStatusError as exc:
+            failures.append(_project_ingest_failure(project_id, paper, exc))
+            continue
+        results.append({"input": paper.input, "task_id": paper.task_id, "result": result})
+    return {
+        "server_project_id": project_id,
+        "imported_count": len(results),
+        "failed_count": len(failures),
+        "items": results,
+        "failures": failures,
+    }
+
+
 def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: httpx.HTTPStatusError) -> dict[str, Any]:
     status_code = exc.response.status_code
     error_code = "server_project_import_unavailable" if status_code == 404 else "server_project_import_failed"
@@ -889,6 +947,26 @@ def _rag_command_failure(command: str, project_id: str, exc: Exception) -> dict[
         "error_type": exc.__class__.__name__,
         "action_hint": action_hint,
         "next_commands": _rag_failure_next_commands(command, reason_code),
+    }
+
+
+def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
+    detail = _http_error_detail(exc)
+    reason_code = str(detail.get("reason_code") or detail.get("error_code") or exc)
+    if reason_code == "server_project_id_missing":
+        action_hint = "The server project creation response did not include an id. Check the backend project API contract, then rerun `mdtero rag build`."
+    else:
+        action_hint = str(detail.get("action_hint") or "Create or link a server project before running server-side Voyage RAG.")
+    return {
+        "status": "failed",
+        "command": f"rag_{command}",
+        "reason_code": reason_code,
+        "error_code": str(detail.get("error_code") or "rag_bootstrap_failed"),
+        "server_project_id": None,
+        "http_status": exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None,
+        "error_type": exc.__class__.__name__,
+        "action_hint": action_hint,
+        "next_commands": ["mdtero project create-server", "mdtero project ingest", "mdtero rag status --json", f"mdtero rag {command}"],
     }
 
 
@@ -1066,10 +1144,8 @@ def _print_next_steps(console: Console) -> None:
         (
             "Server RAG and local agents",
             [
-                "mdtero project create-server",
-                "mdtero project ingest",
-                "mdtero rag status --json",
                 "mdtero rag build",
+                "mdtero rag status --json",
                 "mdtero rag query \"What are the key claims and methods?\"",
                 "mdtero mcp serve",
                 "mdtero agent install",

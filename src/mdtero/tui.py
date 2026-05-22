@@ -149,13 +149,13 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
     if project.papers and any(paper.status in {"pending", "created"} and not paper.task_id for paper in project.papers):
         return [commands["parse_pending"], commands["refresh"]]
     if not project.server_project_id:
-        return ["mdtero project create-server", "mdtero project ingest"]
+        return ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""]
     if rag.get("server_status") == "ready":
         return ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
     if rag.get("server_status") in {"not_ready", "partial"}:
         return ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
     if rag.get("ready_for_ingest_count", 0) > 0:
-        return ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
+        return ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""]
     return ["mdtero discover \"your topic\"", "mdtero parse <doi-or-url>"]
 
 

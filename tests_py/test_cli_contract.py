@@ -163,8 +163,6 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero config zotero" in output
     assert "mdtero zotero import --limit 20" in output
     assert "mdtero zotero sync" in output
-    assert "mdtero project create-server" in output
-    assert "mdtero project ingest" in output
     assert "mdtero rag status --json" in output
     assert "mdtero rag build" in output
     assert "mdtero mcp serve" in output
@@ -941,7 +939,8 @@ def test_mcp_server_rag_status_reports_unlinked_next_commands(tmp_path: Path):
     assert status["status"] == "not_ready"
     assert status["reason_code"] == "server_project_not_linked"
     assert status["local_ready_for_ingest_count"] == 1
-    assert status["next_commands"][0] == "mdtero project create-server"
+    assert status["next_commands"][0] == "mdtero rag build"
+    assert "create and bind" in status["action_hint"]
 
 
 def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
@@ -1062,7 +1061,7 @@ def test_tui_dashboard_model_keeps_local_rag_when_server_status_unavailable(tmp_
     assert model["rag"]["ready"] is True
     assert model["rag"]["server_status"] == "unavailable"
     assert model["rag"]["server_reason_code"] == "server_rag_status_unavailable"
-    assert model["next_steps"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
+    assert model["next_steps"] == ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""]
 
 
 def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):
@@ -1327,26 +1326,44 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
     assert "project create-server" in payload["action_hint"]
 
 
-def test_rag_build_unlinked_project_returns_agent_json(monkeypatch, tmp_path: Path, capsys):
+def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
     init_project(tmp_path, name="local-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    def fake_create(self, name, *, description=None):
+        calls.append(("create", name, description))
+        return {"id": 42, "name": name}
+
+    def fake_import(self, project_id, task_id):
+        calls.append(("import", project_id, task_id))
+        return {"document_id": "doc-1", "import_status": "imported"}
+
+    def fake_build(self, project_id):
+        calls.append(("build", project_id))
+        return {"status": "queued", "reason_code": "rag_build_queued"}
+
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create)
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
+    monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
     monkeypatch.chdir(tmp_path)
 
-    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 1
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 0
     payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
 
-    assert payload["status"] == "not_ready"
-    assert payload["command"] == "rag_build"
-    assert payload["reason_code"] == "server_project_not_linked"
-    assert payload["error_code"] == "rag_precondition_failed"
-    assert payload["local_ready_for_ingest_count"] == 1
-    assert payload["next_commands"] == [
-        "mdtero project create-server",
-        "mdtero project ingest",
-        "mdtero rag status --json",
-        "mdtero rag build",
+    assert payload["status"] == "queued"
+    assert payload["reason_code"] == "rag_build_queued"
+    assert payload["server_project_id"] == "42"
+    assert payload["bootstrap"]["created_server_project"] is True
+    assert payload["ingest"]["imported_count"] == 1
+    assert state.server_project_id == "42"
+    assert calls == [
+        ("create", "local-demo", "Mdtero local project: local-demo"),
+        ("import", "42", "task-done"),
+        ("build", "42"),
     ]
 
 

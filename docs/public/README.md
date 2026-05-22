@@ -10,7 +10,7 @@ The current public product shape is:
 - Backend-owned auth, quota, task state, MinerU PDF parsing, OpenAlex fallback discovery, LLM translation, and Voyage RAG.
 - Zotero reverse sync is limited to Mdtero result notes/tags for succeeded Zotero-origin tasks; it must not be described as bibliographic metadata rewriting.
 
-Do not present GROBID as a public user-selectable parser. Do not describe RAG as requiring manual project ids only; the public CLI flow is `project create-server`, `project ingest`, `rag build`, then `rag query`.
+Do not present GROBID as a public user-selectable parser. Do not describe RAG as requiring manual project ids; the public CLI flow is `rag build`, then `rag query`, with `project create-server` and `project ingest` available only as explicit recovery/debug commands.
 
 ## 中文版
 
@@ -24,4 +24,4 @@ Do not present GROBID as a public user-selectable parser. Do not describe RAG as
 - 后端负责鉴权、额度、任务状态、MinerU PDF 解析、OpenAlex fallback discovery、LLM 翻译和 Voyage RAG。
 - Zotero 反向同步仅限 Mdtero 解析结果 note/tag 写回成功解析的 Zotero 来源任务，不要写成改写 Zotero 题录元数据。
 
-公开文档不要把 GROBID 写成用户可选择的公开解析引擎；RAG 不要写成只能手动传 server project id，公开 CLI 流程是 `project create-server`、`project ingest`、`rag build`、再 `rag query`。
+公开文档不要把 GROBID 写成用户可选择的公开解析引擎；RAG 不要写成只能手动传 server project id，公开 CLI 主流程是 `rag build`、再 `rag query`，`project create-server` 和 `project ingest` 只作为显式恢复/调试命令。

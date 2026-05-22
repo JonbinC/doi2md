@@ -31,9 +31,9 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - submit a project queue: `mdtero project parse --wait`
 - refresh project tasks: `mdtero project refresh`
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output`
-- create a server project for Voyage RAG: `mdtero project create-server`
-- bind an existing server project: `mdtero project link --server-project-id <id>`
-- import succeeded parse tasks into the bound server project: `mdtero project ingest`
+- bootstrap server-side Voyage RAG for the current project: `mdtero rag build`
+- optionally create or bind a server project explicitly: `mdtero project create-server` or `mdtero project link --server-project-id <id>`
+- optionally re-import succeeded parse tasks into the bound server project: `mdtero project ingest`
 - parse a DOI/URL: `mdtero parse <doi-or-url>`
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub>`
 - parse a directory of files: `mdtero parse --batch ./papers`
@@ -42,8 +42,8 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - poll status: `mdtero status <task-id>`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir>`
 - translate Markdown: `mdtero translate <paper.md> --to zh-CN`
-- build server project RAG after ingesting documents: `mdtero rag build`
-- query server project RAG after binding: `mdtero rag query "<question>"`
+- build server project RAG, automatically creating/binding/importing when needed: `mdtero rag build`
+- query server project RAG after build: `mdtero rag query "<question>"`
 - serve project MCP context: `mdtero mcp serve`
 
 ## MCP Workflow

@@ -62,10 +62,8 @@ mdtero parse https://example.org/open-paper --trace
 mdtero parse --file paper.pdf
 mdtero parse --batch ./papers
 mdtero project init
-mdtero project create-server
 mdtero project import-bib references.bib
 mdtero project parse --wait
-mdtero project ingest
 mdtero project refresh
 mdtero project download --output-dir ./mdtero-output
 mdtero config zotero
@@ -91,7 +89,7 @@ What is validated in the current alpha:
 
 Current boundaries:
 
-- RAG is server-side Voyage RAG. Run `mdtero project create-server` once, then `mdtero project ingest` after successful parses; `mdtero rag status --json` reports readiness and next commands.
+- RAG is server-side Voyage RAG. `mdtero rag build` creates and binds a server project when needed, imports succeeded parse tasks, and starts the backend Voyage build; `mdtero rag status --json` reports readiness and next commands.
 - `mdtero zotero sync` is conservative: it writes Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
 - GROBID is not exposed as a user-selectable public engine; PDF parsing is MinerU-first on the backend.
 
@@ -149,13 +147,11 @@ mdtero agent install --all
 
 ```bash
 mdtero project init --name alpha-test
-mdtero project create-server
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out
 mdtero project import-bib references.bib
-mdtero project ingest
 mdtero rag status --json
 mdtero rag build --json
 mdtero rag query "这批论文的核心方法是什么？" --json
