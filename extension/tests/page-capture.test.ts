@@ -183,20 +183,16 @@ describe("fetchXmlArtifact", () => {
 });
 
 describe("extractXmlCandidateUrls", () => {
-  it("extracts Springer XML candidates from article metadata and injects the OA key", () => {
+  it("extracts usable XML candidates from article metadata without injecting publisher keys", () => {
     expect(
       extractXmlCandidateUrls({
         pageUrl: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
-        springerOpenAccessApiKey: "springer-key",
         html: `
           <meta name="citation_doi" content="10.1007/s12011-024-04385-0" />
-          <meta name="citation_springer_api_url" content="http://api.springer.com/xmldata/jats?q=doi:10.1007/s12011-024-04385-0&amp;api_key=" />
+          <meta name="citation_xml_url" content="http://example.org/paper.xml" />
         `
       })
-    ).toEqual([
-      "https://api.springernature.com/openaccess/jats?q=doi:10.1007%2Fs12011-024-04385-0&api_key=springer-key",
-      "https://api.springer.com/xmldata/jats?q=doi%3A10.1007%2Fs12011-024-04385-0&api_key=springer-key"
-    ]);
+    ).toEqual(["https://example.org/paper.xml"]);
   });
 
   it("drops unusable legacy Springer XML candidates when no key is available", () => {
@@ -211,18 +207,14 @@ describe("extractXmlCandidateUrls", () => {
     ).toEqual([]);
   });
 
-  it("reads DOI metadata from colon-style prism and dc meta names", () => {
+  it("does not synthesize Springer API URLs from DOI metadata", () => {
     const candidates = extractXmlCandidateUrls({
       pageUrl: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
-      springerOpenAccessApiKey: "springer-key",
       html: `
         <meta name="prism:doi" content="10.1007/s12011-024-04385-0" />
-        <meta name="citation_springer_api_url" content="https://api.springer.com/xmldata/jats?q=doi:10.1007/s12011-024-04385-0&amp;api_key=" />
       `
     });
 
-    expect(candidates[0]).toBe(
-      "https://api.springernature.com/openaccess/jats?q=doi:10.1007%2Fs12011-024-04385-0&api_key=springer-key"
-    );
+    expect(candidates).toEqual([]);
   });
 });

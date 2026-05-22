@@ -261,34 +261,10 @@ function requiresElsevierLocalAcquire(input) {
 }
 function buildElsevierLocalAcquireGuidance() {
   return [
-    "This Elsevier or ScienceDirect paper needs local acquisition in your browser first.",
-    "Add your Elsevier API key in Mdtero extension settings, then retry.",
+    "This Elsevier or ScienceDirect paper needs licensed full-text acquisition before parsing.",
+    "Use the browser extension on an already-open full-text page, upload the PDF/XML manually, or run `mdtero config academic` and retry with the CLI.",
     "If Elsevier only returns the abstract, check whether this machine is on a campus or institutional network IP."
   ].join(" ");
-}
-async function fetchElsevierXml(input, apiKey) {
-  const identifier = normalizeElsevierInput(input);
-  if (!identifier) {
-    throw new Error("Input is not recognized as an Elsevier DOI or ScienceDirect article.");
-  }
-  const endpointBase = identifier.kind === "doi" ? `https://api.elsevier.com/content/article/doi/${identifier.value}` : `https://api.elsevier.com/content/article/pii/${identifier.value}`;
-  const response = await fetch(
-    `${endpointBase}?APIKey=${encodeURIComponent(apiKey)}&httpAccept=text/xml`
-  );
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Elsevier API request failed. Please verify your Elsevier API key and network entitlement.");
-    }
-    throw new Error(`Elsevier XML fetch failed: ${response.status}`);
-  }
-  const xmlBytes = new Uint8Array(await response.arrayBuffer());
-  return {
-    xmlBlob: new Blob([xmlBytes], { type: "application/xml" }),
-    sourceDoi: identifier.kind === "doi" ? identifier.value : void 0,
-    sourceInput: input,
-    filename: "paper.xml",
-    bundleExtraFiles: {}
-  };
 }
 
 // src/lib/springer.ts
@@ -318,63 +294,14 @@ function normalizeSpringerInput(input, pageUrl) {
   }
   return null;
 }
-async function fetchSpringerOpenAccessJats(input, apiKey, pageUrl) {
-  const sourceDoi = normalizeSpringerInput(input, pageUrl);
-  if (!sourceDoi) {
-    throw new Error("Input is not recognized as a Springer DOI or Springer article page.");
-  }
-  const response = await fetch(
-    `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(sourceDoi)}&api_key=${encodeURIComponent(apiKey)}`
-  );
-  if (!response.ok) {
-    throw new Error(`Springer OA JATS fetch failed: ${response.status}`);
-  }
-  const text = await response.text();
-  if (!/<article[\s>]/i.test(text)) {
-    throw new Error("Springer OA API did not return a JATS article payload.");
-  }
-  return {
-    xmlBlob: new Blob([text], { type: "application/xml" }),
-    filename: "paper.xml",
-    sourceDoi,
-    sourceInput: input
-  };
-}
 
 // src/lib/legacy-parse.ts
 async function runLegacyParseRequest(client2, message) {
   if (requiresElsevierLocalAcquire(message.input)) {
-    if (!message.elsevierApiKey) {
-      throw new Error(buildElsevierLocalAcquireGuidance());
-    }
-    const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-    return client2.createParseFulltextV2Task({
-      fulltextFile: uploaded.xmlBlob,
-      filename: uploaded.filename,
-      sourceDoi: uploaded.sourceDoi,
-      sourceInput: uploaded.sourceInput
-    });
-  }
-  const springerSourceDoi = normalizeSpringerInput(message.input, message.pageContext?.tabUrl);
-  if (springerSourceDoi && message.springerOpenAccessApiKey) {
-    try {
-      const uploaded = await fetchSpringerOpenAccessJats(
-        message.input,
-        message.springerOpenAccessApiKey,
-        message.pageContext?.tabUrl
-      );
-      return client2.createParseFulltextV2Task({
-        fulltextFile: uploaded.xmlBlob,
-        filename: uploaded.filename,
-        sourceDoi: uploaded.sourceDoi,
-        sourceInput: uploaded.sourceInput
-      });
-    } catch {
-    }
+    throw new Error(buildElsevierLocalAcquireGuidance());
   }
   const currentTabRawUploadTask = await tryCreateCurrentTabRawUploadTask(client2, {
     input: message.input,
-    springerOpenAccessApiKey: message.springerOpenAccessApiKey,
     pageContext: message.pageContext
   });
   if (currentTabRawUploadTask) {
@@ -430,8 +357,7 @@ async function tryCreateCurrentTabRawUploadTask(client2, message) {
     return null;
   }
   const response = await chrome.tabs.sendMessage(tabId, {
-    type: "mdtero.capture_current_tab.request",
-    springerOpenAccessApiKey: message.springerOpenAccessApiKey
+    type: "mdtero.capture_current_tab.request"
   });
   if (response?.xml?.ok && response.xml.payloadText) {
     return client2.createParseFulltextV2Task({
@@ -566,6 +492,7 @@ async function fetchXmlArtifact(candidateUrls) {
 }
 
 // src/lib/action-executor.ts
+var CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
 async function executeAction(action, context, routePlan) {
   switch (action) {
     case "capture_current_tab_html":
@@ -603,8 +530,7 @@ async function executeCaptureCurrentTabHtml(context) {
   }
   try {
     const response = await chrome.tabs.sendMessage(context.tabId, {
-      type: "mdtero.capture_current_tab.request",
-      springerOpenAccessApiKey: context.springerOpenAccessApiKey
+      type: "mdtero.capture_current_tab.request"
     });
     if (response?.xml?.ok && response.xml.payloadText) {
       return {
@@ -638,22 +564,6 @@ async function executeFetchStructuredXml(context, routePlan) {
   const candidates = routePlan.acquisition_candidates || [];
   for (const candidate of candidates) {
     if (isStructuredXmlCandidate(candidate)) {
-      if ((candidate.connector === "springer_openaccess_api" || candidate.connector === "springer_full_text_tdm") && context.springerOpenAccessApiKey) {
-        try {
-          const result = await fetchSpringerOpenAccessJats(
-            context.input,
-            context.springerOpenAccessApiKey,
-            context.tabUrl
-          );
-          return {
-            success: true,
-            rawArtifact: result.xmlBlob,
-            filename: result.filename,
-            sourceDoi: result.sourceDoi
-          };
-        } catch {
-        }
-      }
       const candidateUrl = candidate.url;
       if (candidateUrl) {
         try {
@@ -674,55 +584,18 @@ async function executeFetchStructuredXml(context, routePlan) {
   return { success: false, error: "No structured XML source available" };
 }
 async function executeFetchElsevierXml(context, routePlan) {
-  if (!context.elsevierApiKey) {
-    return {
-      success: false,
-      requiresUpload: true,
-      error: routePlan.user_message || "Elsevier requires API key. Configure in settings."
-    };
-  }
-  try {
-    const result = await fetchElsevierXml(context.input, context.elsevierApiKey);
-    return {
-      success: true,
-      rawArtifact: result.xmlBlob,
-      filename: result.filename,
-      sourceDoi: result.sourceDoi
-    };
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
+  return {
+    success: false,
+    requiresUpload: true,
+    error: routePlan.user_message || buildElsevierLocalAcquireGuidance()
+  };
 }
-async function executeFetchWileyTdmPdf(context, routePlan) {
-  if (!context.wileyTdmToken) {
-    return {
-      success: false,
-      requiresUpload: true,
-      error: routePlan.user_message || "Wiley TDM requires your Wiley TDM token in extension settings."
-    };
-  }
-  const sourceDoi = inferSourceDoi2(context.input);
-  if (!sourceDoi) {
-    return { success: false, requiresUpload: true, error: "Wiley TDM needs a DOI input." };
-  }
-  try {
-    const response = await fetch(`https://api.wiley.com/onlinelibrary/tdm/v1/articles/${encodeURIComponent(sourceDoi)}`, {
-      headers: {
-        "Wiley-TDM-Client-Token": context.wileyTdmToken
-      }
-    });
-    if (!response.ok) {
-      return { success: false, requiresUpload: true, error: `Wiley TDM fetch failed: ${response.status}` };
-    }
-    return {
-      success: true,
-      rawArtifact: await response.blob(),
-      filename: "paper.pdf",
-      sourceDoi
-    };
-  } catch (error) {
-    return { success: false, requiresUpload: true, error: String(error) };
-  }
+async function executeFetchWileyTdmPdf(_context, routePlan) {
+  return {
+    success: false,
+    requiresUpload: true,
+    error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`
+  };
 }
 async function executeFetchEpubAsset(context, routePlan) {
   if (!context.tabId) {
@@ -907,9 +780,6 @@ async function readSettings() {
     apiBaseUrl: current.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     token: current.token,
     email: current.email,
-    elsevierApiKey: current.elsevierApiKey,
-    wileyTdmToken: current.wileyTdmToken,
-    springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
 }
@@ -952,10 +822,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           tabId: message.pageContext?.tabId,
           tabUrl: message.pageContext?.tabUrl,
           tabTitle: message.pageContext?.tabTitle,
-          input: message.input,
-          springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
-          elsevierApiKey: settings.elsevierApiKey,
-          wileyTdmToken: settings.wileyTdmToken
+          input: message.input
         }
       );
       if (result.success && result.taskId) {
@@ -973,9 +840,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       return runLegacyParseRequest(client, {
         input: message.input,
-        elsevierApiKey: message.elsevierApiKey,
-        wileyTdmToken: settings.wileyTdmToken,
-        springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
         pageContext: message.pageContext
       });
     })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));

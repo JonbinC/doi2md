@@ -62,7 +62,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const xmlCandidates = extractXmlCandidateUrls({
       html,
       pageUrl: window.location.href,
-      springerOpenAccessApiKey: String(message.springerOpenAccessApiKey || "")
     });
     if (xmlCandidates.length === 0) {
       sendResponse({

@@ -5,19 +5,15 @@ export interface ParsePageContext {
 
 export type LocalFileArtifactKind = "pdf" | "epub";
 
-export function createParseMessage(input: string, elsevierApiKey?: string, pageContext?: ParsePageContext) {
+export function createParseMessage(input: string, pageContext?: ParsePageContext) {
   const message: {
     type: "mdtero.parse.request";
     input: string;
-    elsevierApiKey?: string;
     pageContext?: ParsePageContext;
   } = {
     type: "mdtero.parse.request" as const,
     input
   };
-  if (elsevierApiKey) {
-    message.elsevierApiKey = elsevierApiKey;
-  }
   if (pageContext) {
     message.pageContext = pageContext;
   }

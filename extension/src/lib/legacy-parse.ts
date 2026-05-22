@@ -1,9 +1,8 @@
 import {
   buildElsevierLocalAcquireGuidance,
-  fetchElsevierXml,
   requiresElsevierLocalAcquire,
 } from "./elsevier";
-import { fetchSpringerOpenAccessJats, normalizeSpringerInput } from "./springer";
+import { normalizeSpringerInput } from "./springer";
 
 interface ParseClientLike {
   createParseTask(payload: { input: string }): Promise<unknown>;
@@ -27,9 +26,6 @@ interface LegacyPageContext {
 
 interface LegacyParseMessage {
   input: string;
-  elsevierApiKey?: string;
-  wileyTdmToken?: string;
-  springerOpenAccessApiKey?: string;
   pageContext?: LegacyPageContext;
 }
 
@@ -44,40 +40,11 @@ export async function runLegacyParseRequest(
   message: LegacyParseMessage,
 ): Promise<unknown> {
   if (requiresElsevierLocalAcquire(message.input)) {
-    if (!message.elsevierApiKey) {
-      throw new Error(buildElsevierLocalAcquireGuidance());
-    }
-    const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-    return client.createParseFulltextV2Task({
-      fulltextFile: uploaded.xmlBlob,
-      filename: uploaded.filename,
-      sourceDoi: uploaded.sourceDoi,
-      sourceInput: uploaded.sourceInput,
-    });
-  }
-
-  const springerSourceDoi = normalizeSpringerInput(message.input, message.pageContext?.tabUrl);
-  if (springerSourceDoi && message.springerOpenAccessApiKey) {
-    try {
-      const uploaded = await fetchSpringerOpenAccessJats(
-        message.input,
-        message.springerOpenAccessApiKey,
-        message.pageContext?.tabUrl,
-      );
-      return client.createParseFulltextV2Task({
-        fulltextFile: uploaded.xmlBlob,
-        filename: uploaded.filename,
-        sourceDoi: uploaded.sourceDoi,
-        sourceInput: uploaded.sourceInput,
-      });
-    } catch {
-      // Fall through to current-tab or generic parse.
-    }
+    throw new Error(buildElsevierLocalAcquireGuidance());
   }
 
   const currentTabRawUploadTask = await tryCreateCurrentTabRawUploadTask(client, {
     input: message.input,
-    springerOpenAccessApiKey: message.springerOpenAccessApiKey,
     pageContext: message.pageContext,
   });
   if (currentTabRawUploadTask) {
@@ -146,7 +113,6 @@ async function tryCreateCurrentTabRawUploadTask(
   client: ParseClientLike,
   message: {
     input: string;
-    springerOpenAccessApiKey?: string;
     pageContext?: LegacyPageContext;
   },
 ) {
@@ -160,7 +126,6 @@ async function tryCreateCurrentTabRawUploadTask(
 
   const response = await chrome.tabs.sendMessage(tabId, {
     type: "mdtero.capture_current_tab.request",
-    springerOpenAccessApiKey: message.springerOpenAccessApiKey,
   });
   if (response?.xml?.ok && response.xml.payloadText) {
     return client.createParseFulltextV2Task({

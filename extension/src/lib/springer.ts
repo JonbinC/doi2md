@@ -29,34 +29,3 @@ export function normalizeSpringerInput(input: string, pageUrl?: string): string 
 
   return null;
 }
-
-export async function fetchSpringerOpenAccessJats(
-  input: string,
-  apiKey: string,
-  pageUrl?: string
-) {
-  const sourceDoi = normalizeSpringerInput(input, pageUrl);
-  if (!sourceDoi) {
-    throw new Error("Input is not recognized as a Springer DOI or Springer article page.");
-  }
-
-  const response = await fetch(
-    `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(sourceDoi)}&api_key=${encodeURIComponent(apiKey)}`
-  );
-
-  if (!response.ok) {
-    throw new Error(`Springer OA JATS fetch failed: ${response.status}`);
-  }
-
-  const text = await response.text();
-  if (!/<article[\s>]/i.test(text)) {
-    throw new Error("Springer OA API did not return a JATS article payload.");
-  }
-
-  return {
-    xmlBlob: new Blob([text], { type: "application/xml" }),
-    filename: "paper.xml",
-    sourceDoi,
-    sourceInput: input
-  };
-}

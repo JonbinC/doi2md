@@ -5,8 +5,9 @@ import type {
   AcquisitionCandidate,
 } from "@mdtero/shared";
 import { fetchXmlArtifact } from "./page-capture";
-import { fetchSpringerOpenAccessJats } from "./springer";
-import { fetchElsevierXml } from "./elsevier";
+import { buildElsevierLocalAcquireGuidance } from "./elsevier";
+
+const CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
 
 /**
  * Execute a single action from the sequence
@@ -75,7 +76,6 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
   try {
     const response = await chrome.tabs.sendMessage(context.tabId, {
       type: "mdtero.capture_current_tab.request",
-      springerOpenAccessApiKey: context.springerOpenAccessApiKey,
     });
 
     // Check for XML response first (Springer OA, etc.)
@@ -127,28 +127,6 @@ async function executeFetchStructuredXml(
   // Prioritize XML-capable connectors
   for (const candidate of candidates) {
     if (isStructuredXmlCandidate(candidate)) {
-      if (
-        (candidate.connector === "springer_openaccess_api" || candidate.connector === "springer_full_text_tdm") &&
-        context.springerOpenAccessApiKey
-      ) {
-        try {
-          const result = await fetchSpringerOpenAccessJats(
-            context.input,
-            context.springerOpenAccessApiKey,
-            context.tabUrl
-          );
-          
-          return {
-            success: true,
-            rawArtifact: result.xmlBlob,
-            filename: result.filename,
-            sourceDoi: result.sourceDoi,
-          };
-        } catch {
-          // Continue to next candidate
-        }
-      }
-
       const candidateUrl = candidate.url;
       if (candidateUrl) {
         try {
@@ -178,64 +156,22 @@ async function executeFetchElsevierXml(
   context: ActionContext,
   routePlan: { user_message?: string }
 ): Promise<ActionResult> {
-  if (!context.elsevierApiKey) {
-    return {
-      success: false,
-      requiresUpload: true,
-      error: routePlan.user_message || "Elsevier requires API key. Configure in settings.",
-    };
-  }
-
-  try {
-    const result = await fetchElsevierXml(context.input, context.elsevierApiKey);
-    
-    return {
-      success: true,
-      rawArtifact: result.xmlBlob,
-      filename: result.filename,
-      sourceDoi: result.sourceDoi,
-    };
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
+  return {
+    success: false,
+    requiresUpload: true,
+    error: routePlan.user_message || buildElsevierLocalAcquireGuidance(),
+  };
 }
 
 async function executeFetchWileyTdmPdf(
-  context: ActionContext,
+  _context: ActionContext,
   routePlan: { user_message?: string }
 ): Promise<ActionResult> {
-  if (!context.wileyTdmToken) {
-    return {
-      success: false,
-      requiresUpload: true,
-      error: routePlan.user_message || "Wiley TDM requires your Wiley TDM token in extension settings.",
-    };
-  }
-
-  const sourceDoi = inferSourceDoi(context.input);
-  if (!sourceDoi) {
-    return { success: false, requiresUpload: true, error: "Wiley TDM needs a DOI input." };
-  }
-
-  try {
-    const response = await fetch(`https://api.wiley.com/onlinelibrary/tdm/v1/articles/${encodeURIComponent(sourceDoi)}`, {
-      headers: {
-        "Wiley-TDM-Client-Token": context.wileyTdmToken,
-      },
-    });
-    if (!response.ok) {
-      return { success: false, requiresUpload: true, error: `Wiley TDM fetch failed: ${response.status}` };
-    }
-
-    return {
-      success: true,
-      rawArtifact: await response.blob(),
-      filename: "paper.pdf",
-      sourceDoi,
-    };
-  } catch (error) {
-    return { success: false, requiresUpload: true, error: String(error) };
-  }
+  return {
+    success: false,
+    requiresUpload: true,
+    error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`,
+  };
 }
 
 async function executeFetchEpubAsset(

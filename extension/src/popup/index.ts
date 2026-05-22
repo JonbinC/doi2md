@@ -264,7 +264,6 @@ async function updatePreflightHint() {
         input,
         pageUrl,
         bridgeStatus: currentBridgeStatus,
-        hasElsevierApiKey: Boolean(settings.elsevierApiKey)
       },
       uiLanguage
     )

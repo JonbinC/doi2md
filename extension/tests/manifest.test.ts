@@ -19,9 +19,6 @@ describe("extension manifest", () => {
     expect(manifest.permissions).toEqual(["storage", "downloads", "tabs"]);
     expect(manifest.host_permissions).toEqual([
       "https://api.mdtero.com/*",
-      "https://api.elsevier.com/*",
-      "https://api.wiley.com/*",
-      "https://api.springernature.com/*",
       "https://doi.org/*",
       "*://*.arxiv.org/*",
       "*://*.dl.acm.org/*",
@@ -118,5 +115,21 @@ describe("extension manifest", () => {
     expect(backgroundSource).not.toContain("mdtero.bridge.status");
     expect(backgroundSource).not.toContain("mdtero.source_connectivity.observation");
     expect(contentSource).not.toContain("announceBridgePageReady");
+  });
+
+  it("does not request direct publisher API hosts or expose publisher key storage", () => {
+    const manifest = JSON.parse(readFileSync(resolve("manifest.json"), "utf-8")) as { host_permissions?: string[] };
+    const storageSource = readFileSync(resolve("src/lib/storage.ts"), "utf-8");
+    const backgroundSource = readFileSync(resolve("src/background.ts"), "utf-8");
+
+    expect(manifest.host_permissions ?? []).not.toContain("https://api.elsevier.com/*");
+    expect(manifest.host_permissions ?? []).not.toContain("https://api.wiley.com/*");
+    expect(manifest.host_permissions ?? []).not.toContain("https://api.springernature.com/*");
+    expect(storageSource).not.toContain("elsevierApiKey");
+    expect(storageSource).not.toContain("wileyTdmToken");
+    expect(storageSource).not.toContain("springerOpenAccessApiKey");
+    expect(backgroundSource).not.toContain("elsevierApiKey");
+    expect(backgroundSource).not.toContain("wileyTdmToken");
+    expect(backgroundSource).not.toContain("springerOpenAccessApiKey");
   });
 });

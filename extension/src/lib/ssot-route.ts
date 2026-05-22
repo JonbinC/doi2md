@@ -14,9 +14,6 @@ export interface SsotPageContext {
 
 export interface SsotExecutionContext extends SsotPageContext {
   input: string;
-  springerOpenAccessApiKey?: string;
-  elsevierApiKey?: string;
-  wileyTdmToken?: string;
 }
 
 export interface RouteClientLike {

@@ -249,9 +249,6 @@ async function readSettings() {
     apiBaseUrl: current.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     token: current.token,
     email: current.email,
-    elsevierApiKey: current.elsevierApiKey,
-    wileyTdmToken: current.wileyTdmToken,
-    springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
 }
@@ -464,8 +461,8 @@ function getPreflightHintText(params, language = "en") {
   if (looksLikePdfShell) {
     return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u76F4\u63A5\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\u3002" : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";
   }
-  if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
-    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u6269\u5C55\u4F1A\u4F18\u5148\u4F7F\u7528\u4F60\u7684\u5B98\u7F51\u767B\u5F55\u6001\u548C\u670D\u52A1\u7AEF\u8DEF\u7531\uFF1B\u82E5\u9700\u8981\u673A\u6784\u5168\u6587\uFF0C\u8BF7\u786E\u8BA4\u5F53\u524D\u6D4F\u89C8\u5668\u5DF2\u80FD\u6253\u5F00\u539F\u6587\u3002" : "This input maps to Elsevier / ScienceDirect. The extension will use your website session and server route first; for licensed full text, confirm this browser can already open the article.";
+  if (input && requiresElsevierLocalAcquire(input)) {
+    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u6269\u5C55\u4E0D\u4FDD\u5B58\u51FA\u7248\u793E\u5BC6\u94A5\uFF1B\u82E5\u9700\u8981\u673A\u6784\u5168\u6587\uFF0C\u8BF7\u786E\u8BA4\u5F53\u524D\u6D4F\u89C8\u5668\u5DF2\u80FD\u6253\u5F00\u539F\u6587\uFF0C\u6216\u7528 CLI \u914D\u7F6E\u5B66\u672F key \u540E\u91CD\u8BD5\u3002" : "This input maps to Elsevier / ScienceDirect. The extension does not store publisher keys; for licensed full text, confirm this browser can already open the article or configure academic keys in the CLI.";
   }
   if (!livePageSupported) {
     return "";
@@ -736,8 +733,7 @@ async function updatePreflightHint() {
       {
         input,
         pageUrl,
-        bridgeStatus: currentBridgeStatus,
-        hasElsevierApiKey: Boolean(settings.elsevierApiKey)
+        bridgeStatus: currentBridgeStatus
       },
       uiLanguage
     )

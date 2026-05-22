@@ -218,9 +218,6 @@ async function readSettings() {
     apiBaseUrl: current.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     token: current.token,
     email: current.email,
-    elsevierApiKey: current.elsevierApiKey,
-    wileyTdmToken: current.wileyTdmToken,
-    springerOpenAccessApiKey: current.springerOpenAccessApiKey,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
   };
 }

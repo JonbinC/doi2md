@@ -8,9 +8,6 @@ let mockSettings = {
   token: undefined,
   email: undefined,
   uiLanguage: "en",
-  elsevierApiKey: undefined,
-  wileyTdmToken: undefined,
-  springerOpenAccessApiKey: undefined,
 };
 
 const mockReadSettings = vi.fn(async () => mockSettings);
@@ -74,9 +71,6 @@ describe("extension options page", () => {
       token: undefined,
       email: undefined,
       uiLanguage: "en",
-      elsevierApiKey: undefined,
-      wileyTdmToken: undefined,
-      springerOpenAccessApiKey: undefined,
     };
     mockReadSettings.mockClear();
     mockWriteSettings.mockClear();
@@ -109,9 +103,6 @@ describe("extension options page", () => {
       token: "token-1",
       email: "reader@example.com",
       uiLanguage: "en",
-      elsevierApiKey: undefined,
-      wileyTdmToken: "wiley-demo-token",
-      springerOpenAccessApiKey: undefined,
     };
     globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 
@@ -134,9 +125,6 @@ describe("extension options page", () => {
       token: "token-1",
       email: "reader@example.com",
       uiLanguage: "en",
-      elsevierApiKey: undefined,
-      wileyTdmToken: undefined,
-      springerOpenAccessApiKey: undefined,
     };
     mockGetMyTasks.mockResolvedValueOnce({
       items: [
@@ -166,7 +154,7 @@ describe("extension options page", () => {
     expect(document.querySelector("#history-list")?.textContent).not.toContain("Download BUNDLE");
   });
 
-  it("persists advanced API base and language without rewriting retired connector keys", async () => {
+  it("persists advanced API base and language without publisher key fields", async () => {
     globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 
     await loadOptionsModule();
@@ -181,8 +169,8 @@ describe("extension options page", () => {
       expect.objectContaining({
         apiBaseUrl: "https://api.example.test",
         uiLanguage: "zh",
-        wileyTdmToken: undefined,
       })
     );
+    expect(JSON.stringify(mockWriteSettings.mock.calls.at(-1)?.[0])).not.toContain("wileyTdmToken");
   });
 });
