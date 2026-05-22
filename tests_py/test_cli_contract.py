@@ -10,6 +10,7 @@ from mdtero.agent import detect_targets, install_targets, uninstall_targets
 from mdtero.cli import build_parser
 from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
+from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.projects import (
     PaperRecord,
@@ -608,6 +609,39 @@ def test_project_ingest_imports_succeeded_tasks_into_bound_server_project(monkey
     assert payload["server_project_id"] == "42"
     assert payload["imported_count"] == 1
     assert payload["items"][0]["result"]["document_id"] == 7
+
+
+def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+
+    status = build_project_status(tmp_path)
+    commands = build_agent_commands(tmp_path)
+    rag = build_rag_context(tmp_path)
+    paper = build_paper_context("task-done", tmp_path)
+
+    assert status["server_project_id"] == "42"
+    assert status["ready_for_ingest_count"] == 1
+    assert status["pending_count"] == 1
+    assert commands["commands"]["ingest_for_rag"] == "mdtero project ingest"
+    assert commands["commands"]["rag_build"] == "mdtero rag build"
+    assert rag["ready"] is True
+    assert rag["reason_code"] == "ready"
+    assert "mdtero project ingest" in paper["recommended_commands"]
+
+
+def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    rag = build_rag_context(tmp_path)
+    commands = build_agent_commands(tmp_path)
+
+    assert rag["ready"] is False
+    assert rag["reason_code"] == "server_project_not_linked"
+    assert commands["commands"]["create_server_project"] == "mdtero project create-server"
 
 
 def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):

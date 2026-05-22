@@ -44,6 +44,15 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - query server project RAG after binding: `mdtero rag query "<question>"`
 - serve project MCP context: `mdtero mcp serve`
 
+## MCP Workflow
+
+When `mdtero mcp serve` is available, use these tools before guessing project state:
+
+- `project_status`: current project name, server project id, paper statuses, and next actions
+- `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
+- `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
+- `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
+
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.
 
 ## Output Rule
