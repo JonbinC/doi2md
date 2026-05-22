@@ -14,6 +14,7 @@ from mdtero.core import artifacts_from_task_result, paper_from_task, provider_fr
 from mdtero.projects import (
     PaperRecord,
     add_paper,
+    bind_server_project,
     extract_bib_targets,
     import_bib,
     init_project,
@@ -466,7 +467,27 @@ def test_project_init_creates_local_project_state(tmp_path: Path):
 
     assert target.exists()
     assert state.name == "demo"
+    assert state.server_project_id is None
     assert state.papers == []
+
+
+def test_project_state_keeps_optional_server_project_binding(tmp_path: Path):
+    init_project(tmp_path, name="demo")
+    state = bind_server_project(tmp_path, " 123 ")
+    loaded = load_project(tmp_path)
+
+    assert state.server_project_id == "123"
+    assert loaded.server_project_id == "123"
+
+
+def test_project_state_loads_legacy_files_without_server_project_id(tmp_path: Path):
+    project_file = init_project(tmp_path, name="legacy")
+    project_file.write_text('{"name":"legacy","papers":[]}', encoding="utf-8")
+
+    state = load_project(tmp_path)
+
+    assert state.name == "legacy"
+    assert state.server_project_id is None
 
 
 def test_project_add_remove_and_task_update(tmp_path: Path):
@@ -532,6 +553,48 @@ def test_project_queue_submission_refresh_helpers(tmp_path: Path):
     assert updated.provider == "openalex"
     assert updated.parser_strategy == "server_parse"
     assert updated.reason_code == "queued"
+
+
+def test_client_can_create_server_project(monkeypatch):
+    calls = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs.get("json")))
+        return {"id": 42, "name": kwargs["json"]["name"]}
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient().create_project("demo", description="local project")
+
+    assert result["id"] == 42
+    assert calls == [("POST", "/projects", {"name": "demo", "description": "local project"})]
+
+
+def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    monkeypatch.chdir(tmp_path)
+    assert cli._server_project_id(type("Args", (), {"project_id": None})()) == "42"
+    assert cli._server_project_id(type("Args", (), {"project_id": "99"})()) == "99"
+
+
+def test_rag_requires_project_binding_when_project_id_is_omitted(monkeypatch, tmp_path: Path):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    monkeypatch.chdir(tmp_path)
+
+    try:
+        cli._server_project_id(type("Args", (), {"project_id": None})())
+    except SystemExit as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected missing binding error")
+
+    assert "mdtero project create-server" in message
 
 
 def test_zotero_item_maps_to_project_paper():

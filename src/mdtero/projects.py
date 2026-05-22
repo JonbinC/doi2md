@@ -31,6 +31,7 @@ class PaperRecord:
 @dataclass
 class ProjectState:
     name: str
+    server_project_id: str | None = None
     papers: list[PaperRecord] = field(default_factory=list)
 
 
@@ -58,8 +59,19 @@ def load_project(root: Path) -> ProjectState:
     payload = json.loads(project_path(root).read_text(encoding="utf-8"))
     return ProjectState(
         name=str(payload.get("name") or root.resolve().name),
+        server_project_id=str(payload.get("server_project_id") or "").strip() or None,
         papers=[PaperRecord(**paper) for paper in payload.get("papers") or []],
     )
+
+
+def bind_server_project(root: Path, server_project_id: str) -> ProjectState:
+    state = ensure_project(root)
+    cleaned = str(server_project_id or "").strip()
+    if not cleaned:
+        raise ValueError("server_project_id is required")
+    state.server_project_id = cleaned
+    save_project(root, state)
+    return state
 
 
 def ensure_project(root: Path) -> ProjectState:
