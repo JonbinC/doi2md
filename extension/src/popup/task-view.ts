@@ -216,8 +216,8 @@ export function getPreflightHintText(
 
   if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
     return language === "zh"
-      ? "当前输入命中了 Elsevier / ScienceDirect。请先在设置里填写 Elsevier API Key；部分论文还可能要求本机处于校园网或机构网络环境。"
-      : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first; some papers may still require this machine to be on a campus or institutional network.";
+      ? "当前输入命中了 Elsevier / ScienceDirect。扩展会优先使用你的官网登录态和服务端路由；若需要机构全文，请确认当前浏览器已能打开原文。"
+      : "This input maps to Elsevier / ScienceDirect. The extension will use your website session and server route first; for licensed full text, confirm this browser can already open the article.";
   }
 
   if (!livePageSupported) {
@@ -226,14 +226,14 @@ export function getPreflightHintText(
 
   if (bridgeMissing) {
     return language === "zh"
-      ? "当前页面可回退到本地浏览器抓取，但还没检测到设备侧运行时。请先启动 `mdtero`。"
-      : "This page can fall back to local browser capture, but the on-device runtime is not ready. Start `mdtero` first.";
+      ? "当前页面可通过扩展做浏览器补抓取。若直连失败，请先启动 `mdtero mcp serve` 或使用本地 CLI 继续。"
+      : "This page can use browser-assisted capture. If direct routing fails, start `mdtero mcp serve` or continue from the local CLI.";
   }
 
   if (bridgeReady) {
     return language === "zh"
-      ? "当前页面在直连 publisher API / TDM 不可用时，可回退到本地浏览器抓取。"
-      : "This page is ready for local browser capture if direct publisher APIs or TDM are not available.";
+      ? "当前页面在服务端直连不可用时，可回退到本地浏览器抓取。"
+      : "This page is ready for local browser capture if the server route cannot fetch the article directly.";
   }
 
   return language === "zh"

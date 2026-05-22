@@ -272,7 +272,7 @@ describe("getBridgeStatusText", () => {
 });
 
 describe("getPreflightHintText", () => {
-  it("warns when Elsevier input is missing the required API key", () => {
+  it("routes Elsevier guidance through website auth and browser access instead of retired settings", () => {
     expect(
       getPreflightHintText(
         {
@@ -290,7 +290,7 @@ describe("getPreflightHintText", () => {
         },
         "en"
       )
-    ).toContain("campus or institutional network");
+    ).toContain("website session and server route");
   });
 
   it("warns when a supported live page is open but the helper is unavailable", () => {
@@ -304,7 +304,7 @@ describe("getPreflightHintText", () => {
         },
         "en"
       )
-    ).toContain("Start `mdtero`");
+    ).toContain("mdtero mcp serve");
   });
 
   it("confirms local capture readiness on supported live pages", () => {

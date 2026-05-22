@@ -488,16 +488,16 @@ function getPreflightHintText(params, language = "en") {
     return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\uFF0C\u518D\u8FDB\u884C\u672C\u5730\u6293\u53D6\u3002" : "This looks like a PDF/EPUB page. Open the HTML full-text page first for better local capture.";
   }
   if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
-    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u8BF7\u5148\u5728\u8BBE\u7F6E\u91CC\u586B\u5199 Elsevier API Key\uFF1B\u90E8\u5206\u8BBA\u6587\u8FD8\u53EF\u80FD\u8981\u6C42\u672C\u673A\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784\u7F51\u7EDC\u73AF\u5883\u3002" : "This input maps to Elsevier / ScienceDirect. Add your Elsevier API Key in Settings first; some papers may still require this machine to be on a campus or institutional network.";
+    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u6269\u5C55\u4F1A\u4F18\u5148\u4F7F\u7528\u4F60\u7684\u5B98\u7F51\u767B\u5F55\u6001\u548C\u670D\u52A1\u7AEF\u8DEF\u7531\uFF1B\u82E5\u9700\u8981\u673A\u6784\u5168\u6587\uFF0C\u8BF7\u786E\u8BA4\u5F53\u524D\u6D4F\u89C8\u5668\u5DF2\u80FD\u6253\u5F00\u539F\u6587\u3002" : "This input maps to Elsevier / ScienceDirect. The extension will use your website session and server route first; for licensed full text, confirm this browser can already open the article.";
   }
   if (!livePageSupported) {
     return "";
   }
   if (bridgeMissing) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\uFF0C\u4F46\u8FD8\u6CA1\u68C0\u6D4B\u5230\u8BBE\u5907\u4FA7\u8FD0\u884C\u65F6\u3002\u8BF7\u5148\u542F\u52A8 `mdtero`\u3002" : "This page can fall back to local browser capture, but the on-device runtime is not ready. Start `mdtero` first.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u901A\u8FC7\u6269\u5C55\u505A\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u3002\u82E5\u76F4\u8FDE\u5931\u8D25\uFF0C\u8BF7\u5148\u542F\u52A8 `mdtero mcp serve` \u6216\u4F7F\u7528\u672C\u5730 CLI \u7EE7\u7EED\u3002" : "This page can use browser-assisted capture. If direct routing fails, start `mdtero mcp serve` or continue from the local CLI.";
   }
   if (bridgeReady) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5728\u76F4\u8FDE publisher API / TDM \u4E0D\u53EF\u7528\u65F6\uFF0C\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002" : "This page is ready for local browser capture if direct publisher APIs or TDM are not available.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5728\u670D\u52A1\u7AEF\u76F4\u8FDE\u4E0D\u53EF\u7528\u65F6\uFF0C\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002" : "This page is ready for local browser capture if the server route cannot fetch the article directly.";
   }
   return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u8BBE\u5907\u4FA7\u8FD0\u884C\u65F6\u5DF2\u8FDE\u63A5\u3002" : "This page supports local browser capture. Confirm the on-device runtime is connected before parsing.";
 }
@@ -528,14 +528,12 @@ var COPY = {
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
     signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
     signInButton: "Open Mdtero Account",
-    freeHint: "PDF/XML free",
-    supportSummary: "",
-    supportStableTitle: "Ready on this machine",
-    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
-    supportShadowTitle: "Use your own access",
-    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself on this computer.",
-    supportExperimentalTitle: "Needs browser help sometimes",
-    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary more by login and challenge flow.",
+    connectionPillSignedOut: "Website OAuth",
+    connectionPillSignedIn: "Connected",
+    workflowAuth: "Login",
+    workflowParse: "Parse",
+    workflowUpload: "Upload",
+    workflowDownload: "Download",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
@@ -574,9 +572,7 @@ var COPY = {
     detected: (kind) => `Detected ${kind}.`,
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
-    downloadFailed: "Download failed. Please try again.",
-    campusHint: "Note: Campus network IP required for non-open access full-text.",
-    elsevierKeyRequired: "ScienceDirect link detected. Please configure Elsevier API Key in settings first."
+    downloadFailed: "Download failed. Please try again."
   },
   zh: {
     title: "Mdtero",
@@ -586,14 +582,12 @@ var COPY = {
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
     signInHint: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\uFF0C\u7136\u540E\u56DE\u5230\u6269\u5C55\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
     signInButton: "\u6253\u5F00 Mdtero Account",
-    freeHint: "PDF/XML \u514D\u8D39",
-    supportSummary: "",
-    supportStableTitle: "\u8FD9\u53F0\u673A\u5668\u4E0A\u5DF2\u7ECF\u6BD4\u8F83\u987A\u624B",
-    supportStableItems: "arXiv\u3001PMC / Europe PMC\u3001bioRxiv / medRxiv\u3001PLOS\u3001Springer Open Access \u7B49\u5F00\u653E\u6765\u6E90\u6700\u987A\u624B\u3002",
-    supportShadowTitle: "\u4F7F\u7528\u4F60\u81EA\u5DF1\u7684\u8BBF\u95EE\u6743\u9650",
-    supportShadowItems: "Elsevier\u3001Springer \u7B49\u51FA\u7248\u793E\u9875\u9762\uFF0C\u5728\u4F60\u5DF2\u7ECF\u80FD\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u6253\u5F00\u5168\u6587\u65F6\u901A\u5E38\u6548\u679C\u6700\u597D\u3002",
-    supportExperimentalTitle: "\u6709\u65F6\u9700\u8981\u6D4F\u89C8\u5668\u5E2E\u4E00\u628A",
-    supportExperimentalItems: "\u90E8\u5206 Wiley \u4E0E Taylor & Francis \u9875\u9762\u4ECD\u66F4\u5BB9\u6613\u53D7\u767B\u5F55\u6001\u6216\u6311\u6218\u9875\u5F71\u54CD\u3002",
+    connectionPillSignedOut: "\u7F51\u9875\u767B\u5F55",
+    connectionPillSignedIn: "\u5DF2\u8FDE\u63A5",
+    workflowAuth: "\u767B\u5F55",
+    workflowParse: "\u89E3\u6790",
+    workflowUpload: "\u4E0A\u4F20",
+    workflowDownload: "\u4E0B\u8F7D",
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
@@ -632,9 +626,7 @@ var COPY = {
     detected: (kind) => `\u5DF2\u8BC6\u522B${kind}\u3002`,
     noDoi: "\u672A\u8BC6\u522B\u5230 DOI\uFF0C\u8BF7\u624B\u52A8\u7C98\u8D34\u3002",
     noActiveTab: "\u5F53\u524D\u6CA1\u6709\u53EF\u7528\u6807\u7B7E\u9875\u3002",
-    downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
-    campusHint: "\u63D0\u793A\uFF1A\u9700\u8981\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u624D\u80FD\u83B7\u53D6\u975E\u5F00\u6E90\u5168\u6587\uFF0C\u5426\u5219\u4EC5\u89E3\u6790\u6458\u8981\u3002",
-    elsevierKeyRequired: "\u68C0\u6D4B\u5230 ScienceDirect \u94FE\u63A5\uFF0C\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E Elsevier API Key\u3002"
+    downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002"
   }
 };
 var titleEl = document.querySelector("#app-title");
@@ -642,16 +634,15 @@ var subtitleEl = document.querySelector("#app-subtitle");
 var languageToggleEl = document.querySelector("#language-toggle");
 var accountEmailEl = document.querySelector("#account-email");
 var usageStatusEl = document.querySelector("#usage-status");
-var helperStatusEl = document.querySelector("#helper-status");
-var freeHintEl = document.querySelector("#free-hint");
-var supportStableItemsEl = document.querySelector("#support-stable-items");
-var supportShadowItemsEl = document.querySelector("#support-shadow-items");
-var supportExperimentalItemsEl = document.querySelector("#support-experimental-items");
+var connectionPillEl = document.querySelector("#connection-pill");
+var workflowAuthEl = document.querySelector("#workflow-auth");
+var workflowParseEl = document.querySelector("#workflow-parse");
+var workflowUploadEl = document.querySelector("#workflow-upload");
+var workflowDownloadEl = document.querySelector("#workflow-download");
 var inputLabelEl = document.querySelector("#paper-input-label");
 var inputEl = document.querySelector("#paper-input");
 var statusEl = document.querySelector("#status");
 var preflightHintEl = document.querySelector("#preflight-hint");
-var campusHintEl = document.querySelector("#campus-hint");
 var fileIntakeTitleEl = document.querySelector("#file-intake-title");
 var fileIntakeNoteEl = document.querySelector("#file-intake-note");
 var pickPdfButton = document.querySelector("#pick-pdf-button");
@@ -759,10 +750,10 @@ function applyLanguage() {
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
-  if (freeHintEl) freeHintEl.textContent = copy.freeHint;
-  if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
-  if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
-  if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
+  if (workflowAuthEl) workflowAuthEl.textContent = copy.workflowAuth;
+  if (workflowParseEl) workflowParseEl.textContent = copy.workflowParse;
+  if (workflowUploadEl) workflowUploadEl.textContent = copy.workflowUpload;
+  if (workflowDownloadEl) workflowDownloadEl.textContent = copy.workflowDownload;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
   if (fileIntakeTitleEl) fileIntakeTitleEl.textContent = copy.fileIntakeTitle;
@@ -772,7 +763,6 @@ function applyLanguage() {
   if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
     localFileNameEl.textContent = copy.fileNameEmpty;
   }
-  if (campusHintEl) campusHintEl.textContent = copy.campusHint;
   if (translateLanguageLabelEl) translateLanguageLabelEl.textContent = copy.translateLabel;
   if (sourceFilesSummaryEl) sourceFilesSummaryEl.textContent = copy.sourceFiles;
   if (recentTasksSummaryEl) recentTasksSummaryEl.textContent = copy.recentTasks;
@@ -1083,6 +1073,9 @@ async function pollTask(taskId, kind) {
 }
 async function refreshUsage() {
   const settings = await readSettings();
+  if (connectionPillEl) {
+    connectionPillEl.textContent = settings.token ? getCurrentCopy().connectionPillSignedIn : getCurrentCopy().connectionPillSignedOut;
+  }
   if (accountEmailEl) {
     accountEmailEl.textContent = settings.email ? getCurrentCopy().signedIn(settings.email) : getCurrentCopy().guest;
   }
@@ -1108,7 +1101,6 @@ async function refreshUsage() {
 }
 async function refreshBridgeStatus() {
   currentBridgeStatus = null;
-  if (helperStatusEl) helperStatusEl.hidden = true;
   await updatePreflightHint();
 }
 async function detectCurrentTab() {

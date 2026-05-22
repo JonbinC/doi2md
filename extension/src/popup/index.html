@@ -21,13 +21,18 @@
           <div>
             <p id="account-email" class="meta-label">Guest mode</p>
             <p id="usage-status" class="meta-value">Checking account...</p>
-            <p id="helper-status" class="meta-label" hidden></p>
           </div>
-          <p id="free-hint" class="meta-pill">PDF/XML free</p>
+          <p id="connection-pill" class="meta-pill">Website OAuth</p>
         </div>
         <div class="button-row hero-cta-row">
           <button id="open-settings-login" type="button" class="primary-button">Sign in</button>
           <button id="open-settings" type="button" class="secondary-button">Settings</button>
+        </div>
+        <div class="workflow-strip" aria-label="Mdtero extension workflow">
+          <span id="workflow-auth">Login</span>
+          <span id="workflow-parse">Parse</span>
+          <span id="workflow-upload">Upload</span>
+          <span id="workflow-download">Download</span>
         </div>
       </section>
 
@@ -36,7 +41,6 @@
         <input id="paper-input" type="text" placeholder="10.1016/..." />
         <p id="status" class="status-line">Detecting paper input...</p>
         <p id="preflight-hint" class="meta-label campus-hint"></p>
-        <p id="campus-hint" class="meta-label campus-hint">Note: Campus network IP required for Elsevier full-text access.</p>
       </section>
 
       <section class="card" id="file-intake-card">

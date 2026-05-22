@@ -47,14 +47,12 @@ const COPY = {
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
     signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
     signInButton: "Open Mdtero Account",
-    freeHint: "PDF/XML free",
-    supportSummary: "",
-    supportStableTitle: "Ready on this machine",
-    supportStableItems: "arXiv, PMC / Europe PMC, bioRxiv / medRxiv, PLOS, Springer Open Access, and other open sources work best.",
-    supportShadowTitle: "Use your own access",
-    supportShadowItems: "Publisher pages such as Elsevier and Springer work best when you can already open the full text yourself on this computer.",
-    supportExperimentalTitle: "Needs browser help sometimes",
-    supportExperimentalItems: "Some Wiley and Taylor & Francis pages still vary more by login and challenge flow.",
+    connectionPillSignedOut: "Website OAuth",
+    connectionPillSignedIn: "Connected",
+    workflowAuth: "Login",
+    workflowParse: "Parse",
+    workflowUpload: "Upload",
+    workflowDownload: "Download",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
@@ -93,9 +91,7 @@ const COPY = {
     detected: (kind: string) => `Detected ${kind}.`,
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
-    downloadFailed: "Download failed. Please try again.",
-    campusHint: "Note: Campus network IP required for non-open access full-text.",
-    elsevierKeyRequired: "ScienceDirect link detected. Please configure Elsevier API Key in settings first."
+    downloadFailed: "Download failed. Please try again."
   },
   zh: {
     title: "Mdtero",
@@ -106,14 +102,12 @@ const COPY = {
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
     signInHint: "请在 mdtero.com/account 登录，然后回到扩展解析、翻译和下载。",
     signInButton: "打开 Mdtero Account",
-    freeHint: "PDF/XML 免费",
-    supportSummary: "",
-    supportStableTitle: "这台机器上已经比较顺手",
-    supportStableItems: "arXiv、PMC / Europe PMC、bioRxiv / medRxiv、PLOS、Springer Open Access 等开放来源最顺手。",
-    supportShadowTitle: "使用你自己的访问权限",
-    supportShadowItems: "Elsevier、Springer 等出版社页面，在你已经能在这台机器上打开全文时通常效果最好。",
-    supportExperimentalTitle: "有时需要浏览器帮一把",
-    supportExperimentalItems: "部分 Wiley 与 Taylor & Francis 页面仍更容易受登录态或挑战页影响。",
+    connectionPillSignedOut: "网页登录",
+    connectionPillSignedIn: "已连接",
+    workflowAuth: "登录",
+    workflowParse: "解析",
+    workflowUpload: "上传",
+    workflowDownload: "下载",
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "本地文件入口",
@@ -152,9 +146,7 @@ const COPY = {
     detected: (kind: string) => `已识别${kind}。`,
     noDoi: "未识别到 DOI，请手动粘贴。",
     noActiveTab: "当前没有可用标签页。",
-    downloadFailed: "下载失败，请重试。",
-    campusHint: "提示：需要校园网或机构 IP 才能获取非开源全文，否则仅解析摘要。",
-    elsevierKeyRequired: "检测到 ScienceDirect 链接，请先在设置中配置 Elsevier API Key。"
+    downloadFailed: "下载失败，请重试。"
   }
 } satisfies Record<UiLanguage, Record<string, string | ((...args: any[]) => string)>>;
 
@@ -163,16 +155,15 @@ const subtitleEl = document.querySelector<HTMLParagraphElement>("#app-subtitle")
 const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-toggle");
 const accountEmailEl = document.querySelector<HTMLParagraphElement>("#account-email");
 const usageStatusEl = document.querySelector<HTMLParagraphElement>("#usage-status");
-const helperStatusEl = document.querySelector<HTMLParagraphElement>("#helper-status");
-const freeHintEl = document.querySelector<HTMLParagraphElement>("#free-hint");
-const supportStableItemsEl = document.querySelector<HTMLParagraphElement>("#support-stable-items");
-const supportShadowItemsEl = document.querySelector<HTMLParagraphElement>("#support-shadow-items");
-const supportExperimentalItemsEl = document.querySelector<HTMLParagraphElement>("#support-experimental-items");
+const connectionPillEl = document.querySelector<HTMLParagraphElement>("#connection-pill");
+const workflowAuthEl = document.querySelector<HTMLSpanElement>("#workflow-auth");
+const workflowParseEl = document.querySelector<HTMLSpanElement>("#workflow-parse");
+const workflowUploadEl = document.querySelector<HTMLSpanElement>("#workflow-upload");
+const workflowDownloadEl = document.querySelector<HTMLSpanElement>("#workflow-download");
 const inputLabelEl = document.querySelector<HTMLLabelElement>("#paper-input-label");
 const inputEl = document.querySelector<HTMLInputElement>("#paper-input");
 const statusEl = document.querySelector<HTMLParagraphElement>("#status");
 const preflightHintEl = document.querySelector<HTMLParagraphElement>("#preflight-hint");
-const campusHintEl = document.querySelector<HTMLParagraphElement>("#campus-hint");
 const fileIntakeTitleEl = document.querySelector<HTMLParagraphElement>("#file-intake-title");
 const fileIntakeNoteEl = document.querySelector<HTMLParagraphElement>("#file-intake-note");
 const pickPdfButton = document.querySelector<HTMLButtonElement>("#pick-pdf-button");
@@ -298,10 +289,10 @@ function applyLanguage() {
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
-  if (freeHintEl) freeHintEl.textContent = copy.freeHint;
-  if (supportStableItemsEl) supportStableItemsEl.textContent = copy.supportStableItems;
-  if (supportShadowItemsEl) supportShadowItemsEl.textContent = copy.supportShadowItems;
-  if (supportExperimentalItemsEl) supportExperimentalItemsEl.textContent = copy.supportExperimentalItems;
+  if (workflowAuthEl) workflowAuthEl.textContent = copy.workflowAuth;
+  if (workflowParseEl) workflowParseEl.textContent = copy.workflowParse;
+  if (workflowUploadEl) workflowUploadEl.textContent = copy.workflowUpload;
+  if (workflowDownloadEl) workflowDownloadEl.textContent = copy.workflowDownload;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
   if (fileIntakeTitleEl) fileIntakeTitleEl.textContent = copy.fileIntakeTitle;
@@ -311,7 +302,6 @@ function applyLanguage() {
   if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
     localFileNameEl.textContent = copy.fileNameEmpty;
   }
-  if (campusHintEl) campusHintEl.textContent = copy.campusHint;
   if (translateLanguageLabelEl) translateLanguageLabelEl.textContent = copy.translateLabel;
   if (sourceFilesSummaryEl) sourceFilesSummaryEl.textContent = copy.sourceFiles;
   if (recentTasksSummaryEl) recentTasksSummaryEl.textContent = copy.recentTasks;
@@ -637,6 +627,11 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
 
 async function refreshUsage() {
   const settings = await readSettings();
+  if (connectionPillEl) {
+    connectionPillEl.textContent = settings.token
+      ? getCurrentCopy().connectionPillSignedIn
+      : getCurrentCopy().connectionPillSignedOut;
+  }
   if (accountEmailEl) {
     accountEmailEl.textContent = settings.email
       ? getCurrentCopy().signedIn(settings.email)
@@ -667,7 +662,6 @@ async function refreshUsage() {
 
 async function refreshBridgeStatus() {
   currentBridgeStatus = null;
-  if (helperStatusEl) helperStatusEl.hidden = true;
   await updatePreflightHint();
 }
 
