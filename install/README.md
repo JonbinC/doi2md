@@ -63,7 +63,8 @@ mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace
 mdtero parse --file paper.pdf
 mdtero parse --batch ./papers
-mdtero project init
+mdtero project init --json
+mdtero project status --json
 mdtero project import-bib references.bib
 mdtero project parse --wait
 mdtero project refresh
@@ -151,6 +152,7 @@ mdtero agent install --all
 
 ```bash
 mdtero project init --name alpha-test
+mdtero project status --json
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json

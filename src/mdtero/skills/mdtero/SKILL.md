@@ -25,6 +25,8 @@ description: Use when Mdtero should be available inside an agent workspace for s
 ## CLI Workflow
 
 - initialize a project: `mdtero project init`
+- inspect project state for agents: `mdtero project status --json` or `mdtero project list --json`
+- add or remove project entries for agents: `mdtero project add <doi-or-url> --json`, `mdtero project remove <doi-or-url-or-task-id> --json`
 - import a BibTeX file: `mdtero project import-bib references.bib`
 - import Zotero items: `mdtero config zotero`, then `mdtero zotero import`
 - sync succeeded Zotero-origin parse task notes/tags back to Zotero: `mdtero zotero sync`

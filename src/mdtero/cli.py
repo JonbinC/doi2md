@@ -23,6 +23,7 @@ from .projects import (
     import_bib,
     init_project,
     load_project,
+    paper_to_document,
     paper_from_submission,
     project_path,
     project_pending_papers,
@@ -110,18 +111,23 @@ def build_parser() -> argparse.ArgumentParser:
     project_sub = project.add_subparsers(dest="project_command")
     project_init = _cmd(project_sub, "init", "Initialize a local Mdtero project.", cmd_project_init)
     project_init.add_argument("--name")
+    project_init.add_argument("--json", action="store_true")
     project_add = _cmd(project_sub, "add", "Add one DOI/URL/file to the current project.", cmd_project_add)
     project_add.add_argument("input")
+    project_add.add_argument("--json", action="store_true")
     project_link = _cmd(project_sub, "link", "Bind this local project to an existing server project id.", cmd_project_link)
     project_link.add_argument("--server-project-id", required=True)
+    project_link.add_argument("--json", action="store_true")
     project_create_server = _cmd(project_sub, "create-server", "Create and bind a server project for RAG.", cmd_project_create_server)
     project_create_server.add_argument("--name")
     project_create_server.add_argument("--description")
     project_create_server.add_argument("--json", action="store_true")
     project_remove = _cmd(project_sub, "remove", "Remove one project paper by input or task id.", cmd_project_remove)
     project_remove.add_argument("input")
+    project_remove.add_argument("--json", action="store_true")
     project_bib = _cmd(project_sub, "import-bib", "Import DOI/URL entries from one or more BibTeX files.", cmd_project_import_bib)
     project_bib.add_argument("paths", nargs="+", type=Path)
+    project_bib.add_argument("--json", action="store_true")
     project_parse = _cmd(project_sub, "parse", "Submit pending project papers to Mdtero.", cmd_project_parse)
     project_parse.add_argument("--limit", type=int, default=0)
     project_parse.add_argument("--include-failed", action="store_true")
@@ -136,8 +142,10 @@ def build_parser() -> argparse.ArgumentParser:
     project_download.add_argument("--json", action="store_true")
     project_ingest = _cmd(project_sub, "ingest", "Import succeeded parse tasks into the linked server project for RAG.", cmd_project_ingest)
     project_ingest.add_argument("--json", action="store_true")
-    _cmd(project_sub, "list", "List papers in the current project.", cmd_project_status)
-    _cmd(project_sub, "status", "Show current project status.", cmd_project_status)
+    project_list = _cmd(project_sub, "list", "List papers in the current project.", cmd_project_status)
+    project_list.add_argument("--json", action="store_true")
+    project_status = _cmd(project_sub, "status", "Show current project status.", cmd_project_status)
+    project_status.add_argument("--json", action="store_true")
 
     parse_bib = _cmd(sub, "parse-bib", "Import BibTeX DOI/URL entries into the current project.", cmd_project_import_bib)
     parse_bib.add_argument("paths", nargs="+", type=Path)
@@ -462,14 +470,41 @@ def _discovery_parse_target(item: dict[str, Any]) -> str | None:
     return url or None
 
 
+def _project_payload(state: Any) -> dict[str, Any]:
+    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
+    failed = [paper for paper in state.papers if paper.status == "failed"]
+    running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed", "cancelled"}]
+    return {
+        "name": state.name,
+        "server_project_id": state.server_project_id,
+        "paper_count": len(state.papers),
+        "pending_count": len(pending),
+        "running_count": len(running),
+        "succeeded_count": len(succeeded),
+        "failed_count": len(failed),
+        "ready_for_ingest_count": len(succeeded),
+        "papers": [paper_to_document(paper).to_dict() for paper in state.papers],
+    }
+
+
 def cmd_project_init(args: argparse.Namespace) -> int:
     path = init_project(Path.cwd(), name=args.name)
-    Console().print(f"Initialized Mdtero project at {path}")
+    state = load_project(Path.cwd())
+    payload = _project_payload(state)
+    payload["project_path"] = str(path)
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Initialized Mdtero project at {path}")
     return 0
 
 
-def cmd_project_status(_args: argparse.Namespace) -> int:
+def cmd_project_status(args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
+    if getattr(args, "json", False):
+        print(json.dumps(_project_payload(state), indent=2, ensure_ascii=False))
+        return 0
     table = Table("Input", "Task", "Status", "Reason")
     for paper in state.papers:
         table.add_row(paper.input, paper.task_id or "", paper.status, paper.reason_code or "")
@@ -481,13 +516,19 @@ def cmd_project_status(_args: argparse.Namespace) -> int:
 
 def cmd_project_add(args: argparse.Namespace) -> int:
     state = add_paper(Path.cwd(), PaperRecord(input=args.input, source="manual"))
-    Console().print(f"Added {args.input} to project {state.name}")
+    if args.json:
+        print(json.dumps({"status": "added", "input": args.input, "project": _project_payload(state)}, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Added {args.input} to project {state.name}")
     return 0
 
 
 def cmd_project_link(args: argparse.Namespace) -> int:
     state = bind_server_project(Path.cwd(), args.server_project_id)
-    Console().print(f"Project {state.name} linked to server project {state.server_project_id}")
+    if args.json:
+        print(json.dumps({"status": "linked", "server_project_id": state.server_project_id, "project": _project_payload(state)}, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Project {state.name} linked to server project {state.server_project_id}")
     return 0
 
 
@@ -510,15 +551,22 @@ def cmd_project_create_server(args: argparse.Namespace) -> int:
 
 def cmd_project_remove(args: argparse.Namespace) -> int:
     state = remove_paper(Path.cwd(), args.input)
-    Console().print(f"Project {state.name}: {len(state.papers)} paper(s) remain")
+    if args.json:
+        print(json.dumps({"status": "removed", "input": args.input, "project": _project_payload(state)}, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Project {state.name}: {len(state.papers)} paper(s) remain")
     return 0
 
 
 def cmd_project_import_bib(args: argparse.Namespace) -> int:
     summary = import_bib(Path.cwd(), args.paths)
-    Console().print(
-        f"Imported {summary['imported_count']} BibTeX target(s); skipped {summary['skipped_count']}; project now has {summary['paper_count']} paper(s)."
-    )
+    if getattr(args, "json", False):
+        summary["project"] = _project_payload(load_project(Path.cwd()))
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+    else:
+        Console().print(
+            f"Imported {summary['imported_count']} BibTeX target(s); skipped {summary['skipped_count']}; project now has {summary['paper_count']} paper(s)."
+        )
     return 0
 
 

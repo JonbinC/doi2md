@@ -134,6 +134,31 @@ def test_rag_build_and_query_accept_agent_friendly_json_flags():
     assert query_args.json is True
 
 
+def test_project_management_commands_accept_agent_friendly_json_flags():
+    parser = build_parser()
+
+    init_args = parser.parse_args(["project", "init", "--name", "demo", "--json"])
+    add_args = parser.parse_args(["project", "add", "10.1000/demo", "--json"])
+    link_args = parser.parse_args(["project", "link", "--server-project-id", "42", "--json"])
+    remove_args = parser.parse_args(["project", "remove", "10.1000/demo", "--json"])
+    list_args = parser.parse_args(["project", "list", "--json"])
+    status_args = parser.parse_args(["project", "status", "--json"])
+    bib_args = parser.parse_args(["project", "import-bib", "refs.bib", "--json"])
+
+    assert init_args.name == "demo"
+    assert init_args.json is True
+    assert add_args.input == "10.1000/demo"
+    assert add_args.json is True
+    assert link_args.server_project_id == "42"
+    assert link_args.json is True
+    assert remove_args.input == "10.1000/demo"
+    assert remove_args.json is True
+    assert list_args.json is True
+    assert status_args.json is True
+    assert bib_args.paths == [Path("refs.bib")]
+    assert bib_args.json is True
+
+
 def test_academic_setup_selection_accepts_numbered_enter_flow():
     assert _parse_academic_selection("") == set()
     assert _parse_academic_selection("1,3") == {"1", "3"}
@@ -827,6 +852,57 @@ def test_project_add_remove_and_task_update(tmp_path: Path):
 
     remove_paper(tmp_path, "task-1")
     assert load_project(tmp_path).papers == []
+
+
+def test_project_management_json_outputs_agent_readable_state(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_init(type("Args", (), {"name": "demo", "json": True})()) == 0
+    init_payload = json.loads(capsys.readouterr().out)
+    assert init_payload["name"] == "demo"
+    assert init_payload["paper_count"] == 0
+    assert init_payload["project_path"].endswith(".mdtero/project.json")
+
+    assert cli.cmd_project_add(type("Args", (), {"input": "10.1000/demo", "json": True})()) == 0
+    add_payload = json.loads(capsys.readouterr().out)
+    assert add_payload["status"] == "added"
+    assert add_payload["project"]["paper_count"] == 1
+    assert add_payload["project"]["papers"][0]["input"] == "10.1000/demo"
+
+    assert cli.cmd_project_link(type("Args", (), {"server_project_id": "42", "json": True})()) == 0
+    link_payload = json.loads(capsys.readouterr().out)
+    assert link_payload["status"] == "linked"
+    assert link_payload["server_project_id"] == "42"
+
+    assert cli.cmd_project_status(type("Args", (), {"json": True})()) == 0
+    status_payload = json.loads(capsys.readouterr().out)
+    assert status_payload["server_project_id"] == "42"
+    assert status_payload["pending_count"] == 1
+    assert status_payload["papers"][0]["status"] == "pending"
+
+    assert cli.cmd_project_remove(type("Args", (), {"input": "10.1000/demo", "json": True})()) == 0
+    remove_payload = json.loads(capsys.readouterr().out)
+    assert remove_payload["status"] == "removed"
+    assert remove_payload["project"]["paper_count"] == 0
+
+
+def test_project_import_bib_json_includes_project_state(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    bib = tmp_path / "refs.bib"
+    bib.write_text('@article{a, doi={10.1000/demo}, title={Demo}}', encoding="utf-8")
+    init_project(tmp_path, name="demo")
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_import_bib(type("Args", (), {"paths": [bib], "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["imported_count"] == 1
+    assert payload["skipped_count"] == 0
+    assert payload["project"]["paper_count"] == 1
+    assert payload["project"]["papers"][0]["input"] == "10.1000/demo"
 
 
 def test_project_queue_submission_refresh_helpers(tmp_path: Path):
