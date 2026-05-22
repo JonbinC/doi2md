@@ -1120,6 +1120,24 @@ def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Pa
     assert output.count("Step 1: saved API-key login for this machine.") == 1
 
 
+def test_setup_uses_environment_api_key_without_prompting(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup should not prompt for auth")))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup should not prompt for auth")))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "Step 1: using existing API-key login from MDTERO_API_KEY." in output
+    assert cfg.api_key is None
+    assert cfg.effective_api_key == "mdt_live_env"
+
+
 def test_client_can_import_task_to_server_project(monkeypatch):
     calls = []
 
