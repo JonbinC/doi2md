@@ -121,6 +121,19 @@ def test_rag_status_accepts_agent_friendly_flags():
     assert args.json is True
 
 
+def test_rag_build_and_query_accept_agent_friendly_json_flags():
+    parser = build_parser()
+
+    build_args = parser.parse_args(["rag", "build", "--project-id", "42", "--json"])
+    query_args = parser.parse_args(["rag", "query", "main contribution?", "--project-id", "42", "--json"])
+
+    assert build_args.project_id == "42"
+    assert build_args.json is True
+    assert query_args.project_id == "42"
+    assert query_args.question == "main contribution?"
+    assert query_args.json is True
+
+
 def test_academic_setup_selection_accepts_numbered_enter_flow():
     assert _parse_academic_selection("") == set()
     assert _parse_academic_selection("1,3") == {"1", "3"}
