@@ -128,6 +128,44 @@ describe("extension options page", () => {
     expect(document.querySelector("#publisher-capability-groups")).toBeNull();
   });
 
+  it("renders history artifact download actions with user-facing labels", async () => {
+    mockSettings = {
+      apiBaseUrl: "https://api.mdtero.com",
+      token: "token-1",
+      email: "reader@example.com",
+      uiLanguage: "en",
+      elsevierApiKey: undefined,
+      wileyTdmToken: undefined,
+      springerOpenAccessApiKey: undefined,
+    };
+    mockGetMyTasks.mockResolvedValueOnce({
+      items: [
+        {
+          task_id: "task-1",
+          status: "succeeded",
+          task_kind: "parse",
+          created_at: "2026-05-01T00:00:00Z",
+          paper_input: "10.48550/arXiv.1706.03762",
+          result: {
+            artifacts: {
+              paper_md: { filename: "vaswani2017attention.md" },
+              paper_bundle: { filename: "vaswani2017attention.zip" },
+              translated_md: { filename: "vaswani2017attention_CN.md" },
+            },
+          },
+        },
+      ],
+    });
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
+
+    await loadOptionsModule();
+
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download Markdown");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download ZIP");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download Translation");
+    expect(document.querySelector("#history-list")?.textContent).not.toContain("Download BUNDLE");
+  });
+
   it("persists advanced API base and language without rewriting retired connector keys", async () => {
     globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 

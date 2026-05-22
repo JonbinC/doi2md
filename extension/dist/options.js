@@ -277,6 +277,14 @@ var COPY = {
     historyEmpty: "No parsing or translation history found yet.",
     historyError: "Failed to load history: ",
     downloadFailed: "Download failed:",
+    download: "Download",
+    artifactLabels: {
+      paper_md: "Markdown",
+      paper_bundle: "ZIP",
+      translated_md: "Translation",
+      paper_pdf: "PDF",
+      paper_xml: "XML"
+    },
     historyRefresh: "Refresh",
     historyRefreshing: "Refreshing..."
   },
@@ -304,6 +312,14 @@ var COPY = {
     historyEmpty: "\u6682\u65E0\u89E3\u6790\u6216\u7FFB\u8BD1\u8BB0\u5F55\u3002",
     historyError: "\u52A0\u8F7D\u5386\u53F2\u6587\u6863\u5931\u8D25\uFF1A",
     downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF1A",
+    download: "\u4E0B\u8F7D",
+    artifactLabels: {
+      paper_md: "Markdown",
+      paper_bundle: "\u538B\u7F29\u5305",
+      translated_md: "\u8BD1\u6587",
+      paper_pdf: "PDF",
+      paper_xml: "XML"
+    },
     historyRefresh: "\u5237\u65B0",
     historyRefreshing: "\u5237\u65B0\u4E2D..."
   }
@@ -359,6 +375,12 @@ function formatUsageSummary(usage) {
   const parse = Number.isFinite(usage.parse_quota_remaining) ? Number(usage.parse_quota_remaining) : 0;
   const translation = Number.isFinite(usage.translation_quota_remaining) ? Number(usage.translation_quota_remaining) : 0;
   return copyFor(uiLanguage).usageSummary(wallet, parse, translation);
+}
+function formatArtifactActionLabel(artifactKey) {
+  const copy = copyFor(uiLanguage);
+  const labels = copy.artifactLabels;
+  const label = labels[artifactKey] || artifactKey.replace(/^paper_/, "").replace(/_/g, " ").toUpperCase();
+  return `${copy.download} ${label}`;
 }
 function applyLanguage() {
   const copy = copyFor(uiLanguage);
@@ -419,16 +441,16 @@ async function refreshHistory() {
         for (const [key, desc] of Object.entries(task.result.artifacts)) {
           const dlBtn = document.createElement("button");
           dlBtn.className = "ghost-chip history-download-button";
-          dlBtn.textContent = `${copyFor(uiLanguage).historyRefresh === "\u5237\u65B0" ? "\u4E0B\u8F7D" : "Download"} ${key.replace("paper_", "").toUpperCase()}`;
+          dlBtn.textContent = formatArtifactActionLabel(key);
           dlBtn.addEventListener("click", async () => {
             try {
               dlBtn.textContent = uiLanguage === "zh" ? "\u4E0B\u8F7D\u4E2D..." : "Downloading...";
               const result = await client.downloadArtifact(task.task_id, key, desc.filename);
               triggerBlobDownload(result.blob, result.filename);
-              dlBtn.textContent = `${copyFor(uiLanguage).historyRefresh === "\u5237\u65B0" ? "\u4E0B\u8F7D" : "Download"} ${key.replace("paper_", "").toUpperCase()}`;
+              dlBtn.textContent = formatArtifactActionLabel(key);
             } catch (err) {
               renderHistoryNotice(`${copyFor(uiLanguage).downloadFailed} ${err.message}`, "#b91c1c");
-              dlBtn.textContent = `${copyFor(uiLanguage).historyRefresh === "\u5237\u65B0" ? "\u4E0B\u8F7D" : "Download"} ${key.replace("paper_", "").toUpperCase()}`;
+              dlBtn.textContent = formatArtifactActionLabel(key);
             }
           });
           artifactsRow.appendChild(dlBtn);
