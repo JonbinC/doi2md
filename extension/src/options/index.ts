@@ -18,7 +18,7 @@ const COPY = {
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension read the current paper page and open Mdtero Account when you sign in.",
     permissionsDownloads: "`downloads` saves Markdown files, translations, ZIP bundles, and uploaded-source results back to your machine.",
-    permissionsNative: "`nativeMessaging` is reserved for optional CLI-assisted capture when the website asks the browser to retry a difficult page.",
+    permissionsCapture: "Browser capture reuses the active tab only when you ask Mdtero to parse the current paper page.",
     permissionsHosts: "Host permissions stay limited to Mdtero Account, supported scholarly pages, and files you choose to upload.",
     notSignedIn: "Not signed in.",
     usagePending: "Balance and quota appear after sign-in.",
@@ -46,7 +46,7 @@ const COPY = {
     permissionsTitle: "为什么 Mdtero 需要这些权限",
     permissionsTabs: "`tabs` 用来读取当前论文页，并在登录时打开 Mdtero Account。",
     permissionsDownloads: "`downloads` 用来把 Markdown、译文、ZIP 包和上传文件的解析结果保存回你的电脑。",
-    permissionsNative: "`nativeMessaging` 预留给可选的 CLI 辅助抓取，用于官网要求浏览器重试困难页面时联动。",
+    permissionsCapture: "浏览器补抓取只会在你主动解析当前论文页时复用当前标签页。",
     permissionsHosts: "站点权限只覆盖 Mdtero Account、受支持的学术页面，以及你主动选择上传的文件。",
     notSignedIn: "尚未登录。请打开 Mdtero Account 授权扩展。",
     usagePending: "请在 mdtero.com/account 登录以同步余额、额度和历史。",
@@ -75,7 +75,7 @@ const subtitleEl = document.querySelector<HTMLParagraphElement>("#settings-subti
 const permissionsTitleEl = document.querySelector<HTMLHeadingElement>("#permissions-title");
 const permissionsTabsEl = document.querySelector<HTMLParagraphElement>("#permissions-tabs");
 const permissionsDownloadsEl = document.querySelector<HTMLParagraphElement>("#permissions-downloads");
-const permissionsNativeEl = document.querySelector<HTMLParagraphElement>("#permissions-native");
+const permissionsCaptureEl = document.querySelector<HTMLParagraphElement>("#permissions-capture");
 const permissionsHostsEl = document.querySelector<HTMLParagraphElement>("#permissions-hosts");
 const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-toggle");
 const apiBaseUrlInput = document.querySelector<HTMLInputElement>("#api-base-url");
@@ -145,7 +145,7 @@ function applyLanguage() {
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
   if (permissionsTabsEl) permissionsTabsEl.textContent = copy.permissionsTabs;
   if (permissionsDownloadsEl) permissionsDownloadsEl.textContent = copy.permissionsDownloads;
-  if (permissionsNativeEl) permissionsNativeEl.textContent = copy.permissionsNative;
+  if (permissionsCaptureEl) permissionsCaptureEl.textContent = copy.permissionsCapture;
   if (permissionsHostsEl) permissionsHostsEl.textContent = copy.permissionsHosts;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;

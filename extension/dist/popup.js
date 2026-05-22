@@ -494,12 +494,12 @@ function getPreflightHintText(params, language = "en") {
     return "";
   }
   if (bridgeMissing) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u901A\u8FC7\u6269\u5C55\u505A\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u3002\u82E5\u76F4\u8FDE\u5931\u8D25\uFF0C\u8BF7\u5148\u542F\u52A8 `mdtero mcp serve` \u6216\u4F7F\u7528\u672C\u5730 CLI \u7EE7\u7EED\u3002" : "This page can use browser-assisted capture. If direct routing fails, start `mdtero mcp serve` or continue from the local CLI.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u901A\u8FC7\u6269\u5C55\u505A\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u3002\u82E5\u76F4\u8FDE\u5931\u8D25\uFF0C\u8BF7\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5728\u7EC8\u7AEF\u7528 `mdtero parse` \u7EE7\u7EED\u3002" : "This page can use browser-assisted capture. If direct routing fails, upload the PDF/EPUB or continue with `mdtero parse` in the terminal.";
   }
   if (bridgeReady) {
     return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5728\u670D\u52A1\u7AEF\u76F4\u8FDE\u4E0D\u53EF\u7528\u65F6\uFF0C\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002" : "This page is ready for local browser capture if the server route cannot fetch the article directly.";
   }
-  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u8BBE\u5907\u4FA7\u8FD0\u884C\u65F6\u5DF2\u8FDE\u63A5\u3002" : "This page supports local browser capture. Confirm the on-device runtime is connected before parsing.";
+  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u6269\u5C55\u5DF2\u8FDE\u63A5\u5E76\u80FD\u8BFB\u53D6\u5F53\u524D\u9875\u9762\u3002" : "This page supports browser-assisted capture. Confirm the extension is connected and can read the current page before parsing.";
 }
 function getSavedResultSummary(state, language = "en") {
   const filename = state?.translatedFilename ?? state?.parseFilename;

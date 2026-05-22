@@ -259,7 +259,7 @@ var COPY = {
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension read the current paper page and open Mdtero Account when you sign in.",
     permissionsDownloads: "`downloads` saves Markdown files, translations, ZIP bundles, and uploaded-source results back to your machine.",
-    permissionsNative: "`nativeMessaging` is reserved for optional CLI-assisted capture when the website asks the browser to retry a difficult page.",
+    permissionsCapture: "Browser capture reuses the active tab only when you ask Mdtero to parse the current paper page.",
     permissionsHosts: "Host permissions stay limited to Mdtero Account, supported scholarly pages, and files you choose to upload.",
     notSignedIn: "Not signed in.",
     usagePending: "Balance and quota appear after sign-in.",
@@ -286,7 +286,7 @@ var COPY = {
     permissionsTitle: "\u4E3A\u4EC0\u4E48 Mdtero \u9700\u8981\u8FD9\u4E9B\u6743\u9650",
     permissionsTabs: "`tabs` \u7528\u6765\u8BFB\u53D6\u5F53\u524D\u8BBA\u6587\u9875\uFF0C\u5E76\u5728\u767B\u5F55\u65F6\u6253\u5F00 Mdtero Account\u3002",
     permissionsDownloads: "`downloads` \u7528\u6765\u628A Markdown\u3001\u8BD1\u6587\u3001ZIP \u5305\u548C\u4E0A\u4F20\u6587\u4EF6\u7684\u89E3\u6790\u7ED3\u679C\u4FDD\u5B58\u56DE\u4F60\u7684\u7535\u8111\u3002",
-    permissionsNative: "`nativeMessaging` \u9884\u7559\u7ED9\u53EF\u9009\u7684 CLI \u8F85\u52A9\u6293\u53D6\uFF0C\u7528\u4E8E\u5B98\u7F51\u8981\u6C42\u6D4F\u89C8\u5668\u91CD\u8BD5\u56F0\u96BE\u9875\u9762\u65F6\u8054\u52A8\u3002",
+    permissionsCapture: "\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u53EA\u4F1A\u5728\u4F60\u4E3B\u52A8\u89E3\u6790\u5F53\u524D\u8BBA\u6587\u9875\u65F6\u590D\u7528\u5F53\u524D\u6807\u7B7E\u9875\u3002",
     permissionsHosts: "\u7AD9\u70B9\u6743\u9650\u53EA\u8986\u76D6 Mdtero Account\u3001\u53D7\u652F\u6301\u7684\u5B66\u672F\u9875\u9762\uFF0C\u4EE5\u53CA\u4F60\u4E3B\u52A8\u9009\u62E9\u4E0A\u4F20\u7684\u6587\u4EF6\u3002",
     notSignedIn: "\u5C1A\u672A\u767B\u5F55\u3002\u8BF7\u6253\u5F00 Mdtero Account \u6388\u6743\u6269\u5C55\u3002",
     usagePending: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\u4EE5\u540C\u6B65\u4F59\u989D\u3001\u989D\u5EA6\u548C\u5386\u53F2\u3002",
@@ -313,7 +313,7 @@ var subtitleEl = document.querySelector("#settings-subtitle");
 var permissionsTitleEl = document.querySelector("#permissions-title");
 var permissionsTabsEl = document.querySelector("#permissions-tabs");
 var permissionsDownloadsEl = document.querySelector("#permissions-downloads");
-var permissionsNativeEl = document.querySelector("#permissions-native");
+var permissionsCaptureEl = document.querySelector("#permissions-capture");
 var permissionsHostsEl = document.querySelector("#permissions-hosts");
 var languageToggleEl = document.querySelector("#language-toggle");
 var apiBaseUrlInput = document.querySelector("#api-base-url");
@@ -368,7 +368,7 @@ function applyLanguage() {
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
   if (permissionsTabsEl) permissionsTabsEl.textContent = copy.permissionsTabs;
   if (permissionsDownloadsEl) permissionsDownloadsEl.textContent = copy.permissionsDownloads;
-  if (permissionsNativeEl) permissionsNativeEl.textContent = copy.permissionsNative;
+  if (permissionsCaptureEl) permissionsCaptureEl.textContent = copy.permissionsCapture;
   if (permissionsHostsEl) permissionsHostsEl.textContent = copy.permissionsHosts;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;

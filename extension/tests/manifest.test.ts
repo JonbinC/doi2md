@@ -99,7 +99,10 @@ describe("extension manifest", () => {
     expect(popupSource).toContain("Open Mdtero Account");
     expect(optionsSource).toContain("Website sign-in");
     expect(optionsSource).toContain("browser capture, upload, translation, and download settings");
+    expect(optionsSource).toContain("Browser capture reuses the active tab");
     expect(optionsSource).not.toContain("publisher API");
     expect(optionsSource).not.toContain("TDM");
+    expect(optionsSource).not.toContain("nativeMessaging` is reserved");
+    expect(optionsSource).not.toContain("CLI-assisted capture");
   });
 });
