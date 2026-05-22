@@ -723,8 +723,8 @@ def cmd_translate(args: argparse.Namespace) -> int:
                 "status": "failed",
                 "error_code": "translation_source_artifact_missing",
                 "task_id": args.task_or_file,
-                "action_hint": "The parse task does not expose a server-side paper_md path for translation. Run `mdtero status <task-id> --json`; if only a download artifact is available, download paper_md and run `mdtero translate <paper.md> --to zh-CN`.",
-                "next_commands": [f"mdtero status {args.task_or_file} --json", f"mdtero download {args.task_or_file} paper_md --output-dir ./mdtero-output"],
+                "action_hint": "The parse task does not expose a server-side paper_md path for translation. Run `mdtero status <task-id> --json`; if only a download artifact is available, download paper_md and run `mdtero translate <paper.md> --to zh-CN --json`.",
+                "next_commands": [f"mdtero status {args.task_or_file} --json", f"mdtero download {args.task_or_file} paper_md --output-dir ./mdtero-output --json"],
             }
             _print_result(payload, json_output=args.json)
             return 1
@@ -797,8 +797,8 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
             "server_project_id": project_id,
             "bootstrap": bootstrap,
             "ingest": ingest,
-            "action_hint": "Some succeeded parse tasks could not be imported into the server project. Fix the import failures, rerun `mdtero project ingest`, then rerun `mdtero rag build`.",
-            "next_commands": ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"],
+            "action_hint": "Some succeeded parse tasks could not be imported into the server project. Fix the import failures, rerun `mdtero project ingest --json`, then rerun `mdtero rag build --json`.",
+            "next_commands": ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"],
         }
         _print_rag_command_failure(payload, json_output=_args.json)
         return 1
@@ -841,9 +841,9 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
             result = MdteroClient().rag_status(project_id)
         except Exception as exc:
             http_status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-            next_commands = ["mdtero project ingest", "mdtero rag status --json"]
+            next_commands = ["mdtero project ingest --json", "mdtero rag status --json"]
             if indexed:
-                next_commands.append("mdtero rag build")
+                next_commands.append("mdtero rag build --json")
             payload = {
                 "status": "unavailable",
                 "reason_code": "server_rag_status_unavailable",
@@ -853,7 +853,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 "local_paper_count": len(state.papers),
                 "error_type": exc.__class__.__name__,
                 "http_status": http_status,
-                "action_hint": "Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `mdtero project ingest` and `mdtero rag status --json`.",
+                "action_hint": "Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `mdtero project ingest --json` and `mdtero rag status --json`.",
                 "next_commands": next_commands,
             }
             if args.json:
@@ -1059,10 +1059,10 @@ def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: httpx.HTTP
     error_code = "server_project_import_unavailable" if status_code == 404 else "server_project_import_failed"
     action_hint = (
         "The backend did not expose the project task import endpoint yet. Deploy the backend branch with "
-        "POST /api/v1/projects/{id}/tasks/{task_id}/import, then rerun `mdtero project ingest`; "
+        "POST /api/v1/projects/{id}/tasks/{task_id}/import, then rerun `mdtero project ingest --json`; "
         "use `mdtero rag status --json` to verify the linked server project."
         if status_code == 404
-        else "Check the server project id, API key permissions, and task ownership, then rerun `mdtero project ingest`."
+        else "Check the server project id, API key permissions, and task ownership, then rerun `mdtero project ingest --json`."
     )
     return {
         "input": paper.input,
@@ -1096,7 +1096,7 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
     detail = _http_error_detail(exc)
     reason_code = str(detail.get("reason_code") or detail.get("error_code") or exc)
     if reason_code == "server_project_id_missing":
-        action_hint = "The server project creation response did not include an id. Check the backend project API contract, then rerun `mdtero rag build`."
+        action_hint = "The server project creation response did not include an id. Check the backend project API contract, then rerun `mdtero rag build --json`."
     else:
         action_hint = str(detail.get("action_hint") or "Create or link a server project before running server-side Voyage RAG.")
     return {
@@ -1108,7 +1108,7 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
         "http_status": exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None,
         "error_type": exc.__class__.__name__,
         "action_hint": action_hint,
-        "next_commands": ["mdtero project create-server", "mdtero project ingest", "mdtero rag status --json", f"mdtero rag {command}"],
+        "next_commands": ["mdtero project create-server --json", "mdtero project ingest --json", "mdtero rag status --json", f"mdtero rag {command} --json"],
     }
 
 
@@ -1125,28 +1125,28 @@ def _http_error_detail(exc: Exception) -> dict[str, Any]:
 
 def _rag_action_hint(command: str, reason_code: str) -> str:
     if reason_code == "voyage_not_configured":
-        return "Server Voyage RAG is not configured. Configure VOYAGE_API_KEY on the backend, then rerun `mdtero rag build`."
+        return "Server Voyage RAG is not configured. Configure VOYAGE_API_KEY on the backend, then rerun `mdtero rag build --json`."
     if reason_code == "rag_index_not_built":
         return "Build this server project RAG index before querying."
     if reason_code == "project_has_no_chunks":
-        return "Import succeeded parse tasks first with `mdtero project ingest`, then run `mdtero rag build`."
+        return "Import succeeded parse tasks first with `mdtero project ingest --json`, then run `mdtero rag build --json`."
     if reason_code == "forbidden":
         return "Use credentials for the owner of this server project."
     if reason_code == "project_not_found":
-        return "Check the server project id or run `mdtero project create-server`."
+        return "Check the server project id or run `mdtero project create-server --json`."
     if command == "query":
-        return "Check `mdtero rag status --json`, then run `mdtero rag build` if the project is not ready."
+        return "Check `mdtero rag status --json`, then run `mdtero rag build --json` if the project is not ready."
     return "Check `mdtero rag status --json`, fix the reported precondition, then retry."
 
 
 def _rag_failure_next_commands(command: str, reason_code: str) -> list[str]:
     if reason_code == "project_has_no_chunks":
-        return ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
+        return ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
     if command == "query" and reason_code == "rag_index_not_built":
-        return ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
+        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
     if reason_code in {"voyage_not_configured", "forbidden", "project_not_found"}:
         return ["mdtero rag status --json"]
-    return ["mdtero rag status --json", "mdtero rag build"]
+    return ["mdtero rag status --json", "mdtero rag build --json"]
 
 
 def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) -> None:
@@ -1205,10 +1205,10 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
         "local_paper_count": len(state.papers),
         "action_hint": "Create or link a server project before running server-side Voyage RAG.",
         "next_commands": [
-            "mdtero project create-server",
-            "mdtero project ingest",
+            "mdtero project create-server --json",
+            "mdtero project ingest --json",
             "mdtero rag status --json",
-            "mdtero rag build" if command == "build" else "mdtero rag query \"<question>\"",
+            "mdtero rag build --json" if command == "build" else "mdtero rag query \"<question>\" --json",
         ],
     }
 

@@ -1642,7 +1642,7 @@ def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypat
     assert payload["http_status"] == 404
     assert payload["local_ready_for_ingest_count"] == 1
     assert "backend /api/v1 project RAG routes" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
+    assert payload["next_commands"] == ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
 
 
 def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
@@ -1712,7 +1712,7 @@ def test_rag_query_not_built_outputs_next_commands(monkeypatch, tmp_path: Path, 
     assert payload["reason_code"] == "rag_index_not_built"
     assert payload["http_status"] == 409
     assert "Build this server project RAG index" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
 
 
 def test_rag_query_failure_plain_output_is_actionable(monkeypatch, tmp_path: Path, capsys):
