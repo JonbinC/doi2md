@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import httpx
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
@@ -564,12 +565,24 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
     project_id = _server_project_id(args)
     client = MdteroClient()
     results = []
+    failures = []
     for paper in state.papers:
         if paper.status != "succeeded" or not paper.task_id:
             continue
-        result = client.import_task_to_project(project_id, paper.task_id)
+        try:
+            result = client.import_task_to_project(project_id, paper.task_id)
+        except httpx.HTTPStatusError as exc:
+            failure = _project_ingest_failure(project_id, paper, exc)
+            failures.append(failure)
+            continue
         results.append({"input": paper.input, "task_id": paper.task_id, "result": result})
-    payload = {"server_project_id": project_id, "imported_count": len(results), "items": results}
+    payload = {
+        "server_project_id": project_id,
+        "imported_count": len(results),
+        "failed_count": len(failures),
+        "items": results,
+        "failures": failures,
+    }
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -577,10 +590,14 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
         for item in results:
             result = item["result"]
             table.add_row(item["input"], item["task_id"], str(result.get("document_id") or ""), str(result.get("import_status") or ""))
+        for item in failures:
+            table.add_row(item["input"], item["task_id"], "", f"failed: {item['error_code']}")
         Console().print(table)
         if not results:
             Console().print("No succeeded project tasks are ready to import.")
-    return 0
+        for item in failures:
+            Console().print(f"Hint for {item['task_id']}: {item['action_hint']}")
+    return 1 if failures else 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -675,6 +692,10 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         try:
             result = MdteroClient().rag_status(project_id)
         except Exception as exc:
+            http_status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+            next_commands = ["mdtero project ingest", "mdtero rag status --json"]
+            if indexed:
+                next_commands.append("mdtero rag build")
             payload = {
                 "status": "unavailable",
                 "reason_code": "server_rag_status_unavailable",
@@ -683,12 +704,19 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 "local_ready_for_ingest_count": indexed,
                 "local_paper_count": len(state.papers),
                 "error_type": exc.__class__.__name__,
+                "http_status": http_status,
+                "action_hint": "Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `mdtero project ingest` and `mdtero rag status --json`.",
+                "next_commands": next_commands,
             }
             if args.json:
                 print(json.dumps(payload, indent=2, ensure_ascii=False))
             else:
                 console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
                 console.print(f"Server project: {project_id}; status unavailable ({exc.__class__.__name__}).")
+                console.print(f"Hint: {payload['action_hint']}")
+                console.print("Next:")
+                for command in next_commands:
+                    console.print(f"  {command}")
             return 1
         summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
         result.setdefault("project", state.name)
@@ -785,6 +813,27 @@ def _submit_project_paper(client: MdteroClient, paper: PaperRecord) -> dict[str,
         return client.upload(path, source_input=paper.doi or paper.title)
     _route, result, _acquisition = client.parse_with_route(paper.input)
     return result
+
+
+def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: httpx.HTTPStatusError) -> dict[str, Any]:
+    status_code = exc.response.status_code
+    error_code = "server_project_import_unavailable" if status_code == 404 else "server_project_import_failed"
+    action_hint = (
+        "The backend did not expose the project task import endpoint yet. Deploy the backend branch with "
+        "POST /api/v1/projects/{id}/tasks/{task_id}/import, then rerun `mdtero project ingest`; "
+        "use `mdtero rag status --json` to verify the linked server project."
+        if status_code == 404
+        else "Check the server project id, API key permissions, and task ownership, then rerun `mdtero project ingest`."
+    )
+    return {
+        "input": paper.input,
+        "task_id": paper.task_id,
+        "status": "failed",
+        "error_code": error_code,
+        "http_status": status_code,
+        "server_project_id": project_id,
+        "action_hint": action_hint,
+    }
 
 
 def _server_project_id(args: argparse.Namespace) -> str:

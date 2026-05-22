@@ -843,6 +843,34 @@ def test_project_ingest_imports_succeeded_tasks_into_bound_server_project(monkey
     assert payload["server_project_id"] == "42"
     assert payload["imported_count"] == 1
     assert payload["items"][0]["result"]["document_id"] == 7
+    assert payload["failed_count"] == 0
+
+
+def test_project_ingest_reports_unavailable_server_import_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_import(self, project_id, task_id):
+        request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/tasks/{task_id}/import")
+        response = httpx.Response(404, request=request, json={"detail": "Not Found"})
+        raise httpx.HTTPStatusError("not found", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_ingest(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["server_project_id"] == "42"
+    assert payload["imported_count"] == 0
+    assert payload["failed_count"] == 1
+    assert payload["failures"][0]["error_code"] == "server_project_import_unavailable"
+    assert payload["failures"][0]["http_status"] == 404
+    assert "mdtero project ingest" in payload["failures"][0]["action_hint"]
+    assert "rag status" in payload["failures"][0]["action_hint"]
 
 
 def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
@@ -1125,6 +1153,32 @@ def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, 
     assert payload["reason_code"] == "rag_index_partial"
     assert payload["server_project_id"] == "99"
     assert payload["summary"]["pending_embedding_count"] == 2
+
+
+def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_status(self, project_id):
+        request = httpx.Request("GET", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/status")
+        response = httpx.Response(404, request=request, json={"detail": "Not Found"})
+        raise httpx.HTTPStatusError("not found", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "unavailable"
+    assert payload["reason_code"] == "server_rag_status_unavailable"
+    assert payload["http_status"] == 404
+    assert payload["local_ready_for_ingest_count"] == 1
+    assert "backend /api/v1 project RAG routes" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
 
 
 def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypatch, tmp_path: Path, capsys):
