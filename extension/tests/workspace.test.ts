@@ -15,18 +15,24 @@ describe("workspace", () => {
 
     expect(popupHtml).toContain('href="./styles.css"');
     expect(popupHtml).toContain('src="./popup.js"');
-    expect(popupHtml).toContain('id="helper-status"');
+    expect(popupHtml).toContain('id="connection-pill"');
+    expect(popupHtml).toContain('id="workflow-upload"');
     expect(popupHtml).toContain('id="open-settings-login"');
     expect(popupHtml).not.toContain('id="supported-sources-inline"');
     expect(popupHtml).not.toContain('id="support-shadow-title"');
     expect(popupHtml).not.toContain('id="support-experimental-title"');
     expect(popupHtml).toContain('id="file-intake-card"');
     expect(popupHtml).toContain('id="local-file-input"');
+    expect(popupHtml).not.toContain('id="campus-hint"');
+    expect(popupHtml).not.toContain('id="helper-status"');
     expect(popupHtml).not.toContain('id="pdf-engine-select"');
     expect(popupHtml).not.toContain("Docling");
     expect(popupHtml).not.toContain("MinerU");
     expect(popupHtml).not.toContain("PMC");
     expect(popupHtml).not.toContain("Wiley");
+    expect(optionsHtml).not.toContain("Elsevier");
+    expect(optionsHtml).not.toContain("PMC");
+    expect(optionsHtml).not.toContain("Wiley");
     expect(optionsHtml).toContain('href="./styles.css"');
     expect(optionsHtml).toContain('src="./options.js"');
     expect(optionsHtml).toContain('id="settings-overview-card"');
