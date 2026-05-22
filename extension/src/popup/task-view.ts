@@ -294,7 +294,7 @@ export function buildCliParseCommand(input?: string | null): string {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace`;
+  return `mdtero parse ${shellQuote(normalized)} --trace --json`;
 }
 
 function shellQuote(value: string): string {

@@ -29,7 +29,7 @@ describe("createParseMessage", () => {
     });
   });
 
-  it("can include current-page context for helper-first capture", () => {
+  it("can include current-page context for browser capture", () => {
     expect(
       createParseMessage("https://example.com/paper", {
         tabId: 42,
@@ -424,16 +424,16 @@ describe("getTaskFailureText", () => {
 describe("buildCliParseCommand", () => {
   it("builds a traceable CLI handoff command for DOI and URL inputs", () => {
     expect(buildCliParseCommand("10.48550/arXiv.1706.03762")).toBe(
-      "mdtero parse 10.48550/arXiv.1706.03762 --trace"
+      "mdtero parse 10.48550/arXiv.1706.03762 --trace --json"
     );
     expect(buildCliParseCommand("https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML")).toBe(
-      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace"
+      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace --json"
     );
   });
 
   it("quotes shell-sensitive URLs and avoids fake local-file commands", () => {
     expect(buildCliParseCommand("https://example.org/paper?q=a b&x='demo'")).toBe(
-      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --trace"
+      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --trace --json"
     );
     expect(buildCliParseCommand("paper.pdf")).toBe("");
     expect(buildCliParseCommand("")).toBe("");

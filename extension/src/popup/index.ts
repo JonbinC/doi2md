@@ -700,7 +700,19 @@ async function refreshUsage() {
 }
 
 async function refreshBridgeStatus() {
-  currentBridgeStatus = null;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    currentBridgeStatus = { state: "unavailable", runnerState: "idle" };
+    await updatePreflightHint();
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, createDetectMessage());
+    currentBridgeStatus = { state: "connected", runnerState: "idle" };
+  } catch {
+    currentBridgeStatus = { state: "unavailable", runnerState: "idle" };
+  }
   await updatePreflightHint();
 }
 
