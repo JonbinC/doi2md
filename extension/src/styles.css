@@ -1,24 +1,24 @@
 :root {
   color-scheme: light;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  --background: #fcf7f1;
-  --foreground: #2f1a12;
-  --card: #fffdf9;
-  --card-foreground: #2f1a12;
-  --primary: #6d3920;
-  --primary-foreground: #fff8f2;
-  --secondary: #f6e6d5;
-  --secondary-foreground: #50291a;
-  --muted: #f4ece3;
-  --muted-foreground: #7a5a49;
-  --accent: #e2b792;
-  --accent-foreground: #3f2419;
-  --border: rgba(109, 57, 32, 0.16);
-  --border-strong: rgba(109, 57, 32, 0.26);
-  --input-background: #f8f1e9;
+  --background: #f7f8fb;
+  --foreground: #14151f;
+  --card: #ffffff;
+  --card-foreground: #14151f;
+  --primary: #111827;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2f7;
+  --secondary-foreground: #1f2937;
+  --muted: #f1f4f8;
+  --muted-foreground: #647184;
+  --accent: #d9f3ee;
+  --accent-foreground: #0f766e;
+  --border: rgba(20, 21, 31, 0.12);
+  --border-strong: rgba(20, 21, 31, 0.22);
+  --input-background: #f8fafc;
   --success: #0f766e;
   --danger: #b91c1c;
-  --shadow: 0 10px 28px rgba(80, 41, 26, 0.08);
+  --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
   --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 12px;
@@ -31,9 +31,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(226, 183, 146, 0.18), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(252, 247, 241, 0.96));
+  background: linear-gradient(180deg, #ffffff, var(--background));
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
@@ -173,7 +171,7 @@ summary,
   padding: 6px 7px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: rgba(246, 230, 213, 0.58);
+  background: var(--secondary);
   color: var(--secondary-foreground);
   font-size: 11px;
   font-weight: 650;
@@ -196,10 +194,10 @@ summary,
 .meta-pill {
   flex: 0 0 auto;
   padding: 5px 9px;
-  border: 1px solid rgba(109, 57, 32, 0.14);
+  border: 1px solid rgba(15, 118, 110, 0.18);
   border-radius: 999px;
-  background: var(--secondary);
-  color: var(--secondary-foreground);
+  background: var(--accent);
+  color: var(--accent-foreground);
   font-size: 11px;
   font-weight: 650;
   line-height: 1.2;
@@ -335,7 +333,7 @@ select {
 }
 
 input::placeholder {
-  color: rgba(122, 90, 73, 0.64);
+  color: rgba(100, 113, 132, 0.72);
 }
 
 select {
@@ -349,7 +347,7 @@ select {
 input:focus,
 select:focus,
 button:focus-visible {
-  outline: 2px solid rgba(109, 57, 32, 0.24);
+  outline: 2px solid rgba(15, 118, 110, 0.28);
   outline-offset: 2px;
 }
 
@@ -388,7 +386,7 @@ button:disabled {
 }
 
 .primary-button:hover {
-  background: #5c301b;
+  background: #0b1220;
 }
 
 .secondary-button {
@@ -399,7 +397,7 @@ button:disabled {
 
 .secondary-button:hover {
   border-color: var(--border-strong);
-  background: #f0dcc8;
+  background: #e6ebf2;
 }
 
 .ghost-chip {
@@ -432,7 +430,7 @@ button:disabled {
 
 .campus-hint {
   margin-top: 8px;
-  color: rgba(122, 90, 73, 0.82);
+  color: var(--muted-foreground);
   font-size: 11px;
 }
 

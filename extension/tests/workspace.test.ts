@@ -81,4 +81,15 @@ describe("workspace", () => {
     expect(localeZh).not.toContain("可复用的 Markdown 文献包");
     expect(localeZh).not.toContain("publisher API / TDM");
   });
+
+  it("keeps the extension shell aligned with the neutral Mdtero product palette", () => {
+    const styles = readFileSync(resolve("src/styles.css"), "utf-8");
+
+    expect(styles).toContain("--background: #f7f8fb");
+    expect(styles).toContain("--primary: #111827");
+    expect(styles).toContain("--accent-foreground: #0f766e");
+    expect(styles).not.toContain("#6d3920");
+    expect(styles).not.toContain("#f6e6d5");
+    expect(styles).not.toContain("#50291a");
+  });
 });
