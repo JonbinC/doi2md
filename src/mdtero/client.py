@@ -120,19 +120,26 @@ class MdteroClient:
             time.sleep(interval)
 
     def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
-        local_error: str | None = None
+        local_failure: dict[str, Any] | None = None
         if self.config.has_semantic_scholar_key:
             try:
                 return self._semantic_scholar_search(query, limit=limit)
             except (httpx.HTTPError, ValueError) as exc:
-                local_error = exc.__class__.__name__
+                local_failure = _local_semantic_scholar_failure(exc)
         try:
             result = self._server_discovery_search(query, limit=limit)
         except (httpx.HTTPError, ValueError) as exc:
-            raise DiscoveryError(_discovery_failure_payload(exc, local_error=local_error)) from exc
+            raise DiscoveryError(_discovery_failure_payload(exc, local_failure=local_failure)) from exc
         result.setdefault("source", "openalex_server")
-        if local_error:
-            result["local_semantic_scholar_error"] = local_error
+        if local_failure:
+            result["local_semantic_scholar_error"] = local_failure["error_type"]
+            result["local_semantic_scholar_failure"] = local_failure
+            result["discovery_fallback"] = {
+                "from": "semantic_scholar_local",
+                "to": "openalex_server",
+                "reason_code": local_failure["reason_code"],
+                "action_hint": "Local Semantic Scholar discovery failed; using the Mdtero server OpenAlex fallback for this query.",
+            }
         return result
 
     def _server_discovery_search(self, query: str, *, limit: int) -> dict[str, Any]:
@@ -254,7 +261,40 @@ def _filename_from_disposition(content_disposition: str | None, artifact: str) -
     return f"{artifact}.bin"
 
 
-def _discovery_failure_payload(exc: Exception, *, local_error: str | None = None) -> dict[str, Any]:
+def _local_semantic_scholar_failure(exc: Exception) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "provider": "semantic_scholar",
+        "status": "failed",
+        "error_type": exc.__class__.__name__,
+        "reason_code": "semantic_scholar_local_failed",
+        "action_hint": "Mdtero will fall back to server OpenAlex when available. Check the Semantic Scholar API key, rate limit, or network if you want local discovery.",
+    }
+    if isinstance(exc, httpx.HTTPStatusError):
+        response = exc.response
+        payload["status_code"] = response.status_code
+        if response.status_code == 401 or response.status_code == 403:
+            payload["reason_code"] = "semantic_scholar_auth_failed"
+            payload["action_hint"] = "Check the Semantic Scholar API key saved by `mdtero config academic`, or press Enter there to use server OpenAlex instead."
+        elif response.status_code == 429:
+            payload["reason_code"] = "semantic_scholar_rate_limited"
+            payload["action_hint"] = "Semantic Scholar rate-limited local discovery. Wait and retry, or continue with the server OpenAlex fallback."
+        else:
+            payload["reason_code"] = "semantic_scholar_http_error"
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text[:300]
+        payload["detail"] = detail
+    elif isinstance(exc, httpx.TimeoutException):
+        payload["reason_code"] = "semantic_scholar_timeout"
+    elif isinstance(exc, httpx.ConnectError):
+        payload["reason_code"] = "semantic_scholar_network_error"
+    else:
+        payload["detail"] = str(exc)
+    return payload
+
+
+def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] | None = None) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "failed",
         "error_code": "discovery_failed",
@@ -262,8 +302,9 @@ def _discovery_failure_payload(exc: Exception, *, local_error: str | None = None
         "server_error": exc.__class__.__name__,
         "action_hint": "Check Mdtero API connectivity and whether server OpenAlex discovery is enabled.",
     }
-    if local_error:
-        payload["local_semantic_scholar_error"] = local_error
+    if local_failure:
+        payload["local_semantic_scholar_error"] = local_failure["error_type"]
+        payload["local_semantic_scholar_failure"] = local_failure
     if isinstance(exc, httpx.HTTPStatusError):
         response = exc.response
         payload["status_code"] = response.status_code

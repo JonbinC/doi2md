@@ -490,8 +490,32 @@ def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monk
 
     assert result["source"] == "openalex_server"
     assert result["local_semantic_scholar_error"] == "ConnectError"
+    assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_network_error"
+    assert result["discovery_fallback"] == {
+        "from": "semantic_scholar_local",
+        "to": "openalex_server",
+        "reason_code": "semantic_scholar_network_error",
+        "action_hint": "Local Semantic Scholar discovery failed; using the Mdtero server OpenAlex fallback for this query.",
+    }
     assert result["items"][0]["title"] == "Server fallback"
     assert calls[0][1] == "/api/v1/discovery/search"
+
+
+def test_discover_explains_semantic_scholar_rate_limit_before_openalex_fallback(monkeypatch):
+    def fake_s2(self, query, *, limit):
+        request = httpx.Request("GET", "https://api.semanticscholar.org/graph/v1/paper/search")
+        response = httpx.Response(429, json={"message": "Too many requests"}, request=request)
+        raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
+    monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": []})
+
+    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
+
+    assert result["source"] == "openalex_server"
+    assert result["local_semantic_scholar_failure"]["status_code"] == 429
+    assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_rate_limited"
+    assert "server OpenAlex fallback" in result["discovery_fallback"]["action_hint"]
 
 
 def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch):
@@ -515,6 +539,7 @@ def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch
 
     assert payload["error_code"] == "discovery_provider_disabled"
     assert payload["local_semantic_scholar_error"] == "ConnectError"
+    assert payload["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_network_error"
     assert payload["status_code"] == 503
 
 
