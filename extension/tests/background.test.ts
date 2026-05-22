@@ -304,7 +304,7 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("routes local PDF uploads through parse-helper-bundle-v2 without forcing a default engine", async () => {
+  it("routes local PDF uploads through the v1 upload endpoint", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -321,26 +321,22 @@ describe("extension background Elsevier routing", () => {
     );
 
     await vi.waitFor(() => {
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createUploadedParseTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          paperFile: expect.any(Blob),
+          filename: "demo.pdf",
           sourceInput: "demo.pdf"
         })
       );
-      expect(createParseHelperBundleV2Task).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          pdfEngine: expect.anything()
-        })
-      );
+      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle", status: "queued" }
+        result: { task_id: "task-legacy", status: "queued" }
       });
     });
   });
 
-  it("routes local EPUB uploads through parse-helper-bundle-v2 without a PDF engine", async () => {
+  it("routes local EPUB uploads through the v1 upload endpoint", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -363,18 +359,17 @@ describe("extension background Elsevier routing", () => {
     );
 
     await vi.waitFor(() => {
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createUploadedParseTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          paperFile: expect.any(Blob),
+          filename: "demo.epub",
           sourceInput: "demo.epub"
         })
       );
-      const call = createParseHelperBundleV2Task.mock.calls.at(-1)?.[0];
-      expect(call?.pdfEngine).toBeUndefined();
+      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle", status: "queued" }
+        result: { task_id: "task-legacy", status: "queued" }
       });
     });
   });
