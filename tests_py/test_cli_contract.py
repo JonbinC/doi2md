@@ -12,7 +12,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context
+from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -853,6 +853,61 @@ def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path:
     assert rag["ready"] is False
     assert rag["reason_code"] == "server_project_not_linked"
     assert commands["commands"]["create_server_project"] == "mdtero project create-server"
+
+
+def test_mcp_server_rag_status_reports_unlinked_next_commands(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    status = build_server_rag_status(tmp_path)
+
+    assert status["status"] == "not_ready"
+    assert status["reason_code"] == "server_project_not_linked"
+    assert status["local_ready_for_ingest_count"] == 1
+    assert status["next_commands"][0] == "mdtero project create-server"
+
+
+def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_fetcher(project_id):
+        assert project_id == "42"
+        return {
+            "status": "ready",
+            "reason_code": "indexed",
+            "selected_provider": "voyage",
+            "summary": {"chunk_count": 5, "embedded_count": 5, "pending_embedding_count": 0},
+        }
+
+    status = build_server_rag_status(tmp_path, fetcher=fake_fetcher)
+
+    assert status["server_project_id"] == "42"
+    assert status["agent_summary"] == {
+        "status": "ready",
+        "reason_code": "indexed",
+        "embedded_count": 5,
+        "chunk_count": 5,
+        "pending_embedding_count": 0,
+    }
+    assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
+
+
+def test_mcp_server_rag_status_handles_server_unavailable(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def failing_fetcher(_project_id):
+        raise TimeoutError("slow")
+
+    status = build_server_rag_status(tmp_path, fetcher=failing_fetcher)
+
+    assert status["status"] == "unavailable"
+    assert status["reason_code"] == "server_rag_status_unavailable"
+    assert status["error_type"] == "TimeoutError"
+    assert status["next_commands"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
 
 
 def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
