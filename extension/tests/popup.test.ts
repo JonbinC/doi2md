@@ -15,6 +15,7 @@ import {
   getUsageStatusText,
   getPreferredArtifactKey,
   getResultWarningText,
+  getTaskFailureText,
   getSavedResultSummary,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -383,6 +384,44 @@ describe("getResultWarningText", () => {
         "zh"
       )
     ).toContain("校园网");
+  });
+});
+
+describe("getTaskFailureText", () => {
+  it("surfaces backend reason codes and action hints for failed tasks", () => {
+    expect(
+      getTaskFailureText(
+        {
+          error_message: "MinerU timed out while fetching the PDF.",
+          error_code: "uploaded_pdf_v2_parse_failed",
+          reason_code: "mineru_urlapi_timeout",
+          action_hint: "Retry later or upload a smaller PDF."
+        },
+        "Parse failed. Please try again.",
+        "en"
+      )
+    ).toBe(
+      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF."
+    );
+  });
+
+  it("falls back to result-level reasons and localizes labels", () => {
+    expect(
+      getTaskFailureText(
+        {
+          error_message: null,
+          error_code: "parser_failed",
+          reason_code: null,
+          action_hint: null,
+          result: {
+            reason_code: "client_acquisition_challenge_page",
+            action_hint: "请用扩展上传 PDF/EPUB，或在 CLI 中继续。"
+          }
+        },
+        "解析失败，请重试。",
+        "zh"
+      )
+    ).toBe("解析失败，请重试。 原因：client_acquisition_challenge_page 下一步：请用扩展上传 PDF/EPUB，或在 CLI 中继续。");
   });
 });
 

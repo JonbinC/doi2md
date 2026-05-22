@@ -264,6 +264,29 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
   return result.warning_message ?? "";
 }
 
+export function getTaskFailureText(
+  task:
+    | (Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint"> & {
+        result?: Pick<TaskResult, "reason_code" | "action_hint"> | null;
+      })
+    | null
+    | undefined,
+  fallback: string,
+  language: UiLanguage = "en"
+): string {
+  const message = task?.error_message?.trim() || fallback;
+  const reason = (task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
+  const actionHint = (task?.action_hint || task?.result?.action_hint || "").trim();
+  const parts = [message];
+  if (reason) {
+    parts.push(language === "zh" ? `原因：${reason}` : `Reason: ${reason}`);
+  }
+  if (actionHint) {
+    parts.push(language === "zh" ? `下一步：${actionHint}` : `Next: ${actionHint}`);
+  }
+  return parts.join(" ");
+}
+
 export function buildCliParseCommand(input?: string | null): string {
   const normalized = String(input || "").trim();
   if (!normalized) {
