@@ -1327,6 +1327,44 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
     assert "project create-server" in payload["action_hint"]
 
 
+def test_rag_build_unlinked_project_returns_agent_json(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "not_ready"
+    assert payload["command"] == "rag_build"
+    assert payload["reason_code"] == "server_project_not_linked"
+    assert payload["error_code"] == "rag_precondition_failed"
+    assert payload["local_ready_for_ingest_count"] == 1
+    assert payload["next_commands"] == [
+        "mdtero project create-server",
+        "mdtero project ingest",
+        "mdtero rag status --json",
+        "mdtero rag build",
+    ]
+
+
+def test_rag_query_unlinked_project_plain_output_is_actionable(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "demo", "json": False})()) == 1
+    output = capsys.readouterr().out
+
+    assert "RAG query not ready: server_project_not_linked" in output
+    assert "mdtero project create-server" in output
+    assert "mdtero project ingest" in output
+    assert "mdtero rag query \"<question>\"" in output
+
+
 def test_zotero_item_maps_to_project_paper():
     paper = paper_from_zotero_item(
         {

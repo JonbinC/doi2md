@@ -672,7 +672,9 @@ def cmd_zotero_sync(_args: argparse.Namespace) -> int:
 
 
 def cmd_rag_build(_args: argparse.Namespace) -> int:
-    project_id = _server_project_id(_args)
+    project_id = _server_project_id_or_report(_args, command="build")
+    if project_id is None:
+        return 1
     try:
         result = MdteroClient().rag_build(project_id)
     except Exception as exc:
@@ -684,7 +686,9 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
 
 
 def cmd_rag_query(args: argparse.Namespace) -> int:
-    project_id = _server_project_id(args)
+    project_id = _server_project_id_or_report(args, command="query")
+    if project_id is None:
+        return 1
     try:
         result = MdteroClient().rag_query(project_id, args.question)
     except Exception as exc:
@@ -924,6 +928,46 @@ def _server_project_id(args: argparse.Namespace) -> str:
     if state.server_project_id:
         return state.server_project_id
     raise SystemExit("No server project is linked. Run `mdtero project create-server` or `mdtero project link --server-project-id <id>` first.")
+
+
+def _server_project_id_or_report(args: argparse.Namespace, *, command: str) -> str | None:
+    value = getattr(args, "project_id", None)
+    if value:
+        return str(value)
+    state = load_project(Path.cwd())
+    if state.server_project_id:
+        return state.server_project_id
+    payload = _unlinked_server_project_payload(command, state)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        console.print(f"RAG {command} not ready: {payload['reason_code']}")
+        console.print(f"Hint: {payload['action_hint']}")
+        console.print("Next:")
+        for next_command in payload["next_commands"]:
+            console.print(f"  {next_command}")
+    return None
+
+
+def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]:
+    return {
+        "status": "not_ready",
+        "command": f"rag_{command}",
+        "reason_code": "server_project_not_linked",
+        "error_code": "rag_precondition_failed",
+        "server_project_id": None,
+        "project": state.name,
+        "local_ready_for_ingest_count": sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id),
+        "local_paper_count": len(state.papers),
+        "action_hint": "Create or link a server project before running server-side Voyage RAG.",
+        "next_commands": [
+            "mdtero project create-server",
+            "mdtero project ingest",
+            "mdtero rag status --json",
+            "mdtero rag build" if command == "build" else "mdtero rag query \"<question>\"",
+        ],
+    }
 
 
 def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
