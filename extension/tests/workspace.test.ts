@@ -37,12 +37,13 @@ describe("workspace", () => {
     expect(optionsHtml).not.toContain('id="code-input"');
     expect(optionsHtml).not.toContain('id="verify-code"');
     expect(optionsHtml).not.toContain('id="shadow-status"');
-    expect(optionsHtml).toContain('id="springer-oa-api-key"');
-    expect(optionsHtml).toContain('id="wiley-tdm-token"');
+    expect(optionsHtml).not.toContain('id="springer-oa-api-key"');
+    expect(optionsHtml).not.toContain('id="wiley-tdm-token"');
+    expect(optionsHtml).not.toContain('id="elsevier-api-key"');
     expect(optionsHtml).toContain('id="permissions-card"');
     expect(optionsHtml).toContain('id="permissions-title"');
     expect(optionsHtml).not.toContain('id="publisher-capability-groups"');
-    expect(optionsHtml).toContain('id="connector-keys-section"');
+    expect(optionsHtml).not.toContain('id="connector-keys-section"');
     expect(optionsHtml).not.toContain('id="browser-assisted-note"');
   });
 
@@ -65,9 +66,13 @@ describe("workspace", () => {
     expect(manifest).toContain('"default_icon"');
     expect(manifest).toContain('"service_worker": "dist/background.js"');
     expect(manifest).toContain('"default_popup": "dist/popup.html"');
+    expect(localeEn).toContain("parse the current paper page");
     expect(localeEn).toContain("reusable Markdown outputs");
     expect(localeEn).not.toContain("reusable Markdown research packages");
-    expect(localeZh).toContain("可复用的 Markdown 结果");
+    expect(localeEn).not.toContain("publisher API / TDM");
+    expect(localeZh).toContain("解析当前论文页");
+    expect(localeZh).toContain("可复用的 Markdown 产物");
     expect(localeZh).not.toContain("可复用的 Markdown 文献包");
+    expect(localeZh).not.toContain("publisher API / TDM");
   });
 });

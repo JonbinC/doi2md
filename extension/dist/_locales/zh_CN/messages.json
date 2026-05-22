@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "先在 Mdtero 账户页完成发现和 API key 管理，再把支持的实时论文页或本地 PDF / EPUB 留在这台机器上，让 Mdtero 优先走 publisher API / TDM，必要时再通过本地运行时与浏览器抓取补位，最后下载可复用的 Markdown 结果与可继续翻译的产物。",
+    "message": "使用 Mdtero 账户登录，解析当前论文页，上传本地 PDF 或 EPUB，跟踪任务，翻译结果，并下载可复用的 Markdown 产物。",
     "description": "The description of the extension"
   }
 }
