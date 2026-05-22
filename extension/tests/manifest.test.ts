@@ -16,7 +16,7 @@ describe("extension manifest", () => {
       content_scripts?: Array<{ matches?: string[]; js?: string[] }>;
     };
 
-    expect(manifest.permissions).toEqual(["storage", "downloads", "nativeMessaging", "tabs"]);
+    expect(manifest.permissions).toEqual(["storage", "downloads", "tabs"]);
     expect(manifest.host_permissions).toEqual([
       "https://api.mdtero.com/*",
       "https://api.elsevier.com/*",
@@ -104,5 +104,18 @@ describe("extension manifest", () => {
     expect(optionsSource).not.toContain("TDM");
     expect(optionsSource).not.toContain("nativeMessaging` is reserved");
     expect(optionsSource).not.toContain("CLI-assisted capture");
+  });
+
+  it("does not expose a native host helper dependency in the shipping extension", () => {
+    const manifest = JSON.parse(readFileSync(resolve("manifest.json"), "utf-8")) as { permissions?: string[] };
+    const backgroundSource = readFileSync(resolve("src/background.ts"), "utf-8");
+    const contentSource = readFileSync(resolve("src/content.ts"), "utf-8");
+
+    expect(manifest.permissions ?? []).not.toContain("nativeMessaging");
+    expect(backgroundSource).not.toContain("connectNative");
+    expect(backgroundSource).not.toContain("initializeBrowserBridge");
+    expect(backgroundSource).not.toContain("mdtero.bridge.status");
+    expect(backgroundSource).not.toContain("mdtero.source_connectivity.observation");
+    expect(contentSource).not.toContain("announceBridgePageReady");
   });
 });

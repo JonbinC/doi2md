@@ -4,7 +4,7 @@
   "version": "0.1.8",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "downloads", "nativeMessaging", "tabs"],
+  "permissions": ["storage", "downloads", "tabs"],
   "host_permissions": [
     "https://api.mdtero.com/*",
     "https://api.elsevier.com/*",
