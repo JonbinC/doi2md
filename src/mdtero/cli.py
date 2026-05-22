@@ -703,6 +703,14 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
             f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunk(s) embedded."
         )
         console.print(f"Server project: {project_id}; provider: {result.get('selected_provider')}; model: {summary.get('embedding_model') or 'unknown'}")
+        action_hint = str(result.get("action_hint") or "").strip()
+        if action_hint:
+            console.print(f"Hint: {action_hint}")
+        next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
+        if next_commands:
+            console.print("Next:")
+            for command in next_commands:
+                console.print(f"  {command}")
         return 0
     payload = {
         "status": "not_ready",
