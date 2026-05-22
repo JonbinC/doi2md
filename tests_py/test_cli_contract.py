@@ -1468,3 +1468,16 @@ def test_packaged_skill_template_is_available_to_python_installer():
 
     assert "mdtero agent install" in skill
     assert "mdtero parse <doi-or-url>" in skill
+
+
+def test_source_and_packaged_agent_skill_templates_stay_in_sync():
+    from importlib import resources
+
+    repo_root = Path(__file__).resolve().parents[1]
+    source_skill = (repo_root / "skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
+    packaged_skill = resources.files("mdtero.skills.mdtero").joinpath("SKILL.md").read_text(encoding="utf-8")
+
+    assert source_skill == packaged_skill
+    assert "mdtero rag build --project-id" not in source_skill
+    assert "mdtero project ingest" in source_skill
+    assert "server_rag_status" in source_skill
