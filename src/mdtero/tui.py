@@ -13,7 +13,7 @@ from textual.widgets import Footer, Header, Static
 from .agent import detect_targets
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
-from .mcp import build_agent_commands, build_rag_context
+from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
 from .projects import ProjectState, ensure_project
 
 
@@ -34,6 +34,7 @@ def build_dashboard_model(
     failed = [paper for paper in project.papers if paper.status == "failed"]
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
+    briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher)
     return {
         "account": {
             "api_base_url": cfg.api_base_url,
@@ -59,6 +60,12 @@ def build_dashboard_model(
             "detected": [agent.name for agent in agents],
             "labels": [agent.label for agent in agents],
             "install_command": "mdtero agent install" if agents else "mdtero agent install --target codex",
+        },
+        "mcp": {
+            "serve_command": commands["serve_mcp"],
+            "primary_tool": "agent_briefing",
+            "tools": briefing["mcp_tools"],
+            "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "commands": commands,
         "next_steps": _next_steps(cfg, project, rag, commands),
@@ -186,6 +193,7 @@ def _project_panel(model: dict[str, Any]) -> Panel:
 
 def _rag_panel(model: dict[str, Any]) -> Panel:
     rag = model["rag"]
+    mcp = model["mcp"]
     table = Table.grid(expand=True)
     table.add_column(ratio=1)
     table.add_column(ratio=2)
@@ -198,7 +206,8 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
         table.add_row("Embeddings", f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunks")
     elif rag.get("server_error_type"):
         table.add_row("Server RAG", f"unavailable ({rag.get('server_error_type')})")
-    table.add_row("MCP", "mdtero mcp serve")
+    table.add_row("MCP", mcp["serve_command"])
+    table.add_row("Agent briefing", mcp["primary_tool"])
     return Panel(table, title="RAG & MCP", border_style="magenta")
 
 
