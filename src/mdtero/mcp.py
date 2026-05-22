@@ -99,7 +99,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "server_project_id": None,
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
-            "action_hint": "Run `mdtero rag build` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
+            "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
             "next_commands": [commands["bootstrap_rag"], commands["parse_pending"], commands["refresh"]],
         }
 

@@ -150,21 +150,22 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
 
 
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
+    rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
     if not cfg.is_authenticated:
         return ["mdtero login --api-key <key>", "mdtero doctor"]
     if not project.papers:
-        return ["mdtero project add 10.48550/arXiv.1706.03762", "mdtero project parse --wait"]
+        return ["mdtero project add 10.48550/arXiv.1706.03762 --json", commands["parse_pending"]]
     if project.papers and any(paper.status in {"pending", "created"} and not paper.task_id for paper in project.papers):
         return [commands["parse_pending"], commands["refresh"]]
     if not project.server_project_id:
-        return ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""]
+        return [commands["bootstrap_rag"], "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
     if rag.get("server_status") == "ready":
-        return ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
+        return ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
     if rag.get("server_status") in {"not_ready", "partial"}:
-        return ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
+        return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --json"]
     if rag.get("ready_for_ingest_count", 0) > 0:
-        return ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""]
-    return ["mdtero discover \"your topic\"", "mdtero parse <doi-or-url>"]
+        return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
+    return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --json"]
 
 
 def _account_panel(model: dict[str, Any]) -> Panel:

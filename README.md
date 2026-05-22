@@ -65,27 +65,27 @@ mdtero login --api-key <key>
 mdtero config academic
 mdtero project init --json
 mdtero project status --json
-mdtero project import-bib references.bib
-mdtero project parse --wait
-mdtero project refresh
-mdtero project download --output-dir ./mdtero-output
+mdtero project import-bib references.bib --json
+mdtero project parse --wait --json
+mdtero project refresh --wait --json
+mdtero project download --output-dir ./mdtero-output --json
 mdtero config zotero
-mdtero zotero import
-mdtero zotero sync
-mdtero discover "thermochemical energy storage" --limit 5
+mdtero zotero import --json
+mdtero zotero sync --json
+mdtero discover "thermochemical energy storage" --limit 5 --json
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
-mdtero parse 10.48550/arXiv.1706.03762
-mdtero parse https://example.org/open-paper --trace
-mdtero parse --file paper.pdf
-mdtero parse --batch ./papers
-mdtero status <task-id>
+mdtero parse 10.48550/arXiv.1706.03762 --json
+mdtero parse https://example.org/open-paper --trace --json
+mdtero parse --file paper.pdf --json
+mdtero parse --batch ./papers --json
+mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --json
-mdtero translate <parse-task-id> --to zh-CN
-mdtero translate paper.md --to zh-CN
+mdtero translate <parse-task-id> --to zh-CN --json
+mdtero translate paper.md --to zh-CN --json
 mdtero rag status --json
-mdtero rag build
-mdtero rag query "What are the strongest findings?"
+mdtero rag build --json
+mdtero rag query "What are the strongest findings?" --json
 mdtero mcp serve
 mdtero tui
 ```
@@ -153,12 +153,12 @@ mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project init --name literature-review
 mdtero project status --json
-mdtero project import-bib references.bib
-mdtero project parse --wait
-mdtero translate <parse-task-id> --to zh-CN
+mdtero project import-bib references.bib --json
+mdtero project parse --wait --json
+mdtero translate <parse-task-id> --to zh-CN --json
 mdtero rag status --json
-mdtero rag build
-mdtero rag query "这批论文的核心方法是什么？"
+mdtero rag build --json
+mdtero rag query "这批论文的核心方法是什么？" --json
 mdtero zotero import --limit 20 --json
 mdtero zotero sync --json
 mdtero agent install --interactive

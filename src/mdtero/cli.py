@@ -1267,12 +1267,13 @@ def _print_next_steps(console: Console) -> None:
         (
             "Parse papers and files",
             [
-                "mdtero parse 10.48550/arXiv.1706.03762 --wait",
-                "mdtero parse --file paper.pdf --wait",
-                "mdtero parse --batch ./papers --wait",
-                "mdtero project parse --wait",
-                "mdtero project refresh --wait",
-                "mdtero project download --output-dir ./mdtero-output",
+                "mdtero parse 10.48550/arXiv.1706.03762 --wait --json",
+                "mdtero parse https://example.org/open-paper --trace --json",
+                "mdtero parse --file paper.pdf --wait --json",
+                "mdtero parse --batch ./papers --wait --json",
+                "mdtero project parse --wait --json",
+                "mdtero project refresh --wait --json",
+                "mdtero project download --output-dir ./mdtero-output --json",
             ],
         ),
         (
@@ -1286,9 +1287,9 @@ def _print_next_steps(console: Console) -> None:
         (
             "Server RAG and local agents",
             [
-                "mdtero rag build",
+                "mdtero rag build --json",
                 "mdtero rag status --json",
-                "mdtero rag query \"What are the key claims and methods?\"",
+                "mdtero rag query \"What are the key claims and methods?\" --json",
                 "mdtero mcp serve",
                 "mdtero agent install",
                 "mdtero tui",
