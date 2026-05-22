@@ -11,7 +11,6 @@ Public desktop preview mirror. The Electron source and installer manifest genera
 | Public preview docs | `README.md`, `../docs/public/desktop-preview.md` | Preview posture and install wording. |
 | Mirrored ledger | `releases/installer-manifest.json` | Public copy of frontend desktop installer manifest. |
 | Upstream SSOT | `../../mdtero-frontend/apps/desktop/installers/manifest.json` | From `mdtero-public/desktop`, points to the frontend desktop manifest; refresh there first. |
-| Preview contract test | `../tests/desktop-preview-contract.test.mjs` | Validates mirrored metadata and wording. |
 
 ## CONVENTIONS
 
@@ -28,7 +27,4 @@ Public desktop preview mirror. The Electron source and installer manifest genera
 
 ## VERIFY
 
-```bash
-node --test tests/desktop-preview-contract.test.mjs
-node --test tests/release-workflow-contract.test.mjs
-```
+Use the repository-level Python and extension checks before publishing public artifacts.

@@ -119,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     translate = _cmd(sub, "translate", "Request server-side translation.", cmd_translate)
     translate.add_argument("task_or_file")
     translate.add_argument("--to", default="zh-CN")
+    translate.add_argument("--json", action="store_true")
 
     rag = sub.add_parser("rag")
     rag_sub = rag.add_subparsers(dest="rag_command")
@@ -429,7 +430,7 @@ def cmd_translate(args: argparse.Namespace) -> int:
         result = MdteroClient().translate_text(target.read_text(encoding="utf-8"), filename=target.name, target_language=args.to)
     else:
         raise SystemExit("translate currently accepts a local markdown file in the Python client")
-    _print_result(result, json_output=False)
+    _print_result(result, json_output=args.json)
     return 0
 
 

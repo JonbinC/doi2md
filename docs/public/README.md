@@ -19,7 +19,7 @@ Do not present GROBID as a public user-selectable parser. Do not claim Zotero re
 
 - `JonbinC/doi2md` 提供 Python/uv CLI 和 TUI。
 - 浏览器扩展负责登录、当前页/DOI 解析、PDF/EPUB 上传、轮询、翻译和下载。
-- agent skill 通过 `mdtero agent install` 安装；npm 只保留旧兼容。
+- agent skill 通过 `mdtero agent install` 安装，不依赖 npm。
 - 后端负责鉴权、额度、任务状态、MinerU PDF 解析、OpenAlex fallback discovery、LLM 翻译和 Voyage RAG。
 
 公开文档不要把 GROBID 写成用户可选择的公开解析引擎；Zotero 反向同步在完成和测试前也不要写成已上线能力。

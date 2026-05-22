@@ -14,7 +14,7 @@ This repository is the public home for the active launch surfaces:
 - browser extension for OAuth login, DOI/current-page parse, PDF/EPUB upload, translation, polling, and download
 - packaged agent skill bundle installed by the Python CLI with `mdtero agent install`
 
-The old npm package `mdtero-install` is now only a legacy compatibility installer. It is not the runtime and is no longer required for skill installation.
+The old npm installer runtime has been retired from this repository. Skill installation is handled by the Python CLI.
 
 ## Quick Start
 
@@ -112,7 +112,7 @@ The browser extension stays a browser surface. It does not ship Python dependenc
 - [`src/mdtero`](./src/mdtero): Python CLI/TUI/client package
 - [`extension`](./extension): MV3 browser extension source, tests, and build output
 - [`install`](./install): website install manifest and install guide
-- [`skills`](./skills): legacy skill source mirrored for compatibility
+- [`skills`](./skills): agent skill source mirrored into the Python CLI installer
 
 ## Local Development
 
@@ -147,4 +147,4 @@ mdtero agent install --target codex
 mdtero mcp serve
 ```
 
-当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载、agent skill 安装和 MCP 本地上下文。RAG 使用后端 Voyage 能力，但目前命令需要服务端 project id。Zotero 反向同步还没有作为完成能力对外承诺。npm 只保留旧提示词兼容，不再是主运行时或 skill 安装依赖。
+当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载、agent skill 安装和 MCP 本地上下文。RAG 使用后端 Voyage 能力，但目前命令需要服务端 project id。Zotero 反向同步还没有作为完成能力对外承诺。agent skill 安装由 Python CLI 负责，不依赖 npm。
