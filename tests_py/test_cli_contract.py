@@ -112,6 +112,29 @@ def test_login_command_saves_web_callback_key(monkeypatch, tmp_path: Path, capsy
     assert "Saved web login API key" in capsys.readouterr().out
 
 
+def test_login_no_browser_explains_loopback_and_headless_api_key(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+
+    def fake_run_web_login(site_base_url, *, timeout_seconds, open_browser=None):
+        assert site_base_url == "https://mdtero.com"
+        assert timeout_seconds == 7
+        assert open_browser is not None
+        open_browser("https://mdtero.com/auth?cli_callback=http%3A%2F%2F127.0.0.1%3A4173%2Fcallback")
+        return WebLoginResult(api_key="mdt_live_saved", prefix="mdt_live")
+
+    monkeypatch.setattr(cli, "run_web_login", fake_run_web_login)
+
+    assert cli.cmd_login(type("Args", (), {"api_key": "", "timeout": 7, "no_browser": True})()) == 0
+    output = capsys.readouterr().out
+
+    assert "loopback web-login URL" in output
+    assert "mdtero login --api-key <key>" in output
+    assert "127.0.0.1" in output
+    assert "https://mdtero.com/auth?cli_callback=" in output
+
+
 def test_login_rejects_blank_api_key(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
