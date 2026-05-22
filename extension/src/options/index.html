@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">M</div>
           <div class="brand-copy">
             <h1 id="settings-title">Mdtero Account</h1>
-            <p id="settings-subtitle">Connect email, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.</p>
+            <p id="settings-subtitle">Use Mdtero Account for sign-in, review quota, and keep optional publisher keys on this machine.</p>
           </div>
           <button id="language-toggle" type="button" class="ghost-chip">中文</button>
         </div>
@@ -22,7 +22,6 @@
             <p id="account-status" class="meta-label">Not signed in.</p>
             <p id="usage-status" class="meta-value">Balance and quota not loaded.</p>
             <p id="helper-status" class="meta-label">Local helper status unknown.</p>
-            <p id="shadow-status" class="meta-label">Experimental connector shadow status unavailable.</p>
           </div>
         </div>
         <div class="support-row support-row-tight">
@@ -32,11 +31,6 @@
           <span class="support-chip"><span class="support-icon support-icon-preprint">Rx</span>bioRxiv</span>
           <span class="support-chip"><span class="support-icon support-icon-plos">PL</span>PLOS</span>
         </div>
-        <p id="support-summary" class="meta-label support-summary">Configure publisher APIs, TDM access, and on-device fallback routes for supported paper sources and account-linked downloads.</p>
-        <div id="publisher-capability-groups" class="capability-groups" aria-live="polite"></div>
-        <p id="browser-assisted-note" class="meta-label support-summary">
-          When a route cannot go through direct publisher APIs or TDM, keep the article page open locally so Mdtero can fall back to browser capture on this machine.
-        </p>
       </section>
 
       <section class="card" id="connector-keys-section">
@@ -75,32 +69,6 @@
           <p id="website-auth-note" class="meta-label">The extension uses Mdtero Account on the website for sign-in and token handoff.</p>
           <button id="open-account" type="button" class="primary-button">Open Mdtero Account</button>
         </div>
-        <details class="fallback-auth-details">
-          <summary id="fallback-auth-title">Fallback extension login</summary>
-          <label id="email-label" for="email-input">Email</label>
-          <input id="email-input" type="email" placeholder="you@example.com" />
-
-          <div class="auth-mode-row">
-            <button id="auth-mode-password" type="button" class="ghost-chip">Password</button>
-            <button id="auth-mode-code" type="button" class="ghost-chip">Email Code</button>
-          </div>
-
-          <div id="password-auth-panel">
-            <label id="password-label" for="password-input">Password</label>
-            <input id="password-input" type="password" placeholder="••••••••" />
-            <div class="button-row">
-              <button id="password-login" type="button" class="primary-button">Sign In</button>
-              <button id="password-use-code" type="button" class="secondary-button">Use Email Code</button>
-            </div>
-          </div>
-
-          <div id="code-auth-panel" hidden>
-            <button id="send-code" type="button" class="secondary-button">Send Code</button>
-            <label id="code-label" for="code-input">Verification Code</label>
-            <input id="code-input" type="text" placeholder="123456" />
-            <button id="verify-code" type="button" class="primary-button">Verify Login</button>
-          </div>
-        </details>
       </section>
 
       <section class="card">

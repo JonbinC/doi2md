@@ -1,36 +1,5 @@
 export const DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
-export interface EmailStartRequest {
-  email: string;
-}
-
-export interface EmailVerifyRequest {
-  email: string;
-  code: string;
-  preferred_currency?: "cny" | "usd";
-}
-
-export interface PasswordRegisterRequest {
-  email: string;
-  password: string;
-  preferred_currency?: "cny" | "usd";
-}
-
-export interface PasswordLoginRequest {
-  email: string;
-  password: string;
-  preferred_currency?: "cny" | "usd";
-}
-
-export interface PasswordForgotRequest {
-  email: string;
-}
-
-export interface PasswordResetRequest {
-  token: string;
-  password: string;
-}
-
 export interface ParseTaskRequest {
   input: string;
 }
@@ -163,24 +132,6 @@ export interface TaskRecord {
   result?: TaskResult | null;
   error_code?: string | null;
   error_message?: string | null;
-}
-
-export interface ParserV2ShadowConnectorSnapshot {
-  connector: string;
-  preset_available?: boolean;
-  flag?: string | null;
-  enabled: boolean;
-  entrypoint?: string | null;
-  acquisition_mode?: string | null;
-  priority: number;
-}
-
-export interface ParserV2ShadowDiagnostics {
-  aggregate: {
-    connectors_total: number;
-    enabled_total: number;
-  };
-  connectors: ParserV2ShadowConnectorSnapshot[];
 }
 
 export type CheckoutProductCode =

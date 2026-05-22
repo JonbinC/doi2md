@@ -1,19 +1,12 @@
 import type {
-  EmailStartRequest,
-  EmailVerifyRequest,
-  PasswordLoginRequest,
   ParseTaskRequest,
   ParseTaskResponse,
   ParseFulltextV2Request,
   ParseHelperBundleV2Request,
-  ParserV2ShadowDiagnostics,
   TaskRecord,
   TranslateTaskRequest,
   ExtensionRouteRequest,
-  ExtensionRouteResponse,
-  SourceConnectivityDiagnostic,
-  SourceConnectivityEnvironmentSummary,
-  SourceConnectivityExplainRequest
+  ExtensionRouteResponse
 } from "@mdtero/shared";
 
 export interface ApiClientSettings {
@@ -161,42 +154,8 @@ export function createApiClient(
   }
 
   return {
-    startEmailAuth(payload: EmailStartRequest) {
-      return request("/auth/email/start", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }).then((response) => response.json());
-    },
-    verifyEmailAuth(payload: EmailVerifyRequest) {
-      return request("/auth/email/verify", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }).then((response) => response.json());
-    },
-    loginWithPassword(payload: PasswordLoginRequest) {
-      return request("/auth/password/login", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }).then((response) => response.json());
-    },
     getUsage() {
       return request("/me/usage", undefined, { requireAuth: true }).then((response) => response.json());
-    },
-    getParserV2ShadowDiagnostics() {
-      return request("/diagnostics/parser-v2/shadow", undefined, { requireAuth: true }).then(
-        (response) => response.json() as Promise<ParserV2ShadowDiagnostics>
-      );
-    },
-    getSourceConnectivityEnvironmentSummary() {
-      return request("/diagnostics/source-connectivity/environment", undefined, { requireAuth: true }).then(
-        (response) => response.json() as Promise<SourceConnectivityEnvironmentSummary>
-      );
-    },
-    explainSourceConnectivity(payload: SourceConnectivityExplainRequest) {
-      return request("/diagnostics/source-connectivity/explain", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }, { requireAuth: true }).then((response) => response.json() as Promise<SourceConnectivityDiagnostic>);
     },
     getClientConfig() {
       return request("/client-config").then((response) => response.json() as Promise<ClientConfigResponse>);

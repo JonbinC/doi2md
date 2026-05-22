@@ -18,11 +18,7 @@ const mockWriteSettings = vi.fn(async () => undefined);
 const mockMergeSettings = vi.fn((current, next) => ({ ...current, ...next }));
 const mockResolveUiLanguage = vi.fn((preferred) => preferred ?? "en");
 const mockGetUsage = vi.fn(async () => ({ wallet_balance_display: "$12.00", parse_quota_remaining: 4, translation_quota_remaining: 2 }));
-const mockGetParserV2ShadowDiagnostics = vi.fn(async () => ({ routes: [] }));
 const mockGetMyTasks = vi.fn(async () => ({ items: [] }));
-const mockStartEmailAuth = vi.fn(async () => ({}));
-const mockVerifyEmailAuth = vi.fn(async () => ({ token: "verified-token" }));
-const mockLoginWithPassword = vi.fn(async () => ({ token: "login-token" }));
 const mockDownloadArtifact = vi.fn(async () => ({ blob: new Blob(["demo"]), filename: "paper.md" }));
 
 vi.mock("../src/lib/storage", () => ({
@@ -35,11 +31,7 @@ vi.mock("../src/lib/storage", () => ({
 vi.mock("../src/lib/api", () => ({
   createApiClient: () => ({
     getUsage: mockGetUsage,
-    getParserV2ShadowDiagnostics: mockGetParserV2ShadowDiagnostics,
     getMyTasks: mockGetMyTasks,
-    startEmailAuth: mockStartEmailAuth,
-    verifyEmailAuth: mockVerifyEmailAuth,
-    loginWithPassword: mockLoginWithPassword,
     downloadArtifact: mockDownloadArtifact,
   }),
 }));
@@ -91,11 +83,7 @@ describe("extension options page", () => {
     mockMergeSettings.mockClear();
     mockResolveUiLanguage.mockClear();
     mockGetUsage.mockClear();
-    mockGetParserV2ShadowDiagnostics.mockClear();
     mockGetMyTasks.mockClear();
-    mockStartEmailAuth.mockClear();
-    mockVerifyEmailAuth.mockClear();
-    mockLoginWithPassword.mockClear();
     mockDownloadArtifact.mockClear();
   });
 
@@ -109,10 +97,11 @@ describe("extension options page", () => {
     expect(document.querySelector("#helper-status")?.textContent).toBe(
       "Local runtime not detected yet. Install or restart mdtero to enable on-device fallback routes."
     );
-    expect(document.querySelector("#shadow-status")?.textContent).toBe(
-      "Sign in to view experimental connector shadow status."
-    );
+    expect(document.querySelector("#shadow-status")).toBeNull();
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(true);
+    expect(document.querySelector("#open-account")?.textContent).toBe("Open Mdtero Account");
+    expect(document.querySelector("#password-input")).toBeNull();
+    expect(document.querySelector("#code-input")).toBeNull();
   });
 
   it("shows signed-in usage and empty history messaging when the account has no tasks", async () => {
@@ -137,7 +126,7 @@ describe("extension options page", () => {
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(false);
     expect(document.querySelector("#history-list")?.textContent).toContain("No parsing or translation history found yet.");
     expect(document.querySelector("#settings-subtitle")?.textContent).toContain("publisher API, TDM, and on-device fallback preferences");
-    expect(document.querySelector("#support-summary")?.textContent).toContain("publisher APIs, TDM routes, and local fallbacks");
+    expect(document.querySelector("#publisher-capability-groups")).toBeNull();
   });
 
   it("persists Elsevier, Wiley TDM, and Springer connector keys together", async () => {

@@ -4,38 +4,20 @@ import { createApiClient } from "../lib/api";
 import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
 import {
-  getPublisherCapabilityGroups,
-  type PublisherCapabilityLanguage
-} from "@mdtero/shared";
-import {
   mergeSettings,
   readSettings,
   resolveUiLanguage,
   writeSettings,
   type UiLanguage
 } from "../lib/storage";
-import { summarizeParserV2ShadowDiagnostics } from "@mdtero/shared";
-import {
-  describeCapabilityReadiness,
-  formatCapabilityFallbacks,
-  formatCapabilityStatusLabel,
-  resolveCapabilityReadiness,
-  type CapabilityHelperState
-} from "../lib/publisher-capability-view";
 
 const COPY = {
   en: {
     title: "Mdtero Account",
     subtitle: "Use the website account for sign-in, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
-    supportSummary: "Keep licensed retrieval on your own machine and see which publisher APIs, TDM routes, and local fallbacks are ready with your current setup.",
-    browserAssistedNote:
-      "When a source cannot use a direct publisher API or TDM route, Mdtero can still fall back to local browser capture or on-device cffi/curl retrieval where that route is supported.",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote:
       "Only fill the keys you actually need. Everything stays on your own machine.",
-    capabilityNeed: "What you need",
-    capabilityRoute: "How Mdtero gets it",
-    capabilityFallback: "Fallback",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
     permissionsDownloads: "`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.",
@@ -46,8 +28,6 @@ const COPY = {
     helperUnavailable: "Local runtime not detected yet. Install or restart mdtero to enable on-device fallback routes.",
     helperDisconnected: "Local runtime disconnected. Restart mdtero or reload the extension to reconnect.",
     helperUnknown: "Local runtime status unknown.",
-    shadowSignedOut: "Sign in to view experimental connector shadow status.",
-    shadowUnavailable: "Experimental connector shadow status unavailable.",
     notSignedIn: "Not signed in.",
     usagePending: "Balance and quota appear after sign-in.",
     signedIn: (email: string) => `Signed in as ${email}`,
@@ -55,17 +35,7 @@ const COPY = {
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
     openAccount: "Open Mdtero Account",
     websiteAuthTitle: "Website sign-in",
-    websiteAuthNote: "The extension does not run a separate account system. Sign in on mdtero.com/account; the website sends this extension a Mdtero token through the trusted auth bridge. The email/password fields below stay as a fallback until the website exposes a single-use extension handoff code.",
-    fallbackAuthTitle: "Fallback extension login",
-    email: "Fallback email",
-    password: "Fallback password",
-    passwordMode: "Fallback password",
-    codeMode: "Fallback email code",
-    signIn: "Fallback sign in",
-    useEmailCode: "Use fallback email code",
-    sendCode: "Send fallback code",
-    verifyLogin: "Verify fallback login",
-    code: "Fallback verification code",
+    websiteAuthNote: "The extension uses Mdtero Account for sign-in. Open the website, complete login there, and the trusted auth bridge will hand the token back to this extension.",
     uiLanguage: "Interface language",
     advanced: "Advanced",
     elsevierApiKey: "Elsevier API Key",
@@ -73,8 +43,6 @@ const COPY = {
     springerOpenAccessApiKey: "Springer OA API Key",
     apiUrl: "API URL",
     save: "Save",
-    sent: (email: string) => `Verification code sent to ${email}.`,
-    passwordLoginFailed: "Password login failed.",
     historyTitle: "Account history",
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
@@ -86,14 +54,8 @@ const COPY = {
   zh: {
     title: "Mdtero 账户",
     subtitle: "使用官网登录授权扩展，同时把本地 publisher 访问与下载保留在这台电脑上。",
-    supportSummary: "把受限全文获取留在你自己的设备上，并查看当前这套 publisher API、TDM 与本地兜底已经适合哪些来源。",
-    browserAssistedNote:
-      "当某个来源不能直接走 publisher API 或 TDM 时，Mdtero 仍可在支持的链路上回退到本地浏览器抓取或设备侧 cffi/curl 获取。",
     connectorKeysTitle: "Connector keys",
     connectorKeysNote: "只填写你实际需要的 key；这些信息都保留在你自己的机器上。",
-    capabilityNeed: "你需要准备什么",
-    capabilityRoute: "Mdtero 怎么获取",
-    capabilityFallback: "兜底方式",
     permissionsTitle: "为什么 Mdtero 需要这些权限",
     permissionsTabs: "`tabs` 用来复用或打开受支持的论文页面，以便在本机完成抓取。",
     permissionsDownloads: "`downloads` 用来把 Markdown、译文、兜底压缩包和源文件保存回你的电脑。",
@@ -104,8 +66,6 @@ const COPY = {
     helperUnavailable: "暂未检测到本地运行时。请安装或重启 mdtero 以启用设备侧回退链路。",
     helperDisconnected: "本地运行时已断开。请重启 mdtero 或重载扩展后再试。",
     helperUnknown: "本地运行时状态未知。",
-    shadowSignedOut: "登录后可查看实验 connector shadow 状态。",
-    shadowUnavailable: "暂时无法获取实验 connector shadow 状态。",
     notSignedIn: "尚未登录。请打开 Mdtero Account 授权扩展。",
     usagePending: "请在 mdtero.com/account 登录以同步余额、额度和历史。",
     signedIn: (email: string) => `已登录：${email}`,
@@ -113,17 +73,7 @@ const COPY = {
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
     openAccount: "打开 Mdtero Account",
     websiteAuthTitle: "官网登录",
-    websiteAuthNote: "扩展不再维护另一套账户系统。请在 mdtero.com/account 登录；官网会通过受信任 auth bridge 把 Mdtero token 交给扩展。下面的邮箱/密码入口仅作为兼容兜底，直到官网提供一次性扩展授权码。",
-    fallbackAuthTitle: "扩展兜底登录",
-    email: "兜底邮箱",
-    password: "兜底密码",
-    passwordMode: "兜底密码登录",
-    codeMode: "兜底邮箱验证码",
-    signIn: "兜底登录",
-    useEmailCode: "改用兜底验证码",
-    sendCode: "发送兜底验证码",
-    verifyLogin: "验证兜底登录",
-    code: "兜底验证码",
+    websiteAuthNote: "扩展统一使用 Mdtero Account 登录。请打开官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
     uiLanguage: "界面语言",
     advanced: "高级设置",
     elsevierApiKey: "Elsevier API Key",
@@ -131,8 +81,6 @@ const COPY = {
     springerOpenAccessApiKey: "Springer OA API Key",
     apiUrl: "API 地址",
     save: "保存",
-    sent: (email: string) => `验证码已发送到 ${email}。`,
-    passwordLoginFailed: "密码登录失败。",
     historyTitle: "账户历史",
     historyNote: "从历史记录下载内容永远免费，不扣除额度。",
     historyEmpty: "暂无解析或翻译记录。",
@@ -145,9 +93,6 @@ const COPY = {
 
 const titleEl = document.querySelector<HTMLHeadingElement>("#settings-title");
 const subtitleEl = document.querySelector<HTMLParagraphElement>("#settings-subtitle");
-const supportSummaryEl = document.querySelector<HTMLParagraphElement>("#support-summary");
-const browserAssistedNoteEl = document.querySelector<HTMLParagraphElement>("#browser-assisted-note");
-const publisherCapabilityGroupsEl = document.querySelector<HTMLDivElement>("#publisher-capability-groups");
 const connectorKeysTitleEl = document.querySelector<HTMLHeadingElement>("#connector-keys-title");
 const connectorKeysNoteEl = document.querySelector<HTMLParagraphElement>("#connector-keys-note");
 const permissionsTitleEl = document.querySelector<HTMLHeadingElement>("#permissions-title");
@@ -160,28 +105,14 @@ const elsevierApiKeyInput = document.querySelector<HTMLInputElement>("#elsevier-
 const wileyTdmTokenInput = document.querySelector<HTMLInputElement>("#wiley-tdm-token");
 const springerOpenAccessApiKeyInput = document.querySelector<HTMLInputElement>("#springer-oa-api-key");
 const apiBaseUrlInput = document.querySelector<HTMLInputElement>("#api-base-url");
-const emailInput = document.querySelector<HTMLInputElement>("#email-input");
-const passwordInput = document.querySelector<HTMLInputElement>("#password-input");
-const codeInput = document.querySelector<HTMLInputElement>("#code-input");
 const uiLanguageSelect = document.querySelector<HTMLSelectElement>("#ui-language");
 const accountStatus = document.querySelector<HTMLParagraphElement>("#account-status");
 const usageStatus = document.querySelector<HTMLParagraphElement>("#usage-status");
 const helperStatus = document.querySelector<HTMLParagraphElement>("#helper-status");
-const shadowStatus = document.querySelector<HTMLParagraphElement>("#shadow-status");
 const saveButton = document.querySelector<HTMLButtonElement>("#save-settings");
 const openAccountButton = document.querySelector<HTMLButtonElement>("#open-account");
 const websiteAuthTitleEl = document.querySelector<HTMLHeadingElement>("#website-auth-title");
 const websiteAuthNoteEl = document.querySelector<HTMLParagraphElement>("#website-auth-note");
-const fallbackAuthTitleEl = document.querySelector<HTMLElement>("#fallback-auth-title");
-const sendCodeButton = document.querySelector<HTMLButtonElement>("#send-code");
-const verifyButton = document.querySelector<HTMLButtonElement>("#verify-code");
-const passwordLoginButton = document.querySelector<HTMLButtonElement>("#password-login");
-const passwordUseCodeButton = document.querySelector<HTMLButtonElement>("#password-use-code");
-const authModePasswordButton = document.querySelector<HTMLButtonElement>("#auth-mode-password");
-const authModeCodeButton = document.querySelector<HTMLButtonElement>("#auth-mode-code");
-const emailLabel = document.querySelector<HTMLLabelElement>("#email-label");
-const passwordLabel = document.querySelector<HTMLLabelElement>("#password-label");
-const codeLabel = document.querySelector<HTMLLabelElement>("#code-label");
 const uiLanguageLabel = document.querySelector<HTMLLabelElement>("#ui-language-label");
 const advancedSummary = document.querySelector<HTMLElement>("#advanced-summary");
 const elsevierApiKeyLabel = document.querySelector<HTMLLabelElement>("#elsevier-api-key-label");
@@ -193,24 +124,11 @@ const historyList = document.querySelector<HTMLDivElement>("#history-list");
 const historyTitle = document.querySelector<HTMLHeadingElement>("#history-title");
 const historyNote = document.querySelector<HTMLParagraphElement>("#history-note");
 const refreshHistoryBtn = document.querySelector<HTMLButtonElement>("#refresh-history");
-const passwordAuthPanel = document.querySelector<HTMLElement>("#password-auth-panel");
-const codeAuthPanel = document.querySelector<HTMLElement>("#code-auth-panel");
 
 type HistoryTaskRecord = TaskRecord & { paper_input?: string };
 
 const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
-let authMode: "password" | "code" = "password";
-let currentHelperState: CapabilityHelperState = "unavailable";
-
-function setLabeledParagraph(paragraph: HTMLParagraphElement, label: string, value: string) {
-  paragraph.textContent = "";
-  const strong = document.createElement("strong");
-  strong.textContent = `${label}:`;
-  paragraph.appendChild(strong);
-  paragraph.append(" ");
-  paragraph.appendChild(document.createTextNode(value));
-}
 
 function renderHistoryNotice(message: string, color?: string) {
   if (!historyList) return;
@@ -236,14 +154,6 @@ async function openMdteroAccount() {
   await chrome.tabs.create({ url: MDTERO_ACCOUNT_URL });
 }
 
-function applyAuthMode() {
-  const passwordActive = authMode === "password";
-  if (passwordAuthPanel) passwordAuthPanel.hidden = !passwordActive;
-  if (codeAuthPanel) codeAuthPanel.hidden = passwordActive;
-  authModePasswordButton?.classList.toggle("active-chip", passwordActive);
-  authModeCodeButton?.classList.toggle("active-chip", !passwordActive);
-}
-
 function formatUsageSummary(usage: {
   wallet_balance_display?: string;
   parse_quota_remaining?: number;
@@ -257,123 +167,11 @@ function formatUsageSummary(usage: {
   return copyFor(uiLanguage).usageSummary(wallet, parse, translation);
 }
 
-function renderPublisherCapabilityMatrix() {
-  if (!publisherCapabilityGroupsEl) {
-    return;
-  }
-
-  const copy = copyFor(uiLanguage);
-  const groups = getPublisherCapabilityGroups(uiLanguage as PublisherCapabilityLanguage);
-  const settingsSnapshot = {
-    helperState: currentHelperState,
-    hasElsevierApiKey: Boolean(elsevierApiKeyInput?.value.trim()),
-    hasWileyTdmToken: Boolean(wileyTdmTokenInput?.value.trim()),
-    hasSpringerOpenAccessApiKey: Boolean(springerOpenAccessApiKeyInput?.value.trim())
-  };
-
-  publisherCapabilityGroupsEl.innerHTML = "";
-
-  for (const group of groups) {
-    const section = document.createElement("section");
-    section.className = "capability-group-card";
-
-    const head = document.createElement("div");
-    head.className = "capability-group-head";
-
-    const title = document.createElement("h3");
-    title.className = "capability-group-title";
-    title.textContent = group.label;
-
-    const description = document.createElement("p");
-    description.className = "meta-label";
-    description.textContent = group.description;
-
-    head.appendChild(title);
-    head.appendChild(description);
-    section.appendChild(head);
-
-    const list = document.createElement("div");
-    list.className = "capability-entry-list";
-
-    for (const entry of group.entries) {
-      const readiness = resolveCapabilityReadiness(entry, settingsSnapshot);
-
-      const card = document.createElement("article");
-      card.className = "capability-entry-card";
-
-      const row = document.createElement("div");
-      row.className = "capability-entry-top";
-
-      const label = document.createElement("h4");
-      label.className = "capability-entry-title";
-      label.textContent = entry.label;
-
-      const badges = document.createElement("div");
-      badges.className = "capability-badges";
-
-      const statusBadge = document.createElement("span");
-      statusBadge.className = `capability-badge capability-badge-${entry.status}`;
-      statusBadge.textContent = formatCapabilityStatusLabel(entry.status, uiLanguage as PublisherCapabilityLanguage);
-
-      const readinessBadge = document.createElement("span");
-      readinessBadge.className = `capability-badge capability-badge-${readiness}`;
-      readinessBadge.textContent = describeCapabilityReadiness(readiness, uiLanguage as PublisherCapabilityLanguage);
-
-      badges.appendChild(statusBadge);
-      badges.appendChild(readinessBadge);
-      row.appendChild(label);
-      row.appendChild(badges);
-      card.appendChild(row);
-
-      const need = document.createElement("p");
-      need.className = "capability-copy";
-      setLabeledParagraph(need, copy.capabilityNeed, entry.whatYouNeed);
-      card.appendChild(need);
-
-      const route = document.createElement("p");
-      route.className = "capability-copy";
-      setLabeledParagraph(route, copy.capabilityRoute, entry.howMdteroGetsIt);
-      card.appendChild(route);
-
-      const fallback = document.createElement("p");
-      fallback.className = "capability-copy capability-copy-muted";
-      setLabeledParagraph(
-        fallback,
-        copy.capabilityFallback,
-        formatCapabilityFallbacks(entry.fallbacks, uiLanguage as PublisherCapabilityLanguage)
-      );
-      card.appendChild(fallback);
-
-      if (entry.links.length > 0) {
-        const links = document.createElement("div");
-        links.className = "capability-links";
-        for (const item of entry.links) {
-          const anchor = document.createElement("a");
-          anchor.href = item.href;
-          anchor.target = "_blank";
-          anchor.rel = "noopener noreferrer";
-          anchor.className = "guide-doc-link capability-link";
-          anchor.textContent = item.label;
-          links.appendChild(anchor);
-        }
-        card.appendChild(links);
-      }
-
-      list.appendChild(card);
-    }
-
-    section.appendChild(list);
-    publisherCapabilityGroupsEl.appendChild(section);
-  }
-}
-
 function applyLanguage() {
   const copy = copyFor(uiLanguage);
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
-  if (supportSummaryEl) supportSummaryEl.textContent = copy.supportSummary;
-  if (browserAssistedNoteEl) browserAssistedNoteEl.textContent = copy.browserAssistedNote;
   if (connectorKeysTitleEl) connectorKeysTitleEl.textContent = copy.connectorKeysTitle;
   if (connectorKeysNoteEl) connectorKeysNoteEl.textContent = copy.connectorKeysNote;
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
@@ -382,15 +180,6 @@ function applyLanguage() {
   if (permissionsNativeEl) permissionsNativeEl.textContent = copy.permissionsNative;
   if (permissionsHostsEl) permissionsHostsEl.textContent = copy.permissionsHosts;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
-  if (emailLabel) emailLabel.textContent = copy.email;
-  if (passwordLabel) passwordLabel.textContent = copy.password;
-  if (authModePasswordButton) authModePasswordButton.textContent = copy.passwordMode;
-  if (authModeCodeButton) authModeCodeButton.textContent = copy.codeMode;
-  if (passwordLoginButton) passwordLoginButton.textContent = copy.signIn;
-  if (passwordUseCodeButton) passwordUseCodeButton.textContent = copy.useEmailCode;
-  if (sendCodeButton) sendCodeButton.textContent = copy.sendCode;
-  if (verifyButton) verifyButton.textContent = copy.verifyLogin;
-  if (codeLabel) codeLabel.textContent = copy.code;
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
   if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
@@ -400,13 +189,10 @@ function applyLanguage() {
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
-  if (fallbackAuthTitleEl) fallbackAuthTitleEl.textContent = copy.fallbackAuthTitle;
   if (saveButton) saveButton.textContent = copy.save;
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
-  applyAuthMode();
-  renderPublisherCapabilityMatrix();
 }
 
 async function refreshBridgeStatus() {
@@ -421,48 +207,20 @@ async function refreshBridgeStatus() {
     const state = response?.result?.state;
     const runnerState = response?.result?.runnerState;
     if (state === "connected" && runnerState === "busy") {
-      currentHelperState = "busy";
       helperStatus.textContent = copy.helperBusy;
-      renderPublisherCapabilityMatrix();
       return;
     }
     if (state === "connected") {
-      currentHelperState = "connected";
       helperStatus.textContent = copy.helperReady;
-      renderPublisherCapabilityMatrix();
       return;
     }
     if (state === "disconnected") {
-      currentHelperState = "disconnected";
       helperStatus.textContent = copy.helperDisconnected;
-      renderPublisherCapabilityMatrix();
       return;
     }
-    currentHelperState = "unavailable";
     helperStatus.textContent = copy.helperUnavailable;
   } catch {
-    currentHelperState = "unavailable";
     helperStatus.textContent = copy.helperUnavailable;
-  }
-  renderPublisherCapabilityMatrix();
-}
-
-async function refreshShadowDiagnostics() {
-  if (!shadowStatus) {
-    return;
-  }
-
-  const settings = await readSettings();
-  if (!settings.token) {
-    shadowStatus.textContent = copyFor(uiLanguage).shadowSignedOut;
-    return;
-  }
-
-  try {
-    const diagnostics = await client.getParserV2ShadowDiagnostics();
-    shadowStatus.textContent = summarizeParserV2ShadowDiagnostics(diagnostics, uiLanguage);
-  } catch {
-    shadowStatus.textContent = copyFor(uiLanguage).shadowUnavailable;
   }
 }
 
@@ -549,15 +307,12 @@ async function refreshView() {
   uiLanguage = resolveUiLanguage(settings.uiLanguage, globalThis.navigator?.language);
   applyLanguage();
   await refreshBridgeStatus();
-  await refreshShadowDiagnostics();
 
   if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey ?? "";
   if (wileyTdmTokenInput) wileyTdmTokenInput.value = settings.wileyTdmToken ?? "";
   if (springerOpenAccessApiKeyInput) springerOpenAccessApiKeyInput.value = settings.springerOpenAccessApiKey ?? "";
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
-  if (emailInput) emailInput.value = settings.email ?? "";
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
-  renderPublisherCapabilityMatrix();
   if (accountStatus) {
     accountStatus.textContent = settings.email
       ? copyFor(uiLanguage).signedIn(settings.email)
@@ -619,76 +374,6 @@ saveButton?.addEventListener("click", async () => {
     })
   );
   await refreshView();
-});
-
-sendCodeButton?.addEventListener("click", async () => {
-  const email = emailInput?.value.trim();
-  if (!email || !accountStatus) {
-    return;
-  }
-  try {
-    await client.startEmailAuth({ email });
-    accountStatus.textContent = copyFor(uiLanguage).sent(email);
-  } catch (error) {
-    accountStatus.textContent = (error as Error).message;
-  }
-});
-
-passwordLoginButton?.addEventListener("click", async () => {
-  const email = emailInput?.value.trim();
-  const password = passwordInput?.value ?? "";
-  if (!email || !password || !accountStatus) {
-    return;
-  }
-  try {
-    const result = await client.loginWithPassword({ email, password });
-    const current = await readSettings();
-    await writeSettings(
-      mergeSettings(current, {
-        email,
-        token: result.token
-      })
-    );
-    await refreshView();
-  } catch (error) {
-    accountStatus.textContent = (error as Error).message || copyFor(uiLanguage).passwordLoginFailed;
-  }
-});
-
-verifyButton?.addEventListener("click", async () => {
-  const email = emailInput?.value.trim();
-  const code = codeInput?.value.trim();
-  if (!email || !code || !accountStatus) {
-    return;
-  }
-  try {
-    const result = await client.verifyEmailAuth({ email, code });
-    const current = await readSettings();
-    await writeSettings(
-      mergeSettings(current, {
-        email,
-        token: result.token
-      })
-    );
-    await refreshView();
-  } catch (error) {
-    accountStatus.textContent = (error as Error).message;
-  }
-});
-
-authModePasswordButton?.addEventListener("click", () => {
-  authMode = "password";
-  applyAuthMode();
-});
-
-authModeCodeButton?.addEventListener("click", () => {
-  authMode = "code";
-  applyAuthMode();
-});
-
-passwordUseCodeButton?.addEventListener("click", () => {
-  authMode = "code";
-  applyAuthMode();
 });
 
 uiLanguageSelect?.addEventListener("change", async () => {

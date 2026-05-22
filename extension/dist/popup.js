@@ -99,42 +99,8 @@ function createApiClient(getSettings) {
     return match?.[1] ?? fallback;
   }
   return {
-    startEmailAuth(payload) {
-      return request("/auth/email/start", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }).then((response) => response.json());
-    },
-    verifyEmailAuth(payload) {
-      return request("/auth/email/verify", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }).then((response) => response.json());
-    },
-    loginWithPassword(payload) {
-      return request("/auth/password/login", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }).then((response) => response.json());
-    },
     getUsage() {
       return request("/me/usage", void 0, { requireAuth: true }).then((response) => response.json());
-    },
-    getParserV2ShadowDiagnostics() {
-      return request("/diagnostics/parser-v2/shadow", void 0, { requireAuth: true }).then(
-        (response) => response.json()
-      );
-    },
-    getSourceConnectivityEnvironmentSummary() {
-      return request("/diagnostics/source-connectivity/environment", void 0, { requireAuth: true }).then(
-        (response) => response.json()
-      );
-    },
-    explainSourceConnectivity(payload) {
-      return request("/diagnostics/source-connectivity/explain", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }, { requireAuth: true }).then((response) => response.json());
     },
     getClientConfig() {
       return request("/client-config").then((response) => response.json());
@@ -196,9 +162,6 @@ function createApiClient(getSettings) {
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      if (payload.pdfEngine) {
-        body.set("pdf_engine", payload.pdfEngine);
-      }
       return request("/tasks/parse-helper-bundle-v2", {
         method: "POST",
         body
@@ -265,7 +228,7 @@ function createSsotParseMessage(input, pageContext) {
   }
   return message;
 }
-function createFileParseMessage(file, artifactKind, pdfEngine) {
+function createFileParseMessage(file, artifactKind) {
   const message = {
     type: "mdtero.parse.file.request",
     file,
@@ -273,9 +236,6 @@ function createFileParseMessage(file, artifactKind, pdfEngine) {
     mediaType: file.type,
     artifactKind
   };
-  if (artifactKind === "pdf" && pdfEngine) {
-    message.pdfEngine = pdfEngine;
-  }
   return message;
 }
 function createTranslateMessage(sourceMarkdownPath, targetLanguage, mode) {
@@ -294,306 +254,6 @@ function createDetectMessage() {
 
 // ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
-
-// ../shared/src/publisher-capability-matrix.ts
-function link(href, en, zh) {
-  return {
-    href,
-    label: { en, zh }
-  };
-}
-var PUBLISHER_CAPABILITY_MATRIX = [
-  {
-    id: "arxiv",
-    label: { en: "arXiv", zh: "arXiv" },
-    variantOf: "arxiv",
-    accessVariant: "open_repository",
-    presentationGroup: "helper_only",
-    rightsMode: "open",
-    acquisitionMode: "direct_open_fulltext",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Use Mdtero's normal CLI/API path.",
-      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Direct open full-text retrieval from arXiv.",
-      zh: "\u76F4\u63A5\u4ECE arXiv \u83B7\u53D6\u5F00\u653E\u5168\u6587\u3002"
-    },
-    configureTarget: "none",
-    status: "stable",
-    fallbacks: ["pdf"],
-    validationRef: "acceptance:task-arxiv-html-live-1",
-    links: []
-  },
-  {
-    id: "pmc_europe_pmc",
-    label: { en: "PMC / Europe PMC", zh: "PMC / Europe PMC" },
-    variantOf: "pmc",
-    accessVariant: "open_access",
-    presentationGroup: "helper_only",
-    rightsMode: "open",
-    acquisitionMode: "direct_open_fulltext",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Use Mdtero's normal CLI/API path.",
-      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Structured open-access full text from PMC routes.",
-      zh: "\u901A\u8FC7 PMC \u8DEF\u7EBF\u83B7\u53D6\u7ED3\u6784\u5316\u5F00\u653E\u5168\u6587\u3002"
-    },
-    configureTarget: "none",
-    status: "stable",
-    fallbacks: ["pdf"],
-    validationRef: "checklist:pmc-open-access",
-    links: []
-  },
-  {
-    id: "plos",
-    label: { en: "PLOS", zh: "PLOS" },
-    variantOf: "plos",
-    accessVariant: "open_access",
-    presentationGroup: "helper_only",
-    rightsMode: "open",
-    acquisitionMode: "direct_open_fulltext",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Use Mdtero's normal CLI/API path.",
-      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Structured open-access full text from PLOS.",
-      zh: "\u4ECE PLOS \u83B7\u53D6\u7ED3\u6784\u5316\u5F00\u653E\u5168\u6587\u3002"
-    },
-    configureTarget: "none",
-    status: "stable",
-    fallbacks: ["pdf"],
-    validationRef: "checklist:plos-open-access",
-    links: []
-  },
-  {
-    id: "biorxiv_medrxiv",
-    label: { en: "bioRxiv / medRxiv", zh: "bioRxiv / medRxiv" },
-    variantOf: "biorxiv_medrxiv",
-    accessVariant: "preprint_server",
-    presentationGroup: "helper_only",
-    rightsMode: "open",
-    acquisitionMode: "direct_open_fulltext",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Use Mdtero's normal CLI/API path.",
-      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Preprint full text from the source site.",
-      zh: "\u4ECE\u9884\u5370\u672C\u6E90\u7AD9\u83B7\u53D6\u5168\u6587\u3002"
-    },
-    configureTarget: "none",
-    status: "stable",
-    fallbacks: ["pdf"],
-    validationRef: "checklist:biorxiv-medrxiv-open",
-    links: []
-  },
-  {
-    id: "chemrxiv",
-    label: { en: "ChemRxiv", zh: "ChemRxiv" },
-    variantOf: "chemrxiv",
-    accessVariant: "preprint_server",
-    presentationGroup: "helper_only",
-    rightsMode: "open",
-    acquisitionMode: "direct_open_fulltext",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the source cannot provide full text.",
-      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u65E0\u6CD5\u63D0\u4F9B\u5168\u6587\u65F6\u4E0A\u4F20 PDF\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Preprint full text from ChemRxiv when available.",
-      zh: "\u5728\u53EF\u7528\u65F6\u4ECE ChemRxiv \u83B7\u53D6\u9884\u5370\u672C\u5168\u6587\u3002"
-    },
-    configureTarget: "none",
-    status: "demo",
-    fallbacks: ["pdf"],
-    validationRef: "checklist:chemrxiv-demo",
-    links: []
-  },
-  {
-    id: "mdpi",
-    label: { en: "MDPI", zh: "MDPI" },
-    variantOf: "mdpi",
-    accessVariant: "publisher_open_page",
-    presentationGroup: "helper_only",
-    rightsMode: "open",
-    acquisitionMode: "direct_open_fulltext",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Use Mdtero's normal CLI/API path. Upload a PDF if the page route is unavailable.",
-      zh: "\u4F7F\u7528 Mdtero \u5E38\u89C4 CLI/API \u8DEF\u5F84\uFF1B\u9875\u9762\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Open publisher full text from MDPI pages.",
-      zh: "\u4ECE MDPI \u9875\u9762\u83B7\u53D6\u5F00\u653E\u5168\u6587\u3002"
-    },
-    configureTarget: "none",
-    status: "demo",
-    fallbacks: ["pdf"],
-    validationRef: "checklist:mdpi-demo",
-    links: []
-  },
-  {
-    id: "elsevier",
-    label: { en: "Elsevier", zh: "Elsevier" },
-    variantOf: "elsevier",
-    accessVariant: "api",
-    presentationGroup: "api_key",
-    rightsMode: "licensed",
-    acquisitionMode: "official_api",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: true,
-    mayNeedInstitutionAccess: true,
-    whatYouNeed: {
-      en: "Add your Elsevier API key. Some papers may still require institutional access or a user-provided PDF.",
-      zh: "\u586B\u5199 Elsevier API key\u3002\u90E8\u5206\u8BBA\u6587\u4ECD\u53EF\u80FD\u9700\u8981\u673A\u6784\u6743\u9650\u6216\u7528\u6237\u4E0A\u4F20 PDF\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Official full-text API for structured publisher retrieval.",
-      zh: "\u901A\u8FC7\u5B98\u65B9\u5168\u6587 API \u83B7\u53D6\u7ED3\u6784\u5316\u51FA\u7248\u793E\u5185\u5BB9\u3002"
-    },
-    configureTarget: "connector_keys",
-    status: "stable",
-    fallbacks: ["pdf"],
-    validationRef: "acceptance:elsevier-local-api",
-    links: [
-      link("https://dev.elsevier.com/", "Get Elsevier API key", "\u7533\u8BF7 Elsevier API key")
-    ]
-  },
-  {
-    id: "springer_oa",
-    label: { en: "Springer Open Access", zh: "Springer Open Access" },
-    variantOf: "springer",
-    accessVariant: "open_access",
-    presentationGroup: "api_key",
-    rightsMode: "open",
-    acquisitionMode: "hybrid",
-    requiresHelper: true,
-    requiresBrowser: false,
-    requiresApiKey: true,
-    mayNeedInstitutionAccess: false,
-    whatYouNeed: {
-      en: "Add your Springer OA API key for the best XML path. Upload a PDF if the source route is unavailable.",
-      zh: "\u586B\u5199 Springer OA API key \u53EF\u4F18\u5148\u8D70 XML \u8DEF\u5F84\uFF1B\u6E90\u7AD9\u8DEF\u7EBF\u4E0D\u53EF\u7528\u65F6\u4E0A\u4F20 PDF\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Springer OA XML when available, otherwise open full text.",
-      zh: "\u4F18\u5148\u83B7\u53D6 Springer OA XML\uFF0C\u5426\u5219\u8D70\u5F00\u653E\u5168\u6587\u3002"
-    },
-    configureTarget: "connector_keys",
-    status: "stable",
-    fallbacks: ["browser_page_capture", "pdf"],
-    validationRef: "acceptance:task-springer-s12011-04820-w",
-    links: [
-      link("https://dev.springernature.com/", "Get Springer Nature API key", "\u7533\u8BF7 Springer Nature API key")
-    ]
-  },
-  {
-    id: "springer_subscription",
-    label: { en: "Springer subscription pages", zh: "Springer \u8BA2\u9605\u9875\u9762" },
-    variantOf: "springer",
-    accessVariant: "subscription_page",
-    presentationGroup: "browser_assisted",
-    rightsMode: "licensed",
-    acquisitionMode: "browser_page_capture",
-    requiresHelper: true,
-    requiresBrowser: true,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: true,
-    whatYouNeed: {
-      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
-      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
-      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
-    },
-    configureTarget: "browser_assisted_sources",
-    status: "demo",
-    fallbacks: ["pdf"],
-    validationRef: "acceptance:task-springer-s12011-04820-w",
-    links: []
-  },
-  {
-    id: "wiley",
-    label: { en: "Wiley", zh: "Wiley" },
-    variantOf: "wiley",
-    accessVariant: "publisher_tdm",
-    presentationGroup: "api_key",
-    rightsMode: "licensed",
-    acquisitionMode: "official_api",
-    requiresHelper: false,
-    requiresBrowser: false,
-    requiresApiKey: true,
-    mayNeedInstitutionAccess: true,
-    whatYouNeed: {
-      en: "Add your Wiley TDM token. Institutional sign-in or DOI-level entitlement may still be required.",
-      zh: "\u586B\u5199 Wiley TDM token\u3002\u67D0\u4E9B DOI \u4ECD\u53EF\u80FD\u8981\u6C42\u673A\u6784\u767B\u5F55\u6216\u76F8\u5E94\u6388\u6743\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Wiley TDM PDF retrieval first, then local browser or on-device fallback if that route is unavailable.",
-      zh: "\u4F18\u5148\u8D70 Wiley TDM PDF \u63A5\u53E3\uFF1B\u5982\u679C\u8BE5\u94FE\u8DEF\u4E0D\u53EF\u7528\uFF0C\u518D\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6216\u8BBE\u5907\u4FA7\u83B7\u53D6\u3002"
-    },
-    configureTarget: "connector_keys",
-    status: "experimental",
-    fallbacks: ["pdf"],
-    validationRef: "acceptance:task-wiley-validation-1",
-    links: []
-  },
-  {
-    id: "taylor_francis",
-    label: { en: "Taylor & Francis", zh: "Taylor & Francis" },
-    variantOf: "taylor_francis",
-    accessVariant: "publisher_page",
-    presentationGroup: "browser_assisted",
-    rightsMode: "licensed",
-    acquisitionMode: "browser_page_capture",
-    requiresHelper: true,
-    requiresBrowser: true,
-    requiresApiKey: false,
-    mayNeedInstitutionAccess: true,
-    whatYouNeed: {
-      en: "Let Mdtero plan the route first. If the plan needs local raw data, use the extension to upload an authorized PDF or capture browser-context raw data.",
-      zh: "\u5148\u8BA9 Mdtero \u4E91\u7AEF\u89C4\u5212\u94FE\u8DEF\uFF1B\u5982\u679C\u8BA1\u5212\u9700\u8981\u672C\u5730 raw data\uFF0C\u518D\u7528\u6269\u5C55\u4E0A\u4F20\u6388\u6743 PDF \u6216\u91C7\u96C6\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587 raw data\u3002"
-    },
-    howMdteroGetsIt: {
-      en: "Backend route planning and parsing first; extension upload/capture only executes the backend's local raw-data instruction.",
-      zh: "\u540E\u7AEF\u5148\u8D1F\u8D23\u8DEF\u7531\u89C4\u5212\u548C\u89E3\u6790\uFF1B\u6269\u5C55\u4E0A\u4F20/\u91C7\u96C6\u53EA\u6267\u884C\u540E\u7AEF\u4E0B\u53D1\u7684\u672C\u5730 raw-data \u6307\u4EE4\u3002"
-    },
-    configureTarget: "browser_assisted_sources",
-    status: "experimental",
-    fallbacks: ["pdf"],
-    validationRef: "acceptance:task-tf-html-live-3",
-    links: []
-  }
-];
 
 // src/lib/storage.ts
 var SETTINGS_KEY = "mdtero_settings";

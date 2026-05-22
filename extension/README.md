@@ -13,7 +13,7 @@ npm run build
 
 ## Sign In
 
-Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/account`; the website can hand the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The options page keeps email/password and email-code fields as a fallback until the website exposes a single-use extension handoff code.
+Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/account`; the website hands the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The extension no longer maintains its own email, password, or email-code login form.
 
 ## Parse Papers
 
