@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ApiErrorCode, DEFAULT_API_BASE_URL } from "@mdtero/shared";
 
+function stripWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ");
+}
+
 describe("workspace", () => {
   it("exposes the shared package entrypoint", () => {
     expect(DEFAULT_API_BASE_URL).toBe("https://api.mdtero.com");
@@ -91,5 +95,19 @@ describe("workspace", () => {
     expect(styles).not.toContain("#6d3920");
     expect(styles).not.toContain("#f6e6d5");
     expect(styles).not.toContain("#50291a");
+  });
+
+  it("keeps popup and options layouts bounded for extension viewports", () => {
+    const popupHtml = readFileSync(resolve("src/popup/index.html"), "utf-8");
+    const optionsHtml = readFileSync(resolve("src/options/index.html"), "utf-8");
+    const styles = stripWhitespace(readFileSync(resolve("src/styles.css"), "utf-8"));
+
+    expect(popupHtml).toContain('class="panel panel-popup"');
+    expect(optionsHtml).toContain('class="panel panel-options"');
+    expect(styles).toContain(".panel-popup { width: 380px; max-width: 100vw; }");
+    expect(styles).toContain(".panel-popup .shell { max-height: min(600px, 100vh); overflow-y: auto; }");
+    expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
+    expect(styles).toContain("button { min-height: 40px;");
   });
 });
