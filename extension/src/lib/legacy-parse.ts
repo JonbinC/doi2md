@@ -12,6 +12,11 @@ import { fetchSpringerOpenAccessJats, normalizeSpringerInput } from "./springer"
 
 interface ParseClientLike {
   createParseTask(payload: { input: string }): Promise<unknown>;
+  createUploadedParseTask(payload: {
+    paperFile: Blob;
+    filename?: string;
+    sourceInput?: string;
+  }): Promise<unknown>;
   createParseFulltextV2Task(payload: {
     fulltextFile: Blob;
     filename?: string;
@@ -107,26 +112,9 @@ export async function runLegacyFileParseRequest(
   message: LegacyFileMessage,
 ): Promise<unknown> {
   const filename = String(message.filename || "").trim() || "paper.bin";
-  const artifactKind = message.artifactKind === "epub" ? "epub" : "pdf";
-  const sourceType =
-    artifactKind === "pdf"
-      ? "browser_extension_local_upload_pdf"
-      : "browser_extension_local_upload_epub";
-
-  const helperBundle = buildHelperBundleBlob({
-    connector: "local_file_upload",
-    artifactKind,
-    payload: await message.file.arrayBuffer(),
-    payloadName: filename,
-    sourceType,
-    sourceUrl: `file://${filename}`,
-    acquisitionMode: "browser_extension_local_upload",
-    userPrivateRetention: true,
-  });
-
-  return client.createParseHelperBundleV2Task({
-    helperBundleFile: helperBundle,
-    filename: "helper-bundle.zip",
+  return client.createUploadedParseTask({
+    paperFile: message.file,
+    filename,
     sourceInput: filename,
   });
 }

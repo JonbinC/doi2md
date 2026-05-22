@@ -1296,21 +1296,9 @@ async function runLegacyParseRequest(client2, message) {
 }
 async function runLegacyFileParseRequest(client2, message) {
   const filename = String(message.filename || "").trim() || "paper.bin";
-  const artifactKind = message.artifactKind === "epub" ? "epub" : "pdf";
-  const sourceType = artifactKind === "pdf" ? "browser_extension_local_upload_pdf" : "browser_extension_local_upload_epub";
-  const helperBundle = buildHelperBundleBlob({
-    connector: "local_file_upload",
-    artifactKind,
-    payload: await message.file.arrayBuffer(),
-    payloadName: filename,
-    sourceType,
-    sourceUrl: `file://${filename}`,
-    acquisitionMode: "browser_extension_local_upload",
-    userPrivateRetention: true
-  });
-  return client2.createParseHelperBundleV2Task({
-    helperBundleFile: helperBundle,
-    filename: "helper-bundle.zip",
+  return client2.createUploadedParseTask({
+    paperFile: message.file,
+    filename,
     sourceInput: filename
   });
 }
