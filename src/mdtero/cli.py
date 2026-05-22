@@ -229,7 +229,9 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     console.rule("[bold]Mdtero setup")
     cfg = load_config()
     if getattr(_args, "api_key", ""):
-        cfg.api_key = str(_args.api_key).strip()
+        cfg.api_key = _normalize_api_key_arg(str(_args.api_key), console=console)
+        if not cfg.api_key:
+            return 2
         save_config(cfg)
         console.print("Step 1: saved API-key login for this machine.")
     elif cfg.is_authenticated:
@@ -237,7 +239,9 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     else:
         console.print("Step 1: authenticate.")
         if Confirm.ask("Use API-key login for this machine?", default=True):
-            cfg.api_key = Prompt.ask("Paste Mdtero API key", password=True)
+            cfg.api_key = _normalize_api_key_arg(Prompt.ask("Paste Mdtero API key", password=True), console=console)
+            if not cfg.api_key:
+                return 2
             save_config(cfg)
         else:
             _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False)
@@ -250,13 +254,23 @@ def cmd_setup(_args: argparse.Namespace) -> int:
 def cmd_login(args: argparse.Namespace) -> int:
     cfg = load_config()
     console = Console()
-    if args.api_key:
-        cfg.api_key = args.api_key.strip()
+    if args.api_key is not None and str(args.api_key) != "":
+        cfg.api_key = _normalize_api_key_arg(str(args.api_key), console=console)
+        if not cfg.api_key:
+            return 2
         path = save_config(cfg)
         console.print(f"Saved API key to {path}")
         return 0
     _login_with_browser(cfg, console, timeout_seconds=args.timeout, no_browser=args.no_browser)
     return 0
+
+
+def _normalize_api_key_arg(value: str, *, console: Console) -> str | None:
+    key = str(value or "").strip()
+    if not key:
+        console.print("[red]API key cannot be empty.[/red]")
+        return None
+    return key
 
 
 def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds: float, no_browser: bool) -> None:

@@ -112,6 +112,19 @@ def test_login_command_saves_web_callback_key(monkeypatch, tmp_path: Path, capsy
     assert "Saved web login API key" in capsys.readouterr().out
 
 
+def test_login_rejects_blank_api_key(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+
+    assert cli.cmd_login(type("Args", (), {"api_key": "   ", "timeout": 7, "no_browser": False})()) == 2
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "API key cannot be empty" in output
+    assert cfg.api_key is None
+
+
 def test_doctor_accepts_api_key_from_environment(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -1118,6 +1131,20 @@ def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Pa
     output = capsys.readouterr().out
 
     assert output.count("Step 1: saved API-key login for this machine.") == 1
+
+
+def test_setup_rejects_blank_api_key_without_academic_prompt(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: (_ for _ in ()).throw(AssertionError("setup should stop before academic config")))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": "   "})()) == 2
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "API key cannot be empty" in output
+    assert cfg.api_key is None
 
 
 def test_setup_uses_environment_api_key_without_prompting(monkeypatch, tmp_path: Path, capsys):
