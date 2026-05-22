@@ -227,14 +227,16 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "Start a local project" in output
     assert "mdtero project init --name literature-review" in output
     assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3" in output
-    assert "mdtero parse 10.48550/arXiv.1706.03762 --wait" in output
-    assert "mdtero parse --file paper.pdf --wait" in output
-    assert "mdtero parse --batch ./papers --wait" in output
+    assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --json" in output
+    assert "mdtero parse https://example.org/open-paper --trace --json" in output
+    assert "mdtero parse --file paper.pdf --wait --json" in output
+    assert "mdtero parse --batch ./papers --wait --json" in output
     assert "mdtero config zotero" in output
     assert "mdtero zotero import --limit 20" in output
     assert "mdtero zotero sync" in output
     assert "mdtero rag status --json" in output
-    assert "mdtero rag build" in output
+    assert "mdtero rag build --json" in output
+    assert "mdtero rag query \"What are the key claims and methods?\" --json" in output
     assert "mdtero mcp serve" in output
     assert "mdtero agent install" in output
 
@@ -1455,7 +1457,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["academic"]["discover_source"] == "local Semantic Scholar"
     assert model["rag"]["ready"] is False
     assert model["rag"]["server_status"] == "not_ready"
-    assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
+    assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
     assert model["mcp"]["serve_command"] == "mdtero mcp serve"
     assert "mdtero rag build --json" in model["mcp"]["recommended_next_commands"]
     assert model["zotero"]["configured"] is True
@@ -1483,7 +1485,7 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
     assert model["rag"]["ready"] is True
     assert model["rag"]["reason_code"] == "indexed"
     assert model["rag"]["server_summary"]["embedded_count"] == 3
-    assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
+    assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
     assert model["mcp"]["recommended_next_commands"][-1] == "mdtero mcp serve"
     assert rendered is not None
 
@@ -1501,7 +1503,7 @@ def test_tui_dashboard_model_keeps_local_rag_when_server_status_unavailable(tmp_
     assert model["rag"]["ready"] is True
     assert model["rag"]["server_status"] == "unavailable"
     assert model["rag"]["server_reason_code"] == "server_rag_status_unavailable"
-    assert model["next_steps"] == ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""]
+    assert model["next_steps"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
 
 
 def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):
