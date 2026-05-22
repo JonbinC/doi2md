@@ -61,8 +61,10 @@ mdtero doctor
 mdtero login --api-key <key>
 mdtero config academic
 mdtero project init
+mdtero project create-server
 mdtero project import-bib references.bib
 mdtero project parse --wait
+mdtero project ingest
 mdtero project refresh
 mdtero project download --output-dir ./mdtero-output
 mdtero config zotero
@@ -75,8 +77,8 @@ mdtero parse --batch ./papers
 mdtero status <task-id>
 mdtero download <task-id> paper_md
 mdtero translate paper.md --to zh-CN
-mdtero rag build --project-id <server-project-id>
-mdtero rag query "What are the strongest findings?" --project-id <server-project-id>
+mdtero rag build
+mdtero rag query "What are the strongest findings?"
 mdtero mcp serve
 mdtero tui
 ```
@@ -98,7 +100,7 @@ Validated in the current alpha:
 Known boundaries:
 
 - `mdtero zotero sync` is wired as a command, but reverse sync back into Zotero is still the next migration slice.
-- `mdtero rag build/query` talks to server-side Voyage RAG and currently needs a server project id; a local `.mdtero` project name is not enough yet.
+- `mdtero rag build/query` talks to server-side Voyage RAG. Run `mdtero project create-server` once, then `mdtero project ingest` after successful parses so the local project is bound to a server project.
 - GROBID is not a public product option. PDF parsing is MinerU-first on the backend, with internal fallback behavior owned by the service.
 
 ## Product Boundary
@@ -141,10 +143,15 @@ mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out
 mdtero project init --name literature-review
+mdtero project create-server
 mdtero project import-bib references.bib
+mdtero project parse --wait
+mdtero project ingest
+mdtero rag build
+mdtero rag query "这批论文的核心方法是什么？"
 mdtero zotero import --limit 20 --json
 mdtero agent install --target codex
 mdtero mcp serve
 ```
 
-当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载、agent skill 安装和 MCP 本地上下文。RAG 使用后端 Voyage 能力，但目前命令需要服务端 project id。Zotero 反向同步还没有作为完成能力对外承诺。agent skill 安装由 Python CLI 负责，不依赖 npm。
+当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载、后端 Voyage RAG 绑定/导入、agent skill 安装和 MCP 本地上下文。Zotero 反向同步还没有作为完成能力对外承诺。agent skill 安装由 Python CLI 负责，不依赖 npm。

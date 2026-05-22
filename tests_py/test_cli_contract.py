@@ -7,7 +7,7 @@ import httpx
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import detect_targets, install_targets, uninstall_targets
-from mdtero.cli import build_parser
+from mdtero.cli import build_parser, _parse_academic_selection
 from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context
@@ -37,6 +37,28 @@ def test_parser_exposes_next_gen_command_contract():
     help_text = parser.format_help()
     for command in ["setup", "doctor", "login", "config", "parse", "discover", "project", "parse-bib", "zotero", "translate", "rag", "mcp", "agent", "tui"]:
         assert command in help_text
+
+
+def test_setup_accepts_headless_api_key_argument():
+    parser = build_parser()
+
+    args = parser.parse_args(["setup", "--api-key", "mdt_live_demo"])
+
+    assert args.api_key == "mdt_live_demo"
+
+
+def test_academic_setup_selection_accepts_numbered_enter_flow():
+    assert _parse_academic_selection("") == set()
+    assert _parse_academic_selection("1,3") == {"1", "3"}
+    assert _parse_academic_selection("2 3") == {"2", "3"}
+    assert _parse_academic_selection("all") == {"1", "2", "3"}
+
+    try:
+        _parse_academic_selection("4")
+    except ValueError as exc:
+        assert "Choose 1, 2, 3" in str(exc)
+    else:
+        raise AssertionError("expected invalid academic option")
 
 
 def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: Path):
