@@ -255,19 +255,12 @@ async function writeSettings(next) {
 var COPY = {
   en: {
     title: "Mdtero Account",
-    subtitle: "Use the website account for sign-in, check balance and quota, and tune publisher API, TDM, and on-device fallback preferences.",
-    connectorKeysTitle: "Connector keys",
-    connectorKeysNote: "Only fill the keys you actually need. Everything stays on your own machine.",
+    subtitle: "Use the website account for sign-in, check balance and quota, and manage browser capture, upload, translation, and download settings.",
     permissionsTitle: "Why Mdtero asks for these permissions",
-    permissionsTabs: "`tabs` lets the extension reuse or open supported paper pages for local capture.",
-    permissionsDownloads: "`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.",
-    permissionsNative: "`nativeMessaging` connects the extension to your local Mdtero runtime so supported routes can fall back to on-device acquisition when direct publisher APIs or TDM routes are unavailable.",
-    permissionsHosts: "Publisher host permissions stay limited to supported scholarly sites and the Mdtero / publisher APIs already used by the product.",
-    helperReady: "Local runtime ready for on-device fallback and browser capture when needed.",
-    helperBusy: "Local runtime is connected and currently handling an on-device acquisition task.",
-    helperUnavailable: "Local runtime not detected yet. Install or restart mdtero to enable on-device fallback routes.",
-    helperDisconnected: "Local runtime disconnected. Restart mdtero or reload the extension to reconnect.",
-    helperUnknown: "Local runtime status unknown.",
+    permissionsTabs: "`tabs` lets the extension read the current paper page and open Mdtero Account when you sign in.",
+    permissionsDownloads: "`downloads` saves Markdown files, translations, ZIP bundles, and uploaded-source results back to your machine.",
+    permissionsNative: "`nativeMessaging` is reserved for optional CLI-assisted capture when the website asks the browser to retry a difficult page.",
+    permissionsHosts: "Host permissions stay limited to Mdtero Account, supported scholarly pages, and files you choose to upload.",
     notSignedIn: "Not signed in.",
     usagePending: "Balance and quota appear after sign-in.",
     signedIn: (email) => `Signed in as ${email}`,
@@ -277,9 +270,6 @@ var COPY = {
     websiteAuthNote: "The extension uses Mdtero Account for sign-in. Open the website, complete login there, and the trusted auth bridge will hand the token back to this extension.",
     uiLanguage: "Interface language",
     advanced: "Advanced",
-    elsevierApiKey: "Elsevier API Key",
-    wileyTdmToken: "Wiley TDM Token",
-    springerOpenAccessApiKey: "Springer OA API Key",
     apiUrl: "API URL",
     save: "Save",
     historyTitle: "Account history",
@@ -292,19 +282,12 @@ var COPY = {
   },
   zh: {
     title: "Mdtero \u8D26\u6237",
-    subtitle: "\u4F7F\u7528\u5B98\u7F51\u767B\u5F55\u6388\u6743\u6269\u5C55\uFF0C\u540C\u65F6\u628A\u672C\u5730 publisher \u8BBF\u95EE\u4E0E\u4E0B\u8F7D\u4FDD\u7559\u5728\u8FD9\u53F0\u7535\u8111\u4E0A\u3002",
-    connectorKeysTitle: "Connector keys",
-    connectorKeysNote: "\u53EA\u586B\u5199\u4F60\u5B9E\u9645\u9700\u8981\u7684 key\uFF1B\u8FD9\u4E9B\u4FE1\u606F\u90FD\u4FDD\u7559\u5728\u4F60\u81EA\u5DF1\u7684\u673A\u5668\u4E0A\u3002",
+    subtitle: "\u4F7F\u7528\u5B98\u7F51\u767B\u5F55\u6388\u6743\u6269\u5C55\uFF0C\u5E76\u7BA1\u7406\u6D4F\u89C8\u5668\u6293\u53D6\u3001\u4E0A\u4F20\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u8BBE\u7F6E\u3002",
     permissionsTitle: "\u4E3A\u4EC0\u4E48 Mdtero \u9700\u8981\u8FD9\u4E9B\u6743\u9650",
-    permissionsTabs: "`tabs` \u7528\u6765\u590D\u7528\u6216\u6253\u5F00\u53D7\u652F\u6301\u7684\u8BBA\u6587\u9875\u9762\uFF0C\u4EE5\u4FBF\u5728\u672C\u673A\u5B8C\u6210\u6293\u53D6\u3002",
-    permissionsDownloads: "`downloads` \u7528\u6765\u628A Markdown\u3001\u8BD1\u6587\u3001\u515C\u5E95\u538B\u7F29\u5305\u548C\u6E90\u6587\u4EF6\u4FDD\u5B58\u56DE\u4F60\u7684\u7535\u8111\u3002",
-    permissionsNative: "`nativeMessaging` \u7528\u6765\u628A\u6269\u5C55\u8FDE\u63A5\u5230\u4F60\u672C\u5730\u7684 Mdtero \u8FD0\u884C\u65F6\uFF0C\u5728\u76F4\u8FDE publisher API \u6216 TDM \u4E0D\u53EF\u7528\u65F6\u56DE\u9000\u5230\u8BBE\u5907\u4FA7\u83B7\u53D6\u94FE\u8DEF\u3002",
-    permissionsHosts: "\u7AD9\u70B9\u6743\u9650\u53EA\u8986\u76D6\u5DF2\u652F\u6301\u7684\u5B66\u672F\u7AD9\u70B9\uFF0C\u4EE5\u53CA\u4EA7\u54C1\u5DF2\u7ECF\u4F7F\u7528\u7684 Mdtero / \u51FA\u7248\u5546 API\u3002",
-    helperReady: "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u5728\u9700\u8981\u65F6\u5904\u7406\u8BBE\u5907\u4FA7\u56DE\u9000\u4E0E\u6D4F\u89C8\u5668\u6293\u53D6\u3002",
-    helperBusy: "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u8FDE\u63A5\uFF0C\u6B63\u5728\u5904\u7406\u8BBE\u5907\u4FA7\u83B7\u53D6\u4EFB\u52A1\u3002",
-    helperUnavailable: "\u6682\u672A\u68C0\u6D4B\u5230\u672C\u5730\u8FD0\u884C\u65F6\u3002\u8BF7\u5B89\u88C5\u6216\u91CD\u542F mdtero \u4EE5\u542F\u7528\u8BBE\u5907\u4FA7\u56DE\u9000\u94FE\u8DEF\u3002",
-    helperDisconnected: "\u672C\u5730\u8FD0\u884C\u65F6\u5DF2\u65AD\u5F00\u3002\u8BF7\u91CD\u542F mdtero \u6216\u91CD\u8F7D\u6269\u5C55\u540E\u518D\u8BD5\u3002",
-    helperUnknown: "\u672C\u5730\u8FD0\u884C\u65F6\u72B6\u6001\u672A\u77E5\u3002",
+    permissionsTabs: "`tabs` \u7528\u6765\u8BFB\u53D6\u5F53\u524D\u8BBA\u6587\u9875\uFF0C\u5E76\u5728\u767B\u5F55\u65F6\u6253\u5F00 Mdtero Account\u3002",
+    permissionsDownloads: "`downloads` \u7528\u6765\u628A Markdown\u3001\u8BD1\u6587\u3001ZIP \u5305\u548C\u4E0A\u4F20\u6587\u4EF6\u7684\u89E3\u6790\u7ED3\u679C\u4FDD\u5B58\u56DE\u4F60\u7684\u7535\u8111\u3002",
+    permissionsNative: "`nativeMessaging` \u9884\u7559\u7ED9\u53EF\u9009\u7684 CLI \u8F85\u52A9\u6293\u53D6\uFF0C\u7528\u4E8E\u5B98\u7F51\u8981\u6C42\u6D4F\u89C8\u5668\u91CD\u8BD5\u56F0\u96BE\u9875\u9762\u65F6\u8054\u52A8\u3002",
+    permissionsHosts: "\u7AD9\u70B9\u6743\u9650\u53EA\u8986\u76D6 Mdtero Account\u3001\u53D7\u652F\u6301\u7684\u5B66\u672F\u9875\u9762\uFF0C\u4EE5\u53CA\u4F60\u4E3B\u52A8\u9009\u62E9\u4E0A\u4F20\u7684\u6587\u4EF6\u3002",
     notSignedIn: "\u5C1A\u672A\u767B\u5F55\u3002\u8BF7\u6253\u5F00 Mdtero Account \u6388\u6743\u6269\u5C55\u3002",
     usagePending: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\u4EE5\u540C\u6B65\u4F59\u989D\u3001\u989D\u5EA6\u548C\u5386\u53F2\u3002",
     signedIn: (email) => `\u5DF2\u767B\u5F55\uFF1A${email}`,
@@ -314,9 +297,6 @@ var COPY = {
     websiteAuthNote: "\u6269\u5C55\u7EDF\u4E00\u4F7F\u7528 Mdtero Account \u767B\u5F55\u3002\u8BF7\u6253\u5F00\u5B98\u7F51\u5B8C\u6210\u767B\u5F55\uFF0C\u53D7\u4FE1\u4EFB auth bridge \u4F1A\u628A token \u4EA4\u56DE\u6269\u5C55\u3002",
     uiLanguage: "\u754C\u9762\u8BED\u8A00",
     advanced: "\u9AD8\u7EA7\u8BBE\u7F6E",
-    elsevierApiKey: "Elsevier API Key",
-    wileyTdmToken: "Wiley TDM Token",
-    springerOpenAccessApiKey: "Springer OA API Key",
     apiUrl: "API \u5730\u5740",
     save: "\u4FDD\u5B58",
     historyTitle: "\u8D26\u6237\u5386\u53F2",
@@ -330,31 +310,22 @@ var COPY = {
 };
 var titleEl = document.querySelector("#settings-title");
 var subtitleEl = document.querySelector("#settings-subtitle");
-var connectorKeysTitleEl = document.querySelector("#connector-keys-title");
-var connectorKeysNoteEl = document.querySelector("#connector-keys-note");
 var permissionsTitleEl = document.querySelector("#permissions-title");
 var permissionsTabsEl = document.querySelector("#permissions-tabs");
 var permissionsDownloadsEl = document.querySelector("#permissions-downloads");
 var permissionsNativeEl = document.querySelector("#permissions-native");
 var permissionsHostsEl = document.querySelector("#permissions-hosts");
 var languageToggleEl = document.querySelector("#language-toggle");
-var elsevierApiKeyInput = document.querySelector("#elsevier-api-key");
-var wileyTdmTokenInput = document.querySelector("#wiley-tdm-token");
-var springerOpenAccessApiKeyInput = document.querySelector("#springer-oa-api-key");
 var apiBaseUrlInput = document.querySelector("#api-base-url");
 var uiLanguageSelect = document.querySelector("#ui-language");
 var accountStatus = document.querySelector("#account-status");
 var usageStatus = document.querySelector("#usage-status");
-var helperStatus = document.querySelector("#helper-status");
 var saveButton = document.querySelector("#save-settings");
 var openAccountButton = document.querySelector("#open-account");
 var websiteAuthTitleEl = document.querySelector("#website-auth-title");
 var websiteAuthNoteEl = document.querySelector("#website-auth-note");
 var uiLanguageLabel = document.querySelector("#ui-language-label");
 var advancedSummary = document.querySelector("#advanced-summary");
-var elsevierApiKeyLabel = document.querySelector("#elsevier-api-key-label");
-var wileyTdmTokenLabel = document.querySelector("#wiley-tdm-token-label");
-var springerOpenAccessApiKeyLabel = document.querySelector("#springer-oa-api-key-label");
 var apiBaseUrlLabel = document.querySelector("#api-base-url-label");
 var historySection = document.querySelector("#history-section");
 var historyList = document.querySelector("#history-list");
@@ -394,8 +365,6 @@ function applyLanguage() {
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
   if (titleEl) titleEl.textContent = copy.title;
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
-  if (connectorKeysTitleEl) connectorKeysTitleEl.textContent = copy.connectorKeysTitle;
-  if (connectorKeysNoteEl) connectorKeysNoteEl.textContent = copy.connectorKeysNote;
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
   if (permissionsTabsEl) permissionsTabsEl.textContent = copy.permissionsTabs;
   if (permissionsDownloadsEl) permissionsDownloadsEl.textContent = copy.permissionsDownloads;
@@ -404,9 +373,6 @@ function applyLanguage() {
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
-  if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
-  if (wileyTdmTokenLabel) wileyTdmTokenLabel.textContent = copy.wileyTdmToken;
-  if (springerOpenAccessApiKeyLabel) springerOpenAccessApiKeyLabel.textContent = copy.springerOpenAccessApiKey;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
@@ -415,34 +381,6 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
-}
-async function refreshBridgeStatus() {
-  if (!helperStatus) {
-    return;
-  }
-  const copy = copyFor(uiLanguage);
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "mdtero.bridge.status"
-    });
-    const state = response?.result?.state;
-    const runnerState = response?.result?.runnerState;
-    if (state === "connected" && runnerState === "busy") {
-      helperStatus.textContent = copy.helperBusy;
-      return;
-    }
-    if (state === "connected") {
-      helperStatus.textContent = copy.helperReady;
-      return;
-    }
-    if (state === "disconnected") {
-      helperStatus.textContent = copy.helperDisconnected;
-      return;
-    }
-    helperStatus.textContent = copy.helperUnavailable;
-  } catch {
-    helperStatus.textContent = copy.helperUnavailable;
-  }
 }
 async function refreshHistory() {
   if (!historyList) return;
@@ -515,10 +453,6 @@ async function refreshView() {
   const settings = await readSettings();
   uiLanguage = resolveUiLanguage(settings.uiLanguage, globalThis.navigator?.language);
   applyLanguage();
-  await refreshBridgeStatus();
-  if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey ?? "";
-  if (wileyTdmTokenInput) wileyTdmTokenInput.value = settings.wileyTdmToken ?? "";
-  if (springerOpenAccessApiKeyInput) springerOpenAccessApiKeyInput.value = settings.springerOpenAccessApiKey ?? "";
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
   if (accountStatus) {
@@ -565,9 +499,6 @@ saveButton?.addEventListener("click", async () => {
   const current = await readSettings();
   await writeSettings(
     mergeSettings(current, {
-      elsevierApiKey: elsevierApiKeyInput?.value.trim() || void 0,
-      wileyTdmToken: wileyTdmTokenInput?.value.trim() || void 0,
-      springerOpenAccessApiKey: springerOpenAccessApiKeyInput?.value.trim() || void 0,
       apiBaseUrl: apiBaseUrlInput?.value.trim() || current.apiBaseUrl,
       uiLanguage: resolveUiLanguage(uiLanguageSelect?.value, globalThis.navigator?.language)
     })

@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">M</div>
           <div class="brand-copy">
             <h1 id="settings-title">Mdtero Account</h1>
-            <p id="settings-subtitle">Use Mdtero Account for sign-in, review quota, and keep optional publisher keys on this machine.</p>
+            <p id="settings-subtitle">Use Mdtero Account for sign-in, review quota, and manage browser capture, upload, translation, and download settings.</p>
           </div>
           <button id="language-toggle" type="button" class="ghost-chip">中文</button>
         </div>
@@ -21,7 +21,6 @@
           <div>
             <p id="account-status" class="meta-label">Not signed in.</p>
             <p id="usage-status" class="meta-value">Balance and quota not loaded.</p>
-            <p id="helper-status" class="meta-label">Local helper status unknown.</p>
           </div>
         </div>
         <div class="support-row support-row-tight">
@@ -30,36 +29,6 @@
           <span class="support-chip"><span class="support-icon support-icon-pmc">PMC</span>PMC</span>
           <span class="support-chip"><span class="support-icon support-icon-preprint">Rx</span>bioRxiv</span>
           <span class="support-chip"><span class="support-icon support-icon-plos">PL</span>PLOS</span>
-        </div>
-      </section>
-
-      <section class="card" id="connector-keys-section">
-        <h2 id="connector-keys-title">Connector keys</h2>
-        <p id="connector-keys-note" class="meta-label">
-          Only fill the keys you actually need. Everything stays on your own machine.
-        </p>
-        <div class="capability-config-grid">
-          <div class="capability-config-card">
-            <label id="elsevier-api-key-label" for="elsevier-api-key">Elsevier API Key</label>
-            <input id="elsevier-api-key" type="password" placeholder="Key (optional)" />
-            <p class="meta-label">
-              <a href="https://dev.elsevier.com/" target="_blank" rel="noopener noreferrer">Get your API key</a> to unlock the official Elsevier route.
-            </p>
-          </div>
-          <div class="capability-config-card">
-            <label id="wiley-tdm-token-label" for="wiley-tdm-token">Wiley TDM Token</label>
-            <input id="wiley-tdm-token" type="password" placeholder="Token (optional)" />
-            <p class="meta-label">
-              Add your Wiley TDM token when the route needs the official Wiley TDM PDF API.
-            </p>
-          </div>
-          <div class="capability-config-card">
-            <label id="springer-oa-api-key-label" for="springer-oa-api-key">Springer OA API Key</label>
-            <input id="springer-oa-api-key" type="password" placeholder="Key (optional)" />
-            <p class="meta-label">
-              <a href="https://dev.springernature.com/" target="_blank" rel="noopener noreferrer">Get your Springer Nature API key</a> for local OA XML retrieval.
-            </p>
-          </div>
         </div>
       </section>
 
@@ -96,10 +65,10 @@
             <p id="permissions-downloads" class="meta-label">`downloads` saves Markdown files, translations, fallback ZIPs, and source files back to your own machine.</p>
           </div>
           <div class="support-group">
-            <p id="permissions-native" class="meta-label">`nativeMessaging` connects the extension to your local Mdtero runtime so supported routes can fall back to on-device acquisition when direct APIs or TDM are unavailable.</p>
+            <p id="permissions-native" class="meta-label">`nativeMessaging` is reserved for optional CLI-assisted capture when the website asks the browser to retry a difficult page.</p>
           </div>
           <div class="support-group">
-            <p id="permissions-hosts" class="meta-label">Publisher host permissions stay limited to supported scholarly sites and the Mdtero / publisher APIs already used by the product.</p>
+            <p id="permissions-hosts" class="meta-label">Host permissions stay limited to Mdtero Account, supported scholarly pages, and files you choose to upload.</p>
           </div>
         </div>
       </section>

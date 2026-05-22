@@ -75,7 +75,7 @@ describe("extension manifest", () => {
     });
   });
 
-  it("keeps outward-facing extension copy aligned with local runtime capture", () => {
+  it("keeps outward-facing extension copy aligned with the shipping browser flow", () => {
     const en = JSON.parse(
       readFileSync(resolve("_locales/en/messages.json"), "utf-8")
     ) as { extDescription?: { message?: string } };
@@ -85,18 +85,21 @@ describe("extension manifest", () => {
     const popupSource = readFileSync(resolve("src/popup/index.ts"), "utf-8");
     const optionsSource = readFileSync(resolve("src/options/index.ts"), "utf-8");
 
-    expect(en.extDescription?.message).toContain("local runtime");
     expect(en.extDescription?.message).toContain("Account");
-    expect(en.extDescription?.message).toContain("supported live paper pages");
-    expect(zh.extDescription?.message).toContain("本地运行时");
+    expect(en.extDescription?.message).toContain("parse the current paper page");
+    expect(en.extDescription?.message).toContain("upload local PDF or EPUB");
+    expect(en.extDescription?.message).not.toContain("publisher API / TDM");
     expect(zh.extDescription?.message).toContain("账户");
-    expect(zh.extDescription?.message).toContain("支持的实时论文页");
+    expect(zh.extDescription?.message).toContain("解析当前论文页");
+    expect(zh.extDescription?.message).toContain("上传本地 PDF 或 EPUB");
+    expect(zh.extDescription?.message).not.toContain("publisher API / TDM");
     expect(popupSource).toContain("Local file intake");
     expect(popupSource).toContain("Use PDF");
     expect(popupSource).toContain("Use EPUB");
     expect(popupSource).toContain("Open Mdtero Account");
-    expect(optionsSource).toContain("local Mdtero runtime");
-    expect(optionsSource).toContain("publisher API");
-    expect(optionsSource).toContain("TDM");
+    expect(optionsSource).toContain("Website sign-in");
+    expect(optionsSource).toContain("browser capture, upload, translation, and download settings");
+    expect(optionsSource).not.toContain("publisher API");
+    expect(optionsSource).not.toContain("TDM");
   });
 });
