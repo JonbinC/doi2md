@@ -23,8 +23,8 @@ class MdteroClient:
 
     def _headers(self) -> dict[str, str]:
         headers = {"X-Client-Channel": "python-tui"}
-        if self.config.api_key:
-            headers["Authorization"] = f"ApiKey {self.config.api_key}"
+        if self.config.effective_api_key:
+            headers["Authorization"] = f"ApiKey {self.config.effective_api_key}"
         return headers
 
     def _url(self, path: str) -> str:
