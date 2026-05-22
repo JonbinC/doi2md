@@ -109,6 +109,8 @@ export interface TaskArtifactDescriptor {
 export interface TaskResult {
   preferred_artifact?: string;
   artifacts?: Record<string, TaskArtifactDescriptor>;
+  reason_code?: string | null;
+  action_hint?: string | null;
   warning_code?: string;
   warning_message?: string;
 }
@@ -123,6 +125,8 @@ export interface TaskRecord {
   progress_percent?: number | null;
   created_at: string;
   result?: TaskResult | null;
+  reason_code?: string | null;
+  action_hint?: string | null;
   error_code?: string | null;
   error_message?: string | null;
 }

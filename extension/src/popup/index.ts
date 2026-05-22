@@ -33,6 +33,7 @@ import {
   getResultWarningText,
   getSavedResultSummary,
   getUsageStatusText,
+  getTaskFailureText,
   buildCliParseCommand,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -57,7 +58,7 @@ const COPY = {
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF now uses the built-in parser stack automatically.",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF uploads are parsed by the Mdtero backend automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
@@ -118,7 +119,7 @@ const COPY = {
     pickPdfButton: "选择 PDF",
     pickEpubButton: "选择 EPUB",
     fileNameEmpty: "尚未选择本地文件。",
-    localFileParsing: (filename: string) => `正在上传 ${filename}，并走本机解析链路...`,
+    localFileParsing: (filename: string) => `正在上传 ${filename}，后端会创建解析任务并在这里轮询...`,
     localFileParseFailed: "本地文件解析失败，请重试。",
     parseButton: "解析论文",
     parsingButton: "解析中...",
@@ -600,7 +601,13 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
 
   const task = response.result as TaskRecord;
   if (task.status === "failed") {
-    setResult(task.error_message ?? (kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed));
+    setResult(
+      getTaskFailureText(
+        task,
+        kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed,
+        uiLanguage
+      )
+    );
     if (kind === "parse") {
       setCliHandoff(currentInput);
       isParsing = false;

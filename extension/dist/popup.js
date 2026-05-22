@@ -494,6 +494,19 @@ function getResultWarningText(result, language = "en") {
   }
   return result.warning_message ?? "";
 }
+function getTaskFailureText(task, fallback, language = "en") {
+  const message = task?.error_message?.trim() || fallback;
+  const reason = (task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
+  const actionHint = (task?.action_hint || task?.result?.action_hint || "").trim();
+  const parts = [message];
+  if (reason) {
+    parts.push(language === "zh" ? `\u539F\u56E0\uFF1A${reason}` : `Reason: ${reason}`);
+  }
+  if (actionHint) {
+    parts.push(language === "zh" ? `\u4E0B\u4E00\u6B65\uFF1A${actionHint}` : `Next: ${actionHint}`);
+  }
+  return parts.join(" ");
+}
 function buildCliParseCommand(input) {
   const normalized = String(input || "").trim();
   if (!normalized) {
@@ -530,7 +543,7 @@ var COPY = {
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF now uses the built-in parser stack automatically.",
+    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF uploads are parsed by the Mdtero backend automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
@@ -590,7 +603,7 @@ var COPY = {
     pickPdfButton: "\u9009\u62E9 PDF",
     pickEpubButton: "\u9009\u62E9 EPUB",
     fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
-    localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u5E76\u8D70\u672C\u673A\u89E3\u6790\u94FE\u8DEF...`,
+    localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u540E\u7AEF\u4F1A\u521B\u5EFA\u89E3\u6790\u4EFB\u52A1\u5E76\u5728\u8FD9\u91CC\u8F6E\u8BE2...`,
     localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
     parsingButton: "\u89E3\u6790\u4E2D...",
@@ -1042,7 +1055,13 @@ async function pollTask(taskId, kind) {
   }
   const task = response.result;
   if (task.status === "failed") {
-    setResult(task.error_message ?? (kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed));
+    setResult(
+      getTaskFailureText(
+        task,
+        kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed,
+        uiLanguage
+      )
+    );
     if (kind === "parse") {
       setCliHandoff(currentInput);
       isParsing = false;
