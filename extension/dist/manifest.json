@@ -7,7 +7,6 @@
   "permissions": [
     "storage",
     "downloads",
-    "nativeMessaging",
     "tabs"
   ],
   "host_permissions": [

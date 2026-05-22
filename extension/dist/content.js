@@ -464,40 +464,7 @@ function shouldAcceptMdteroAuthMessage(event) {
   return isMdteroAuthTokenPayload(event.data);
 }
 
-// src/lib/bridge-wake.ts
-var BRIDGE_SUPPORTED_URL_PATTERNS = [
-  "arxiv.org",
-  "dl.acm.org",
-  "ieeexplore.ieee.org",
-  "nature.com",
-  "pubs.acs.org",
-  "pubs.rsc.org",
-  "sciencedirect.com/science/article/pii/",
-  "techrxiv.org",
-  "link.springer.com",
-  "mdpi.com",
-  "springer.com",
-  "springernature.com",
-  "onlinelibrary.wiley.com",
-  "tandfonline.com"
-];
-function isBridgeSupportedPage(url) {
-  const normalized = String(url || "").trim().toLowerCase();
-  return BRIDGE_SUPPORTED_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
-}
-function announceBridgePageReady(runtime, url) {
-  if (!runtime?.sendMessage || !url || !isBridgeSupportedPage(url)) {
-    return;
-  }
-  void runtime.sendMessage({
-    type: "mdtero.bridge.page_ready",
-    url
-  }).catch(() => {
-  });
-}
-
 // src/content.ts
-announceBridgePageReady(chrome.runtime, window.location.href);
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.download_epub.request") {
     downloadEpubArtifact(String(message.artifactUrl || "")).then((download) => sendResponse({ ok: true, download })).catch(

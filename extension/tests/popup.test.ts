@@ -259,15 +259,15 @@ describe("getUsageStatusText", () => {
 describe("getBridgeStatusText", () => {
   it("formats browser capture status for popup surfaces", () => {
     expect(getBridgeStatusText({ state: "connected", runnerState: "idle" }, "en")).toBe(
-      "Browser capture channel is ready to reuse this browser session when direct server fetch fails."
+      "The extension can read this paper page and upload page content when needed."
     );
     expect(getBridgeStatusText({ state: "connected", runnerState: "busy" }, "zh")).toBe(
-      "浏览器补抓取通道已连接，正在处理当前页面获取任务。"
+      "扩展正在读取当前论文页。"
     );
     expect(getBridgeStatusText({ state: "unavailable", runnerState: "idle" }, "en")).toContain(
-      "not connected"
+      "unavailable"
     );
-    expect(getBridgeStatusText(undefined, "zh")).toBe("浏览器补抓取通道状态未知。");
+    expect(getBridgeStatusText(undefined, "zh")).toBe("当前页面读取状态未知。");
   });
 });
 
@@ -318,7 +318,7 @@ describe("getPreflightHintText", () => {
         },
         "zh"
       )
-    ).toContain("本地浏览器抓取");
+    ).toContain("扩展读取");
   });
 
   it("nudges users away from PDF or EPUB shells", () => {

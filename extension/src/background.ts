@@ -1,101 +1,15 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
 import {
-  type BrowserBridgeAcquireRequest,
-  initializeBrowserBridge
-} from "./lib/browser-bridge";
-import { performBridgeAcquire } from "./lib/bridge-acquire";
-import { isBridgeSupportedPage } from "./lib/bridge-wake";
-import {
   runLegacyFileParseRequest,
   runLegacyParseRequest,
 } from "./lib/legacy-parse";
-import { buildSourceConnectivityObservation } from "./lib/source-connectivity-observation";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
 import { readSettings, writeSettings } from "./lib/storage";
 
 const client = createApiClient(readSettings);
 const routerSSOT = createRouterSSOTClient(readSettings);
-const bridgeSession: { tabId?: number | null; pageTabId?: number | null } = {};
-let browserBridge =
-  typeof chrome !== "undefined" && chrome.runtime?.connectNative
-    ? initializeBrowserBridge({
-        runtime: chrome.runtime,
-        alarms: chrome.alarms,
-        runtimeId: chrome.runtime.id,
-        acquire: handleBridgeAcquire
-      })
-    : null;
 
-async function handleBridgeAcquire(request: BrowserBridgeAcquireRequest) {
-  return performBridgeAcquire({
-    request,
-    chromeApi: chrome,
-    bridgeSession
-  });
-}
-
-chrome.runtime.onStartup?.addListener(() => {
-  browserBridge?.ensureConnected();
-});
-
-chrome.runtime.onInstalled?.addListener(() => {
-  browserBridge?.ensureConnected();
-});
-
-chrome.tabs.onUpdated?.addListener((_tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && isBridgeSupportedPage(tab?.url || "")) {
-    browserBridge?.ensureConnected();
-  }
-});
-
-chrome.tabs.onRemoved?.addListener((tabId) => {
-  if (bridgeSession.tabId === tabId) {
-    bridgeSession.tabId = null;
-  }
-  if (bridgeSession.pageTabId === tabId) {
-    bridgeSession.pageTabId = null;
-  }
-});
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === "mdtero.bridge.page_ready") {
-    const senderTabId = sender?.tab?.id;
-    if (typeof senderTabId === "number") {
-      bridgeSession.pageTabId = senderTabId;
-    }
-    browserBridge?.ensureConnected();
-    sendResponse({ ok: true });
-    return false;
-  }
-
-  if (message?.type === "mdtero.bridge.status") {
-    const status = browserBridge
-      ? browserBridge.getStatus()
-      : {
-          state: "unavailable",
-          runnerState: "idle"
-        };
-    sendResponse({
-      ok: true,
-      result: status
-    });
-    return false;
-  }
-
-  if (message?.type === "mdtero.source_connectivity.observation") {
-    const status = browserBridge
-      ? browserBridge.getStatus()
-      : {
-          state: "unavailable",
-          runnerState: "idle"
-        };
-    sendResponse({
-      ok: true,
-      result: buildSourceConnectivityObservation(status)
-    });
-    return false;
-  }
-
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.auth.save_token") {
     readSettings().then(settings => {
       return writeSettings({

@@ -1,9 +1,6 @@
 import { detectPaperInput } from "./lib/detect";
 import { buildPageCaptureResult, downloadEpubArtifact, extractXmlCandidateUrls, fetchXmlArtifact } from "./lib/page-capture";
 import { shouldAcceptMdteroAuthMessage } from "./lib/auth-bridge";
-import { announceBridgePageReady } from "./lib/bridge-wake";
-
-announceBridgePageReady(chrome.runtime, window.location.href);
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.download_epub.request") {

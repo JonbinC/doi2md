@@ -485,7 +485,7 @@ function getPreflightHintText(params, language = "en") {
   const livePageSupported = isBridgeSupportedPage(candidate);
   const looksLikePdfShell = candidate.includes("/pdf") || candidate.includes("/epdf") || candidate.includes("download=true") || candidate.includes("/epub/");
   if (looksLikePdfShell) {
-    return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\uFF0C\u518D\u8FDB\u884C\u672C\u5730\u6293\u53D6\u3002" : "This looks like a PDF/EPUB page. Open the HTML full-text page first for better local capture.";
+    return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u76F4\u63A5\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\u3002" : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";
   }
   if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
     return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u6269\u5C55\u4F1A\u4F18\u5148\u4F7F\u7528\u4F60\u7684\u5B98\u7F51\u767B\u5F55\u6001\u548C\u670D\u52A1\u7AEF\u8DEF\u7531\uFF1B\u82E5\u9700\u8981\u673A\u6784\u5168\u6587\uFF0C\u8BF7\u786E\u8BA4\u5F53\u524D\u6D4F\u89C8\u5668\u5DF2\u80FD\u6253\u5F00\u539F\u6587\u3002" : "This input maps to Elsevier / ScienceDirect. The extension will use your website session and server route first; for licensed full text, confirm this browser can already open the article.";
@@ -494,12 +494,12 @@ function getPreflightHintText(params, language = "en") {
     return "";
   }
   if (bridgeMissing) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u901A\u8FC7\u6269\u5C55\u505A\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u3002\u82E5\u76F4\u8FDE\u5931\u8D25\uFF0C\u8BF7\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5728\u7EC8\u7AEF\u7528 `mdtero parse` \u7EE7\u7EED\u3002" : "This page can use browser-assisted capture. If direct routing fails, upload the PDF/EPUB or continue with `mdtero parse` in the terminal.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u7531\u6269\u5C55\u8BFB\u53D6\u3002\u82E5\u76F4\u8FDE\u5931\u8D25\uFF0C\u8BF7\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5728\u7EC8\u7AEF\u7528 `mdtero parse` \u7EE7\u7EED\u3002" : "The extension can read this page. If direct routing fails, upload the PDF/EPUB or continue with `mdtero parse` in the terminal.";
   }
   if (bridgeReady) {
-    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u5728\u670D\u52A1\u7AEF\u76F4\u8FDE\u4E0D\u53EF\u7528\u65F6\uFF0C\u53EF\u56DE\u9000\u5230\u672C\u5730\u6D4F\u89C8\u5668\u6293\u53D6\u3002" : "This page is ready for local browser capture if the server route cannot fetch the article directly.";
+    return language === "zh" ? "\u5F53\u524D\u9875\u9762\u53EF\u7531\u6269\u5C55\u8BFB\u53D6\uFF0C\u5E76\u5728\u9700\u8981\u65F6\u4E0A\u4F20\u7ED9 Mdtero \u89E3\u6790\u3002" : "This page can be read by the extension and uploaded to Mdtero when needed.";
   }
-  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u6269\u5C55\u5DF2\u8FDE\u63A5\u5E76\u80FD\u8BFB\u53D6\u5F53\u524D\u9875\u9762\u3002" : "This page supports browser-assisted capture. Confirm the extension is connected and can read the current page before parsing.";
+  return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6269\u5C55\u8BFB\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u9875\u9762\u6B63\u6587\u5DF2\u7ECF\u52A0\u8F7D\u3002" : "This page supports extension capture. Confirm the article body has loaded before parsing.";
 }
 function getSavedResultSummary(state, language = "en") {
   const filename = state?.translatedFilename ?? state?.parseFilename;

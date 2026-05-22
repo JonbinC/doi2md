@@ -151,33 +151,33 @@ export function getBridgeStatusText(
 
   if (language === "zh") {
     if (state === "connected" && runnerState === "busy") {
-      return "浏览器补抓取通道已连接，正在处理当前页面获取任务。";
+      return "扩展正在读取当前论文页。";
     }
     if (state === "connected") {
-      return "浏览器补抓取通道已就绪，可在服务端直连失败时使用当前浏览器会话。";
+      return "扩展可读取当前论文页并在需要时上传页面内容。";
     }
     if (state === "disconnected") {
-      return "浏览器补抓取通道已断开。请重载扩展或直接上传 PDF/EPUB。";
+      return "当前页面读取不可用。请重载页面或直接上传 PDF/EPUB。";
     }
     if (state === "unavailable") {
-      return "当前未连接浏览器补抓取通道。直连失败时，请用扩展上传文件或改用 mdtero CLI。";
+      return "当前页面读取不可用。直连失败时，请用扩展上传文件或改用 mdtero CLI。";
     }
-    return "浏览器补抓取通道状态未知。";
+    return "当前页面读取状态未知。";
   }
 
   if (state === "connected" && runnerState === "busy") {
-    return "Browser capture channel is connected and handling the current page acquisition.";
+    return "The extension is reading the current paper page.";
   }
   if (state === "connected") {
-    return "Browser capture channel is ready to reuse this browser session when direct server fetch fails.";
+    return "The extension can read this paper page and upload page content when needed.";
   }
   if (state === "disconnected") {
-    return "Browser capture channel disconnected. Reload the extension or upload a PDF/EPUB directly.";
+    return "Current-page capture is unavailable. Reload the page or upload a PDF/EPUB directly.";
   }
   if (state === "unavailable") {
-    return "Browser capture channel is not connected. If direct routing fails, upload the file or continue from mdtero CLI.";
+    return "Current-page capture is unavailable. If direct routing fails, upload the file or continue with mdtero CLI.";
   }
-  return "Browser capture channel status unknown.";
+  return "Current-page capture status unknown.";
 }
 
 export function getPreflightHintText(
@@ -210,8 +210,8 @@ export function getPreflightHintText(
 
   if (looksLikePdfShell) {
     return language === "zh"
-      ? "当前更像 PDF/EPUB 页面。建议先切到 HTML 正文页，再进行本地抓取。"
-      : "This looks like a PDF/EPUB page. Open the HTML full-text page first for better local capture.";
+      ? "当前更像 PDF/EPUB 页面。建议直接上传 PDF/EPUB，或先切到 HTML 正文页。"
+      : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";
   }
 
   if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
@@ -226,19 +226,19 @@ export function getPreflightHintText(
 
   if (bridgeMissing) {
     return language === "zh"
-      ? "当前页面可通过扩展做浏览器补抓取。若直连失败，请上传 PDF/EPUB，或在终端用 `mdtero parse` 继续。"
-      : "This page can use browser-assisted capture. If direct routing fails, upload the PDF/EPUB or continue with `mdtero parse` in the terminal.";
+      ? "当前页面可由扩展读取。若直连失败，请上传 PDF/EPUB，或在终端用 `mdtero parse` 继续。"
+      : "The extension can read this page. If direct routing fails, upload the PDF/EPUB or continue with `mdtero parse` in the terminal.";
   }
 
   if (bridgeReady) {
     return language === "zh"
-      ? "当前页面在服务端直连不可用时，可回退到本地浏览器抓取。"
-      : "This page is ready for local browser capture if the server route cannot fetch the article directly.";
+      ? "当前页面可由扩展读取，并在需要时上传给 Mdtero 解析。"
+      : "This page can be read by the extension and uploaded to Mdtero when needed.";
   }
 
   return language === "zh"
-    ? "当前页面支持浏览器补抓取。解析前请确认扩展已连接并能读取当前页面。"
-    : "This page supports browser-assisted capture. Confirm the extension is connected and can read the current page before parsing.";
+    ? "当前页面支持扩展读取。解析前请确认页面正文已经加载。"
+    : "This page supports extension capture. Confirm the article body has loaded before parsing.";
 }
 
 export function getSavedResultSummary(

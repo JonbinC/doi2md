@@ -46,36 +46,11 @@ vi.mock("../src/lib/springer", () => ({
   fetchSpringerOpenAccessJats
 }));
 
-vi.mock("../src/lib/browser-bridge", () => ({
-  initializeBrowserBridge: vi.fn(() => ({
-    ensureConnected: vi.fn(),
-    getStatus: vi.fn(() => ({
-      state: "connected",
-      runnerState: "idle"
-    }))
-  }))
-}));
-
-vi.mock("../src/lib/bridge-acquire", () => ({
-  performBridgeAcquire: vi.fn()
-}));
-
-vi.mock("../src/lib/bridge-wake", () => ({
-  isBridgeSupportedPage: vi.fn(() => false)
-}));
-
 function createChromeStub() {
   const messageListeners: Array<(message: unknown, sender: unknown, sendResponse: (payload: unknown) => void) => boolean | void> = [];
   return {
     runtime: {
       id: "runtime-demo",
-      connectNative: vi.fn(),
-      onStartup: {
-        addListener: vi.fn()
-      },
-      onInstalled: {
-        addListener: vi.fn()
-      },
       onMessage: {
         addListener(listener: (message: unknown, sender: unknown, sendResponse: (payload: unknown) => void) => boolean | void) {
           messageListeners.push(listener);
@@ -83,13 +58,7 @@ function createChromeStub() {
       }
     },
     tabs: {
-      sendMessage: vi.fn(),
-      onUpdated: {
-        addListener: vi.fn()
-      },
-      onRemoved: {
-        addListener: vi.fn()
-      }
+      sendMessage: vi.fn()
     },
     __messageListeners: messageListeners
   };
@@ -901,7 +870,7 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("exposes bridge readiness status for helper diagnostics", async () => {
+  it("does not expose the retired native helper diagnostics", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
 
@@ -919,16 +888,10 @@ describe("extension background Elsevier routing", () => {
       sendResponse
     );
 
-    expect(sendResponse).toHaveBeenCalledWith({
-      ok: true,
-      result: {
-        state: "connected",
-        runnerState: "idle"
-      }
-    });
+    expect(sendResponse).not.toHaveBeenCalled();
   });
 
-  it("normalizes bridge readiness into source connectivity observations", async () => {
+  it("does not expose retired source connectivity helper observations", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
 
@@ -946,20 +909,6 @@ describe("extension background Elsevier routing", () => {
       sendResponse
     );
 
-    expect(sendResponse).toHaveBeenCalledWith({
-      ok: true,
-      result: {
-        browser_bridge: {
-          ready: true,
-          state: "connected",
-          runnerState: "idle"
-        },
-        local_helper: {
-          ready: true,
-          state: "connected",
-          runnerState: "idle"
-        }
-      }
-    });
+    expect(sendResponse).not.toHaveBeenCalled();
   });
 });

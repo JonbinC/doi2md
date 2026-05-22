@@ -13,8 +13,7 @@ Protocol and acquisition helper layer for the public extension. These files tran
 | Runtime messages | `runtime.ts` | Extension command/message shaping. |
 | Helper bundles | `helper-bundle.ts` | ZIP/manifest packaging for helper-bundle parse flow. |
 | Page capture | `page-capture.ts` | Page classification and artifact detection. |
-| Browser bridge | `browser-bridge.ts` | Native messaging / acquisition envelope protocol. |
-| Connectivity | `source-connectivity-observation.ts` | Host-side observation shape. |
+| Capture hints | `bridge-wake.ts` | Publisher URL support detection for current-tab capture hints. |
 
 ## CONVENTIONS
 
@@ -28,6 +27,7 @@ Protocol and acquisition helper layer for the public extension. These files tran
 - Do not duplicate `@mdtero/shared` contract definitions locally.
 - Do not promote a publisher-specific hack into generic routing policy here.
 - Do not bypass tests for background/page-capture/helper-bundle behavior.
+- Do not reintroduce native messaging or local helper dependencies into the public extension.
 
 ## VERIFY
 
