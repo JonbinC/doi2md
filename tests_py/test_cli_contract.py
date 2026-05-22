@@ -814,15 +814,60 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
         zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero"),
     )
 
-    model = build_dashboard_model(project_root=tmp_path, config=cfg, agent_root=tmp_path)
+    model = build_dashboard_model(project_root=tmp_path, config=cfg, agent_root=tmp_path, rag_status_fetcher=lambda _project_id: {
+        "status": "not_ready",
+        "reason_code": "rag_index_not_built",
+        "summary": {"chunk_count": 2, "embedded_count": 0},
+    })
     rendered = render_dashboard_text(model)
 
     assert model["academic"]["discover_source"] == "local Semantic Scholar"
-    assert model["rag"]["ready"] is True
-    assert model["next_steps"] == ["mdtero project ingest", "mdtero rag build", "mdtero rag query \"<question>\""]
+    assert model["rag"]["ready"] is False
+    assert model["rag"]["server_status"] == "not_ready"
+    assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
     assert model["zotero"]["configured"] is True
     assert model["agents"]["labels"] == ["Codex"]
     assert rendered is not None
+
+
+def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
+    init_project(tmp_path, name="tui-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    model = build_dashboard_model(
+        project_root=tmp_path,
+        config=MdteroConfig(api_key="key"),
+        agent_root=tmp_path,
+        rag_status_fetcher=lambda _project_id: {
+            "status": "ready",
+            "reason_code": "indexed",
+            "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
+        },
+    )
+    rendered = render_dashboard_text(model)
+
+    assert model["rag"]["ready"] is True
+    assert model["rag"]["reason_code"] == "indexed"
+    assert model["rag"]["server_summary"]["embedded_count"] == 3
+    assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
+    assert rendered is not None
+
+
+def test_tui_dashboard_model_keeps_local_rag_when_server_status_unavailable(tmp_path: Path):
+    init_project(tmp_path, name="tui-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def failing_fetcher(_project_id):
+        raise RuntimeError("offline")
+
+    model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path, rag_status_fetcher=failing_fetcher)
+
+    assert model["rag"]["ready"] is True
+    assert model["rag"]["server_status"] == "unavailable"
+    assert model["rag"]["server_reason_code"] == "server_rag_status_unavailable"
+    assert model["next_steps"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
 
 
 def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):

@@ -11,6 +11,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Static
 
 from .agent import detect_targets
+from .client import MdteroClient
 from .config import MdteroConfig, load_config
 from .mcp import build_agent_commands, build_rag_context
 from .projects import ProjectState, ensure_project
@@ -21,6 +22,7 @@ def build_dashboard_model(
     project_root: Path | None = None,
     config: MdteroConfig | None = None,
     agent_root: Path | None = None,
+    rag_status_fetcher: Any | None = None,
 ) -> dict[str, Any]:
     root = project_root or Path.cwd()
     cfg = config or load_config()
@@ -30,7 +32,7 @@ def build_dashboard_model(
     running = [paper for paper in project.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     succeeded = [paper for paper in project.papers if paper.status == "succeeded"]
     failed = [paper for paper in project.papers if paper.status == "failed"]
-    rag = build_rag_context(root)
+    rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
     return {
         "account": {
@@ -115,6 +117,30 @@ def _project_payload(
     }
 
 
+def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *, rag_status_fetcher: Any | None = None) -> dict[str, Any]:
+    payload = dict(local_rag)
+    if not server_project_id:
+        return payload
+    fetcher = rag_status_fetcher
+    if fetcher is None:
+        fetcher = MdteroClient().rag_status
+    try:
+        server_status = fetcher(server_project_id)
+    except Exception as exc:
+        payload["server_status"] = "unavailable"
+        payload["server_reason_code"] = "server_rag_status_unavailable"
+        payload["server_error_type"] = exc.__class__.__name__
+        return payload
+    summary = server_status.get("summary") if isinstance(server_status.get("summary"), dict) else {}
+    payload["server_status"] = server_status.get("status")
+    payload["server_reason_code"] = server_status.get("reason_code")
+    payload["server_summary"] = summary
+    payload["ready"] = server_status.get("status") == "ready"
+    if server_status.get("reason_code"):
+        payload["reason_code"] = str(server_status["reason_code"])
+    return payload
+
+
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
     if not cfg.api_key:
         return ["mdtero login --api-key <key>", "mdtero doctor"]
@@ -124,8 +150,12 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
         return [commands["parse_pending"], commands["refresh"]]
     if not project.server_project_id:
         return ["mdtero project create-server", "mdtero project ingest"]
+    if rag.get("server_status") == "ready":
+        return ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
+    if rag.get("server_status") in {"not_ready", "partial"}:
+        return ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
     if rag.get("ready_for_ingest_count", 0) > 0:
-        return ["mdtero project ingest", "mdtero rag build", "mdtero rag query \"<question>\""]
+        return ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
     return ["mdtero discover \"your topic\"", "mdtero parse <doi-or-url>"]
 
 
@@ -162,6 +192,12 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Ready", "yes" if rag["ready"] else "no")
     table.add_row("Reason", rag["reason_code"])
     table.add_row("Ready for ingest", str(rag["ready_for_ingest_count"]))
+    if rag.get("server_status"):
+        table.add_row("Server RAG", f"{rag.get('server_status')} ({rag.get('server_reason_code')})")
+        summary = rag.get("server_summary") if isinstance(rag.get("server_summary"), dict) else {}
+        table.add_row("Embeddings", f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunks")
+    elif rag.get("server_error_type"):
+        table.add_row("Server RAG", f"unavailable ({rag.get('server_error_type')})")
     table.add_row("MCP", "mdtero mcp serve")
     return Panel(table, title="RAG & MCP", border_style="magenta")
 
