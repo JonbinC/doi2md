@@ -115,10 +115,19 @@ class MdteroClient:
 
     def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
         if self.config.has_semantic_scholar_key:
-            return self._semantic_scholar_search(query, limit=limit)
-        result = self._request_with_fallback("GET", "/api/v1/discovery/search", "/me/discovery/search", params={"query": query, "limit": limit})
+            try:
+                return self._semantic_scholar_search(query, limit=limit)
+            except (httpx.HTTPError, ValueError) as exc:
+                result = self._server_discovery_search(query, limit=limit)
+                result["source"] = "openalex_server"
+                result["local_semantic_scholar_error"] = exc.__class__.__name__
+                return result
+        result = self._server_discovery_search(query, limit=limit)
         result.setdefault("source", "openalex_server")
         return result
+
+    def _server_discovery_search(self, query: str, *, limit: int) -> dict[str, Any]:
+        return self._request_with_fallback("GET", "/api/v1/discovery/search", "/me/discovery/search", params={"query": query, "limit": limit})
 
     def translate_text(self, markdown: str, *, filename: str = "paper.md", target_language: str = "zh-CN") -> dict[str, Any]:
         return self._request_with_fallback(
