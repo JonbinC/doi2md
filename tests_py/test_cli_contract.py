@@ -8,7 +8,7 @@ import httpx
 from rich.console import Console
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
-from mdtero.agent import detect_targets, install_targets, uninstall_targets
+from mdtero.agent import detect_target_status, detect_targets, install_targets, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient
@@ -1573,6 +1573,34 @@ def test_python_agent_installer_detects_and_uninstalls_targets(tmp_path: Path):
     assert results[0].target == "hermes"
     assert removed[0].action == "removed"
     assert not (tmp_path / ".hermes" / "skills" / "mdtero").exists()
+
+
+def test_agent_detect_command_returns_machine_readable_workspace_status(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    (tmp_path / ".codex").mkdir()
+    install_targets(["codex"], root=tmp_path)
+    (tmp_path / ".hermes").mkdir()
+
+    statuses = detect_target_status(tmp_path)
+    codex_status = next(item for item in statuses if item.target == "codex")
+    hermes_status = next(item for item in statuses if item.target == "hermes")
+
+    assert codex_status.detected is True
+    assert codex_status.installed is True
+    assert codex_status.install_command == "mdtero agent install --target codex"
+    assert hermes_status.detected is True
+    assert hermes_status.installed is False
+
+    assert cli.cmd_agent_detect(type("Args", (), {"root": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+    by_target = {item["target"]: item for item in payload}
+
+    assert by_target["codex"]["detected"] is True
+    assert by_target["codex"]["installed"] is True
+    assert by_target["hermes"]["detected"] is True
+    assert by_target["hermes"]["installed"] is False
+    assert by_target["opencode"]["install_command"] == "mdtero agent install --target opencode"
 
 
 def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site():

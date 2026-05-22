@@ -24,6 +24,17 @@ class AgentInstallResult:
     detected: bool
 
 
+@dataclass(frozen=True)
+class AgentDetectionResult:
+    target: str
+    label: str
+    workspace_path: str
+    skill_path: str
+    detected: bool
+    installed: bool
+    install_command: str
+
+
 TARGETS: dict[str, AgentTarget] = {
     "codex": AgentTarget("codex", "Codex", ".codex/skills/mdtero"),
     "claude_code": AgentTarget("claude_code", "Claude Code", ".claude/skills/mdtero"),
@@ -45,6 +56,26 @@ def detect_targets(root: Path | None = None) -> list[AgentTarget]:
         if marker.exists():
             detected.append(target)
     return detected
+
+
+def detect_target_status(root: Path | None = None) -> list[AgentDetectionResult]:
+    base = _root(root)
+    results = []
+    for target in TARGETS.values():
+        workspace_path = base / target.skill_directory.split("/", 1)[0]
+        skill_path = _safe_skill_path(target, root)
+        results.append(
+            AgentDetectionResult(
+                target=target.name,
+                label=target.label,
+                workspace_path=str(workspace_path),
+                skill_path=str(skill_path),
+                detected=workspace_path.exists(),
+                installed=(skill_path / "SKILL.md").exists(),
+                install_command=f"mdtero agent install --target {target.name}",
+            )
+        )
+    return results
 
 
 def install_targets(
@@ -83,6 +114,10 @@ def uninstall_targets(
 
 
 def results_to_json(results: list[AgentInstallResult]) -> str:
+    return json.dumps([asdict(result) for result in results], indent=2, ensure_ascii=False)
+
+
+def detections_to_json(results: list[AgentDetectionResult]) -> str:
     return json.dumps([asdict(result) for result in results], indent=2, ensure_ascii=False)
 
 
