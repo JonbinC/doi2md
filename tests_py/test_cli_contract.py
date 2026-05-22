@@ -13,7 +13,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status
+from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -1165,6 +1165,63 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert rag["ready"] is True
     assert rag["reason_code"] == "ready"
     assert "mdtero project ingest" in paper["recommended_commands"]
+
+
+def test_mcp_agent_briefing_summarizes_project_work_for_agents(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md", provider="mineru_precision"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/bad", task_id="task-bad", status="failed", reason_code="parser_failed"))
+
+    def fake_fetcher(project_id):
+        assert project_id == "42"
+        return {
+            "status": "ready",
+            "reason_code": "indexed",
+            "summary": {"chunk_count": 8, "embedded_count": 8, "pending_embedding_count": 0},
+        }
+
+    briefing = build_agent_briefing(tmp_path, rag_status_fetcher=fake_fetcher)
+
+    assert briefing["project"]["name"] == "agent-demo"
+    assert briefing["health"] == {
+        "pending_count": 1,
+        "running_count": 0,
+        "succeeded_count": 1,
+        "failed_count": 1,
+        "ready_for_ingest_count": 1,
+        "rag_status": "ready",
+        "rag_reason_code": "indexed",
+    }
+    assert briefing["ready_artifacts"][0]["download_command"] == "mdtero download task-done paper_md --output-dir ./mdtero-output --json"
+    assert briefing["blocked_items"][0]["reason_code"] == "parser_failed"
+    assert briefing["active_items"][0]["input"] == "10.1000/todo"
+    assert briefing["rag"]["agent_summary"]["embedded_count"] == 8
+    assert briefing["recommended_next_commands"] == [
+        "mdtero project parse --wait",
+        "mdtero project parse --include-failed --wait",
+        "mdtero project download --output-dir ./mdtero-output",
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\"",
+        "mdtero mcp serve",
+    ]
+    assert "agent_briefing" in briefing["mcp_tools"]
+
+
+def test_mcp_agent_briefing_guides_empty_projects(tmp_path: Path):
+    init_project(tmp_path, name="empty-demo")
+
+    briefing = build_agent_briefing(tmp_path)
+
+    assert briefing["health"]["pending_count"] == 0
+    assert briefing["health"]["rag_reason_code"] == "server_project_not_linked"
+    assert briefing["recommended_next_commands"][:3] == [
+        "mdtero discover \"<topic>\" --interactive",
+        "mdtero project add <doi-or-url> --json",
+        "mdtero parse <doi-or-url> --json",
+    ]
+    assert "mdtero rag build" in briefing["recommended_next_commands"]
 
 
 def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path: Path):

@@ -12,6 +12,7 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
     state = load_project(root)
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
+    running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     failed = [paper for paper in state.papers if paper.status == "failed"]
     return {
         "name": state.name,
@@ -19,6 +20,7 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
         "paper_count": len(state.papers),
         "ready_for_ingest_count": len(succeeded),
         "pending_count": len(pending),
+        "running_count": len(running),
         "failed_count": len(failed),
         "papers": [document.to_dict() for document in project_documents(root)],
         "next_actions": build_agent_commands(root),
@@ -140,6 +142,74 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     return status
 
 
+def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher: Any | None = None) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    state = load_project(root)
+    commands = build_agent_commands(root)["commands"]
+    server_rag = build_server_rag_status(root, fetcher=rag_status_fetcher)
+
+    pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
+    running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
+    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    failed = [paper for paper in state.papers if paper.status == "failed"]
+
+    next_commands: list[str] = []
+    if not state.papers:
+        next_commands.extend([
+            "mdtero discover \"<topic>\" --interactive",
+            "mdtero project add <doi-or-url> --json",
+            "mdtero parse <doi-or-url> --json",
+        ])
+    if pending:
+        next_commands.append(commands["parse_pending"])
+    if running:
+        next_commands.append(commands["refresh"])
+    if failed:
+        next_commands.append("mdtero project parse --include-failed --wait")
+    if succeeded:
+        next_commands.append(commands["download_markdown"])
+    next_commands.extend(str(command) for command in server_rag.get("next_commands", []) if command)
+    next_commands.append(commands["serve_mcp"])
+
+    return {
+        "project": {
+            "name": state.name,
+            "root": str(root.resolve()),
+            "server_project_id": state.server_project_id,
+            "paper_count": len(state.papers),
+        },
+        "health": {
+            "pending_count": len(pending),
+            "running_count": len(running),
+            "succeeded_count": len(succeeded),
+            "failed_count": len(failed),
+            "ready_for_ingest_count": len(succeeded),
+            "rag_status": server_rag.get("status"),
+            "rag_reason_code": server_rag.get("reason_code"),
+        },
+        "ready_artifacts": [_paper_agent_summary(paper, include_download=True) for paper in succeeded[:20]],
+        "blocked_items": [_paper_agent_summary(paper, include_download=False) for paper in failed[:20]],
+        "active_items": [_paper_agent_summary(paper, include_download=False) for paper in [*pending, *running][:20]],
+        "rag": {
+            "server_project_id": server_rag.get("server_project_id"),
+            "status": server_rag.get("status"),
+            "reason_code": server_rag.get("reason_code"),
+            "agent_summary": server_rag.get("agent_summary"),
+            "action_hint": server_rag.get("action_hint"),
+            "next_commands": server_rag.get("next_commands", []),
+        },
+        "recommended_next_commands": _dedupe_commands(next_commands),
+        "mcp_tools": [
+            "agent_briefing",
+            "project_status",
+            "paper_context",
+            "rag_context",
+            "server_rag_status",
+            "agent_commands",
+        ],
+    }
+
+
 def _paper_commands(paper: Any) -> list[str]:
     if paper.status in {"pending", "created"} and not paper.task_id:
         return ["mdtero project parse --wait"]
@@ -150,6 +220,37 @@ def _paper_commands(paper: Any) -> list[str]:
     if paper.status == "failed":
         return ["mdtero project parse --include-failed --wait"]
     return []
+
+
+def _paper_agent_summary(paper: Any, *, include_download: bool) -> dict[str, Any]:
+    payload = {
+        "input": paper.input,
+        "title": paper.title,
+        "doi": paper.doi,
+        "task_id": paper.task_id,
+        "status": paper.status,
+        "reason_code": paper.reason_code,
+        "artifact": paper.artifact,
+        "provider": paper.provider,
+        "parser_strategy": paper.parser_strategy,
+        "source": paper.source,
+        "recommended_commands": _paper_commands(paper),
+    }
+    if include_download and paper.task_id:
+        payload["download_command"] = f"mdtero download {paper.task_id} {paper.artifact or 'paper_md'} --output-dir ./mdtero-output --json"
+    return payload
+
+
+def _dedupe_commands(commands: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for command in commands:
+        cleaned = str(command or "").strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned)
+    return result
 
 
 def serve_project_context(project_root: Path | None = None) -> None:
@@ -176,6 +277,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def server_rag_status() -> dict:
         return build_server_rag_status(root)
+
+    @mcp.tool
+    def agent_briefing() -> dict:
+        return build_agent_briefing(root)
 
     @mcp.tool
     def agent_commands() -> dict:
