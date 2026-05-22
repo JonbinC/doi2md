@@ -11,7 +11,7 @@ from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
-from mdtero.client import MdteroClient
+from mdtero.client import MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -345,6 +345,96 @@ def test_translate_text_payload_is_compatible_with_v1_schema(monkeypatch):
         "target_language": "zh-CN",
         "mode": "full",
     }
+
+
+def test_translate_server_path_payload_is_compatible_with_v1_schema(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_request_with_fallback(self, method, primary_path, fallback_path, **kwargs):
+        captured["method"] = method
+        captured["primary_path"] = primary_path
+        captured["fallback_path"] = fallback_path
+        captured["json"] = kwargs.get("json")
+        return {"task_id": "translate-task", "status": "queued"}
+
+    monkeypatch.setattr(MdteroClient, "_request_with_fallback", fake_request_with_fallback)
+
+    result = MdteroClient().translate_server_path("/app/tasks/parse-1/paper.md", target_language="zh-CN")
+
+    assert result == {"task_id": "translate-task", "status": "queued"}
+    assert captured["method"] == "POST"
+    assert captured["primary_path"] == "/api/v1/tasks/translate"
+    assert captured["fallback_path"] == "/tasks/translate"
+    assert captured["json"] == {
+        "source_markdown_path": "/app/tasks/parse-1/paper.md",
+        "target_language": "zh-CN",
+        "mode": "full",
+    }
+
+
+def test_translation_source_path_from_task_prefers_paper_md_artifact_path():
+    task = {
+        "result": {
+            "artifacts": {
+                "paper_md": {"path": "/app/tasks/parse-1/paper.md", "filename": "paper.md"},
+                "paper_bundle": {"path": "/app/tasks/parse-1/paper.zip"},
+            }
+        }
+    }
+
+    assert translation_source_path_from_task(task) == "/app/tasks/parse-1/paper.md"
+
+
+def test_translate_task_uses_parse_task_artifact_path(monkeypatch):
+    calls = []
+
+    def fake_task(self, task_id):
+        calls.append(("task", task_id))
+        return {"result": {"artifacts": {"paper_md": {"path": "/app/tasks/parse-1/paper.md"}}}}
+
+    def fake_translate_server_path(self, source_markdown_path, *, target_language="zh-CN"):
+        calls.append(("translate", source_markdown_path, target_language))
+        return {"task_id": "translate-task", "status": "queued"}
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "translate_server_path", fake_translate_server_path)
+
+    result = MdteroClient().translate_task("parse-1", target_language="zh-CN")
+
+    assert result == {"task_id": "translate-task", "status": "queued"}
+    assert calls == [("task", "parse-1"), ("translate", "/app/tasks/parse-1/paper.md", "zh-CN")]
+
+
+def test_cmd_translate_accepts_task_id_and_outputs_json(monkeypatch, capsys):
+    from mdtero import cli
+
+    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
+        assert task_id == "parse-1"
+        assert target_language == "zh-CN"
+        assert artifact == "paper_md"
+        return {"task_id": "translate-task", "status": "queued"}
+
+    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
+
+    assert cli.cmd_translate(type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "json": True})()) == 0
+    assert json.loads(capsys.readouterr().out) == {"task_id": "translate-task", "status": "queued"}
+
+
+def test_cmd_translate_reports_missing_task_artifact_without_traceback(monkeypatch, capsys):
+    from mdtero import cli
+
+    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
+        raise ValueError("translation_source_artifact_missing")
+
+    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
+
+    assert cli.cmd_translate(type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["error_code"] == "translation_source_artifact_missing"
+    assert payload["task_id"] == "parse-1"
+    assert "mdtero status <task-id> --json" in payload["action_hint"]
+    assert payload["next_commands"][0] == "mdtero status parse-1 --json"
 
 
 def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monkeypatch):

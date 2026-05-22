@@ -80,6 +80,7 @@ mdtero parse --file paper.pdf
 mdtero parse --batch ./papers
 mdtero status <task-id>
 mdtero download <task-id> paper_md
+mdtero translate <parse-task-id> --to zh-CN
 mdtero translate paper.md --to zh-CN
 mdtero rag status --json
 mdtero rag build
@@ -99,7 +100,7 @@ Validated in the current alpha:
 - Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`
 - discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; use `mdtero discover "<query>" --interactive` to inspect results and multi-select papers into the local project queue, or `--add --select 1,3` for scripts
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
-- server-side translation requests for local Markdown files
+- server-side translation requests from parse task ids or local Markdown files
 - local FastMCP project context server, including live server RAG readiness for agents, and agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
 Known boundaries:
@@ -150,6 +151,7 @@ mdtero download <task-id> paper_md --output-dir ./out
 mdtero project init --name literature-review
 mdtero project import-bib references.bib
 mdtero project parse --wait
+mdtero translate <parse-task-id> --to zh-CN
 mdtero rag status --json
 mdtero rag build
 mdtero rag query "这批论文的核心方法是什么？"

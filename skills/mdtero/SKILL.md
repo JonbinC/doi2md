@@ -42,7 +42,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3`
 - poll status: `mdtero status <task-id>`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir>`
-- translate Markdown: `mdtero translate <paper.md> --to zh-CN`
+- translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN` or `mdtero translate <paper.md> --to zh-CN`
 - build server project RAG, automatically creating/binding/importing when needed: `mdtero rag build`
 - query server project RAG after build: `mdtero rag query "<question>"`
 - serve project MCP context: `mdtero mcp serve`

@@ -72,6 +72,7 @@ mdtero config zotero
 mdtero zotero import --collection <collection-id>
 mdtero status <task-id>
 mdtero download <task-id> paper_md
+mdtero translate <parse-task-id> --to zh-CN
 mdtero translate paper.md --to zh-CN
 mdtero rag status --json
 mdtero rag build --json
