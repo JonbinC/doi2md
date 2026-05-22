@@ -1225,7 +1225,9 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert "mdtero project ingest" in paper["recommended_commands"]
 
 
-def test_mcp_agent_briefing_summarizes_project_work_for_agents(tmp_path: Path):
+def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md", provider="mineru_precision"))
@@ -1243,6 +1245,13 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(tmp_path: Path):
     briefing = build_agent_briefing(tmp_path, rag_status_fetcher=fake_fetcher)
 
     assert briefing["project"]["name"] == "agent-demo"
+    assert briefing["account"] == {
+        "authenticated": True,
+        "api_key_source": "MDTERO_API_KEY",
+        "api_base_url": "https://api.mdtero.com",
+        "action_hint": "Run `mdtero doctor` before cloud parse, translation, discovery fallback, or RAG.",
+        "next_commands": ["mdtero doctor"],
+    }
     assert briefing["health"] == {
         "pending_count": 1,
         "running_count": 0,
@@ -1267,14 +1276,20 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(tmp_path: Path):
     assert "agent_briefing" in briefing["mcp_tools"]
 
 
-def test_mcp_agent_briefing_guides_empty_projects(tmp_path: Path):
+def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.delenv("MDTERO_API_KEY", raising=False)
     init_project(tmp_path, name="empty-demo")
 
     briefing = build_agent_briefing(tmp_path)
 
+    assert briefing["account"]["authenticated"] is False
+    assert briefing["account"]["api_key_source"] == "missing"
     assert briefing["health"]["pending_count"] == 0
     assert briefing["health"]["rag_reason_code"] == "server_project_not_linked"
-    assert briefing["recommended_next_commands"][:3] == [
+    assert briefing["recommended_next_commands"][:5] == [
+        "mdtero login --api-key <key>",
+        "mdtero doctor",
         "mdtero discover \"<topic>\" --interactive",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --json",

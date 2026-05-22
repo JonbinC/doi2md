@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .client import MdteroClient
+from .config import load_config
 from .projects import load_project, paper_to_document, project_documents
 
 
@@ -145,6 +146,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
 def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher: Any | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = load_project(root)
+    config = load_config()
     commands = build_agent_commands(root)["commands"]
     server_rag = build_server_rag_status(root, fetcher=rag_status_fetcher)
 
@@ -154,6 +156,8 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
     failed = [paper for paper in state.papers if paper.status == "failed"]
 
     next_commands: list[str] = []
+    if not config.is_authenticated:
+        next_commands.extend(["mdtero login --api-key <key>", "mdtero doctor"])
     if not state.papers:
         next_commands.extend([
             "mdtero discover \"<topic>\" --interactive",
@@ -177,6 +181,13 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
             "root": str(root.resolve()),
             "server_project_id": state.server_project_id,
             "paper_count": len(state.papers),
+        },
+        "account": {
+            "authenticated": config.is_authenticated,
+            "api_key_source": config.api_key_source,
+            "api_base_url": config.api_base_url,
+            "action_hint": "Run `mdtero doctor` before cloud parse, translation, discovery fallback, or RAG." if config.is_authenticated else "Authenticate before cloud parse, translation, discovery fallback, or RAG.",
+            "next_commands": ["mdtero doctor"] if config.is_authenticated else ["mdtero login --api-key <key>", "mdtero doctor"],
         },
         "health": {
             "pending_count": len(pending),
