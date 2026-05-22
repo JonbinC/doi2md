@@ -49,6 +49,7 @@ export async function executeSsotActionSequence(
   success: boolean;
   taskId?: string;
   error?: string;
+  requiresBrowserCapture?: boolean;
   requiresHelper?: boolean;
   requiresUpload?: boolean;
 }> {
@@ -86,9 +87,10 @@ export async function executeSsotActionSequence(
       continue;
     }
 
-    if (result.requiresHelper || result.requiresUpload) {
+    if (result.requiresBrowserCapture || result.requiresHelper || result.requiresUpload) {
       return {
         success: false,
+        requiresBrowserCapture: result.requiresBrowserCapture || result.requiresHelper,
         requiresHelper: result.requiresHelper,
         requiresUpload: result.requiresUpload,
         error: result.error,

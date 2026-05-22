@@ -747,9 +747,10 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
       }
       continue;
     }
-    if (result.requiresHelper || result.requiresUpload) {
+    if (result.requiresBrowserCapture || result.requiresHelper || result.requiresUpload) {
       return {
         success: false,
+        requiresBrowserCapture: result.requiresBrowserCapture || result.requiresHelper,
         requiresHelper: result.requiresHelper,
         requiresUpload: result.requiresUpload,
         error: result.error
@@ -828,7 +829,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (result.success && result.taskId) {
         return { task_id: result.taskId };
       }
-      throw new Error(result.error || "Action sequence failed");
+      throw new Error(formatSsotFailure(result));
     })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -882,4 +883,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   return false;
 });
+function formatSsotFailure(result) {
+  if (result.requiresBrowserCapture) {
+    return result.error || "Open the article page in this browser, make sure the full text is loaded, then retry current-page parse or upload the PDF/EPUB directly.";
+  }
+  if (result.requiresUpload) {
+    return result.error || "Upload the PDF/EPUB/XML/HTML file directly so Mdtero can parse it.";
+  }
+  return result.error || "Action sequence failed";
+}
 //# sourceMappingURL=background.js.map

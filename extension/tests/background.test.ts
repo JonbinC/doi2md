@@ -483,6 +483,49 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
+  it("returns browser-capture guidance when an SSOT page route cannot use the current tab", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    requiresElsevierLocalAcquire.mockReturnValue(false);
+    fetchRoutePlan.mockResolvedValue({
+      input_kind: "doi",
+      input_value: "10.1000/demo",
+      top_connector: "wiley_tdm",
+      route_kind: "html_helper_first",
+      acquisition_mode: "browser_extension",
+      requires_helper: true,
+      allows_current_tab: true,
+      action_sequence: ["fetch_helper_source"],
+      acceptance_rules: {},
+      fail_closed: true,
+      user_message: "Open the article page and retry.",
+      matched_connectors: ["wiley_tdm"],
+      acquisition_candidates: []
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.ssot.request",
+        input: "10.1000/demo"
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: false,
+        error: "This source requires browser capture. Open the article page and retry."
+      });
+    });
+  });
+
   it("executes SSOT OA repository routes through direct HTML fetch and raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);

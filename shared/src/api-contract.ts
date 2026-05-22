@@ -87,6 +87,7 @@ export interface ActionResult {
   filename?: string;
   sourceDoi?: string;
   error?: string;
+  requiresBrowserCapture?: boolean;
   requiresHelper?: boolean;
   requiresUpload?: boolean;
 }
