@@ -12,6 +12,7 @@ from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
+from mdtero.tui import build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
     PaperRecord,
     add_paper,
@@ -642,6 +643,39 @@ def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path:
     assert rag["ready"] is False
     assert rag["reason_code"] == "server_project_not_linked"
     assert commands["commands"]["create_server_project"] == "mdtero project create-server"
+
+
+def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
+    init_project(tmp_path, name="tui-demo")
+
+    model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key=None), agent_root=tmp_path)
+
+    assert model["account"]["authenticated"] is False
+    assert model["project"]["name"] == "tui-demo"
+    assert model["rag"]["reason_code"] == "server_project_not_linked"
+    assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor"]
+
+
+def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path):
+    init_project(tmp_path, name="tui-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    (tmp_path / ".codex").mkdir()
+    cfg = MdteroConfig(
+        api_key="key",
+        academic=AcademicKeys(semantic_scholar_api_key="s2"),
+        zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero"),
+    )
+
+    model = build_dashboard_model(project_root=tmp_path, config=cfg, agent_root=tmp_path)
+    rendered = render_dashboard_text(model)
+
+    assert model["academic"]["discover_source"] == "local Semantic Scholar"
+    assert model["rag"]["ready"] is True
+    assert model["next_steps"] == ["mdtero project ingest", "mdtero rag build", "mdtero rag query \"<question>\""]
+    assert model["zotero"]["configured"] is True
+    assert model["agents"]["labels"] == ["Codex"]
+    assert rendered is not None
 
 
 def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):
