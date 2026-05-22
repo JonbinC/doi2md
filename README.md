@@ -63,10 +63,8 @@ mdtero login
 mdtero login --api-key <key>
 mdtero config academic
 mdtero project init
-mdtero project create-server
 mdtero project import-bib references.bib
 mdtero project parse --wait
-mdtero project ingest
 mdtero project refresh
 mdtero project download --output-dir ./mdtero-output
 mdtero config zotero
@@ -105,7 +103,7 @@ Validated in the current alpha:
 Known boundaries:
 
 - Zotero reverse sync is conservative: it creates Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
-- `mdtero rag build/query` talks to server-side Voyage RAG. Run `mdtero project create-server` once, then `mdtero project ingest` after successful parses so the local project is bound to a server project.
+- `mdtero rag build/query` talks to server-side Voyage RAG. `mdtero rag build` now bootstraps the server project when needed, imports succeeded parse tasks, and starts the backend Voyage build. `mdtero project create-server` and `mdtero project ingest` remain available for explicit or recovery workflows.
 - GROBID is not a public product option. PDF parsing is MinerU-first on the backend, with internal fallback behavior owned by the service.
 
 ## Product Boundary
@@ -148,10 +146,8 @@ mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out
 mdtero project init --name literature-review
-mdtero project create-server
 mdtero project import-bib references.bib
 mdtero project parse --wait
-mdtero project ingest
 mdtero rag status --json
 mdtero rag build
 mdtero rag query "这批论文的核心方法是什么？"
@@ -161,4 +157,4 @@ mdtero agent install --target codex
 mdtero mcp serve
 ```
 
-当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入、agent skill 安装和 MCP 本地上下文。agent skill 安装由 Python CLI 负责，不依赖 npm。
+当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 自动绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。agent skill 安装由 Python CLI 负责，不依赖 npm。
