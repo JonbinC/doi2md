@@ -3,11 +3,6 @@ import {
   fetchElsevierXml,
   requiresElsevierLocalAcquire,
 } from "./elsevier";
-import {
-  buildHelperBundleBlob,
-  inferBrowserHelperBundleAccess,
-  inferBrowserHelperBundleConnector,
-} from "./helper-bundle";
 import { fetchSpringerOpenAccessJats, normalizeSpringerInput } from "./springer";
 
 interface ParseClientLike {
@@ -19,12 +14,6 @@ interface ParseClientLike {
   }): Promise<unknown>;
   createParseFulltextV2Task(payload: {
     fulltextFile: Blob;
-    filename?: string;
-    sourceDoi?: string;
-    sourceInput?: string;
-  }): Promise<unknown>;
-  createParseHelperBundleV2Task(payload: {
-    helperBundleFile: Blob;
     filename?: string;
     sourceDoi?: string;
     sourceInput?: string;
@@ -59,18 +48,9 @@ export async function runLegacyParseRequest(
       throw new Error(buildElsevierLocalAcquireGuidance());
     }
     const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-    const helperBundle = buildHelperBundleBlob({
-      connector: "elsevier_article_retrieval_api",
-      artifactKind: "structured_xml",
-      payload: await uploaded.xmlBlob.arrayBuffer(),
-      payloadName: uploaded.filename,
-      extraFiles: uploaded.bundleExtraFiles,
-      sourceDoi: uploaded.sourceDoi,
-      access: "licensed",
-    });
-    return client.createParseHelperBundleV2Task({
-      helperBundleFile: helperBundle,
-      filename: "helper-bundle.zip",
+    return client.createParseFulltextV2Task({
+      fulltextFile: uploaded.xmlBlob,
+      filename: uploaded.filename,
       sourceDoi: uploaded.sourceDoi,
       sourceInput: uploaded.sourceInput,
     });
@@ -95,13 +75,13 @@ export async function runLegacyParseRequest(
     }
   }
 
-  const currentTabBundleTask = await tryCreateCurrentTabHelperBundleTask(client, {
+  const currentTabRawUploadTask = await tryCreateCurrentTabRawUploadTask(client, {
     input: message.input,
     springerOpenAccessApiKey: message.springerOpenAccessApiKey,
     pageContext: message.pageContext,
   });
-  if (currentTabBundleTask) {
-    return currentTabBundleTask;
+  if (currentTabRawUploadTask) {
+    return currentTabRawUploadTask;
   }
 
   return client.createParseTask({ input: message.input });
@@ -162,7 +142,7 @@ function describeCurrentTabCaptureFailure(params: {
   return failureMessage || "Browser page capture did not succeed on the current page.";
 }
 
-async function tryCreateCurrentTabHelperBundleTask(
+async function tryCreateCurrentTabRawUploadTask(
   client: ParseClientLike,
   message: {
     input: string;
@@ -211,23 +191,9 @@ async function tryCreateCurrentTabHelperBundleTask(
     );
   }
 
-  const connector = inferBrowserHelperBundleConnector(
-    message.input,
-    message.pageContext?.tabUrl || capture.sourceUrl,
-  );
-  const helperBundle = buildHelperBundleBlob({
-    connector,
-    artifactKind: "html",
-    payload: capture.html,
-    payloadName: capture.payloadName || "paper.html",
-    sourceDoi: inferSourceDoi(message.input),
-    sourceUrl: message.pageContext?.tabUrl || capture.sourceUrl || undefined,
-    access: inferBrowserHelperBundleAccess(connector),
-  });
-
-  return client.createParseHelperBundleV2Task({
-    helperBundleFile: helperBundle,
-    filename: "helper-bundle.zip",
+  return client.createParseFulltextV2Task({
+    fulltextFile: new Blob([capture.html], { type: "text/html" }),
+    filename: capture.payloadName || "paper.html",
     sourceDoi: inferSourceDoi(message.input),
     sourceInput: message.input,
   });

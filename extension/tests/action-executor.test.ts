@@ -7,7 +7,7 @@ describe("executeAction", () => {
     vi.restoreAllMocks();
   });
 
-  it("uses the user-owned Wiley TDM token locally and redacts it from helper bundle metadata", async () => {
+  it("uses the user-owned Wiley TDM token locally and returns a raw PDF artifact", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])]), {
         status: 200,
@@ -34,13 +34,12 @@ describe("executeAction", () => {
       })
     );
 
-    const helperBundle = result.helperBundle;
-    expect(helperBundle).toBeInstanceOf(Blob);
-    const bundleText = new TextDecoder().decode(new Uint8Array(await helperBundle!.arrayBuffer()));
-    expect(bundleText).toContain("\"connector\":\"wiley_tdm\"");
-    expect(bundleText).toContain("\"artifact_kind\":\"pdf\"");
-    expect(bundleText).toContain("\"Wiley-TDM-Client-Token\":\"<user-provided>\"");
-    expect(bundleText).not.toContain("wiley-secret-token");
+    expect(result.rawArtifact).toBeInstanceOf(Blob);
+    expect(result.filename).toBe("paper.pdf");
+    expect(result.sourceDoi).toBe("10.1002/demo");
+    const bytes = new Uint8Array(await result.rawArtifact!.arrayBuffer());
+    expect([...bytes]).toEqual([0x25, 0x50, 0x44, 0x46]);
+    expect(JSON.stringify(result)).not.toContain("wiley-secret-token");
   });
 
   it("asks for a local Wiley token instead of treating the backend as globally configured", async () => {
