@@ -101,6 +101,27 @@ def test_client_falls_back_to_legacy_discovery_when_v1_is_not_deployed(monkeypat
     assert [call[1] for call in calls] == ["/api/v1/discovery/search", "/me/discovery/search"]
 
 
+def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monkeypatch):
+    calls = []
+
+    def fake_s2(self, query, *, limit):
+        raise httpx.ConnectError("socks tls failed")
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"items": [{"title": "Server fallback"}]}
+
+    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
+
+    assert result["source"] == "openalex_server"
+    assert result["local_semantic_scholar_error"] == "ConnectError"
+    assert result["items"][0]["title"] == "Server fallback"
+    assert calls[0][1] == "/api/v1/discovery/search"
+
+
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
     route = {
         "route_kind": "html_helper_first",
