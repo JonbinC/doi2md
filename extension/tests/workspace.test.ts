@@ -30,17 +30,20 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('href="./styles.css"');
     expect(optionsHtml).toContain('src="./options.js"');
     expect(optionsHtml).toContain('id="settings-overview-card"');
-    expect(optionsHtml).toContain('id="password-input"');
-    expect(optionsHtml).toContain('id="auth-mode-password"');
-    expect(optionsHtml).toContain('id="shadow-status"');
+    expect(optionsHtml).toContain('id="open-account"');
+    expect(optionsHtml).toContain('id="website-auth-note"');
+    expect(optionsHtml).not.toContain('id="password-input"');
+    expect(optionsHtml).not.toContain('id="auth-mode-password"');
+    expect(optionsHtml).not.toContain('id="code-input"');
+    expect(optionsHtml).not.toContain('id="verify-code"');
+    expect(optionsHtml).not.toContain('id="shadow-status"');
     expect(optionsHtml).toContain('id="springer-oa-api-key"');
     expect(optionsHtml).toContain('id="wiley-tdm-token"');
     expect(optionsHtml).toContain('id="permissions-card"');
     expect(optionsHtml).toContain('id="permissions-title"');
-    expect(optionsHtml).toContain('id="publisher-capability-groups"');
+    expect(optionsHtml).not.toContain('id="publisher-capability-groups"');
     expect(optionsHtml).toContain('id="connector-keys-section"');
-    expect(optionsHtml).toContain('id="browser-assisted-note"');
-    expect(optionsHtml.indexOf('id="code-input"')).toBeLessThan(optionsHtml.indexOf('id="verify-code"'));
+    expect(optionsHtml).not.toContain('id="browser-assisted-note"');
   });
 
   it("keeps the public repo scoped away from the site workspace", () => {
