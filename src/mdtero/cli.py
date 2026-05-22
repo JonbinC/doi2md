@@ -162,9 +162,11 @@ def build_parser() -> argparse.ArgumentParser:
     rag_sub = rag.add_subparsers(dest="rag_command")
     rag_build = _cmd(rag_sub, "build", "Request server-side project RAG build.", cmd_rag_build)
     rag_build.add_argument("--project-id")
+    rag_build.add_argument("--json", action="store_true")
     rag_query = _cmd(rag_sub, "query", "Query server-side project RAG.", cmd_rag_query)
     rag_query.add_argument("question")
     rag_query.add_argument("--project-id")
+    rag_query.add_argument("--json", action="store_true")
     rag_status = _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
     rag_status.add_argument("--project-id")
     rag_status.add_argument("--json", action="store_true")
@@ -672,14 +674,14 @@ def cmd_zotero_sync(_args: argparse.Namespace) -> int:
 def cmd_rag_build(_args: argparse.Namespace) -> int:
     project_id = _server_project_id(_args)
     result = MdteroClient().rag_build(project_id)
-    _print_result(result, json_output=False)
+    _print_result(result, json_output=_args.json)
     return 0
 
 
 def cmd_rag_query(args: argparse.Namespace) -> int:
     project_id = _server_project_id(args)
     result = MdteroClient().rag_query(project_id, args.question)
-    _print_result(result, json_output=False)
+    _print_result(result, json_output=args.json)
     return 0
 
 
