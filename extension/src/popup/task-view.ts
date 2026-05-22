@@ -263,3 +263,21 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
   }
   return result.warning_message ?? "";
 }
+
+export function buildCliParseCommand(input?: string | null): string {
+  const normalized = String(input || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
+    return "";
+  }
+  return `mdtero parse ${shellQuote(normalized)} --trace`;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}

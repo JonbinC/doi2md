@@ -494,6 +494,22 @@ function getResultWarningText(result, language = "en") {
   }
   return result.warning_message ?? "";
 }
+function buildCliParseCommand(input) {
+  const normalized = String(input || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
+    return "";
+  }
+  return `mdtero parse ${shellQuote(normalized)} --trace`;
+}
+function shellQuote(value) {
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
 
 // src/popup/index.ts
 var COPY = {
@@ -549,7 +565,9 @@ var COPY = {
     detected: (kind) => `Detected ${kind}.`,
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
-    downloadFailed: "Download failed. Please try again."
+    downloadFailed: "Download failed. Please try again.",
+    copyCliCommand: "Copy CLI command",
+    cliCommandCopied: "CLI command copied."
   },
   zh: {
     title: "Mdtero",
@@ -603,7 +621,9 @@ var COPY = {
     detected: (kind) => `\u5DF2\u8BC6\u522B${kind}\u3002`,
     noDoi: "\u672A\u8BC6\u522B\u5230 DOI\uFF0C\u8BF7\u624B\u52A8\u7C98\u8D34\u3002",
     noActiveTab: "\u5F53\u524D\u6CA1\u6709\u53EF\u7528\u6807\u7B7E\u9875\u3002",
-    downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002"
+    downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
+    copyCliCommand: "\u590D\u5236 CLI \u547D\u4EE4",
+    cliCommandCopied: "CLI \u547D\u4EE4\u5DF2\u590D\u5236\u3002"
   }
 };
 var titleEl = document.querySelector("#app-title");
@@ -633,6 +653,9 @@ var translateLanguageLabelEl = document.querySelector("#translate-language-label
 var translateButton = document.querySelector("#translate-button");
 var translateLanguageEl = document.querySelector("#translate-language");
 var resultEl = document.querySelector("#result");
+var cliHandoffEl = document.querySelector("#cli-handoff");
+var cliHandoffCommandEl = document.querySelector("#cli-handoff-command");
+var copyCliHandoffButton = document.querySelector("#copy-cli-handoff");
 var artifactActionsEl = document.querySelector("#artifact-actions");
 var downloadButton = document.querySelector("#download-link");
 var secondaryDownloadsEl = document.querySelector("#secondary-downloads");
@@ -659,6 +682,23 @@ function setResult(message) {
   if (resultEl) {
     resultEl.textContent = message;
   }
+}
+function setCliHandoff(input) {
+  const command = buildCliParseCommand(input);
+  if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton) {
+    return;
+  }
+  cliHandoffEl.hidden = !command;
+  cliHandoffCommandEl.textContent = command;
+  copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
+}
+async function copyCliHandoff() {
+  const command = cliHandoffCommandEl?.textContent?.trim();
+  if (!command) {
+    return;
+  }
+  await navigator.clipboard?.writeText(command);
+  setResult(getCurrentCopy().cliCommandCopied);
 }
 function setStatus(message) {
   if (statusEl) {
@@ -784,6 +824,7 @@ function applyLanguage() {
   }
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
+  if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
   renderActionButtons();
 }
 function renderActionButtons() {
@@ -982,6 +1023,9 @@ async function pollTask(taskId, kind) {
   });
   if (!response?.ok) {
     setResult(response?.error ?? getCurrentCopy().parseFailed);
+    if (kind === "parse") {
+      setCliHandoff(currentInput);
+    }
     isParsing = false;
     isTranslating = false;
     if (currentInput) {
@@ -1000,6 +1044,7 @@ async function pollTask(taskId, kind) {
   if (task.status === "failed") {
     setResult(task.error_message ?? (kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed));
     if (kind === "parse") {
+      setCliHandoff(currentInput);
       isParsing = false;
     } else {
       isTranslating = false;
@@ -1026,6 +1071,7 @@ async function pollTask(taskId, kind) {
     return;
   }
   lastParsedMarkdownPath = task.result?.artifacts?.paper_md?.path ?? lastParsedMarkdownPath;
+  setCliHandoff(null);
   renderArtifacts(task);
   await persistPopupState(task);
   await renderRecentTasks();
@@ -1202,8 +1248,10 @@ parseButton?.addEventListener("click", async () => {
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setCliHandoff(input);
     return;
   }
+  setCliHandoff(null);
   await writePopupState({
     ...await readPopupState(),
     input,
@@ -1264,8 +1312,12 @@ openSettingsButton?.addEventListener("click", () => {
 openSettingsLoginButton?.addEventListener("click", () => {
   void openMdteroAccount();
 });
+copyCliHandoffButton?.addEventListener("click", () => {
+  void copyCliHandoff();
+});
 inputEl?.addEventListener("input", () => {
   currentInput = inputEl.value.trim() || currentInput;
+  setCliHandoff(null);
   void updatePreflightHint();
 });
 pickPdfButton?.addEventListener("click", () => {

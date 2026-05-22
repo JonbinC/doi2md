@@ -11,6 +11,7 @@ import {
   getBridgeStatusText,
   getDownloadLabel,
   getPreflightHintText,
+  buildCliParseCommand,
   getUsageStatusText,
   getPreferredArtifactKey,
   getResultWarningText,
@@ -382,5 +383,24 @@ describe("getResultWarningText", () => {
         "zh"
       )
     ).toContain("校园网");
+  });
+});
+
+describe("buildCliParseCommand", () => {
+  it("builds a traceable CLI handoff command for DOI and URL inputs", () => {
+    expect(buildCliParseCommand("10.48550/arXiv.1706.03762")).toBe(
+      "mdtero parse 10.48550/arXiv.1706.03762 --trace"
+    );
+    expect(buildCliParseCommand("https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML")).toBe(
+      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace"
+    );
+  });
+
+  it("quotes shell-sensitive URLs and avoids fake local-file commands", () => {
+    expect(buildCliParseCommand("https://example.org/paper?q=a b&x='demo'")).toBe(
+      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --trace"
+    );
+    expect(buildCliParseCommand("paper.pdf")).toBe("");
+    expect(buildCliParseCommand("")).toBe("");
   });
 });

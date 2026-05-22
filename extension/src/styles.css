@@ -444,6 +444,33 @@ button:disabled {
   font-weight: 550;
 }
 
+.cli-handoff {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted);
+}
+
+.cli-handoff[hidden] {
+  display: none;
+}
+
+.cli-handoff code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .action-card label {
   margin-top: 10px;
 }

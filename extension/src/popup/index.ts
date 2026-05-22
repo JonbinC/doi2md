@@ -33,6 +33,7 @@ import {
   getResultWarningText,
   getSavedResultSummary,
   getUsageStatusText,
+  buildCliParseCommand,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
 } from "./task-view";
@@ -91,7 +92,9 @@ const COPY = {
     detected: (kind: string) => `Detected ${kind}.`,
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
-    downloadFailed: "Download failed. Please try again."
+    downloadFailed: "Download failed. Please try again.",
+    copyCliCommand: "Copy CLI command",
+    cliCommandCopied: "CLI command copied."
   },
   zh: {
     title: "Mdtero",
@@ -146,7 +149,9 @@ const COPY = {
     detected: (kind: string) => `已识别${kind}。`,
     noDoi: "未识别到 DOI，请手动粘贴。",
     noActiveTab: "当前没有可用标签页。",
-    downloadFailed: "下载失败，请重试。"
+    downloadFailed: "下载失败，请重试。",
+    copyCliCommand: "复制 CLI 命令",
+    cliCommandCopied: "CLI 命令已复制。"
   }
 } satisfies Record<UiLanguage, Record<string, string | ((...args: any[]) => string)>>;
 
@@ -177,6 +182,9 @@ const translateLanguageLabelEl = document.querySelector<HTMLLabelElement>("#tran
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-button");
 const translateLanguageEl = document.querySelector<HTMLSelectElement>("#translate-language");
 const resultEl = document.querySelector<HTMLParagraphElement>("#result");
+const cliHandoffEl = document.querySelector<HTMLDivElement>("#cli-handoff");
+const cliHandoffCommandEl = document.querySelector<HTMLElement>("#cli-handoff-command");
+const copyCliHandoffButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff");
 const artifactActionsEl = document.querySelector<HTMLElement>("#artifact-actions");
 const downloadButton = document.querySelector<HTMLButtonElement>("#download-link");
 const secondaryDownloadsEl = document.querySelector<HTMLDivElement>("#secondary-downloads");
@@ -207,6 +215,25 @@ function setResult(message: string) {
   if (resultEl) {
     resultEl.textContent = message;
   }
+}
+
+function setCliHandoff(input?: string | null) {
+  const command = buildCliParseCommand(input);
+  if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton) {
+    return;
+  }
+  cliHandoffEl.hidden = !command;
+  cliHandoffCommandEl.textContent = command;
+  copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
+}
+
+async function copyCliHandoff() {
+  const command = cliHandoffCommandEl?.textContent?.trim();
+  if (!command) {
+    return;
+  }
+  await navigator.clipboard?.writeText(command);
+  setResult(getCurrentCopy().cliCommandCopied);
 }
 
 function setStatus(message: string) {
@@ -326,6 +353,7 @@ function applyLanguage() {
   }
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
+  if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
   renderActionButtons();
 }
 
@@ -552,6 +580,9 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
   });
   if (!response?.ok) {
     setResult(response?.error ?? getCurrentCopy().parseFailed);
+    if (kind === "parse") {
+      setCliHandoff(currentInput);
+    }
     isParsing = false;
     isTranslating = false;
     if (currentInput) {
@@ -571,6 +602,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
   if (task.status === "failed") {
     setResult(task.error_message ?? (kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed));
     if (kind === "parse") {
+      setCliHandoff(currentInput);
       isParsing = false;
     } else {
       isTranslating = false;
@@ -599,6 +631,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
   }
 
   lastParsedMarkdownPath = task.result?.artifacts?.paper_md?.path ?? lastParsedMarkdownPath;
+  setCliHandoff(null);
   renderArtifacts(task);
   await persistPopupState(task);
   await renderRecentTasks();
@@ -804,8 +837,11 @@ parseButton?.addEventListener("click", async () => {
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setCliHandoff(input);
     return;
   }
+
+  setCliHandoff(null);
 
   await writePopupState({
     ...(await readPopupState()),
@@ -876,8 +912,13 @@ openSettingsLoginButton?.addEventListener("click", () => {
   void openMdteroAccount();
 });
 
+copyCliHandoffButton?.addEventListener("click", () => {
+  void copyCliHandoff();
+});
+
 inputEl?.addEventListener("input", () => {
   currentInput = inputEl.value.trim() || currentInput;
+  setCliHandoff(null);
   void updatePreflightHint();
 });
 

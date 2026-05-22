@@ -677,7 +677,7 @@ async function executeFetchElsevierXml(context, routePlan) {
   if (!context.elsevierApiKey) {
     return {
       success: false,
-      requiresHelper: true,
+      requiresUpload: true,
       error: routePlan.user_message || "Elsevier requires API key. Configure in settings."
     };
   }
@@ -791,7 +791,7 @@ async function executeFetchHelperSource(context, routePlan) {
   if (!context.tabId) {
     return {
       success: false,
-      requiresHelper: true,
+      requiresUpload: true,
       error: "This source requires browser capture. Open the article page and retry."
     };
   }
