@@ -257,17 +257,17 @@ describe("getUsageStatusText", () => {
 });
 
 describe("getBridgeStatusText", () => {
-  it("formats helper bridge status for popup surfaces", () => {
+  it("formats browser capture status for popup surfaces", () => {
     expect(getBridgeStatusText({ state: "connected", runnerState: "idle" }, "en")).toBe(
-      "Local runtime ready for on-device fallback and browser capture when needed."
+      "Browser capture channel is ready to reuse this browser session when direct server fetch fails."
     );
     expect(getBridgeStatusText({ state: "connected", runnerState: "busy" }, "zh")).toBe(
-      "本地运行时已连接，正在处理设备侧获取任务。"
+      "浏览器补抓取通道已连接，正在处理当前页面获取任务。"
     );
     expect(getBridgeStatusText({ state: "unavailable", runnerState: "idle" }, "en")).toContain(
-      "not detected"
+      "not connected"
     );
-    expect(getBridgeStatusText(undefined, "zh")).toBe("本地运行时状态未知。");
+    expect(getBridgeStatusText(undefined, "zh")).toBe("浏览器补抓取通道状态未知。");
   });
 });
 
@@ -293,7 +293,7 @@ describe("getPreflightHintText", () => {
     ).toContain("website session and server route");
   });
 
-  it("warns when a supported live page is open but the helper is unavailable", () => {
+  it("warns when a supported live page is open but browser capture is unavailable", () => {
     expect(
       getPreflightHintText(
         {
@@ -304,7 +304,7 @@ describe("getPreflightHintText", () => {
         },
         "en"
       )
-    ).toContain("mdtero mcp serve");
+    ).toContain("mdtero parse");
   });
 
   it("confirms local capture readiness on supported live pages", () => {

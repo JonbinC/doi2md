@@ -151,33 +151,33 @@ export function getBridgeStatusText(
 
   if (language === "zh") {
     if (state === "connected" && runnerState === "busy") {
-      return "本地运行时已连接，正在处理设备侧获取任务。";
+      return "浏览器补抓取通道已连接，正在处理当前页面获取任务。";
     }
     if (state === "connected") {
-      return "本地运行时已就绪，可在需要时处理设备侧回退与浏览器抓取。";
+      return "浏览器补抓取通道已就绪，可在服务端直连失败时使用当前浏览器会话。";
     }
     if (state === "disconnected") {
-      return "本地运行时已断开。请重启 mdtero 或重载扩展。";
+      return "浏览器补抓取通道已断开。请重载扩展或直接上传 PDF/EPUB。";
     }
     if (state === "unavailable") {
-      return "暂未检测到本地运行时。请安装或启动 mdtero。";
+      return "当前未连接浏览器补抓取通道。直连失败时，请用扩展上传文件或改用 mdtero CLI。";
     }
-    return "本地运行时状态未知。";
+    return "浏览器补抓取通道状态未知。";
   }
 
   if (state === "connected" && runnerState === "busy") {
-    return "Local runtime is connected and handling an on-device acquisition task.";
+    return "Browser capture channel is connected and handling the current page acquisition.";
   }
   if (state === "connected") {
-    return "Local runtime ready for on-device fallback and browser capture when needed.";
+    return "Browser capture channel is ready to reuse this browser session when direct server fetch fails.";
   }
   if (state === "disconnected") {
-    return "Local runtime disconnected. Restart mdtero or reload the extension.";
+    return "Browser capture channel disconnected. Reload the extension or upload a PDF/EPUB directly.";
   }
   if (state === "unavailable") {
-    return "Local runtime not detected. Install or start mdtero.";
+    return "Browser capture channel is not connected. If direct routing fails, upload the file or continue from mdtero CLI.";
   }
-  return "Local runtime status unknown.";
+  return "Browser capture channel status unknown.";
 }
 
 export function getPreflightHintText(
@@ -226,8 +226,8 @@ export function getPreflightHintText(
 
   if (bridgeMissing) {
     return language === "zh"
-      ? "当前页面可通过扩展做浏览器补抓取。若直连失败，请先启动 `mdtero mcp serve` 或使用本地 CLI 继续。"
-      : "This page can use browser-assisted capture. If direct routing fails, start `mdtero mcp serve` or continue from the local CLI.";
+      ? "当前页面可通过扩展做浏览器补抓取。若直连失败，请上传 PDF/EPUB，或在终端用 `mdtero parse` 继续。"
+      : "This page can use browser-assisted capture. If direct routing fails, upload the PDF/EPUB or continue with `mdtero parse` in the terminal.";
   }
 
   if (bridgeReady) {
@@ -237,8 +237,8 @@ export function getPreflightHintText(
   }
 
   return language === "zh"
-    ? "当前页面支持本地浏览器抓取。解析前请确认设备侧运行时已连接。"
-    : "This page supports local browser capture. Confirm the on-device runtime is connected before parsing.";
+    ? "当前页面支持浏览器补抓取。解析前请确认扩展已连接并能读取当前页面。"
+    : "This page supports browser-assisted capture. Confirm the extension is connected and can read the current page before parsing.";
 }
 
 export function getSavedResultSummary(
