@@ -1287,9 +1287,16 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["server_project_id"] == "42"
     assert status["ready_for_ingest_count"] == 1
     assert status["pending_count"] == 1
+    assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --json"
+    assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json"
+    assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
+    assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --json"
+    assert commands["commands"]["zotero_import"] == "mdtero zotero import --json"
+    assert commands["commands"]["agent_install"] == "mdtero agent install --interactive"
     assert commands["commands"]["ingest_for_rag"] == "mdtero project ingest --json"
     assert commands["commands"]["rag_status"] == "mdtero rag status --json"
     assert commands["commands"]["rag_build"] == "mdtero rag build --json"
+    assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
     assert rag["ready"] is True
     assert rag["reason_code"] == "ready"
     assert "mdtero project ingest --json" in paper["recommended_commands"]
@@ -1367,7 +1374,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
     assert "mdtero rag build --json" in briefing["recommended_next_commands"]
 
 
-def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path: Path):
+def test_mcp_rag_context_prompts_rag_build_when_unlinked(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
 
@@ -1376,7 +1383,10 @@ def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path:
 
     assert rag["ready"] is False
     assert rag["reason_code"] == "server_project_not_linked"
-    assert commands["commands"]["create_server_project"] == "mdtero project create-server --json"
+    assert commands["commands"]["rag_build"] == "mdtero rag build --json"
+    assert commands["commands"]["bootstrap_rag"] == "mdtero rag build --json"
+    assert "create_server_project" not in commands["commands"]
+    assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
 
 
 def test_mcp_server_rag_status_reports_unlinked_next_commands(tmp_path: Path):
