@@ -48,6 +48,15 @@ def test_setup_accepts_headless_api_key_argument():
     assert args.api_key == "mdt_live_demo"
 
 
+def test_rag_status_accepts_agent_friendly_flags():
+    parser = build_parser()
+
+    args = parser.parse_args(["rag", "status", "--project-id", "42", "--json"])
+
+    assert args.project_id == "42"
+    assert args.json is True
+
+
 def test_academic_setup_selection_accepts_numbered_enter_flow():
     assert _parse_academic_selection("") == set()
     assert _parse_academic_selection("1,3") == {"1", "3"}
@@ -764,6 +773,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["ready_for_ingest_count"] == 1
     assert status["pending_count"] == 1
     assert commands["commands"]["ingest_for_rag"] == "mdtero project ingest"
+    assert commands["commands"]["rag_status"] == "mdtero rag status --json"
     assert commands["commands"]["rag_build"] == "mdtero rag build"
     assert rag["ready"] is True
     assert rag["reason_code"] == "ready"
@@ -860,12 +870,38 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
     monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
     monkeypatch.chdir(tmp_path)
 
-    assert cli.cmd_rag_status(type("Args", (), {})()) == 0
+    assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": False})()) == 0
     output = capsys.readouterr().out
 
     assert "server RAG ready (indexed)" in output
     assert "3/3 chunk(s) embedded" in output
     assert "voyage-test" in output
+
+
+def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+
+    def fake_status(self, project_id):
+        assert project_id == "99"
+        return {
+            "status": "partial",
+            "reason_code": "rag_index_partial",
+            "selected_provider": "voyage",
+            "summary": {"chunk_count": 4, "embedded_count": 2, "pending_embedding_count": 2},
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_status(type("Args", (), {"project_id": "99", "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "partial"
+    assert payload["reason_code"] == "rag_index_partial"
+    assert payload["server_project_id"] == "99"
+    assert payload["summary"]["pending_embedding_count"] == 2
 
 
 def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypatch, tmp_path: Path, capsys):
@@ -875,11 +911,25 @@ def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypa
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
     monkeypatch.chdir(tmp_path)
 
-    assert cli.cmd_rag_status(type("Args", (), {})()) == 0
+    assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": False})()) == 0
     output = capsys.readouterr().out
 
     assert "1/1 local paper(s)" in output
     assert "mdtero project create-server" in output
+
+
+def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "server_project_not_linked"
+    assert "project create-server" in payload["action_hint"]
 
 
 def test_zotero_item_maps_to_project_paper():

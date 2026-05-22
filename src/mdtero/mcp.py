@@ -47,6 +47,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     }
     if state.server_project_id:
         commands["ingest_for_rag"] = "mdtero project ingest"
+        commands["rag_status"] = "mdtero rag status --json"
         commands["rag_build"] = "mdtero rag build"
         commands["rag_query"] = "mdtero rag query \"<question>\""
     else:
@@ -60,6 +61,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
             "mdtero project parse --wait",
             "mdtero project refresh --wait",
             "mdtero project create-server" if not state.server_project_id else "mdtero project ingest",
+            "mdtero rag status --json",
             "mdtero rag build",
             "mdtero rag query \"<question>\"",
         ],
