@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   buildElsevierLocalAcquireGuidance,
-  fetchElsevierXml,
   normalizeElsevierInput,
   requiresElsevierLocalAcquire
 } from "../src/lib/elsevier";
@@ -38,58 +37,13 @@ describe("requiresElsevierLocalAcquire", () => {
 
 describe("buildElsevierLocalAcquireGuidance", () => {
   it("gives user-facing setup guidance instead of a blunt API key error", () => {
-    expect(buildElsevierLocalAcquireGuidance()).toContain("local acquisition");
-    expect(buildElsevierLocalAcquireGuidance()).toContain("Mdtero extension settings");
+    expect(buildElsevierLocalAcquireGuidance()).toContain("licensed full-text acquisition");
+    expect(buildElsevierLocalAcquireGuidance()).toContain("mdtero config academic");
+    expect(buildElsevierLocalAcquireGuidance()).toContain("upload the PDF/XML manually");
     expect(buildElsevierLocalAcquireGuidance()).toContain("campus or institutional network IP");
+    expect(buildElsevierLocalAcquireGuidance()).not.toContain("extension settings");
     expect(buildElsevierLocalAcquireGuidance()).not.toBe(
       "Elsevier API Key is required for Elsevier / ScienceDirect parsing."
     );
-  });
-});
-
-describe("fetchElsevierXml", () => {
-  it("keeps Elsevier figure links remote instead of bundling downloaded image bytes", async () => {
-    const originalFetch = globalThis.fetch;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("https://api.elsevier.com/content/article/pii/S0360544226002970")) {
-        return new Response(
-          `
-            <full-text-retrieval-response>
-              <coredata>
-                <dc:identifier>PII:S0360544226002970</dc:identifier>
-              </coredata>
-              <originalText>
-                <xocs:doc xmlns:xocs="http://www.elsevier.com/xml/xocs/dtd"
-                          xmlns:ce="http://www.elsevier.com/xml/common/dtd">
-                  <xocs:attachment>
-                    <ce:object ref="gr1" category="standard">https://api.elsevier.com/content/object/eid/1-s2.0-S0360544226002970-gr1.jpg</ce:object>
-                  </xocs:attachment>
-                  <ce:figure id="fig1">
-                    <ce:label>Figure 1</ce:label>
-                    <ce:link locator="gr1" />
-                  </ce:figure>
-                </xocs:doc>
-              </originalText>
-            </full-text-retrieval-response>
-          `,
-          { status: 200, headers: { "content-type": "application/xml" } }
-        );
-      }
-      return new Response("unexpected", { status: 500 });
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-
-    try {
-      const uploaded = await fetchElsevierXml(
-        "https://www.sciencedirect.com/science/article/pii/S0360544226002970",
-        "els-demo"
-      );
-
-      expect(uploaded.bundleExtraFiles).toEqual({});
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
   });
 });

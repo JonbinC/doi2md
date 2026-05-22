@@ -191,7 +191,6 @@ export function getPreflightHintText(
         }
       | null
       | undefined;
-    hasElsevierApiKey?: boolean;
   },
   language: UiLanguage = "en"
 ): string {
@@ -214,10 +213,10 @@ export function getPreflightHintText(
       : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";
   }
 
-  if (input && requiresElsevierLocalAcquire(input) && !params.hasElsevierApiKey) {
+  if (input && requiresElsevierLocalAcquire(input)) {
     return language === "zh"
-      ? "当前输入命中了 Elsevier / ScienceDirect。扩展会优先使用你的官网登录态和服务端路由；若需要机构全文，请确认当前浏览器已能打开原文。"
-      : "This input maps to Elsevier / ScienceDirect. The extension will use your website session and server route first; for licensed full text, confirm this browser can already open the article.";
+      ? "当前输入命中了 Elsevier / ScienceDirect。扩展不保存出版社密钥；若需要机构全文，请确认当前浏览器已能打开原文，或用 CLI 配置学术 key 后重试。"
+      : "This input maps to Elsevier / ScienceDirect. The extension does not store publisher keys; for licensed full text, confirm this browser can already open the article or configure academic keys in the CLI.";
   }
 
   if (!livePageSupported) {

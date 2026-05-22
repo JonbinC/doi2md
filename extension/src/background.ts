@@ -48,9 +48,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           tabUrl: message.pageContext?.tabUrl,
           tabTitle: message.pageContext?.tabTitle,
           input: message.input,
-          springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
-          elsevierApiKey: settings.elsevierApiKey,
-          wileyTdmToken: settings.wileyTdmToken,
         }
       );
 
@@ -74,9 +71,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       return runLegacyParseRequest(client, {
         input: message.input,
-        elsevierApiKey: message.elsevierApiKey,
-        wileyTdmToken: settings.wileyTdmToken,
-        springerOpenAccessApiKey: settings.springerOpenAccessApiKey,
         pageContext: message.pageContext,
       });
     })()

@@ -81,8 +81,8 @@ function pushUniqueCandidate(target, candidate) {
   }
   target.push(normalized);
 }
-function normalizeXmlCandidateUrl(params) {
-  let candidate = String(params.candidate || "").trim();
+function normalizeXmlCandidateUrl(candidateValue) {
+  let candidate = String(candidateValue || "").trim();
   if (!candidate) {
     return null;
   }
@@ -92,12 +92,6 @@ function normalizeXmlCandidateUrl(params) {
   try {
     const parsed = new URL(candidate);
     const isLegacySpringerJats = parsed.hostname === "api.springer.com" && parsed.pathname.replace(/\/+$/, "") === "/xmldata/jats";
-    if (params.springerOpenAccessApiKey) {
-      if (parsed.searchParams.has("api_key")) {
-        parsed.searchParams.set("api_key", params.springerOpenAccessApiKey);
-      }
-      return parsed.toString();
-    }
     if (isLegacySpringerJats) {
       const apiKey = parsed.searchParams.get("api_key") || "";
       if (!apiKey.trim()) {
@@ -111,23 +105,10 @@ function normalizeXmlCandidateUrl(params) {
 }
 function extractXmlCandidateUrls(params) {
   const html = String(params.html || "");
-  const pageUrl = String(params.pageUrl || "");
   const candidates = [];
-  const doi = matchMetaContent2(html, ["citation_doi", "prism.doi", "prism:doi", "dc.identifier", "dc:identifier"])?.match(
-    /10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i
-  )?.[0];
-  if (doi && params.springerOpenAccessApiKey && /springer/i.test(pageUrl)) {
-    pushUniqueCandidate(
-      candidates,
-      `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(doi)}&api_key=${encodeURIComponent(params.springerOpenAccessApiKey)}`
-    );
-  }
   const explicitXml = matchMetaContent2(html, ["citation_xml_url", "citation_springer_api_url"]);
   if (explicitXml) {
-    const normalized = normalizeXmlCandidateUrl({
-      candidate: explicitXml,
-      springerOpenAccessApiKey: params.springerOpenAccessApiKey
-    });
+    const normalized = normalizeXmlCandidateUrl(explicitXml);
     if (normalized) {
       pushUniqueCandidate(candidates, normalized);
     }
@@ -517,8 +498,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     const xmlCandidates = extractXmlCandidateUrls({
       html,
-      pageUrl: window.location.href,
-      springerOpenAccessApiKey: String(message.springerOpenAccessApiKey || "")
+      pageUrl: window.location.href
     });
     if (xmlCandidates.length === 0) {
       sendResponse({

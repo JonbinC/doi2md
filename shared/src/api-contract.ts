@@ -78,9 +78,6 @@ export interface ActionContext {
   tabId?: number;
   tabUrl?: string;
   tabTitle?: string;
-  springerOpenAccessApiKey?: string;
-  elsevierApiKey?: string;
-  wileyTdmToken?: string;
 }
 
 export interface ActionResult {

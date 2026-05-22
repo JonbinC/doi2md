@@ -10,10 +10,8 @@ const fetchRoutePlan = vi.fn();
 const readSettings = vi.fn();
 const writeSettings = vi.fn();
 const requiresElsevierLocalAcquire = vi.fn();
-const fetchElsevierXml = vi.fn();
 const buildElsevierLocalAcquireGuidance = vi.fn(() => "Use local acquisition.");
 const normalizeSpringerInput = vi.fn();
-const fetchSpringerOpenAccessJats = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   createApiClient: vi.fn(() => ({
@@ -35,13 +33,11 @@ vi.mock("../src/lib/storage", () => ({
 
 vi.mock("../src/lib/elsevier", () => ({
   requiresElsevierLocalAcquire,
-  fetchElsevierXml,
   buildElsevierLocalAcquireGuidance
 }));
 
 vi.mock("../src/lib/springer", () => ({
   normalizeSpringerInput,
-  fetchSpringerOpenAccessJats
 }));
 
 function createChromeStub() {
@@ -75,20 +71,13 @@ describe("extension background Elsevier routing", () => {
     getTask.mockResolvedValue({ task_id: "task-1", status: "queued" });
     fetchRoutePlan.mockReset();
     normalizeSpringerInput.mockReturnValue(null);
-    fetchSpringerOpenAccessJats.mockReset();
   });
 
-  it("routes Elsevier local XML acquisition through raw fulltext upload", async () => {
+  it("does not accept direct Elsevier API keys in extension parse messages", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(true);
-    fetchElsevierXml.mockResolvedValue({
-      xmlBlob: new Blob(["<article/>"], { type: "application/xml" }),
-      filename: "paper.xml",
-      sourceDoi: "10.1016/j.energy.2026.140192",
-      sourceInput: "10.1016/j.energy.2026.140192",
-      bundleExtraFiles: {}
-    });
+    buildElsevierLocalAcquireGuidance.mockReturnValue("Use CLI academic keys or upload the PDF/XML.");
 
     await import("../src/background");
 
@@ -107,26 +96,13 @@ describe("extension background Elsevier routing", () => {
     );
 
     await vi.waitFor(() => {
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fulltextFile: expect.any(Blob),
-          filename: "paper.xml",
-          sourceDoi: "10.1016/j.energy.2026.140192",
-          sourceInput: "10.1016/j.energy.2026.140192"
-        })
-      );
+      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(createUploadedParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
-        ok: true,
-        result: { task_id: "task-v2", status: "queued" }
+        ok: false,
+        error: "Use CLI academic keys or upload the PDF/XML."
       });
     });
-
-    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
-    expect(rawArtifact.type).toBe("application/xml");
-    const text = await rawArtifact.text();
-    expect(text).toContain("<article/>");
-    expect(text).not.toContain("paper_files/gr1.jpg");
   });
 
   it("routes current-tab browser capture through raw fulltext upload before falling back to direct parse", async () => {
@@ -409,7 +385,6 @@ describe("extension background Elsevier routing", () => {
       });
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request",
-        springerOpenAccessApiKey: undefined
       });
       expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -719,63 +694,7 @@ describe("extension background Elsevier routing", () => {
     await vi.waitFor(() => {
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request",
-        springerOpenAccessApiKey: undefined
       });
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fulltextFile: expect.any(Blob),
-          filename: "paper.xml",
-          sourceDoi: "10.1007/s12011-024-04385-0"
-        })
-      );
-      expect(sendResponse).toHaveBeenCalledWith({
-        ok: true,
-        result: { task_id: "task-v2", status: "queued" }
-      });
-    });
-  });
-
-  it("prefers local Springer OA JATS when a Springer OA key is available", async () => {
-    const chromeStub = createChromeStub();
-    vi.stubGlobal("chrome", chromeStub);
-    readSettings.mockResolvedValue({
-      token: "demo-token",
-      email: "demo@example.com",
-      springerOpenAccessApiKey: "springer-oa-key"
-    });
-    requiresElsevierLocalAcquire.mockReturnValue(false);
-    normalizeSpringerInput.mockReturnValue("10.1007/s12011-024-04385-0");
-    fetchSpringerOpenAccessJats.mockResolvedValue({
-      xmlBlob: new Blob(["<article/>"], { type: "application/xml" }),
-      filename: "paper.xml",
-      sourceDoi: "10.1007/s12011-024-04385-0",
-      sourceInput: "https://link.springer.com/article/10.1007/s12011-024-04385-0"
-    });
-
-    await import("../src/background");
-
-    const listener = chromeStub.__messageListeners[0];
-    const sendResponse = vi.fn();
-
-    listener?.(
-      {
-        type: "mdtero.parse.request",
-        input: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
-        pageContext: {
-          tabId: 42,
-          tabUrl: "https://link.springer.com/article/10.1007/s12011-024-04385-0"
-        }
-      },
-      {},
-      sendResponse
-    );
-
-    await vi.waitFor(() => {
-      expect(fetchSpringerOpenAccessJats).toHaveBeenCalledWith(
-        "https://link.springer.com/article/10.1007/s12011-024-04385-0",
-        "springer-oa-key",
-        "https://link.springer.com/article/10.1007/s12011-024-04385-0"
-      );
       expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
           fulltextFile: expect.any(Blob),

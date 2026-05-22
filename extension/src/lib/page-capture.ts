@@ -96,11 +96,8 @@ function pushUniqueCandidate(target: string[], candidate: string): void {
   target.push(normalized);
 }
 
-function normalizeXmlCandidateUrl(params: {
-  candidate: string;
-  springerOpenAccessApiKey?: string;
-}): string | null {
-  let candidate = String(params.candidate || "").trim();
+function normalizeXmlCandidateUrl(candidateValue: string): string | null {
+  let candidate = String(candidateValue || "").trim();
   if (!candidate) {
     return null;
   }
@@ -113,13 +110,6 @@ function normalizeXmlCandidateUrl(params: {
     const isLegacySpringerJats =
       parsed.hostname === "api.springer.com" &&
       parsed.pathname.replace(/\/+$/, "") === "/xmldata/jats";
-
-    if (params.springerOpenAccessApiKey) {
-      if (parsed.searchParams.has("api_key")) {
-        parsed.searchParams.set("api_key", params.springerOpenAccessApiKey);
-      }
-      return parsed.toString();
-    }
 
     if (isLegacySpringerJats) {
       const apiKey = parsed.searchParams.get("api_key") || "";
@@ -137,28 +127,13 @@ function normalizeXmlCandidateUrl(params: {
 export function extractXmlCandidateUrls(params: {
   html: string;
   pageUrl: string;
-  springerOpenAccessApiKey?: string;
 }): string[] {
   const html = String(params.html || "");
-  const pageUrl = String(params.pageUrl || "");
   const candidates: string[] = [];
-  const doi = matchMetaContent(html, ["citation_doi", "prism.doi", "prism:doi", "dc.identifier", "dc:identifier"])?.match(
-    /10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i
-  )?.[0];
-
-  if (doi && params.springerOpenAccessApiKey && /springer/i.test(pageUrl)) {
-    pushUniqueCandidate(
-      candidates,
-      `https://api.springernature.com/openaccess/jats?q=doi:${encodeURIComponent(doi)}&api_key=${encodeURIComponent(params.springerOpenAccessApiKey)}`
-    );
-  }
 
   const explicitXml = matchMetaContent(html, ["citation_xml_url", "citation_springer_api_url"]);
   if (explicitXml) {
-    const normalized = normalizeXmlCandidateUrl({
-      candidate: explicitXml,
-      springerOpenAccessApiKey: params.springerOpenAccessApiKey
-    });
+    const normalized = normalizeXmlCandidateUrl(explicitXml);
     if (normalized) {
       pushUniqueCandidate(candidates, normalized);
     }

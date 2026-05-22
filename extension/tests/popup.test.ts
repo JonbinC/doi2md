@@ -31,7 +31,7 @@ describe("createParseMessage", () => {
 
   it("can include current-page context for helper-first capture", () => {
     expect(
-      createParseMessage("https://example.com/paper", undefined, {
+      createParseMessage("https://example.com/paper", {
         tabId: 42,
         tabUrl: "https://example.com/paper"
       })
@@ -279,7 +279,6 @@ describe("getPreflightHintText", () => {
       getPreflightHintText(
         {
           input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
-          hasElsevierApiKey: false
         },
         "en"
       )
@@ -288,11 +287,10 @@ describe("getPreflightHintText", () => {
       getPreflightHintText(
         {
           input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
-          hasElsevierApiKey: false
         },
         "en"
       )
-    ).toContain("website session and server route");
+    ).toContain("does not store publisher keys");
   });
 
   it("warns when a supported live page is open but browser capture is unavailable", () => {
@@ -302,7 +300,6 @@ describe("getPreflightHintText", () => {
           input: "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490",
           pageUrl: "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490",
           bridgeStatus: { state: "unavailable", runnerState: "idle" },
-          hasElsevierApiKey: true
         },
         "en"
       )
@@ -316,7 +313,6 @@ describe("getPreflightHintText", () => {
           input: "https://arxiv.org/html/2401.00001",
           pageUrl: "https://arxiv.org/html/2401.00001",
           bridgeStatus: { state: "connected", runnerState: "idle" },
-          hasElsevierApiKey: true
         },
         "zh"
       )
