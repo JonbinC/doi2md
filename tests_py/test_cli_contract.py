@@ -570,6 +570,46 @@ def test_client_can_create_server_project(monkeypatch):
     assert calls == [("POST", "/projects", {"name": "demo", "description": "local project"})]
 
 
+def test_client_can_import_task_to_server_project(monkeypatch):
+    calls = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"document_id": 7, "import_status": "imported"}
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient().import_task_to_project("42", "task-1")
+
+    assert result["document_id"] == 7
+    assert calls == [("POST", "/api/v1/projects/42/tasks/task-1/import", {})]
+
+
+def test_project_ingest_imports_succeeded_tasks_into_bound_server_project(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/pending", task_id="task-pending", status="queued"))
+    calls = []
+
+    def fake_import(self, project_id, task_id):
+        calls.append((project_id, task_id))
+        return {"document_id": 7, "import_status": "imported"}
+
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_ingest(type("Args", (), {"project_id": None, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert calls == [("42", "task-done")]
+    assert payload["server_project_id"] == "42"
+    assert payload["imported_count"] == 1
+    assert payload["items"][0]["result"]["document_id"] == 7
+
+
 def test_rag_uses_bound_server_project_id_by_default(monkeypatch, tmp_path: Path):
     from mdtero import cli
 
