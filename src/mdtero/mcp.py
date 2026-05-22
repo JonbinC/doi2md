@@ -43,31 +43,49 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = load_project(root)
     commands: dict[str, Any] = {
+        "setup": "mdtero setup",
+        "login_api_key": "mdtero login --api-key <key>",
         "doctor": "mdtero doctor",
+        "discover": "mdtero discover \"<topic>\" --interactive",
+        "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --json",
+        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json",
+        "parse_batch": "mdtero parse --batch <directory> --json",
+        "project_init": "mdtero project init --name <name>",
+        "project_add": "mdtero project add <doi-or-url> --json",
+        "import_bib": "mdtero project import-bib <refs.bib> --json",
         "parse_pending": "mdtero project parse --wait --json",
         "refresh": "mdtero project refresh --wait --json",
         "download_markdown": "mdtero project download --output-dir ./mdtero-output --json",
+        "translate": "mdtero translate <task-id-or-markdown-file> --to zh-CN --json",
+        "zotero_import": "mdtero zotero import --json",
+        "zotero_sync": "mdtero zotero sync --json",
+        "rag_status": "mdtero rag status --json",
+        "rag_build": "mdtero rag build --json",
+        "rag_query": "mdtero rag query \"<question>\" --json",
         "serve_mcp": "mdtero mcp serve",
+        "agent_detect": "mdtero agent detect --json",
+        "agent_install": "mdtero agent install --interactive",
+    }
+    recovery_commands: dict[str, Any] = {
+        "create_server_project": "mdtero project create-server --json",
+        "bind_server_project": "mdtero project link --server-project-id <id>",
     }
     if state.server_project_id:
         commands["ingest_for_rag"] = "mdtero project ingest --json"
-        commands["rag_status"] = "mdtero rag status --json"
-        commands["rag_build"] = "mdtero rag build --json"
-        commands["rag_query"] = "mdtero rag query \"<question>\" --json"
+        recovery_commands["reingest_for_rag"] = "mdtero project ingest --json"
     else:
         commands["bootstrap_rag"] = "mdtero rag build --json"
-        commands["create_server_project"] = "mdtero project create-server --json"
-        commands["bind_server_project"] = "mdtero project link --server-project-id <id>"
     return {
         "project": state.name,
         "server_project_id": state.server_project_id,
         "commands": commands,
+        "recovery_commands": recovery_commands,
         "workflow": [
             commands["parse_pending"],
             commands["refresh"],
-            commands["bootstrap_rag"] if not state.server_project_id else commands["ingest_for_rag"],
-            "mdtero rag status --json",
-            "mdtero rag query \"<question>\" --json",
+            commands["rag_build"] if not state.server_project_id else commands["ingest_for_rag"],
+            commands["rag_status"],
+            commands["rag_query"],
         ],
     }
 
@@ -100,7 +118,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
             "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
-            "next_commands": [commands["bootstrap_rag"], commands["parse_pending"], commands["refresh"]],
+            "next_commands": [commands["rag_build"], commands["parse_pending"], commands["refresh"]],
         }
 
     try:
