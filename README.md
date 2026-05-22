@@ -98,7 +98,7 @@ Validated in the current alpha:
 - discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; use `mdtero discover "<query>" --add --select 1,3` to add results directly to the local project queue
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests for local Markdown files
-- local FastMCP project context server and agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
+- local FastMCP project context server, including live server RAG readiness for agents, and agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
 Known boundaries:
 

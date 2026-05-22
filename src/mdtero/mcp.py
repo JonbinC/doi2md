@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .client import MdteroClient
 from .projects import load_project, paper_to_document, project_documents
 
 
@@ -82,6 +83,62 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | None = None) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    state = load_project(root)
+    local_ready = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    commands = build_agent_commands(root)["commands"]
+    if not state.server_project_id:
+        return {
+            "status": "not_ready",
+            "reason_code": "server_project_not_linked",
+            "project": state.name,
+            "server_project_id": None,
+            "local_ready_for_ingest_count": local_ready,
+            "local_paper_count": len(state.papers),
+            "next_commands": [commands["create_server_project"], commands["parse_pending"], commands["refresh"]],
+        }
+
+    try:
+        status = (fetcher or MdteroClient().rag_status)(state.server_project_id)
+    except Exception as exc:
+        return {
+            "status": "unavailable",
+            "reason_code": "server_rag_status_unavailable",
+            "project": state.name,
+            "server_project_id": state.server_project_id,
+            "local_ready_for_ingest_count": local_ready,
+            "local_paper_count": len(state.papers),
+            "error_type": exc.__class__.__name__,
+            "next_commands": ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"],
+        }
+
+    summary = status.get("summary") if isinstance(status.get("summary"), dict) else {}
+    server_status = str(status.get("status") or "unknown")
+    reason_code = str(status.get("reason_code") or "unknown")
+    next_commands = ["mdtero rag status --json"]
+    if server_status == "ready" or reason_code == "indexed":
+        next_commands.extend(["mdtero rag query \"<question>\"", "mdtero mcp serve"])
+    elif local_ready > 0:
+        next_commands.extend(["mdtero project ingest", "mdtero rag build", "mdtero rag query \"<question>\""])
+    else:
+        next_commands.extend(["mdtero project parse --wait", "mdtero project refresh --wait", "mdtero project ingest"])
+
+    status.setdefault("project", state.name)
+    status.setdefault("server_project_id", state.server_project_id)
+    status.setdefault("local_ready_for_ingest_count", local_ready)
+    status.setdefault("local_paper_count", len(state.papers))
+    status["next_commands"] = next_commands
+    status["agent_summary"] = {
+        "status": server_status,
+        "reason_code": reason_code,
+        "embedded_count": summary.get("embedded_count", 0),
+        "chunk_count": summary.get("chunk_count", 0),
+        "pending_embedding_count": summary.get("pending_embedding_count", 0),
+    }
+    return status
+
+
 def _paper_commands(paper: Any) -> list[str]:
     if paper.status in {"pending", "created"} and not paper.task_id:
         return ["mdtero project parse --wait"]
@@ -114,6 +171,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def rag_context() -> dict:
         return build_rag_context(root)
+
+    @mcp.tool
+    def server_rag_status() -> dict:
+        return build_server_rag_status(root)
 
     @mcp.tool
     def agent_commands() -> dict:
