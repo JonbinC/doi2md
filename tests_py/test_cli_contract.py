@@ -791,16 +791,28 @@ def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path
 def test_client_can_create_server_project(monkeypatch):
     calls = []
 
-    def fake_request(self, method, path, **kwargs):
-        calls.append((method, path, kwargs.get("json")))
+    def fake_request_with_fallback(self, method, primary_path, fallback_path, **kwargs):
+        calls.append((method, primary_path, fallback_path, kwargs))
         return {"id": 42, "name": kwargs["json"]["name"]}
 
-    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+    monkeypatch.setattr(MdteroClient, "_request_with_fallback", fake_request_with_fallback)
 
     result = MdteroClient().create_project("demo", description="local project")
 
     assert result["id"] == 42
-    assert calls == [("POST", "/projects", {"name": "demo", "description": "local project"})]
+    assert calls == [("POST", "/api/v1/projects", "/projects", {"json": {"name": "demo", "description": "local project"}})]
+
+
+def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": "mdt_live_demo"})()) == 0
+    output = capsys.readouterr().out
+
+    assert output.count("Step 1: saved API-key login for this machine.") == 1
 
 
 def test_client_can_import_task_to_server_project(monkeypatch):
