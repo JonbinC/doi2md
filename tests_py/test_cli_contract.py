@@ -21,6 +21,7 @@ from mdtero.projects import (
     import_bib,
     init_project,
     load_project,
+    paper_from_submission,
     paper_to_document,
     project_pending_papers,
     project_task_ids,
@@ -614,6 +615,68 @@ def test_project_queue_submission_refresh_helpers(tmp_path: Path):
     assert updated.provider == "openalex"
     assert updated.parser_strategy == "server_parse"
     assert updated.reason_code == "queued"
+
+
+def test_submission_result_maps_provider_artifact_and_reason_to_project_record():
+    paper = paper_from_submission(
+        "paper.pdf",
+        {
+            "task_id": "task-file",
+            "status": "queued",
+            "result": {
+                "preferred_artifact": "paper_bundle",
+                "selected_provider": "mineru_precision",
+                "parser_strategy": "mineru_precision_ast",
+                "reason_code": "queued_for_parse",
+            },
+        },
+        source="file:pdf",
+    )
+
+    assert paper.input == "paper.pdf"
+    assert paper.task_id == "task-file"
+    assert paper.source == "file:pdf"
+    assert paper.artifact == "paper_bundle"
+    assert paper.provider == "mineru_precision"
+    assert paper.parser_strategy == "mineru_precision_ast"
+    assert paper.reason_code == "queued_for_parse"
+
+
+def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="batch-demo")
+    batch = tmp_path / "papers"
+    batch.mkdir()
+    pdf = batch / "a.pdf"
+    epub = batch / "b.epub"
+    ignored = batch / "notes.txt"
+    pdf.write_bytes(b"%PDF-1.4")
+    epub.write_bytes(b"epub")
+    ignored.write_text("ignore", encoding="utf-8")
+
+    def fake_upload(self, path, *, source_input=None, source_doi=None):
+        return {
+            "task_id": f"task-{path.stem}",
+            "status": "queued",
+            "result": {
+                "preferred_artifact": "paper_md",
+                "selected_provider": "mineru_precision",
+                "parser_strategy": "mineru_precision_ast",
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "upload", fake_upload)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["parse", "--batch", str(batch), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
+
+    assert [item["task_id"] for item in payload["items"]] == ["task-a", "task-b"]
+    assert [paper.input for paper in state.papers] == [str(pdf), str(epub)]
+    assert [paper.source for paper in state.papers] == ["file:pdf", "file:epub"]
+    assert [paper.provider for paper in state.papers] == ["mineru_precision", "mineru_precision"]
 
 
 def test_client_can_create_server_project(monkeypatch):

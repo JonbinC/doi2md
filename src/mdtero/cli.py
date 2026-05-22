@@ -21,6 +21,7 @@ from .projects import (
     import_bib,
     init_project,
     load_project,
+    paper_from_submission,
     project_path,
     project_pending_papers,
     project_task_ids,
@@ -271,17 +272,17 @@ def cmd_config_zotero(args: argparse.Namespace) -> int:
 
 def cmd_parse(args: argparse.Namespace) -> int:
     client = MdteroClient()
-    results = []
+    submissions: list[tuple[dict[str, Any], str, str]] = []
     traces = []
     if args.batch:
         for path in sorted(args.batch.iterdir()):
             if path.suffix.lower() in {".pdf", ".epub", ".html", ".htm", ".xml"}:
                 result = client.upload(path)
-                results.append(result)
+                submissions.append((result, str(path), f"file:{path.suffix.lower().lstrip('.')}"))
                 traces.append(upload_trace(path, result).to_dict())
     elif args.file:
         result = client.upload(args.file, source_input=args.input)
-        results.append(result)
+        submissions.append((result, args.input or str(args.file), f"file:{args.file.suffix.lower().lstrip('.')}"))
         traces.append(upload_trace(args.file, result).to_dict())
     else:
         if not args.input:
@@ -297,22 +298,16 @@ def cmd_parse(args: argparse.Namespace) -> int:
             }
             _print_result(failure, json_output=args.json or args.trace)
             return 2
-        results.append(result)
+        submissions.append((result, args.input, "manual"))
         traces.append(parse_trace_from_route(args.input, route, result).to_dict())
-    for result in results:
+    for result, input_value, source in submissions:
         if result.get("task_id"):
-            add_paper(
-                Path.cwd(),
-                PaperRecord(
-                    input=args.input or str(args.file or args.batch or ""),
-                    task_id=str(result.get("task_id")),
-                    status=str(result.get("status") or "queued"),
-                ),
-            )
+            add_paper(Path.cwd(), paper_from_submission(input_value, result, source=source))
             if args.wait:
                 task = client.wait(str(result["task_id"]))
                 update_task(Path.cwd(), task)
                 result["final_task"] = task
+    results = [result for result, _, _ in submissions]
     payload = results[0] if len(results) == 1 else {"items": results}
     if args.trace:
         payload = {"result": payload, "workflow": traces[0] if len(traces) == 1 else traces}
