@@ -25,7 +25,7 @@ Helpful public checks:
 - `mdtero doctor`
 - `mdtero agent install --target codex --dry-run`
 
-Do not use `npx mdtero-install install openclaw`, `mdtero setup --agent openclaw`, or `mdtero bootstrap --agent openclaw`; OpenClaw stays on `clawhub install mdtero`.
+Do not use generic agent-skill install commands for OpenClaw; OpenClaw stays on `clawhub install mdtero`.
 
 ## Other agent targets
 

@@ -49,7 +49,7 @@ mdtero agent install --target codex --dry-run
 mdtero agent uninstall --target codex
 ```
 
-The legacy npm package `mdtero-install` remains available only as a compatibility path for older prompts. It should not be presented as the default runtime or skill installer.
+The old npm installer runtime has been retired from this repository. Use the Python CLI for both runtime commands and agent skill installation.
 
 ## Use Mdtero After Setup
 
@@ -153,4 +153,4 @@ mdtero zotero import --limit 20 --json
 mdtero mcp serve
 ```
 
-当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载和 agent skill 安装。RAG 走后端 Voyage，但目前需要服务端 project id。Zotero 反向同步还不是已完成的公开能力。npm `mdtero-install` 只保留给旧提示词兼容，不是主安装路径。
+当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载和 agent skill 安装。RAG 走后端 Voyage，但目前需要服务端 project id。Zotero 反向同步还不是已完成的公开能力。agent skill 安装走 Python CLI，不再依赖 npm。

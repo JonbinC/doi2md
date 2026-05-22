@@ -11,6 +11,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 2. Run `mdtero setup`
 3. Use `mdtero login --api-key <key>` when the environment is headless
 4. Run `mdtero doctor` before parse, translate, status, download, Zotero, RAG, or MCP work
+5. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime
 
 ## Setup Rules
 

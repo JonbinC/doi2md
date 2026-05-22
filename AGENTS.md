@@ -12,10 +12,8 @@ mdtero-public/
 ├── shared/     # public contract subset used by extension/public code
 ├── install/    # canonical public install manifest and docs
 ├── desktop/    # public desktop preview ledger mirror
-├── helper/     # legacy local-file handoff notes/docs
 ├── skills/     # agent skill/install bundles
-├── tests/      # public release/install contract tests
-└── archive/    # historical/reference-only assets
+└── docs/       # public product documentation notes
 ```
 
 ## WHERE TO LOOK
@@ -25,10 +23,8 @@ mdtero-public/
 | Extension runtime | `extension` | Source, tests, manifest, build output. |
 | Extension protocol helpers | `extension/src/lib` | Route execution, helper bundle, page capture, runtime messages. |
 | Public install contract | `install/manifest.json` | Mirrored with site manifest; audited by tests. |
-| Installer CLI | `bin/mdtero-install.mjs` | Uses bundled manifest fallback. |
 | Public shared contracts | `shared/src` | Mirror/subset for public clients. |
 | Desktop preview ledger | `desktop/releases/installer-manifest.json` | Mirror of frontend desktop installer manifest. |
-| Contract tests | `tests/public-contract-truth.test.mjs` | Guards release truth and mirror alignment. |
 
 ## CONVENTIONS
 
@@ -48,16 +44,14 @@ mdtero-public/
 ## COMMANDS
 
 ```bash
-npm install
-npm run test:install
-npm run test:public-contract
-node --test tests/mdtero-install.test.mjs
-node --test tests/public-contract-truth.test.mjs
+npm --prefix extension install
+npm --prefix extension test -- --run
+npm --prefix extension run build
+uv run --with pytest python -m pytest tests_py
 ```
 
 ## CHILD GUIDANCE
 
-- `install/AGENTS.md`: manifest and installer contract.
 - `desktop/AGENTS.md`: public desktop preview mirror.
 - `extension/AGENTS.md`: extension source/build/test surface.
 - `extension/src/lib/AGENTS.md`: extension protocol helpers.

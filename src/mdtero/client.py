@@ -144,6 +144,7 @@ class MdteroClient:
             "/api/v1/tasks/translate",
             "/tasks/translate",
             json={
+                "source_markdown_path": "",
                 "source_markdown_text": markdown,
                 "source_markdown_filename": filename,
                 "target_language": target_language,

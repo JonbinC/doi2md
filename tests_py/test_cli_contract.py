@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import httpx
@@ -99,6 +100,33 @@ def test_client_falls_back_to_legacy_discovery_when_v1_is_not_deployed(monkeypat
     assert result["items"][0]["title"] == "Demo"
     assert result["source"] == "openalex_server"
     assert [call[1] for call in calls] == ["/api/v1/discovery/search", "/me/discovery/search"]
+
+
+def test_translate_text_payload_is_compatible_with_v1_schema(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_request_with_fallback(self, method, primary_path, fallback_path, **kwargs):
+        captured["method"] = method
+        captured["primary_path"] = primary_path
+        captured["fallback_path"] = fallback_path
+        captured["json"] = kwargs.get("json")
+        return {"task_id": "translate-task", "status": "queued"}
+
+    monkeypatch.setattr(MdteroClient, "_request_with_fallback", fake_request_with_fallback)
+
+    result = MdteroClient().translate_text("# Title\n\nHello", filename="paper.md", target_language="zh-CN")
+
+    assert result == {"task_id": "translate-task", "status": "queued"}
+    assert captured["method"] == "POST"
+    assert captured["primary_path"] == "/api/v1/tasks/translate"
+    assert captured["fallback_path"] == "/tasks/translate"
+    assert captured["json"] == {
+        "source_markdown_path": "",
+        "source_markdown_text": "# Title\n\nHello",
+        "source_markdown_filename": "paper.md",
+        "target_language": "zh-CN",
+        "mode": "full",
+    }
 
 
 def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monkeypatch):
@@ -667,3 +695,41 @@ def test_python_agent_installer_detects_and_uninstalls_targets(tmp_path: Path):
     assert results[0].target == "hermes"
     assert removed[0].action == "removed"
     assert not (tmp_path / ".hermes" / "skills" / "mdtero").exists()
+
+
+def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site():
+    repo_root = Path(__file__).resolve().parents[1]
+    manifest = json.loads((repo_root / "install" / "manifest.json").read_text(encoding="utf-8"))
+    site_manifest = json.loads((repo_root.parent / "nextmdtero" / "public" / "install" / "manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest == site_manifest
+    assert manifest["quickInstallCommand"] == "uv tool install git+https://github.com/JonbinC/doi2md.git && mdtero setup"
+    assert manifest["cli"]["packageName"] == "mdtero"
+    assert manifest["cli"]["packageManager"] == "uv"
+    assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
+    assert "legacyNpmCompatibility" not in json.dumps(manifest)
+    assert "mdtero-install" not in json.dumps(manifest)
+
+
+def test_public_docs_do_not_advertise_npm_installer_runtime():
+    repo_root = Path(__file__).resolve().parents[1]
+    docs = [
+        repo_root / "README.md",
+        repo_root / "install" / "README.md",
+        repo_root / "docs" / "public" / "README.md",
+        repo_root / "helper" / "README.md",
+    ]
+    for path in docs:
+        content = path.read_text(encoding="utf-8")
+        assert "mdtero-install" not in content
+        assert "npx mdtero" not in content
+        assert "npm install -g" not in content
+
+
+def test_packaged_skill_template_is_available_to_python_installer():
+    from importlib import resources
+
+    skill = resources.files("mdtero.skills.mdtero").joinpath("SKILL.md").read_text(encoding="utf-8")
+
+    assert "mdtero agent install" in skill
+    assert "mdtero parse <doi-or-url>" in skill

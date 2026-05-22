@@ -12,8 +12,7 @@ mdtero agent install --target <target>
 ```
 
 The install script at `https://mdtero.com/install.sh` is a bootstrap wrapper around
-that Python runtime. The legacy `mdtero-install` npm package is not the runtime and
-is not required for skill installation.
+that Python runtime. Agent skill installation is handled by `mdtero agent install`.
 
 Current maintained content:
 

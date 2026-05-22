@@ -3,7 +3,7 @@
   "manifestUrl": "https://mdtero.com/install/manifest.json",
   "installGuideUrl": "https://api.mdtero.com/skills/install.md",
   "installScriptUrl": "https://mdtero.com/install.sh",
-  "quickInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>",
+  "quickInstallCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git && mdtero setup",
   "helperCommand": "mdtero",
   "accountBoundaryNote": "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
@@ -12,12 +12,7 @@
     "packageManager": "uv",
     "runtimeInstallCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git",
     "runtimeCommand": "mdtero",
-    "skillInstallCommand": "mdtero agent install --target <target>",
-    "legacyNpmCompatibility": {
-      "packageName": "mdtero-install",
-      "packageVersion": "0.1.8",
-      "npxCommand": "npx mdtero-install"
-    }
+    "skillInstallCommand": "mdtero agent install --target <target>"
   },
   "targets": [
     {
@@ -98,8 +93,7 @@
           "gemini_cli",
           "hermes",
           "opencode"
-        ],
-        "legacyNpmCompatibility": "npx mdtero-install install <target>"
+        ]
       },
       "desktop": {
         "version": "0.1.0-preview.1",
