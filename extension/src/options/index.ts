@@ -57,7 +57,7 @@ const COPY = {
     permissionsCapture: "浏览器补抓取只会在你主动解析当前论文页时复用当前标签页。",
     permissionsHosts: "站点权限只覆盖 Mdtero Account、受支持的学术页面，以及你主动选择上传的文件。",
     notSignedIn: "尚未登录。请打开 Mdtero Account 授权扩展。",
-    usagePending: "请在 mdtero.com/account 登录以同步余额、额度和历史。",
+    usagePending: "请在 mdtero.com/auth 登录以同步余额、额度和历史。",
     signedIn: (email: string) => `已登录：${email}`,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,

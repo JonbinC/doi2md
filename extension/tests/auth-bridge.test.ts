@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MDTERO_ACCOUNT_URL,
   isTrustedMdteroOrigin,
   shouldAcceptMdteroAuthMessage
 } from "../src/lib/auth-bridge";
+
+describe("MDTERO_ACCOUNT_URL", () => {
+  it("opens the canonical website auth route for extension sign-in", () => {
+    expect(MDTERO_ACCOUNT_URL).toBe("https://mdtero.com/auth?source=extension");
+    expect(MDTERO_ACCOUNT_URL).not.toContain("/account");
+  });
+});
 
 describe("isTrustedMdteroOrigin", () => {
   it("allows the production site origin and local development origins", () => {
