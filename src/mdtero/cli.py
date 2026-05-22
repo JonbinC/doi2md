@@ -25,6 +25,7 @@ from .projects import (
     project_pending_papers,
     project_task_ids,
     remove_paper,
+    save_project,
     update_paper_submission,
     update_task,
 )
@@ -144,7 +145,8 @@ def build_parser() -> argparse.ArgumentParser:
     zotero_import.add_argument("--library-type", choices=["user", "group"])
     zotero_import.add_argument("--api-key")
     zotero_import.add_argument("--json", action="store_true")
-    _cmd(zotero_sub, "sync", "Sync Mdtero parse state back to Zotero notes/tags.", cmd_zotero_sync)
+    zotero_sync = _cmd(zotero_sub, "sync", "Sync Mdtero parse state back to Zotero notes/tags.", cmd_zotero_sync)
+    zotero_sync.add_argument("--json", action="store_true")
 
     translate = _cmd(sub, "translate", "Request server-side translation.", cmd_translate)
     translate.add_argument("task_or_file")
@@ -621,7 +623,17 @@ def cmd_zotero_import(args: argparse.Namespace) -> int:
 
 
 def cmd_zotero_sync(_args: argparse.Namespace) -> int:
-    Console().print("Zotero sync command is wired in the public CLI; reverse sync metadata is the next migration slice.")
+    from .zotero import make_zotero_client, sync_project_to_zotero
+
+    cfg = load_config()
+    state = load_project(Path.cwd())
+    client = make_zotero_client(cfg)
+    payload = sync_project_to_zotero(client, state.papers)
+    save_project(Path.cwd(), state)
+    if _args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Synced {payload['synced_count']} Zotero item(s); skipped {payload['skipped_count']}.")
     return 0
 
 

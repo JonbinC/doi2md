@@ -69,6 +69,7 @@ mdtero project refresh
 mdtero project download --output-dir ./mdtero-output
 mdtero config zotero
 mdtero zotero import
+mdtero zotero sync
 mdtero discover "thermochemical energy storage" --limit 5
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762
@@ -92,7 +93,7 @@ Validated in the current alpha:
 - DOI/arXiv parse with task polling and Markdown/bundle download
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
 - local project init/add/remove/list, BibTeX import with de-duplication, project parse/refresh/download
-- read-only Zotero metadata import into a local Mdtero project
+- Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`
 - discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; use `mdtero discover "<query>" --add --select 1,3` to add results directly to the local project queue
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests for local Markdown files
@@ -100,7 +101,7 @@ Validated in the current alpha:
 
 Known boundaries:
 
-- `mdtero zotero sync` is wired as a command, but reverse sync back into Zotero is still the next migration slice.
+- Zotero reverse sync is conservative: it creates Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
 - `mdtero rag build/query` talks to server-side Voyage RAG. Run `mdtero project create-server` once, then `mdtero project ingest` after successful parses so the local project is bound to a server project.
 - GROBID is not a public product option. PDF parsing is MinerU-first on the backend, with internal fallback behavior owned by the service.
 
@@ -151,8 +152,9 @@ mdtero project ingest
 mdtero rag build
 mdtero rag query "这批论文的核心方法是什么？"
 mdtero zotero import --limit 20 --json
+mdtero zotero sync --json
 mdtero agent install --target codex
 mdtero mcp serve
 ```
 
-当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载、后端 Voyage RAG 绑定/导入、agent skill 安装和 MCP 本地上下文。Zotero 反向同步还没有作为完成能力对外承诺。agent skill 安装由 Python CLI 负责，不依赖 npm。
+当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入、agent skill 安装和 MCP 本地上下文。agent skill 安装由 Python CLI 负责，不依赖 npm。

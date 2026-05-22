@@ -27,6 +27,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - initialize a project: `mdtero project init`
 - import a BibTeX file: `mdtero project import-bib references.bib`
 - import Zotero items: `mdtero config zotero`, then `mdtero zotero import`
+- sync succeeded Zotero-origin parse task notes/tags back to Zotero: `mdtero zotero sync`
 - submit a project queue: `mdtero project parse --wait`
 - refresh project tasks: `mdtero project refresh`
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output`
