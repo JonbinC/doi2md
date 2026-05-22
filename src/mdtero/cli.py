@@ -673,14 +673,24 @@ def cmd_zotero_sync(_args: argparse.Namespace) -> int:
 
 def cmd_rag_build(_args: argparse.Namespace) -> int:
     project_id = _server_project_id(_args)
-    result = MdteroClient().rag_build(project_id)
+    try:
+        result = MdteroClient().rag_build(project_id)
+    except Exception as exc:
+        payload = _rag_command_failure("build", project_id, exc)
+        _print_rag_command_failure(payload, json_output=_args.json)
+        return 1
     _print_result(result, json_output=_args.json)
     return 0
 
 
 def cmd_rag_query(args: argparse.Namespace) -> int:
     project_id = _server_project_id(args)
-    result = MdteroClient().rag_query(project_id, args.question)
+    try:
+        result = MdteroClient().rag_query(project_id, args.question)
+    except Exception as exc:
+        payload = _rag_command_failure("query", project_id, exc)
+        _print_rag_command_failure(payload, json_output=args.json)
+        return 1
     _print_result(result, json_output=args.json)
     return 0
 
@@ -836,6 +846,74 @@ def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: httpx.HTTP
         "server_project_id": project_id,
         "action_hint": action_hint,
     }
+
+
+def _rag_command_failure(command: str, project_id: str, exc: Exception) -> dict[str, Any]:
+    detail = _http_error_detail(exc)
+    reason_code = str(detail.get("reason_code") or "server_rag_command_failed")
+    action_hint = str(detail.get("action_hint") or _rag_action_hint(command, reason_code))
+    return {
+        "status": "failed",
+        "command": f"rag_{command}",
+        "reason_code": reason_code,
+        "error_code": str(detail.get("error_code") or "server_rag_failed"),
+        "server_project_id": project_id,
+        "http_status": exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None,
+        "error_type": exc.__class__.__name__,
+        "action_hint": action_hint,
+        "next_commands": _rag_failure_next_commands(command, reason_code),
+    }
+
+
+def _http_error_detail(exc: Exception) -> dict[str, Any]:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return {}
+    try:
+        payload = exc.response.json()
+    except ValueError:
+        return {}
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    return detail if isinstance(detail, dict) else {}
+
+
+def _rag_action_hint(command: str, reason_code: str) -> str:
+    if reason_code == "voyage_not_configured":
+        return "Server Voyage RAG is not configured. Configure VOYAGE_API_KEY on the backend, then rerun `mdtero rag build`."
+    if reason_code == "rag_index_not_built":
+        return "Build this server project RAG index before querying."
+    if reason_code == "project_has_no_chunks":
+        return "Import succeeded parse tasks first with `mdtero project ingest`, then run `mdtero rag build`."
+    if reason_code == "forbidden":
+        return "Use credentials for the owner of this server project."
+    if reason_code == "project_not_found":
+        return "Check the server project id or run `mdtero project create-server`."
+    if command == "query":
+        return "Check `mdtero rag status --json`, then run `mdtero rag build` if the project is not ready."
+    return "Check `mdtero rag status --json`, fix the reported precondition, then retry."
+
+
+def _rag_failure_next_commands(command: str, reason_code: str) -> list[str]:
+    if reason_code == "project_has_no_chunks":
+        return ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
+    if command == "query" and reason_code == "rag_index_not_built":
+        return ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
+    if reason_code in {"voyage_not_configured", "forbidden", "project_not_found"}:
+        return ["mdtero rag status --json"]
+    return ["mdtero rag status --json", "mdtero rag build"]
+
+
+def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    console = Console()
+    console.print(f"RAG {payload['command'].removeprefix('rag_')} failed: {payload['reason_code']}")
+    console.print(f"Hint: {payload['action_hint']}")
+    next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
+    if next_commands:
+        console.print("Next:")
+        for command in next_commands:
+            console.print(f"  {command}")
 
 
 def _server_project_id(args: argparse.Namespace) -> str:

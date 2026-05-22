@@ -1206,6 +1206,99 @@ def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypat
     assert payload["next_commands"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
 
 
+def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_build(self, project_id):
+        assert project_id == "42"
+        request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/build")
+        response = httpx.Response(
+            503,
+            request=request,
+            json={
+                "detail": {
+                    "error_code": "server_rag_failed",
+                    "reason_code": "voyage_not_configured",
+                    "action_hint": "Configure VOYAGE_API_KEY on the server before building or querying RAG.",
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "failed"
+    assert payload["command"] == "rag_build"
+    assert payload["reason_code"] == "voyage_not_configured"
+    assert payload["error_code"] == "server_rag_failed"
+    assert payload["server_project_id"] == "42"
+    assert payload["http_status"] == 503
+    assert payload["error_type"] == "HTTPStatusError"
+    assert "VOYAGE_API_KEY" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero rag status --json"]
+
+
+def test_rag_query_not_built_outputs_next_commands(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(self, project_id, question):
+        assert project_id == "42"
+        assert question == "demo"
+        request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
+        response = httpx.Response(
+            409,
+            request=request,
+            json={"detail": {"error_code": "server_rag_failed", "reason_code": "rag_index_not_built"}},
+        )
+        raise httpx.HTTPStatusError("conflict", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "demo", "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "failed"
+    assert payload["command"] == "rag_query"
+    assert payload["reason_code"] == "rag_index_not_built"
+    assert payload["http_status"] == 409
+    assert "Build this server project RAG index" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
+
+
+def test_rag_query_failure_plain_output_is_actionable(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(self, project_id, question):
+        request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
+        response = httpx.Response(409, request=request, json={"detail": {"reason_code": "rag_index_not_built"}})
+        raise httpx.HTTPStatusError("conflict", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "demo", "json": False})()) == 1
+    output = capsys.readouterr().out
+
+    assert "RAG query failed: rag_index_not_built" in output
+    assert "Hint:" in output
+    assert "Next:" in output
+    assert "mdtero rag build" in output
+
+
 def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
