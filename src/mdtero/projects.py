@@ -112,6 +112,21 @@ def update_paper_submission(root: Path, input_value: str, result: dict) -> Proje
     return state
 
 
+def paper_from_submission(input_value: str, result: dict, *, source: str | None = None, title: str | None = None, doi: str | None = None) -> PaperRecord:
+    return PaperRecord(
+        input=input_value,
+        task_id=str(result.get("task_id") or "") or None,
+        status=str(result.get("status") or "queued"),
+        reason_code=_reason_code(result),
+        title=title,
+        doi=doi,
+        source=source,
+        artifact=_preferred_artifact(result),
+        provider=_selected_provider(result),
+        parser_strategy=_parser_strategy(result),
+    )
+
+
 def project_pending_papers(state: ProjectState, *, include_failed: bool = False) -> list[PaperRecord]:
     selected = [paper for paper in state.papers if not paper.task_id and paper.status in {"pending", "created"}]
     if include_failed:
