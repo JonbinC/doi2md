@@ -47,11 +47,12 @@ mdtero parse --file <path> [--source-input DOI_OR_URL] [--source-doi DOI]
 
 - base URL: `https://api.mdtero.com`
 - auth header: `Authorization: ApiKey ${MDTERO_API_KEY}`
-- parse endpoint: `POST /tasks/parse`
-- upload endpoint: `POST /tasks/parse-upload-v2`
-- status endpoint: `GET /tasks/<task_id>`
-- translate endpoint: `POST /tasks/translate`
-- Markdown download: `/tasks/<task_id>/download/paper_md`
-- translated Markdown download: `/tasks/<task_id>/download/translated_md`
+- route endpoint: `POST /api/v1/route`
+- parse endpoint: `POST /api/v1/tasks/parse`
+- upload endpoint: `POST /api/v1/tasks/upload`
+- status endpoint: `GET /api/v1/tasks/<task_id>`
+- translate endpoint: `POST /api/v1/tasks/translate`
+- Markdown download: `/api/v1/tasks/<task_id>/download/paper_md`
+- translated Markdown download: `/api/v1/tasks/<task_id>/download/translated_md`
 
 For Elsevier inputs, prefer raw DOI form such as `10.1016/j.energy.2026.140192`.

@@ -258,9 +258,6 @@ export function createApiClient(
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      if (payload.pdfEngine) {
-        body.set("pdf_engine", payload.pdfEngine);
-      }
       return request("/tasks/parse-helper-bundle-v2", {
         method: "POST",
         body

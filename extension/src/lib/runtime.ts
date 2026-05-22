@@ -1,5 +1,3 @@
-import type { PdfEngine } from "@mdtero/shared";
-
 export interface ParsePageContext {
   tabId: number;
   tabUrl?: string;
@@ -43,8 +41,7 @@ export function createSsotParseMessage(input: string, pageContext?: ParsePageCon
 
 export function createFileParseMessage(
   file: File,
-  artifactKind: LocalFileArtifactKind,
-  pdfEngine?: PdfEngine
+  artifactKind: LocalFileArtifactKind
 ) {
   const message: {
     type: "mdtero.parse.file.request";
@@ -52,7 +49,6 @@ export function createFileParseMessage(
     filename: string;
     mediaType: string;
     artifactKind: LocalFileArtifactKind;
-    pdfEngine?: PdfEngine;
   } = {
     type: "mdtero.parse.file.request" as const,
     file,
@@ -60,10 +56,6 @@ export function createFileParseMessage(
     mediaType: file.type,
     artifactKind
   };
-
-  if (artifactKind === "pdf" && pdfEngine) {
-    message.pdfEngine = pdfEngine;
-  }
 
   return message;
 }

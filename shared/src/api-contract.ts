@@ -47,14 +47,11 @@ export interface ParseFulltextV2Request {
   sourceInput?: string;
 }
 
-export type PdfEngine = "grobid";
-
 export interface ParseHelperBundleV2Request {
   helperBundleFile: Blob;
   filename?: string;
   sourceDoi?: string;
   sourceInput?: string;
-  pdfEngine?: PdfEngine;
 }
 
 export type ActionType =
