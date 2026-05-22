@@ -44,6 +44,7 @@ Useful variants:
 
 ```bash
 mdtero agent install              # auto-detect existing agent directories
+mdtero agent install --interactive # prompt and multi-select by number or target name
 mdtero agent install --all
 mdtero agent install --target codex --dry-run
 mdtero agent uninstall --target codex
@@ -140,6 +141,7 @@ mdtero doctor
 
 ```bash
 mdtero agent install --target codex
+mdtero agent install --interactive
 mdtero agent install --all
 ```
 

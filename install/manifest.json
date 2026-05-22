@@ -13,6 +13,7 @@
     "runtimeInstallCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git",
     "runtimeCommand": "mdtero",
     "skillDetectCommand": "mdtero agent detect --json",
+    "skillInteractiveInstallCommand": "mdtero agent install --interactive",
     "skillInstallCommand": "mdtero agent install --target <target>"
   },
   "targets": [
@@ -88,6 +89,7 @@
         "packageManager": "uv",
         "installCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git",
         "skillDetectCommand": "mdtero agent detect --json",
+        "skillInteractiveInstallCommand": "mdtero agent install --interactive",
         "skillInstallCommand": "mdtero agent install --target <target>",
         "installTargets": [
           "claude_code",

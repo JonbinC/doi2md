@@ -43,11 +43,12 @@ mdtero agent install --target gemini_cli
 mdtero agent install --target hermes
 mdtero agent install --target opencode
 mdtero agent detect --json
+mdtero agent install --interactive
 mdtero agent install --all
 mdtero agent uninstall --target codex
 ```
 
-Run `mdtero agent detect --json` first when an agent or script needs a machine-readable list of detected workspaces, current install state, and the exact `mdtero agent install --target ...` command. If `--target` is omitted, Mdtero detects existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, and `~/.opencode` directories and installs into the detected workspaces.
+Run `mdtero agent detect --json` first when an agent or script needs a machine-readable list of detected workspaces, current install state, and the exact `mdtero agent install --target ...` command. For a human setup flow, `mdtero agent install --interactive` shows detected workspaces and lets you multi-select by number or target name; Enter installs detected pending targets. If `--target` is omitted, Mdtero detects existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, and `~/.opencode` directories and installs into the detected workspaces.
 
 OpenClaw keeps the dedicated route:
 
@@ -153,6 +154,7 @@ mdtero rag build
 mdtero rag query "这批论文的核心方法是什么？"
 mdtero zotero import --limit 20 --json
 mdtero zotero sync --json
+mdtero agent install --interactive
 mdtero agent install --target codex
 mdtero mcp serve
 ```

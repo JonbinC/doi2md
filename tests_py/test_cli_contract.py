@@ -8,7 +8,7 @@ import httpx
 from rich.console import Console
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
-from mdtero.agent import detect_target_status, detect_targets, install_targets, uninstall_targets
+from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient
@@ -1618,6 +1618,37 @@ def test_agent_detect_command_returns_machine_readable_workspace_status(monkeypa
     assert by_target["hermes"]["detected"] is True
     assert by_target["hermes"]["installed"] is False
     assert by_target["opencode"]["install_command"] == "mdtero agent install --target opencode"
+    assert by_target["codex"]["selection_index"] == 1
+
+
+def test_agent_interactive_selection_defaults_to_detected_pending_targets(tmp_path: Path):
+    (tmp_path / ".codex").mkdir()
+    install_targets(["codex"], root=tmp_path)
+    (tmp_path / ".hermes").mkdir()
+
+    statuses = detect_target_status(tmp_path)
+
+    assert default_interactive_targets(statuses) == ["hermes"]
+    assert parse_agent_selection("", statuses) == ["hermes"]
+    assert parse_agent_selection("1 4", statuses) == ["codex", "hermes"]
+    assert parse_agent_selection("codex,opencode", statuses) == ["codex", "opencode"]
+    assert parse_agent_selection("all", statuses) == ["codex", "claude_code", "gemini_cli", "hermes", "opencode"]
+
+
+def test_agent_install_interactive_uses_prompted_multi_select(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".hermes").mkdir()
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "1 4")
+
+    args = type("Args", (), {"target": None, "root": tmp_path, "all": False, "dry_run": True, "json": True, "interactive": True})()
+
+    assert cli.cmd_agent_install(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert [item["target"] for item in payload] == ["codex", "hermes"]
+    assert all(item["action"] == "would_install" for item in payload)
 
 
 def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site():

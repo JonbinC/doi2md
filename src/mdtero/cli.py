@@ -197,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     agent_install.add_argument("--all", action="store_true")
     agent_install.add_argument("--dry-run", action="store_true")
     agent_install.add_argument("--json", action="store_true")
+    agent_install.add_argument("--interactive", action="store_true", help="Interactively select detected agent workspaces to configure.")
     agent_uninstall = _cmd(agent_sub, "uninstall", "Remove Mdtero skills from selected agents.", cmd_agent_uninstall)
     agent_uninstall.add_argument("--target", action="append", required=True, choices=["codex", "claude_code", "gemini_cli", "hermes", "opencode"])
     agent_uninstall.add_argument("--root", type=Path)
@@ -822,10 +823,16 @@ def cmd_agent_detect(_args: argparse.Namespace) -> int:
 
 
 def cmd_agent_install(_args: argparse.Namespace) -> int:
-    from .agent import install_targets, results_to_json
+    from .agent import detect_target_status, install_targets, results_to_json
 
     try:
-        results = install_targets(_args.target, root=_args.root, install_all=_args.all, dry_run=_args.dry_run)
+        target_names = _args.target
+        if _args.interactive:
+            detections = detect_target_status(root=_args.root)
+            target_names = _prompt_agent_targets(detections)
+            if not target_names:
+                raise ValueError("No agent target selected. Pass --target <target> or create an agent workspace directory first.")
+        results = install_targets(target_names, root=_args.root, install_all=_args.all, dry_run=_args.dry_run)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     if _args.json:
@@ -838,6 +845,31 @@ def cmd_agent_install(_args: argparse.Namespace) -> int:
     console.print(table)
     console.print("Agent skill install uses the Python mdtero package; npm is no longer required for this path.")
     return 0
+
+
+def _prompt_agent_targets(detections: list[Any]) -> list[str]:
+    from .agent import default_interactive_targets, parse_agent_selection
+
+    console = Console(stderr=True)
+    table = Table("No", "Agent", "Detected", "Installed", "Workspace")
+    for item in detections:
+        table.add_row(
+            str(item.selection_index),
+            item.label,
+            "yes" if item.detected else "no",
+            "yes" if item.installed else "no",
+            item.workspace_path,
+        )
+    console.print(table)
+    defaults = default_interactive_targets(detections)
+    default_hint = ",".join(defaults) if defaults else ""
+    console.print("Select agent workspaces by number or target name. Use spaces for multi-select; Enter installs detected pending targets.")
+    while True:
+        selection = Prompt.ask("Agents", default=default_hint, console=console).strip()
+        try:
+            return parse_agent_selection(selection, detections)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
 
 
 def cmd_agent_uninstall(_args: argparse.Namespace) -> int:
