@@ -830,22 +830,53 @@ def _parse_academic_selection(selection: str) -> set[str]:
 
 
 def _print_next_steps(console: Console) -> None:
-    commands = [
-        "mdtero project init",
-        "mdtero parse 10.1000/example",
-        "mdtero parse --file paper.pdf",
-        "mdtero parse --batch ./papers",
-        "mdtero discover \"graph neural networks\"",
-        "mdtero project import-bib references.bib",
-        "mdtero config zotero",
-        "mdtero zotero import",
-        "mdtero rag build",
-        "mdtero mcp serve",
-        "mdtero agent install",
-        "mdtero tui",
+    console.print("\n[bold]Next commands[/bold]")
+    sections = [
+        (
+            "Start a local project",
+            [
+                "mdtero project init --name literature-review",
+                "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3",
+                "mdtero project import-bib references.bib",
+            ],
+        ),
+        (
+            "Parse papers and files",
+            [
+                "mdtero parse 10.48550/arXiv.1706.03762 --wait",
+                "mdtero parse --file paper.pdf --wait",
+                "mdtero parse --batch ./papers --wait",
+                "mdtero project parse --wait",
+                "mdtero project refresh --wait",
+                "mdtero project download --output-dir ./mdtero-output",
+            ],
+        ),
+        (
+            "Zotero",
+            [
+                "mdtero config zotero",
+                "mdtero zotero import --limit 20",
+                "mdtero zotero sync",
+            ],
+        ),
+        (
+            "Server RAG and local agents",
+            [
+                "mdtero project create-server",
+                "mdtero project ingest",
+                "mdtero rag status --json",
+                "mdtero rag build",
+                "mdtero rag query \"What are the key claims and methods?\"",
+                "mdtero mcp serve",
+                "mdtero agent install",
+                "mdtero tui",
+            ],
+        ),
     ]
-    for command in commands:
-        console.print(f"  {command}")
+    for title, commands in sections:
+        console.print(f"\n[bold]{title}[/bold]")
+        for command in commands:
+            console.print(f"  {command}")
 
 
 def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:

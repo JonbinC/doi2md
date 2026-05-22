@@ -80,6 +80,7 @@ mdtero parse --batch ./papers
 mdtero status <task-id>
 mdtero download <task-id> paper_md
 mdtero translate paper.md --to zh-CN
+mdtero rag status --json
 mdtero rag build
 mdtero rag query "What are the strongest findings?"
 mdtero mcp serve
@@ -150,6 +151,7 @@ mdtero project create-server
 mdtero project import-bib references.bib
 mdtero project parse --wait
 mdtero project ingest
+mdtero rag status --json
 mdtero rag build
 mdtero rag query "这批论文的核心方法是什么？"
 mdtero zotero import --limit 20 --json

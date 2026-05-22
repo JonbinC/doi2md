@@ -5,6 +5,7 @@ import urllib.parse
 from pathlib import Path
 
 import httpx
+from rich.console import Console
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import detect_targets, install_targets, uninstall_targets
@@ -132,6 +133,29 @@ def test_academic_setup_selection_accepts_numbered_enter_flow():
         assert "Choose 1, 2, 3" in str(exc)
     else:
         raise AssertionError("expected invalid academic option")
+
+
+def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
+    from mdtero import cli
+
+    cli._print_next_steps(Console())
+    output = capsys.readouterr().out
+
+    assert "Start a local project" in output
+    assert "mdtero project init --name literature-review" in output
+    assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3" in output
+    assert "mdtero parse 10.48550/arXiv.1706.03762 --wait" in output
+    assert "mdtero parse --file paper.pdf --wait" in output
+    assert "mdtero parse --batch ./papers --wait" in output
+    assert "mdtero config zotero" in output
+    assert "mdtero zotero import --limit 20" in output
+    assert "mdtero zotero sync" in output
+    assert "mdtero project create-server" in output
+    assert "mdtero project ingest" in output
+    assert "mdtero rag status --json" in output
+    assert "mdtero rag build" in output
+    assert "mdtero mcp serve" in output
+    assert "mdtero agent install" in output
 
 
 def test_result_selection_supports_all_and_number_lists():
