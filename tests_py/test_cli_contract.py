@@ -1052,6 +1052,8 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
             "reason_code": "indexed",
             "selected_provider": "voyage",
             "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
+            "action_hint": "Query this project or serve it over MCP.",
+            "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"],
         }
 
     monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
@@ -1063,6 +1065,40 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
     assert "server RAG ready (indexed)" in output
     assert "3/3 chunk(s) embedded" in output
     assert "voyage-test" in output
+    assert "Hint: Query this project or serve it over MCP." in output
+    assert "mdtero rag query \"<question>\"" in output
+    assert "mdtero mcp serve" in output
+
+
+def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_status(self, project_id):
+        assert project_id == "42"
+        return {
+            "status": "partial",
+            "reason_code": "rag_index_partial",
+            "selected_provider": "voyage",
+            "summary": {"chunk_count": 4, "embedded_count": 2, "pending_embedding_count": 2},
+            "action_hint": "Rebuild project RAG so every imported chunk has a Voyage embedding.",
+            "next_commands": ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""],
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": False})()) == 0
+    output = capsys.readouterr().out
+
+    assert "server RAG partial (rag_index_partial)" in output
+    assert "2/4 chunk(s)" in output
+    assert "embedded" in output
+    assert "Hint: Rebuild project RAG" in output
+    assert "mdtero rag build" in output
+    assert "mdtero rag status --json" in output
 
 
 def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, capsys):
