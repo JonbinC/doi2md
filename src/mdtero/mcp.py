@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .client import MdteroClient
-from .config import load_config
+from .config import MdteroConfig, load_config
 from .projects import load_project, paper_to_document, project_documents
 
 
@@ -44,30 +44,30 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     state = load_project(root)
     commands: dict[str, Any] = {
         "doctor": "mdtero doctor",
-        "parse_pending": "mdtero project parse --wait",
-        "refresh": "mdtero project refresh --wait",
-        "download_markdown": "mdtero project download --output-dir ./mdtero-output",
+        "parse_pending": "mdtero project parse --wait --json",
+        "refresh": "mdtero project refresh --wait --json",
+        "download_markdown": "mdtero project download --output-dir ./mdtero-output --json",
         "serve_mcp": "mdtero mcp serve",
     }
     if state.server_project_id:
-        commands["ingest_for_rag"] = "mdtero project ingest"
+        commands["ingest_for_rag"] = "mdtero project ingest --json"
         commands["rag_status"] = "mdtero rag status --json"
-        commands["rag_build"] = "mdtero rag build"
-        commands["rag_query"] = "mdtero rag query \"<question>\""
+        commands["rag_build"] = "mdtero rag build --json"
+        commands["rag_query"] = "mdtero rag query \"<question>\" --json"
     else:
-        commands["bootstrap_rag"] = "mdtero rag build"
-        commands["create_server_project"] = "mdtero project create-server"
+        commands["bootstrap_rag"] = "mdtero rag build --json"
+        commands["create_server_project"] = "mdtero project create-server --json"
         commands["bind_server_project"] = "mdtero project link --server-project-id <id>"
     return {
         "project": state.name,
         "server_project_id": state.server_project_id,
         "commands": commands,
         "workflow": [
-            "mdtero project parse --wait",
-            "mdtero project refresh --wait",
-            "mdtero rag build" if not state.server_project_id else "mdtero project ingest",
+            commands["parse_pending"],
+            commands["refresh"],
+            commands["bootstrap_rag"] if not state.server_project_id else commands["ingest_for_rag"],
             "mdtero rag status --json",
-            "mdtero rag query \"<question>\"",
+            "mdtero rag query \"<question>\" --json",
         ],
     }
 
@@ -114,7 +114,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
             "error_type": exc.__class__.__name__,
-            "next_commands": ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"],
+            "next_commands": [commands["ingest_for_rag"], "mdtero rag status --json", commands["rag_build"]],
         }
 
     summary = status.get("summary") if isinstance(status.get("summary"), dict) else {}
@@ -122,11 +122,11 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     reason_code = str(status.get("reason_code") or "unknown")
     next_commands = ["mdtero rag status --json"]
     if server_status == "ready" or reason_code == "indexed":
-        next_commands.extend(["mdtero rag query \"<question>\"", "mdtero mcp serve"])
+        next_commands.extend([commands["rag_query"], "mdtero mcp serve"])
     elif local_ready > 0:
-        next_commands.extend(["mdtero project ingest", "mdtero rag build", "mdtero rag query \"<question>\""])
+        next_commands.extend([commands["ingest_for_rag"], commands["rag_build"], commands["rag_query"]])
     else:
-        next_commands.extend(["mdtero project parse --wait", "mdtero project refresh --wait", "mdtero project ingest"])
+        next_commands.extend([commands["parse_pending"], commands["refresh"], commands["ingest_for_rag"]])
 
     status.setdefault("project", state.name)
     status.setdefault("server_project_id", state.server_project_id)
@@ -143,10 +143,10 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     return status
 
 
-def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher: Any | None = None) -> dict[str, Any]:
+def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher: Any | None = None, config: MdteroConfig | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = load_project(root)
-    config = load_config()
+    config = config or load_config()
     commands = build_agent_commands(root)["commands"]
     server_rag = build_server_rag_status(root, fetcher=rag_status_fetcher)
 
@@ -169,7 +169,7 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
     if running:
         next_commands.append(commands["refresh"])
     if failed:
-        next_commands.append("mdtero project parse --include-failed --wait")
+        next_commands.append("mdtero project parse --include-failed --wait --json")
     if succeeded:
         next_commands.append(commands["download_markdown"])
     next_commands.extend(str(command) for command in server_rag.get("next_commands", []) if command)
@@ -223,13 +223,13 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
 
 def _paper_commands(paper: Any) -> list[str]:
     if paper.status in {"pending", "created"} and not paper.task_id:
-        return ["mdtero project parse --wait"]
+        return ["mdtero project parse --wait --json"]
     if paper.task_id and paper.status not in {"succeeded", "failed"}:
-        return [f"mdtero status {paper.task_id} --wait", "mdtero project refresh --wait"]
+        return [f"mdtero status {paper.task_id} --wait --json", "mdtero project refresh --wait --json"]
     if paper.task_id and paper.status == "succeeded":
-        return [f"mdtero download {paper.task_id} {paper.artifact or 'paper_md'} --output-dir ./mdtero-output", "mdtero project ingest"]
+        return [f"mdtero download {paper.task_id} {paper.artifact or 'paper_md'} --output-dir ./mdtero-output --json", "mdtero project ingest --json"]
     if paper.status == "failed":
-        return ["mdtero project parse --include-failed --wait"]
+        return ["mdtero project parse --include-failed --wait --json"]
     return []
 
 

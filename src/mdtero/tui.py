@@ -34,7 +34,7 @@ def build_dashboard_model(
     failed = [paper for paper in project.papers if paper.status == "failed"]
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
-    briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher)
+    briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg)
     return {
         "account": {
             "api_base_url": cfg.api_base_url,
