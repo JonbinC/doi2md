@@ -709,6 +709,21 @@ def test_client_can_import_task_to_server_project(monkeypatch):
     assert calls == [("POST", "/api/v1/projects/42/tasks/task-1/import", {})]
 
 
+def test_client_can_fetch_server_rag_status(monkeypatch):
+    calls = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"project_id": 42, "status": "ready", "reason_code": "indexed"}
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient().rag_status("42")
+
+    assert result["status"] == "ready"
+    assert calls == [("GET", "/api/v1/projects/42/rag/status", {})]
+
+
 def test_project_ingest_imports_succeeded_tasks_into_bound_server_project(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -825,6 +840,46 @@ def test_rag_requires_project_binding_when_project_id_is_omitted(monkeypatch, tm
         raise AssertionError("expected missing binding error")
 
     assert "mdtero project create-server" in message
+
+
+def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_status(self, project_id):
+        assert project_id == "42"
+        return {
+            "status": "ready",
+            "reason_code": "indexed",
+            "selected_provider": "voyage",
+            "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_status(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+
+    assert "server RAG ready (indexed)" in output
+    assert "3/3 chunk(s) embedded" in output
+    assert "voyage-test" in output
+
+
+def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_status(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+
+    assert "1/1 local paper(s)" in output
+    assert "mdtero project create-server" in output
 
 
 def test_zotero_item_maps_to_project_paper():
