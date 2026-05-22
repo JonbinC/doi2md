@@ -170,7 +170,7 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
 
 
 def test_result_selection_supports_all_and_number_lists():
-    assert _parse_result_selection("", max_count=3) == [1, 2, 3]
+    assert _parse_result_selection("", max_count=3) == []
     assert _parse_result_selection("all", max_count=2) == [1, 2]
     assert _parse_result_selection("1,3 3", max_count=3) == [1, 3]
 
@@ -204,6 +204,54 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
     assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
     assert state.papers[0].source == "discover:openalex"
     assert state.papers[0].title == "Paper A"
+
+
+def test_discover_interactive_adds_prompted_results_to_project(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="discover-demo")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "1 2")
+
+    def fake_discover(self, query, *, limit=10):
+        assert query == "rag papers"
+        assert limit == 3
+        return {
+            "source": "openalex_server",
+            "items": [
+                {"title": "Paper A", "doi": "10.1000/a", "source": "openalex"},
+                {"title": "Paper B", "url": "https://example.test/paper-b", "source": "openalex"},
+                {"title": "Paper C"},
+            ],
+        }
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    args = type("Args", (), {"query": "rag papers", "limit": 3, "add": False, "select": "", "interactive": True, "json": True})()
+
+    assert cli.cmd_discover(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
+
+    assert payload["project_add"]["added_count"] == 2
+    assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
+
+
+def test_discover_interactive_enter_skips_project_add(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="discover-demo")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "")
+    monkeypatch.setattr(MdteroClient, "discover", lambda self, query, *, limit=10: {"items": [{"title": "Paper A", "doi": "10.1000/a"}]})
+
+    args = type("Args", (), {"query": "rag", "limit": 1, "add": False, "select": "", "interactive": True, "json": True})()
+
+    assert cli.cmd_discover(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
+
+    assert payload["project_add"]["added_count"] == 0
+    assert state.papers == []
 
 
 def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: Path):

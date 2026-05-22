@@ -103,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--limit", type=int, default=10)
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
+    discover.add_argument("--interactive", action="store_true", help="Show results and prompt for numbers to add to the current project.")
     discover.add_argument("--json", action="store_true")
 
     project = sub.add_parser("project")
@@ -353,7 +354,18 @@ def cmd_discover(args: argparse.Namespace) -> int:
             Console().print(str(exc.payload.get("action_hint") or ""))
         return 2
     project_add = None
-    if args.add:
+    if args.interactive:
+        selection = _prompt_discovery_selection(result)
+        try:
+            project_add = _add_discovery_results_to_project(result, selection=selection)
+        except ValueError as exc:
+            if args.json:
+                print(json.dumps({"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}, indent=2, ensure_ascii=False))
+            else:
+                Console().print(f"Invalid selection: {exc}")
+            return 2
+        result["project_add"] = project_add
+    elif args.add:
         try:
             project_add = _add_discovery_results_to_project(result, selection=args.select or "all")
         except ValueError as exc:
@@ -366,13 +378,24 @@ def cmd_discover(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    table = Table("No", "Year", "Title", "DOI", "Source")
-    for index, item in enumerate(result.get("items") or [], start=1):
-        table.add_row(str(index), str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
-    Console().print(table)
+    _print_discovery_table(result)
     if project_add is not None:
         Console().print(f"Added {project_add['added_count']} discovery result(s) to project; skipped {project_add['skipped_count']}.")
     return 0
+
+
+def _prompt_discovery_selection(result: dict[str, Any]) -> str:
+    console = Console(stderr=True)
+    _print_discovery_table(result, console=console)
+    console.print("Select result numbers to add to the current project. Use spaces for multi-select, `all` for all results, or Enter to skip.")
+    return Prompt.ask("Add papers", default="", console=console).strip()
+
+
+def _print_discovery_table(result: dict[str, Any], *, console: Console | None = None) -> None:
+    table = Table("No", "Year", "Title", "DOI", "Source")
+    for index, item in enumerate(result.get("items") or [], start=1):
+        table.add_row(str(index), str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
+    (console or Console()).print(table)
 
 
 def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str) -> dict[str, Any]:
@@ -414,7 +437,9 @@ def _parse_result_selection(selection: str, *, max_count: int) -> list[int]:
     if max_count <= 0:
         return []
     cleaned = str(selection or "").strip().lower()
-    if not cleaned or cleaned in {"all", "a", "*"}:
+    if not cleaned:
+        return []
+    if cleaned in {"all", "a", "*"}:
         return list(range(1, max_count + 1))
     values: list[int] = []
     for token in cleaned.replace(",", " ").split():
