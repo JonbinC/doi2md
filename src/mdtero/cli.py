@@ -649,8 +649,23 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
 def cmd_rag_status(_args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
     indexed = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.artifact)
-    Console().print(f"Project {state.name}: {indexed}/{len(state.papers)} paper(s) have downloadable artifacts for server RAG.")
-    Console().print(f"Server project: {state.server_project_id or 'not linked; run `mdtero project create-server` or `mdtero project link --server-project-id <id>`'}")
+    console = Console()
+    if state.server_project_id:
+        try:
+            result = MdteroClient().rag_status(state.server_project_id)
+        except Exception as exc:
+            console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
+            console.print(f"Server project: {state.server_project_id}; status unavailable ({exc.__class__.__name__}).")
+            return 1
+        summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+        console.print(
+            f"Project {state.name}: server RAG {result.get('status')} ({result.get('reason_code')}); "
+            f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunk(s) embedded."
+        )
+        console.print(f"Server project: {state.server_project_id}; provider: {result.get('selected_provider')}; model: {summary.get('embedding_model') or 'unknown'}")
+        return 0
+    console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
+    console.print("Server project: not linked; run `mdtero project create-server` or `mdtero project link --server-project-id <id>`")
     return 0
 
 
