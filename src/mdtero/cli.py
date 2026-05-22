@@ -106,6 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
     project_download.add_argument("--artifact", default="paper_md")
     project_download.add_argument("--output-dir", type=Path, default=Path("mdtero-output"))
     project_download.add_argument("--json", action="store_true")
+    project_ingest = _cmd(project_sub, "ingest", "Import succeeded parse tasks into the linked server project for RAG.", cmd_project_ingest)
+    project_ingest.add_argument("--json", action="store_true")
     _cmd(project_sub, "list", "List papers in the current project.", cmd_project_status)
     _cmd(project_sub, "status", "Show current project status.", cmd_project_status)
 
@@ -437,6 +439,30 @@ def cmd_project_download(args: argparse.Namespace) -> int:
         for item in downloaded:
             table.add_row(item["input"], item["artifact"], item["path"])
         Console().print(table)
+    return 0
+
+
+def cmd_project_ingest(args: argparse.Namespace) -> int:
+    state = load_project(Path.cwd())
+    project_id = _server_project_id(args)
+    client = MdteroClient()
+    results = []
+    for paper in state.papers:
+        if paper.status != "succeeded" or not paper.task_id:
+            continue
+        result = client.import_task_to_project(project_id, paper.task_id)
+        results.append({"input": paper.input, "task_id": paper.task_id, "result": result})
+    payload = {"server_project_id": project_id, "imported_count": len(results), "items": results}
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        table = Table("Input", "Task", "Document", "Status")
+        for item in results:
+            result = item["result"]
+            table.add_row(item["input"], item["task_id"], str(result.get("document_id") or ""), str(result.get("import_status") or ""))
+        Console().print(table)
+        if not results:
+            Console().print("No succeeded project tasks are ready to import.")
     return 0
 
 
