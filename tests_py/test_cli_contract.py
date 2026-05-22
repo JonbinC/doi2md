@@ -7,7 +7,7 @@ import httpx
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import detect_targets, install_targets, uninstall_targets
-from mdtero.cli import build_parser, _parse_academic_selection
+from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_commands, build_paper_context, build_project_status, build_rag_context
@@ -59,6 +59,43 @@ def test_academic_setup_selection_accepts_numbered_enter_flow():
         assert "Choose 1, 2, 3" in str(exc)
     else:
         raise AssertionError("expected invalid academic option")
+
+
+def test_result_selection_supports_all_and_number_lists():
+    assert _parse_result_selection("", max_count=3) == [1, 2, 3]
+    assert _parse_result_selection("all", max_count=2) == [1, 2]
+    assert _parse_result_selection("1,3 3", max_count=3) == [1, 3]
+
+    try:
+        _parse_result_selection("4", max_count=3)
+    except ValueError as exc:
+        assert "outside 1..3" in str(exc)
+    else:
+        raise AssertionError("expected invalid result selection")
+
+
+def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: Path):
+    init_project(tmp_path, name="discover-demo")
+    monkeypatch.chdir(tmp_path)
+
+    summary = _add_discovery_results_to_project(
+        {
+            "source": "openalex_server",
+            "items": [
+                {"title": "Paper A", "doi": "10.1000/a", "source": "openalex"},
+                {"title": "Paper B", "url": "https://example.test/paper-b", "source": "openalex"},
+                {"title": "Paper C"},
+            ],
+        },
+        selection="1,2,3",
+    )
+
+    state = load_project(tmp_path)
+    assert summary["added_count"] == 2
+    assert summary["skipped_count"] == 1
+    assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
+    assert state.papers[0].source == "discover:openalex"
+    assert state.papers[0].title == "Paper A"
 
 
 def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: Path):

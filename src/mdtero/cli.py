@@ -95,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
     discover = _cmd(sub, "discover", "Search papers.", cmd_discover)
     discover.add_argument("query")
     discover.add_argument("--limit", type=int, default=10)
+    discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
+    discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
     discover.add_argument("--json", action="store_true")
 
     project = sub.add_parser("project")
@@ -326,14 +328,89 @@ def cmd_discover(args: argparse.Namespace) -> int:
             Console().print(f"Discovery failed: {exc.payload.get('error_code')}")
             Console().print(str(exc.payload.get("action_hint") or ""))
         return 2
+    project_add = None
+    if args.add:
+        try:
+            project_add = _add_discovery_results_to_project(result, selection=args.select or "all")
+        except ValueError as exc:
+            if args.json:
+                print(json.dumps({"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}, indent=2, ensure_ascii=False))
+            else:
+                Console().print(f"Invalid selection: {exc}")
+            return 2
+        result["project_add"] = project_add
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    table = Table("Year", "Title", "DOI", "Source")
-    for item in result.get("items") or []:
-        table.add_row(str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
+    table = Table("No", "Year", "Title", "DOI", "Source")
+    for index, item in enumerate(result.get("items") or [], start=1):
+        table.add_row(str(index), str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
     Console().print(table)
+    if project_add is not None:
+        Console().print(f"Added {project_add['added_count']} discovery result(s) to project; skipped {project_add['skipped_count']}.")
     return 0
+
+
+def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str) -> dict[str, Any]:
+    items = [item for item in result.get("items") or [] if isinstance(item, dict)]
+    selected_indices = _parse_result_selection(selection, max_count=len(items))
+    state = load_project(Path.cwd()) if project_path(Path.cwd()).exists() else None
+    existing_inputs = {paper.input for paper in state.papers} if state else set()
+    added: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for index in selected_indices:
+        item = items[index - 1]
+        target = _discovery_parse_target(item)
+        if not target:
+            skipped.append({"index": index, "reason_code": "missing_doi_or_url", "title": item.get("title")})
+            continue
+        if target in existing_inputs:
+            skipped.append({"index": index, "reason_code": "already_in_project", "input": target})
+            continue
+        add_paper(
+            Path.cwd(),
+            PaperRecord(
+                input=target,
+                title=str(item.get("title") or "") or None,
+                doi=str(item.get("doi") or "") or None,
+                source=f"discover:{item.get('source') or result.get('source') or 'unknown'}",
+            ),
+        )
+        existing_inputs.add(target)
+        added.append({"index": index, "input": target, "title": item.get("title"), "doi": item.get("doi")})
+    return {
+        "added_count": len(added),
+        "skipped_count": len(skipped),
+        "added": added,
+        "skipped": skipped,
+    }
+
+
+def _parse_result_selection(selection: str, *, max_count: int) -> list[int]:
+    if max_count <= 0:
+        return []
+    cleaned = str(selection or "").strip().lower()
+    if not cleaned or cleaned in {"all", "a", "*"}:
+        return list(range(1, max_count + 1))
+    values: list[int] = []
+    for token in cleaned.replace(",", " ").split():
+        try:
+            value = int(token)
+        except ValueError as exc:
+            raise ValueError(f"selection `{token}` is not a number") from exc
+        if value < 1 or value > max_count:
+            raise ValueError(f"selection `{value}` is outside 1..{max_count}")
+        if value not in values:
+            values.append(value)
+    return values
+
+
+def _discovery_parse_target(item: dict[str, Any]) -> str | None:
+    doi = str(item.get("doi") or "").strip()
+    if doi:
+        return doi
+    url = str(item.get("url") or "").strip()
+    return url or None
 
 
 def cmd_project_init(args: argparse.Namespace) -> int:
