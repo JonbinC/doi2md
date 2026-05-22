@@ -63,7 +63,8 @@ mdtero doctor
 mdtero login
 mdtero login --api-key <key>
 mdtero config academic
-mdtero project init
+mdtero project init --json
+mdtero project status --json
 mdtero project import-bib references.bib
 mdtero project parse --wait
 mdtero project refresh
@@ -96,7 +97,7 @@ Validated in the current alpha:
 - API-key login, `mdtero doctor`, and local config
 - DOI/arXiv parse with task polling and Markdown/bundle download
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
-- local project init/add/remove/list, BibTeX import with de-duplication, project parse/refresh/download
+- local project init/add/remove/list/status, BibTeX import with de-duplication, project parse/refresh/download, and agent-readable JSON for project management commands
 - Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`
 - discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; use `mdtero discover "<query>" --interactive` to inspect results and multi-select papers into the local project queue, or `--add --select 1,3` for scripts
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
@@ -149,6 +150,7 @@ mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out
 mdtero project init --name literature-review
+mdtero project status --json
 mdtero project import-bib references.bib
 mdtero project parse --wait
 mdtero translate <parse-task-id> --to zh-CN
