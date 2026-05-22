@@ -188,6 +188,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     agent = sub.add_parser("agent")
     agent_sub = agent.add_subparsers(dest="agent_command")
+    agent_detect = _cmd(agent_sub, "detect", "Detect local agent workspaces before installing skills.", cmd_agent_detect)
+    agent_detect.add_argument("--root", type=Path)
+    agent_detect.add_argument("--json", action="store_true")
     agent_install = _cmd(agent_sub, "install", "Detect local agents and install Mdtero skills.", cmd_agent_install)
     agent_install.add_argument("--target", action="append", choices=["codex", "claude_code", "gemini_cli", "hermes", "opencode"])
     agent_install.add_argument("--root", type=Path)
@@ -777,6 +780,26 @@ def cmd_mcp_serve(_args: argparse.Namespace) -> int:
     from .mcp import serve_project_context
 
     serve_project_context(Path.cwd())
+    return 0
+
+
+def cmd_agent_detect(_args: argparse.Namespace) -> int:
+    from .agent import detect_target_status, detections_to_json
+
+    results = detect_target_status(root=_args.root)
+    if _args.json:
+        print(detections_to_json(results))
+        return 0
+    table = Table("Agent", "Detected", "Installed", "Workspace", "Install command")
+    for result in results:
+        table.add_row(
+            result.label,
+            "yes" if result.detected else "no",
+            "yes" if result.installed else "no",
+            result.workspace_path,
+            result.install_command,
+        )
+    Console().print(table)
     return 0
 
 

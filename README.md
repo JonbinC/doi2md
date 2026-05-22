@@ -42,11 +42,12 @@ mdtero agent install --target codex
 mdtero agent install --target gemini_cli
 mdtero agent install --target hermes
 mdtero agent install --target opencode
+mdtero agent detect --json
 mdtero agent install --all
 mdtero agent uninstall --target codex
 ```
 
-If `--target` is omitted, Mdtero detects existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, and `~/.opencode` directories and installs into the detected workspaces.
+Run `mdtero agent detect --json` first when an agent or script needs a machine-readable list of detected workspaces, current install state, and the exact `mdtero agent install --target ...` command. If `--target` is omitted, Mdtero detects existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, and `~/.opencode` directories and installs into the detected workspaces.
 
 OpenClaw keeps the dedicated route:
 
