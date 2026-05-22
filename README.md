@@ -103,6 +103,7 @@ Validated in the current alpha:
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests from parse task ids or local Markdown files
 - local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, and recommended next commands
+- MCP and agent-facing recommended commands prefer `--json` on parse, refresh, ingest, RAG, and download steps so local agents can parse results without scraping terminal tables
 - agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
 Known boundaries:

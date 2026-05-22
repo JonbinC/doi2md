@@ -1262,12 +1262,12 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["server_project_id"] == "42"
     assert status["ready_for_ingest_count"] == 1
     assert status["pending_count"] == 1
-    assert commands["commands"]["ingest_for_rag"] == "mdtero project ingest"
+    assert commands["commands"]["ingest_for_rag"] == "mdtero project ingest --json"
     assert commands["commands"]["rag_status"] == "mdtero rag status --json"
-    assert commands["commands"]["rag_build"] == "mdtero rag build"
+    assert commands["commands"]["rag_build"] == "mdtero rag build --json"
     assert rag["ready"] is True
     assert rag["reason_code"] == "ready"
-    assert "mdtero project ingest" in paper["recommended_commands"]
+    assert "mdtero project ingest --json" in paper["recommended_commands"]
 
 
 def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_path: Path):
@@ -1311,11 +1311,11 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["active_items"][0]["input"] == "10.1000/todo"
     assert briefing["rag"]["agent_summary"]["embedded_count"] == 8
     assert briefing["recommended_next_commands"] == [
-        "mdtero project parse --wait",
-        "mdtero project parse --include-failed --wait",
-        "mdtero project download --output-dir ./mdtero-output",
+        "mdtero project parse --wait --json",
+        "mdtero project parse --include-failed --wait --json",
+        "mdtero project download --output-dir ./mdtero-output --json",
         "mdtero rag status --json",
-        "mdtero rag query \"<question>\"",
+        "mdtero rag query \"<question>\" --json",
         "mdtero mcp serve",
     ]
     assert "agent_briefing" in briefing["mcp_tools"]
@@ -1339,7 +1339,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --json",
     ]
-    assert "mdtero rag build" in briefing["recommended_next_commands"]
+    assert "mdtero rag build --json" in briefing["recommended_next_commands"]
 
 
 def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path: Path):
@@ -1351,7 +1351,7 @@ def test_mcp_rag_context_prompts_server_project_creation_when_unlinked(tmp_path:
 
     assert rag["ready"] is False
     assert rag["reason_code"] == "server_project_not_linked"
-    assert commands["commands"]["create_server_project"] == "mdtero project create-server"
+    assert commands["commands"]["create_server_project"] == "mdtero project create-server --json"
 
 
 def test_mcp_server_rag_status_reports_unlinked_next_commands(tmp_path: Path):
@@ -1363,7 +1363,7 @@ def test_mcp_server_rag_status_reports_unlinked_next_commands(tmp_path: Path):
     assert status["status"] == "not_ready"
     assert status["reason_code"] == "server_project_not_linked"
     assert status["local_ready_for_ingest_count"] == 1
-    assert status["next_commands"][0] == "mdtero rag build"
+    assert status["next_commands"][0] == "mdtero rag build --json"
     assert "create and bind" in status["action_hint"]
 
 
@@ -1391,7 +1391,7 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "chunk_count": 5,
         "pending_embedding_count": 0,
     }
-    assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"]
+    assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
 
 
 def test_mcp_server_rag_status_handles_server_unavailable(tmp_path: Path):
@@ -1407,7 +1407,7 @@ def test_mcp_server_rag_status_handles_server_unavailable(tmp_path: Path):
     assert status["status"] == "unavailable"
     assert status["reason_code"] == "server_rag_status_unavailable"
     assert status["error_type"] == "TimeoutError"
-    assert status["next_commands"] == ["mdtero project ingest", "mdtero rag status --json", "mdtero rag build"]
+    assert status["next_commands"] == ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
 
 
 def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
@@ -1457,7 +1457,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["rag"]["server_status"] == "not_ready"
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build", "mdtero rag query \"<question>\""]
     assert model["mcp"]["serve_command"] == "mdtero mcp serve"
-    assert "mdtero rag build" in model["mcp"]["recommended_next_commands"]
+    assert "mdtero rag build --json" in model["mcp"]["recommended_next_commands"]
     assert model["zotero"]["configured"] is True
     assert model["agents"]["labels"] == ["Codex"]
     assert rendered is not None

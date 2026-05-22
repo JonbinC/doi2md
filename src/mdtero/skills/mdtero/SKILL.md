@@ -55,6 +55,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 When `mdtero mcp serve` is available, use these tools before guessing project state:
 
 - `agent_briefing`: one-call account status, project health, ready downloads, blocked items, RAG status, and recommended next commands
+- Agent-facing recommended commands include `--json` where supported. Prefer those exact commands over human-readable variants when automating workflows.
 - `project_status`: current project name, server project id, paper statuses, and next actions
 - `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
