@@ -30,17 +30,17 @@ Treat PDF as optional input. Prefer the Markdown package first and only fall bac
 ## Cloud CLI Workflow
 
 ```bash
-mdtero parse <doi-or-url>
-mdtero status <task-id>
-mdtero download <task-id> paper_md --output-dir .
-mdtero translate <parse-task-id> zh
-mdtero download <task-id> translated_md --output-dir .
+mdtero parse <doi-or-url> --trace --json
+mdtero status <task-id> --wait --json
+mdtero download <task-id> paper_md --output-dir . --json
+mdtero translate <parse-task-id> --to zh-CN --json
+mdtero download <task-id> translated_md --output-dir . --json
 ```
 
 For user-provided PDF/HTML/XML/EPUB files, use:
 
 ```bash
-mdtero parse --file <path> [--source-input DOI_OR_URL] [--source-doi DOI]
+mdtero parse --file <path> --json
 ```
 
 ## Direct API Notes

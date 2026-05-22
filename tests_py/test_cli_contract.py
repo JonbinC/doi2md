@@ -2131,6 +2131,23 @@ def test_packaged_skill_template_is_available_to_python_installer():
     assert "mdtero parse <doi-or-url>" in skill
 
 
+def test_legacy_agent_install_docs_use_json_friendly_cli_examples():
+    repo_root = Path(__file__).resolve().parents[1]
+    docs = [
+        repo_root / "skills" / "codex" / "INSTALL.md",
+        repo_root / "skills" / "claude_code" / "INSTALL.md",
+        repo_root / "skills" / "gemini_cli" / "INSTALL.md",
+        repo_root / "skills" / "hermes" / "INSTALL.md",
+    ]
+    for path in docs:
+        content = path.read_text(encoding="utf-8")
+        assert "mdtero parse <doi-or-url> --trace --json" in content
+        assert "mdtero status <task-id> --wait --json" in content
+        assert "mdtero translate <parse-task-id> --to zh-CN --json" in content
+        assert "mdtero parse <doi-or-url>\n" not in content
+        assert "mdtero translate <parse-task-id> zh" not in content
+
+
 def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     from importlib import resources
 
