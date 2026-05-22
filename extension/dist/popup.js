@@ -512,7 +512,7 @@ function buildCliParseCommand(input) {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace`;
+  return `mdtero parse ${shellQuote(normalized)} --trace --json`;
 }
 function shellQuote(value) {
   if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
@@ -1138,7 +1138,18 @@ async function refreshUsage() {
   }
 }
 async function refreshBridgeStatus() {
-  currentBridgeStatus = null;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    currentBridgeStatus = { state: "unavailable", runnerState: "idle" };
+    await updatePreflightHint();
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tab.id, createDetectMessage());
+    currentBridgeStatus = { state: "connected", runnerState: "idle" };
+  } catch {
+    currentBridgeStatus = { state: "unavailable", runnerState: "idle" };
+  }
   await updatePreflightHint();
 }
 async function detectCurrentTab() {

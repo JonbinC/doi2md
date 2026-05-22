@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-Protocol and acquisition helper layer for the public extension. These files translate shared/backend contracts into browser/runtime behavior.
+Protocol and browser acquisition layer for the public extension. These files translate shared/backend contracts into browser/runtime behavior.
 
 ## WHERE TO LOOK
 
@@ -26,7 +26,7 @@ Protocol and acquisition helper layer for the public extension. These files tran
 - Do not duplicate `@mdtero/shared` contract definitions locally.
 - Do not promote a publisher-specific hack into generic routing policy here.
 - Do not bypass tests for background/page-capture/raw-upload behavior.
-- Do not reintroduce native messaging or local helper dependencies into the public extension.
+- Do not reintroduce native messaging, local helper dependencies, or publisher API key storage into the public extension.
 
 ## VERIFY
 
