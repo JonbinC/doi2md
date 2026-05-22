@@ -161,7 +161,9 @@ def build_parser() -> argparse.ArgumentParser:
     rag_query = _cmd(rag_sub, "query", "Query server-side project RAG.", cmd_rag_query)
     rag_query.add_argument("question")
     rag_query.add_argument("--project-id")
-    _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
+    rag_status = _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
+    rag_status.add_argument("--project-id")
+    rag_status.add_argument("--json", action="store_true")
 
     mcp = sub.add_parser("mcp")
     mcp_sub = mcp.add_subparsers(dest="mcp_command")
@@ -646,23 +648,55 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_rag_status(_args: argparse.Namespace) -> int:
+def cmd_rag_status(args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
     indexed = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.artifact)
     console = Console()
-    if state.server_project_id:
+    project_id = args.project_id or state.server_project_id
+    if project_id:
         try:
-            result = MdteroClient().rag_status(state.server_project_id)
+            result = MdteroClient().rag_status(project_id)
         except Exception as exc:
-            console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
-            console.print(f"Server project: {state.server_project_id}; status unavailable ({exc.__class__.__name__}).")
+            payload = {
+                "status": "unavailable",
+                "reason_code": "server_rag_status_unavailable",
+                "project": state.name,
+                "server_project_id": project_id,
+                "local_ready_for_ingest_count": indexed,
+                "local_paper_count": len(state.papers),
+                "error_type": exc.__class__.__name__,
+            }
+            if args.json:
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
+                console.print(f"Server project: {project_id}; status unavailable ({exc.__class__.__name__}).")
             return 1
         summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+        result.setdefault("project", state.name)
+        result.setdefault("server_project_id", str(project_id))
+        result.setdefault("local_ready_for_ingest_count", indexed)
+        result.setdefault("local_paper_count", len(state.papers))
+        if args.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
         console.print(
             f"Project {state.name}: server RAG {result.get('status')} ({result.get('reason_code')}); "
             f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunk(s) embedded."
         )
-        console.print(f"Server project: {state.server_project_id}; provider: {result.get('selected_provider')}; model: {summary.get('embedding_model') or 'unknown'}")
+        console.print(f"Server project: {project_id}; provider: {result.get('selected_provider')}; model: {summary.get('embedding_model') or 'unknown'}")
+        return 0
+    payload = {
+        "status": "not_ready",
+        "reason_code": "server_project_not_linked",
+        "project": state.name,
+        "server_project_id": None,
+        "local_ready_for_ingest_count": indexed,
+        "local_paper_count": len(state.papers),
+        "action_hint": "Run `mdtero project create-server` or `mdtero project link --server-project-id <id>`.",
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
     console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
     console.print("Server project: not linked; run `mdtero project create-server` or `mdtero project link --server-project-id <id>`")
