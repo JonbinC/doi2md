@@ -56,6 +56,7 @@ The old npm installer runtime has been retired from this repository. Use the Pyt
 ```bash
 mdtero doctor
 mdtero discover "thermochemical energy storage" --limit 5
+mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace
 mdtero parse --file paper.pdf
@@ -82,7 +83,7 @@ What is validated in the current alpha:
 - backend-planned local source acquisition through `curl_cffi` for HTML/XML/EPUB/PDF URLs, with `httpx` fallback and `--trace` visibility.
 - local project state, BibTeX import, de-duplication, project parse/refresh/download.
 - Zotero read-only metadata import into the current Mdtero project.
-- discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback.
+- discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback. `--add --select 1,3` sends selected results straight into the local project queue.
 - agent skill installation without npm for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode.
 
 Current boundaries:

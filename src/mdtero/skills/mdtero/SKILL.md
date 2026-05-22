@@ -37,6 +37,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub>`
 - parse a directory of files: `mdtero parse --batch ./papers`
 - search discovery: `mdtero discover "<query>"`
+- add discovery results to the local parse queue: `mdtero discover "<query>" --limit 5 --add --select 1,3`
 - poll status: `mdtero status <task-id>`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir>`
 - translate Markdown: `mdtero translate <paper.md> --to zh-CN`
