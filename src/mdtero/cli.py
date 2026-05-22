@@ -897,13 +897,17 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         "server_project_id": None,
         "local_ready_for_ingest_count": indexed,
         "local_paper_count": len(state.papers),
-        "action_hint": "Run `mdtero project create-server` or `mdtero project link --server-project-id <id>`.",
+        "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
+        "next_commands": ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"],
     }
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
     console.print(f"Project {state.name}: {indexed}/{len(state.papers)} local paper(s) have downloadable artifacts for server RAG.")
-    console.print("Server project: not linked; run `mdtero project create-server` or `mdtero project link --server-project-id <id>`")
+    console.print(f"Server project: not linked. Hint: {payload['action_hint']}")
+    console.print("Next:")
+    for command in payload["next_commands"]:
+        console.print(f"  {command}")
     return 0
 
 
@@ -1172,7 +1176,7 @@ def _server_project_id(args: argparse.Namespace) -> str:
     state = load_project(Path.cwd())
     if state.server_project_id:
         return state.server_project_id
-    raise SystemExit("No server project is linked. Run `mdtero project create-server` or `mdtero project link --server-project-id <id>` first.")
+    raise SystemExit("No server project is linked. Run `mdtero rag build --json` to create, bind, import, and build server-side Voyage RAG.")
 
 
 def _server_project_id_or_report(args: argparse.Namespace, *, command: str) -> str | None:
@@ -1205,13 +1209,8 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
         "project": state.name,
         "local_ready_for_ingest_count": sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id),
         "local_paper_count": len(state.papers),
-        "action_hint": "Create or link a server project before running server-side Voyage RAG.",
-        "next_commands": [
-            "mdtero project create-server --json",
-            "mdtero project ingest --json",
-            "mdtero rag status --json",
-            "mdtero rag build --json" if command == "build" else "mdtero rag query \"<question>\" --json",
-        ],
+        "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
+        "next_commands": ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"],
     }
 
 
