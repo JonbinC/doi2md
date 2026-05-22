@@ -167,7 +167,7 @@ function createApiClient(getSettings) {
 }
 
 // src/lib/auth-bridge.ts
-var MDTERO_ACCOUNT_URL = "https://mdtero.com/account";
+var MDTERO_ACCOUNT_URL = "https://mdtero.com/auth?source=extension";
 
 // src/lib/download.ts
 var defaultDeps = {
@@ -529,7 +529,7 @@ var COPY = {
     guest: "Guest mode",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
-    signInHint: "Sign in on mdtero.com/account, then return here to parse, translate, and download.",
+    signInHint: "Sign in on mdtero.com/auth, then return here to parse, translate, and download.",
     signInButton: "Open Mdtero Account",
     connectionPillSignedOut: "Website OAuth",
     connectionPillSignedIn: "Connected",
@@ -585,7 +585,7 @@ var COPY = {
     guest: "\u6E38\u5BA2\u6A21\u5F0F",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
-    signInHint: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\uFF0C\u7136\u540E\u56DE\u5230\u6269\u5C55\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
+    signInHint: "\u8BF7\u5728 mdtero.com/auth \u767B\u5F55\uFF0C\u7136\u540E\u56DE\u5230\u6269\u5C55\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
     signInButton: "\u6253\u5F00 Mdtero Account",
     connectionPillSignedOut: "\u7F51\u9875\u767B\u5F55",
     connectionPillSignedIn: "\u5DF2\u8FDE\u63A5",

@@ -1,4 +1,4 @@
-export const MDTERO_ACCOUNT_URL = "https://mdtero.com/account";
+export const MDTERO_ACCOUNT_URL = "https://mdtero.com/auth?source=extension";
 
 const TRUSTED_SITE_ORIGINS = new Set([
   "https://mdtero.com",

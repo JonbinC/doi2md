@@ -167,7 +167,7 @@ function createApiClient(getSettings) {
 }
 
 // src/lib/auth-bridge.ts
-var MDTERO_ACCOUNT_URL = "https://mdtero.com/account";
+var MDTERO_ACCOUNT_URL = "https://mdtero.com/auth?source=extension";
 
 // src/lib/download.ts
 var defaultDeps = {
@@ -271,7 +271,7 @@ var COPY = {
     permissionsCapture: "\u6D4F\u89C8\u5668\u8865\u6293\u53D6\u53EA\u4F1A\u5728\u4F60\u4E3B\u52A8\u89E3\u6790\u5F53\u524D\u8BBA\u6587\u9875\u65F6\u590D\u7528\u5F53\u524D\u6807\u7B7E\u9875\u3002",
     permissionsHosts: "\u7AD9\u70B9\u6743\u9650\u53EA\u8986\u76D6 Mdtero Account\u3001\u53D7\u652F\u6301\u7684\u5B66\u672F\u9875\u9762\uFF0C\u4EE5\u53CA\u4F60\u4E3B\u52A8\u9009\u62E9\u4E0A\u4F20\u7684\u6587\u4EF6\u3002",
     notSignedIn: "\u5C1A\u672A\u767B\u5F55\u3002\u8BF7\u6253\u5F00 Mdtero Account \u6388\u6743\u6269\u5C55\u3002",
-    usagePending: "\u8BF7\u5728 mdtero.com/account \u767B\u5F55\u4EE5\u540C\u6B65\u4F59\u989D\u3001\u989D\u5EA6\u548C\u5386\u53F2\u3002",
+    usagePending: "\u8BF7\u5728 mdtero.com/auth \u767B\u5F55\u4EE5\u540C\u6B65\u4F59\u989D\u3001\u989D\u5EA6\u548C\u5386\u53F2\u3002",
     signedIn: (email) => `\u5DF2\u767B\u5F55\uFF1A${email}`,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
     openAccount: "\u6253\u5F00 Mdtero Account",
