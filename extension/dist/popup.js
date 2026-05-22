@@ -534,8 +534,8 @@ var COPY = {
     connectionPillSignedOut: "Website OAuth",
     connectionPillSignedIn: "Connected",
     workflowAuth: "Login",
-    workflowParse: "Parse",
-    workflowUpload: "Upload",
+    workflowParse: "Parse / Upload",
+    workflowTranslate: "Translate",
     workflowDownload: "Download",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
@@ -590,8 +590,8 @@ var COPY = {
     connectionPillSignedOut: "\u7F51\u9875\u767B\u5F55",
     connectionPillSignedIn: "\u5DF2\u8FDE\u63A5",
     workflowAuth: "\u767B\u5F55",
-    workflowParse: "\u89E3\u6790",
-    workflowUpload: "\u4E0A\u4F20",
+    workflowParse: "\u89E3\u6790 / \u4E0A\u4F20",
+    workflowTranslate: "\u7FFB\u8BD1",
     workflowDownload: "\u4E0B\u8F7D",
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
@@ -644,7 +644,7 @@ var usageStatusEl = document.querySelector("#usage-status");
 var connectionPillEl = document.querySelector("#connection-pill");
 var workflowAuthEl = document.querySelector("#workflow-auth");
 var workflowParseEl = document.querySelector("#workflow-parse");
-var workflowUploadEl = document.querySelector("#workflow-upload");
+var workflowTranslateEl = document.querySelector("#workflow-translate");
 var workflowDownloadEl = document.querySelector("#workflow-download");
 var inputLabelEl = document.querySelector("#paper-input-label");
 var inputEl = document.querySelector("#paper-input");
@@ -778,7 +778,7 @@ function applyLanguage() {
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (workflowAuthEl) workflowAuthEl.textContent = copy.workflowAuth;
   if (workflowParseEl) workflowParseEl.textContent = copy.workflowParse;
-  if (workflowUploadEl) workflowUploadEl.textContent = copy.workflowUpload;
+  if (workflowTranslateEl) workflowTranslateEl.textContent = copy.workflowTranslate;
   if (workflowDownloadEl) workflowDownloadEl.textContent = copy.workflowDownload;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;

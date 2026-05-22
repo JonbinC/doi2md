@@ -52,8 +52,8 @@ const COPY = {
     connectionPillSignedOut: "Website OAuth",
     connectionPillSignedIn: "Connected",
     workflowAuth: "Login",
-    workflowParse: "Parse",
-    workflowUpload: "Upload",
+    workflowParse: "Parse / Upload",
+    workflowTranslate: "Translate",
     workflowDownload: "Download",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
@@ -109,8 +109,8 @@ const COPY = {
     connectionPillSignedOut: "网页登录",
     connectionPillSignedIn: "已连接",
     workflowAuth: "登录",
-    workflowParse: "解析",
-    workflowUpload: "上传",
+    workflowParse: "解析 / 上传",
+    workflowTranslate: "翻译",
     workflowDownload: "下载",
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
@@ -164,7 +164,7 @@ const usageStatusEl = document.querySelector<HTMLParagraphElement>("#usage-statu
 const connectionPillEl = document.querySelector<HTMLParagraphElement>("#connection-pill");
 const workflowAuthEl = document.querySelector<HTMLSpanElement>("#workflow-auth");
 const workflowParseEl = document.querySelector<HTMLSpanElement>("#workflow-parse");
-const workflowUploadEl = document.querySelector<HTMLSpanElement>("#workflow-upload");
+const workflowTranslateEl = document.querySelector<HTMLSpanElement>("#workflow-translate");
 const workflowDownloadEl = document.querySelector<HTMLSpanElement>("#workflow-download");
 const inputLabelEl = document.querySelector<HTMLLabelElement>("#paper-input-label");
 const inputEl = document.querySelector<HTMLInputElement>("#paper-input");
@@ -318,7 +318,7 @@ function applyLanguage() {
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (workflowAuthEl) workflowAuthEl.textContent = copy.workflowAuth;
   if (workflowParseEl) workflowParseEl.textContent = copy.workflowParse;
-  if (workflowUploadEl) workflowUploadEl.textContent = copy.workflowUpload;
+  if (workflowTranslateEl) workflowTranslateEl.textContent = copy.workflowTranslate;
   if (workflowDownloadEl) workflowDownloadEl.textContent = copy.workflowDownload;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;

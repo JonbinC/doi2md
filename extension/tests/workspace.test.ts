@@ -20,7 +20,10 @@ describe("workspace", () => {
     expect(popupHtml).toContain('href="./styles.css"');
     expect(popupHtml).toContain('src="./popup.js"');
     expect(popupHtml).toContain('id="connection-pill"');
-    expect(popupHtml).toContain('id="workflow-upload"');
+    expect(popupHtml).toContain('id="workflow-translate"');
+    expect(popupHtml).toContain('Parse / Upload');
+    expect(popupHtml).toContain('Translate');
+    expect(popupHtml).not.toContain('id="workflow-upload"');
     expect(popupHtml).toContain('id="open-settings-login"');
     expect(popupHtml).not.toContain('id="supported-sources-inline"');
     expect(popupHtml).not.toContain('id="support-shadow-title"');
@@ -44,6 +47,8 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="settings-overview-card"');
     expect(optionsHtml).toContain('id="open-account"');
     expect(optionsHtml).toContain('id="website-auth-note"');
+    expect(optionsHtml).toContain('Parse / Upload');
+    expect(optionsHtml).toContain('Translate');
     expect(optionsHtml).not.toContain('id="password-input"');
     expect(optionsHtml).not.toContain('id="auth-mode-password"');
     expect(optionsHtml).not.toContain('id="code-input"');
