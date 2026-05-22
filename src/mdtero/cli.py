@@ -194,6 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("task_id")
     download.add_argument("artifact", nargs="?", default="paper_md")
     download.add_argument("--output-dir", type=Path, default=Path.cwd())
+    download.add_argument("--json", action="store_true")
 
     agent = sub.add_parser("agent")
     agent_sub = agent.add_subparsers(dest="agent_command")
@@ -682,7 +683,16 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_download(args: argparse.Namespace) -> int:
     path = MdteroClient().download(args.task_id, args.artifact, args.output_dir)
-    Console().print(f"Downloaded {args.artifact} to {path}")
+    payload = {
+        "status": "downloaded",
+        "task_id": args.task_id,
+        "artifact": args.artifact,
+        "path": str(path),
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Downloaded {args.artifact} to {path}")
     return 0
 
 
