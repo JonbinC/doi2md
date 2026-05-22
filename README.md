@@ -24,7 +24,7 @@ mdtero setup
 mdtero agent install --target codex
 ```
 
-After the PyPI handoff, the stable install command will be `uv tool install mdtero`. Until then, use the GitHub install above so you get the tested `0.2.0a6` Python client instead of an unrelated package name collision.
+After the PyPI handoff, the stable install command will be `uv tool install mdtero`. Until then, use the GitHub install above so you get the tested `0.2.0a8` Python client instead of an unrelated package name collision.
 
 For a one-command agent setup:
 

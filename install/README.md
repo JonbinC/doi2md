@@ -12,7 +12,7 @@ mdtero setup
 mdtero agent install --target codex
 ```
 
-This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a6` client.
+This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a8` client.
 
 For a one-command install:
 
@@ -62,8 +62,10 @@ mdtero parse https://example.org/open-paper --trace
 mdtero parse --file paper.pdf
 mdtero parse --batch ./papers
 mdtero project init
+mdtero project create-server
 mdtero project import-bib references.bib
 mdtero project parse --wait
+mdtero project ingest
 mdtero project refresh
 mdtero project download --output-dir ./mdtero-output
 mdtero config zotero
@@ -71,8 +73,9 @@ mdtero zotero import --collection <collection-id>
 mdtero status <task-id>
 mdtero download <task-id> paper_md
 mdtero translate paper.md --to zh-CN
-mdtero rag build --project-id <server-project-id>
-mdtero rag query "What are the strongest findings?" --project-id <server-project-id>
+mdtero rag status --json
+mdtero rag build --json
+mdtero rag query "What are the strongest findings?" --json
 mdtero mcp serve
 ```
 
@@ -88,8 +91,8 @@ What is validated in the current alpha:
 
 Current boundaries:
 
-- RAG is server-side Voyage RAG and currently requires a server project id.
-- `mdtero zotero sync` is present, but reverse sync back to Zotero is not yet a completed public workflow.
+- RAG is server-side Voyage RAG. Run `mdtero project create-server` once, then `mdtero project ingest` after successful parses; `mdtero rag status --json` reports readiness and next commands.
+- `mdtero zotero sync` is conservative: it writes Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
 - GROBID is not exposed as a user-selectable public engine; PDF parsing is MinerU-first on the backend.
 
 For machines with a browser, run `mdtero login`; it opens Mdtero Account and stores the one-time CLI key returned through the local loopback callback.
@@ -146,14 +149,20 @@ mdtero agent install --all
 
 ```bash
 mdtero project init --name alpha-test
+mdtero project create-server
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out
 mdtero project import-bib references.bib
+mdtero project ingest
+mdtero rag status --json
+mdtero rag build --json
+mdtero rag query "这批论文的核心方法是什么？" --json
 mdtero config zotero
 mdtero zotero import --limit 20 --json
+mdtero zotero sync --json
 mdtero mcp serve
 ```
 
-当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 只读导入、下载和 agent skill 安装。RAG 走后端 Voyage，但目前需要服务端 project id。Zotero 反向同步还不是已完成的公开能力。agent skill 安装走 Python CLI，不再依赖 npm。
+当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。agent skill 安装走 Python CLI，不再依赖 npm。
