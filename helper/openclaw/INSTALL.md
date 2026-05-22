@@ -11,7 +11,7 @@ Use the normal path in this order:
 2. Create or select an API key
 3. Paste the prepared install message into OpenClaw
 
-The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release seam.
+The website-led install manifest at `https://mdtero.com/install/manifest.json` is the canonical public release contract.
 
 OpenClaw stays on the dedicated `clawhub install mdtero` path and is not part of the install-script release truth used by Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode. For those targets, the preferred user-facing command is `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>`; for OpenClaw, keep using the dashboard prompt and ClawHub route.
 
@@ -21,9 +21,9 @@ GitHub Releases and the public `doi2md` repository only mirror the website-led r
 
 Helpful public checks:
 
-- `npx mdtero-install version`
-- `npx mdtero-install show`
-- `npm --prefix mdtero-frontend run test:launchability-proof`
+- `mdtero --version`
+- `mdtero doctor`
+- `mdtero agent install --target codex --dry-run`
 
 Do not use `npx mdtero-install install openclaw`, `mdtero setup --agent openclaw`, or `mdtero bootstrap --agent openclaw`; OpenClaw stays on `clawhub install mdtero`.
 
@@ -31,7 +31,7 @@ Do not use `npx mdtero-install install openclaw`, `mdtero setup --agent openclaw
 
 The install script supports Claude Code, Codex, Gemini CLI, Hermes Agent, and OpenCode. OpenClaw should still use ClawHub even though the public manifest lists all six supported environments.
 
-Hermes Agent supports MCP through its own `~/.hermes/config.yaml` `mcp_servers` configuration, but Mdtero does not currently publish an active MCP installer flow through `mdtero-install`. Do not present MCP as part of the OpenClaw/ClawHub install until a maintained Mdtero MCP server is published and documented.
+Hermes Agent supports MCP through its own `~/.hermes/config.yaml` `mcp_servers` configuration. Mdtero's maintained MCP surface is the Python command `mdtero mcp serve`; do not present MCP as part of the OpenClaw/ClawHub install until that flow is documented for OpenClaw.
 
 ## Local acquisition rule
 

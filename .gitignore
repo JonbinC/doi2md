@@ -1,6 +1,9 @@
 .DS_Store
+dist/
+mdtero-chrome-store-*.zip
 mdtero-edge-store-*.zip
 extension/node_modules/
 extension/node_modules/.vite/
 extension/.vite/
 extension/.vitest/
+extension/releases/*.zip

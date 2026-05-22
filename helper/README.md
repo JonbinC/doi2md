@@ -1,22 +1,24 @@
 # Helper
 
-This directory is for legacy local-acquisition notes and narrow local-file handoffs.
+This directory is retained only for narrow compatibility notes that do not fit the
+active Python CLI, browser extension, or agent skill surfaces.
 
-The helper is not the normal public install path. Mdtero's regular product flow is `https://mdtero.com/install.sh` or the dashboard asking the backend to choose the route and run the parser. The browser extension remains a local executor for user PDF/local file upload and browser-context raw data capture.
+Mdtero's normal public path is now:
 
-Dependency boundary:
+```bash
+uv tool install git+https://github.com/JonbinC/doi2md.git
+mdtero setup
+mdtero agent install --target <target>
+```
 
-- `npm install -g mdtero-install@0.1.8` owns the currently published public CLI package.
-- `curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>` is the preferred one-command bootstrap for CLI package plus agent skill files.
-- `npx mdtero-install install <target>` installs agent skill files and is the reviewable skill-only route.
-- `mdtero-install` is the Node CLI package and installer/uninstaller for agent skill files.
-- The browser extension is JavaScript/browser code and does not bundle `curl_cffi`.
-- Local Python/backend tooling may use local-only Python dependencies such as `curl_cffi` and `pyzotero`.
+The install script at `https://mdtero.com/install.sh` is a bootstrap wrapper around
+that Python runtime. The legacy `mdtero-install` npm package is not the runtime and
+is not required for skill installation.
 
-Current migrated content:
+Current maintained content:
 
-- `openclaw/`: OpenClaw-facing install guidance
+- `openclaw/`: OpenClaw-facing install guidance for the dedicated ClawHub route.
 
-Not maintained anymore:
+Retired content:
 
-- legacy MCP code has been moved to `archive/mcp-legacy/`
+- legacy MCP code has been moved to `archive/mcp-legacy/`.

@@ -21,9 +21,9 @@ This installs the Mdtero CLI runtime, then copies the Mdtero skill into `.hermes
 
 ## MCP Boundary
 
-Hermes Agent supports MCP through `~/.hermes/config.yaml` and `mcp_servers`, but Mdtero does not currently publish an active public MCP installer flow through `mdtero-install`.
+Hermes Agent supports MCP through `~/.hermes/config.yaml` and `mcp_servers`. Mdtero's maintained MCP server is exposed by the Python CLI with `mdtero mcp serve`.
 
-Use the Mdtero skill first. Add MCP only after a maintained Mdtero MCP server is published and documented as an active public surface.
+Use the Mdtero skill first. Add MCP after the local project is initialized and `mdtero doctor` passes.
 
 ## Cloud CLI Workflow
 
@@ -45,9 +45,10 @@ mdtero parse --file <path> [--source-input DOI_OR_URL] [--source-doi DOI]
 
 - base URL: `https://api.mdtero.com`
 - auth header: `Authorization: ApiKey ${MDTERO_API_KEY}`
-- parse endpoint: `POST /tasks/parse`
-- upload endpoint: `POST /tasks/parse-upload-v2`
-- status endpoint: `GET /tasks/<task_id>`
-- translate endpoint: `POST /tasks/translate`
-- Markdown download: `/tasks/<task_id>/download/paper_md`
-- translated Markdown download: `/tasks/<task_id>/download/translated_md`
+- route endpoint: `POST /api/v1/route`
+- parse endpoint: `POST /api/v1/tasks/parse`
+- upload endpoint: `POST /api/v1/tasks/upload`
+- status endpoint: `GET /api/v1/tasks/<task_id>`
+- translate endpoint: `POST /api/v1/tasks/translate`
+- Markdown download: `/api/v1/tasks/<task_id>/download/paper_md`
+- translated Markdown download: `/api/v1/tasks/<task_id>/download/translated_md`

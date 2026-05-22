@@ -91,7 +91,11 @@ describe("extension manifest", () => {
     expect(zh.extDescription?.message).toContain("本地运行时");
     expect(zh.extDescription?.message).toContain("账户");
     expect(zh.extDescription?.message).toContain("支持的实时论文页");
-    expect(popupSource).toContain("Prefer direct publisher APIs and TDM routes first");
+    expect(popupSource).toContain("Local file intake");
+    expect(popupSource).toContain("Use PDF");
+    expect(popupSource).toContain("Use EPUB");
+    expect(popupSource).toContain("Open Mdtero Account");
+    expect(optionsSource).toContain("local Mdtero runtime");
     expect(optionsSource).toContain("publisher API");
     expect(optionsSource).toContain("TDM");
   });
