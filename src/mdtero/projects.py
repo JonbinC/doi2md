@@ -26,6 +26,8 @@ class PaperRecord:
     artifact: str | None = None
     provider: str | None = None
     parser_strategy: str | None = None
+    zotero_key: str | None = None
+    zotero_synced_task_id: str | None = None
 
 
 @dataclass

@@ -29,7 +29,7 @@ from mdtero.projects import (
     update_task,
 )
 from mdtero.workflow import parse_trace_from_route, status_trace, upload_trace
-from mdtero.zotero import paper_from_zotero_item
+from mdtero.zotero import build_sync_note, paper_from_zotero_item, sync_project_to_zotero
 
 
 def test_parser_exposes_next_gen_command_contract():
@@ -780,6 +780,53 @@ def test_zotero_item_maps_to_project_paper():
     assert paper.input == "10.1000/zotero"
     assert paper.title == "A paper"
     assert paper.source == "zotero"
+    assert paper.zotero_key == "ABC"
+
+
+def test_zotero_sync_creates_note_for_succeeded_zotero_papers():
+    class FakeZoteroClient:
+        def __init__(self):
+            self.created = []
+
+        def create_items(self, items):
+            self.created.append(items)
+            return {"successful": {"0": {"key": "NOTE1"}}}
+
+    papers = [
+        PaperRecord(
+            input="10.1000/zotero",
+            title="A paper",
+            task_id="task-1",
+            status="succeeded",
+            source="zotero",
+            artifact="paper_md",
+            provider="arxiv",
+            parser_strategy="arxiv_native",
+            zotero_key="ABC",
+        ),
+        PaperRecord(input="10.1000/pending", status="pending", source="zotero", zotero_key="DEF"),
+        PaperRecord(input="10.1000/manual", status="succeeded", task_id="task-2", source="manual"),
+    ]
+    client = FakeZoteroClient()
+
+    summary = sync_project_to_zotero(client, papers)
+
+    assert summary["synced_count"] == 1
+    assert summary["skipped_count"] == 2
+    assert papers[0].zotero_synced_task_id == "task-1"
+    assert client.created[0][0]["parentItem"] == "ABC"
+    assert "Mdtero parse status" in client.created[0][0]["note"]
+    assert {tag["tag"] for tag in client.created[0][0]["tags"]} == {"mdtero", "mdtero:succeeded"}
+
+
+def test_zotero_sync_note_contains_download_command():
+    paper = PaperRecord(input="10.1000/zotero", task_id="task-1", status="succeeded", source="zotero", zotero_key="ABC")
+
+    note = build_sync_note(paper)
+
+    assert note["itemType"] == "note"
+    assert note["parentItem"] == "ABC"
+    assert "mdtero download" in note["note"]
 
 
 def test_bib_targets_import_into_project(tmp_path: Path):
