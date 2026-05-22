@@ -33,6 +33,7 @@ class AgentDetectionResult:
     detected: bool
     installed: bool
     install_command: str
+    selection_index: int
 
 
 TARGETS: dict[str, AgentTarget] = {
@@ -61,7 +62,7 @@ def detect_targets(root: Path | None = None) -> list[AgentTarget]:
 def detect_target_status(root: Path | None = None) -> list[AgentDetectionResult]:
     base = _root(root)
     results = []
-    for target in TARGETS.values():
+    for index, target in enumerate(TARGETS.values(), start=1):
         workspace_path = base / target.skill_directory.split("/", 1)[0]
         skill_path = _safe_skill_path(target, root)
         results.append(
@@ -73,9 +74,39 @@ def detect_target_status(root: Path | None = None) -> list[AgentDetectionResult]
                 detected=workspace_path.exists(),
                 installed=(skill_path / "SKILL.md").exists(),
                 install_command=f"mdtero agent install --target {target.name}",
+                selection_index=index,
             )
         )
     return results
+
+
+def default_interactive_targets(detections: list[AgentDetectionResult]) -> list[str]:
+    pending = [item.target for item in detections if item.detected and not item.installed]
+    if pending:
+        return pending
+    detected = [item.target for item in detections if item.detected]
+    if detected:
+        return detected
+    return []
+
+
+def parse_agent_selection(selection: str, detections: list[AgentDetectionResult]) -> list[str]:
+    cleaned = str(selection or "").strip().lower()
+    if not cleaned:
+        return default_interactive_targets(detections)
+    if cleaned in {"all", "a", "*"}:
+        return [item.target for item in detections]
+    by_index = {str(item.selection_index): item.target for item in detections}
+    by_target = {item.target: item.target for item in detections}
+    by_label = {item.label.lower().replace(" ", "_"): item.target for item in detections}
+    selected: list[str] = []
+    for token in cleaned.replace(",", " ").split():
+        target = by_index.get(token) or by_target.get(token) or by_label.get(token)
+        if not target:
+            raise ValueError(f"Unknown agent selection `{token}`. Use numbers, target names, all, or Enter for detected pending installs.")
+        if target not in selected:
+            selected.append(target)
+    return selected
 
 
 def install_targets(
