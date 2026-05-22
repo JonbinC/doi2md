@@ -19,6 +19,5 @@ Current maintained content:
 
 - `openclaw/`: OpenClaw-facing install guidance for the dedicated ClawHub route.
 
-Retired content:
-
-- legacy MCP code has been moved to `archive/mcp-legacy/`.
+Retired content has been removed from the active repository once the Python
+runtime owns the maintained replacement.

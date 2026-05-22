@@ -113,7 +113,6 @@ The browser extension stays a browser surface. It does not ship Python dependenc
 - [`extension`](./extension): MV3 browser extension source, tests, and build output
 - [`install`](./install): website install manifest and install guide
 - [`skills`](./skills): legacy skill source mirrored for compatibility
-- [`archive`](./archive): retired public surfaces
 
 ## Local Development
 

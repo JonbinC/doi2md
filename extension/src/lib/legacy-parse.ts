@@ -1,5 +1,3 @@
-import type { PdfEngine } from "@mdtero/shared";
-
 import {
   buildElsevierLocalAcquireGuidance,
   fetchElsevierXml,
@@ -25,7 +23,6 @@ interface ParseClientLike {
     filename?: string;
     sourceDoi?: string;
     sourceInput?: string;
-    pdfEngine?: PdfEngine;
   }): Promise<unknown>;
 }
 
@@ -46,7 +43,6 @@ interface LegacyFileMessage {
   file: Blob;
   filename?: string;
   artifactKind?: "pdf" | "epub";
-  pdfEngine?: PdfEngine;
 }
 
 export async function runLegacyParseRequest(
@@ -132,7 +128,6 @@ export async function runLegacyFileParseRequest(
     helperBundleFile: helperBundle,
     filename: "helper-bundle.zip",
     sourceInput: filename,
-    pdfEngine: artifactKind === "pdf" ? message.pdfEngine : undefined,
   });
 }
 

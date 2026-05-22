@@ -1,4 +1,8 @@
 .DS_Store
+.pytest_cache/
+.venv/
+__pycache__/
+*.py[cod]
 dist/
 mdtero-chrome-store-*.zip
 mdtero-edge-store-*.zip

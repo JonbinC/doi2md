@@ -183,8 +183,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return runLegacyFileParseRequest(client, {
         file: message.file,
         filename: message.filename,
-        artifactKind: message.artifactKind,
-        pdfEngine: message.pdfEngine
+        artifactKind: message.artifactKind
       });
     })()
       .then((result) => sendResponse({ ok: true, result }))

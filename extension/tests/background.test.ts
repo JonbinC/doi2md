@@ -304,45 +304,6 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("routes local PDF uploads through parse-helper-bundle-v2 with the chosen grobid engine", async () => {
-    const chromeStub = createChromeStub();
-    vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
-
-    await import("../src/background");
-
-    const listener = chromeStub.__messageListeners[0];
-    const sendResponse = vi.fn();
-
-    listener?.(
-      {
-        type: "mdtero.parse.file.request",
-        file: new File(["pdf"], "demo.pdf", { type: "application/pdf" }),
-        filename: "demo.pdf",
-        mediaType: "application/pdf",
-        artifactKind: "pdf",
-        pdfEngine: "grobid"
-      },
-      {},
-      sendResponse
-    );
-
-    await vi.waitFor(() => {
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
-        expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
-          sourceInput: "demo.pdf",
-          pdfEngine: "grobid"
-        })
-      );
-      expect(sendResponse).toHaveBeenCalledWith({
-        ok: true,
-        result: { task_id: "task-bundle", status: "queued" }
-      });
-    });
-  });
-
   it("routes local PDF uploads through parse-helper-bundle-v2 without forcing a default engine", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);

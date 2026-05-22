@@ -76,31 +76,6 @@ describe("createTranslateMessage", () => {
 });
 
 describe("createFileParseMessage", () => {
-  it("builds a PDF local file parse message with an explicit grobid engine", () => {
-    const file = new File(["pdf"], "demo.pdf", { type: "application/pdf" });
-
-    expect(createFileParseMessage(file, "pdf", "grobid")).toEqual({
-      type: "mdtero.parse.file.request",
-      file,
-      filename: "demo.pdf",
-      mediaType: "application/pdf",
-      artifactKind: "pdf",
-      pdfEngine: "grobid"
-    });
-  });
-
-  it("keeps the default PDF local file parse message engine-free so backend auto-resolution can decide", () => {
-    const file = new File(["pdf"], "demo.pdf", { type: "application/pdf" });
-
-    expect(createFileParseMessage(file, "pdf")).toEqual({
-      type: "mdtero.parse.file.request",
-      file,
-      filename: "demo.pdf",
-      mediaType: "application/pdf",
-      artifactKind: "pdf"
-    });
-  });
-
   it("keeps the default PDF local file parse message engine-free so backend auto-resolution can decide", () => {
     const file = new File(["pdf"], "demo.pdf", { type: "application/pdf" });
 
