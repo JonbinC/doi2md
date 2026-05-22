@@ -72,7 +72,7 @@ mdtero project download --output-dir ./mdtero-output
 mdtero config zotero
 mdtero zotero import --collection <collection-id>
 mdtero status <task-id>
-mdtero download <task-id> paper_md
+mdtero download <task-id> paper_md --json
 mdtero translate <parse-task-id> --to zh-CN
 mdtero translate paper.md --to zh-CN
 mdtero rag status --json
@@ -156,7 +156,7 @@ mdtero project status --json
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse --file paper.pdf --json
 mdtero status <task-id> --wait --json
-mdtero download <task-id> paper_md --output-dir ./out
+mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project import-bib references.bib
 mdtero rag status --json
 mdtero rag build --json

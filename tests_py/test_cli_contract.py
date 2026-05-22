@@ -159,6 +159,17 @@ def test_project_management_commands_accept_agent_friendly_json_flags():
     assert bib_args.json is True
 
 
+def test_download_accepts_agent_friendly_json_flag():
+    parser = build_parser()
+
+    args = parser.parse_args(["download", "task-1", "paper_md", "--output-dir", "out", "--json"])
+
+    assert args.task_id == "task-1"
+    assert args.artifact == "paper_md"
+    assert args.output_dir == Path("out")
+    assert args.json is True
+
+
 def test_academic_setup_selection_accepts_numbered_enter_flow():
     assert _parse_academic_selection("") == set()
     assert _parse_academic_selection("1,3") == {"1", "3"}
@@ -936,6 +947,30 @@ def test_project_queue_submission_refresh_helpers(tmp_path: Path):
     assert updated.provider == "openalex"
     assert updated.parser_strategy == "server_parse"
     assert updated.reason_code == "queued"
+
+
+def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    downloaded = tmp_path / "paper.md"
+
+    def fake_download(self, task_id, artifact, output_dir):
+        assert task_id == "task-1"
+        assert artifact == "paper_md"
+        assert output_dir == tmp_path
+        return downloaded
+
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-1", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload == {
+        "status": "downloaded",
+        "task_id": "task-1",
+        "artifact": "paper_md",
+        "path": str(downloaded),
+    }
 
 
 def test_submission_result_maps_provider_artifact_and_reason_to_project_record():
