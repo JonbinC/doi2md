@@ -38,8 +38,9 @@ def build_dashboard_model(
     return {
         "account": {
             "api_base_url": cfg.api_base_url,
-            "authenticated": bool(cfg.api_key),
-            "auth_hint": "mdtero login --api-key <key>" if not cfg.api_key else "mdtero doctor",
+            "authenticated": cfg.is_authenticated,
+            "auth_source": cfg.api_key_source,
+            "auth_hint": "mdtero login --api-key <key>" if not cfg.is_authenticated else "mdtero doctor",
         },
         "academic": {
             "elsevier": bool(cfg.academic.elsevier_api_key),
@@ -149,7 +150,7 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
 
 
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
-    if not cfg.api_key:
+    if not cfg.is_authenticated:
         return ["mdtero login --api-key <key>", "mdtero doctor"]
     if not project.papers:
         return ["mdtero project add 10.48550/arXiv.1706.03762", "mdtero project parse --wait"]
@@ -173,7 +174,7 @@ def _account_panel(model: dict[str, Any]) -> Panel:
     table.add_column(ratio=1)
     table.add_column(ratio=2)
     table.add_row("API", account["api_base_url"])
-    table.add_row("Auth", "configured" if account["authenticated"] else f"missing - {account['auth_hint']}")
+    table.add_row("Auth", f"configured ({account['auth_source']})" if account["authenticated"] else f"missing - {account['auth_hint']}")
     table.add_row("Discover", academic["discover_source"])
     table.add_row("Academic keys", _key_summary(academic))
     return Panel(table, title="Account & Discovery", border_style="green")

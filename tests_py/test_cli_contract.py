@@ -125,6 +125,14 @@ def test_doctor_accepts_api_key_from_environment(monkeypatch, tmp_path: Path, ca
     assert "MDTERO_API_KEY" in output
 
 
+def test_client_headers_use_environment_api_key(monkeypatch):
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+
+    headers = MdteroClient(config=MdteroConfig(api_key=None))._headers()
+
+    assert headers["Authorization"] == "ApiKey mdt_live_env"
+
+
 def test_rag_status_accepts_agent_friendly_flags():
     parser = build_parser()
 
@@ -317,6 +325,18 @@ def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: 
 
     assert cfg.api_key == "key"
     assert cfg.has_semantic_scholar_key is True
+
+
+def test_config_keeps_environment_api_key_as_runtime_override(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+
+    cfg = load_config()
+
+    assert cfg.api_key is None
+    assert cfg.effective_api_key == "mdt_live_env"
+    assert cfg.api_key_source == "MDTERO_API_KEY"
+    assert cfg.is_authenticated is True
 
 
 def test_client_falls_back_to_legacy_parse_when_v1_route_is_not_deployed(monkeypatch):
@@ -1341,6 +1361,17 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert "agent_briefing" in model["mcp"]["tools"]
     assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor"]
+
+
+def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+    init_project(tmp_path, name="tui-env")
+
+    model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key=None), agent_root=tmp_path)
+
+    assert model["account"]["authenticated"] is True
+    assert model["account"]["auth_source"] == "MDTERO_API_KEY"
+    assert model["next_steps"][:2] != ["mdtero login --api-key <key>", "mdtero doctor"]
 
 
 def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path):

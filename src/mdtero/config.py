@@ -48,6 +48,22 @@ class MdteroConfig:
     def has_semantic_scholar_key(self) -> bool:
         return bool((self.academic.semantic_scholar_api_key or "").strip())
 
+    @property
+    def effective_api_key(self) -> str | None:
+        return (self.api_key or os.environ.get("MDTERO_API_KEY") or "").strip() or None
+
+    @property
+    def api_key_source(self) -> str:
+        if (self.api_key or "").strip():
+            return "saved config"
+        if os.environ.get("MDTERO_API_KEY"):
+            return "MDTERO_API_KEY"
+        return "missing"
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self.effective_api_key is not None
+
 
 def load_config(path: Path | None = None) -> MdteroConfig:
     target = path or config_path()
@@ -55,7 +71,7 @@ def load_config(path: Path | None = None) -> MdteroConfig:
         return MdteroConfig(
             api_base_url=os.environ.get("MDTERO_API_URL", DEFAULT_API_BASE),
             site_base_url=os.environ.get("MDTERO_SITE_URL", DEFAULT_SITE_BASE),
-            api_key=os.environ.get("MDTERO_API_KEY") or None,
+            api_key=None,
         )
     payload = json.loads(target.read_text(encoding="utf-8"))
     academic = payload.get("academic") or {}
@@ -63,7 +79,7 @@ def load_config(path: Path | None = None) -> MdteroConfig:
     cfg = MdteroConfig(
         api_base_url=str(payload.get("api_base_url") or os.environ.get("MDTERO_API_URL") or DEFAULT_API_BASE),
         site_base_url=str(payload.get("site_base_url") or os.environ.get("MDTERO_SITE_URL") or DEFAULT_SITE_BASE),
-        api_key=payload.get("api_key") or os.environ.get("MDTERO_API_KEY") or None,
+        api_key=payload.get("api_key") or None,
         default_project=payload.get("default_project") or None,
         academic=AcademicKeys(
             elsevier_api_key=academic.get("elsevier_api_key") or None,
