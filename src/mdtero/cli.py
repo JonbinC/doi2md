@@ -17,6 +17,7 @@ from .config import MdteroConfig, config_path, load_config, save_config
 from .projects import (
     PaperRecord,
     add_paper,
+    bind_server_project,
     import_bib,
     init_project,
     load_project,
@@ -83,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
     project_init.add_argument("--name")
     project_add = _cmd(project_sub, "add", "Add one DOI/URL/file to the current project.", cmd_project_add)
     project_add.add_argument("input")
+    project_link = _cmd(project_sub, "link", "Bind this local project to an existing server project id.", cmd_project_link)
+    project_link.add_argument("--server-project-id", required=True)
+    project_create_server = _cmd(project_sub, "create-server", "Create and bind a server project for RAG.", cmd_project_create_server)
+    project_create_server.add_argument("--name")
+    project_create_server.add_argument("--description")
+    project_create_server.add_argument("--json", action="store_true")
     project_remove = _cmd(project_sub, "remove", "Remove one project paper by input or task id.", cmd_project_remove)
     project_remove.add_argument("input")
     project_bib = _cmd(project_sub, "import-bib", "Import DOI/URL entries from one or more BibTeX files.", cmd_project_import_bib)
@@ -316,6 +323,7 @@ def cmd_project_status(_args: argparse.Namespace) -> int:
     for paper in state.papers:
         table.add_row(paper.input, paper.task_id or "", paper.status, paper.reason_code or "")
     Console().print(f"Project: {state.name}")
+    Console().print(f"Server project: {state.server_project_id or 'not linked'}")
     Console().print(table)
     return 0
 
@@ -323,6 +331,29 @@ def cmd_project_status(_args: argparse.Namespace) -> int:
 def cmd_project_add(args: argparse.Namespace) -> int:
     state = add_paper(Path.cwd(), PaperRecord(input=args.input, source="manual"))
     Console().print(f"Added {args.input} to project {state.name}")
+    return 0
+
+
+def cmd_project_link(args: argparse.Namespace) -> int:
+    state = bind_server_project(Path.cwd(), args.server_project_id)
+    Console().print(f"Project {state.name} linked to server project {state.server_project_id}")
+    return 0
+
+
+def cmd_project_create_server(args: argparse.Namespace) -> int:
+    root = Path.cwd()
+    state = load_project(root)
+    name = args.name or state.name
+    result = MdteroClient().create_project(name, description=args.description or f"Mdtero local project: {state.name}")
+    server_project_id = str(result.get("id") or "").strip()
+    if not server_project_id:
+        raise SystemExit("Server did not return a project id")
+    state = bind_server_project(root, server_project_id)
+    payload = {"server_project_id": state.server_project_id, "project": result}
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Created server project {state.server_project_id} for {state.name}")
     return 0
 
 
@@ -486,6 +517,7 @@ def cmd_rag_status(_args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
     indexed = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.artifact)
     Console().print(f"Project {state.name}: {indexed}/{len(state.papers)} paper(s) have downloadable artifacts for server RAG.")
+    Console().print(f"Server project: {state.server_project_id or 'not linked; run `mdtero project create-server` or `mdtero project link --server-project-id <id>`'}")
     return 0
 
 
@@ -552,7 +584,9 @@ def _server_project_id(args: argparse.Namespace) -> str:
     if value:
         return str(value)
     state = load_project(Path.cwd())
-    return state.name
+    if state.server_project_id:
+        return state.server_project_id
+    raise SystemExit("No server project is linked. Run `mdtero project create-server` or `mdtero project link --server-project-id <id>` first.")
 
 
 def _configure_academic(cfg: MdteroConfig, console: Console) -> None:

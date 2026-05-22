@@ -152,6 +152,9 @@ class MdteroClient:
             },
         )
 
+    def create_project(self, name: str, *, description: str | None = None) -> dict[str, Any]:
+        return self._request("POST", "/projects", json={"name": name, "description": description})
+
     def rag_build(self, project_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/projects/{project_id}/rag/build")
 
