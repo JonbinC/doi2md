@@ -80,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
     login.add_argument("--api-key", default="")
-    login.add_argument("--no-browser", action="store_true", help="Print the web login URL instead of opening a browser.")
+    login.add_argument("--no-browser", action="store_true", help="Print the loopback web-login URL instead of opening a browser.")
     login.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the browser login callback.")
 
     config = sub.add_parser("config")
@@ -275,7 +275,9 @@ def _normalize_api_key_arg(value: str, *, console: Console) -> str | None:
 
 def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds: float, no_browser: bool) -> None:
     if no_browser:
-        console.print("Open the Mdtero login URL below in a browser on this machine. Waiting for the local callback...")
+        console.print("Printing a loopback web-login URL instead of opening a browser.")
+        console.print("Use `mdtero login --api-key <key>` for remote/headless servers where 127.0.0.1 cannot receive the browser callback.")
+        console.print("Open the URL below from a browser that can reach this machine's loopback callback. Waiting for the callback...")
         opener = lambda url: console.print(f"  {url}")
     else:
         console.print(f"Opening {cfg.site_base_url}/auth for Mdtero web login...")
