@@ -2,7 +2,6 @@ import type {
   ParseTaskRequest,
   ParseTaskResponse,
   ParseFulltextV2Request,
-  ParseHelperBundleV2Request,
   TaskRecord,
   TranslateTaskRequest,
   ExtensionRouteRequest,
@@ -31,15 +30,14 @@ export interface UploadedParseTaskPayload {
   sourceInput?: string;
 }
 
-function buildHelperFirstParseBody(params: {
-  fileField: "fulltext_file" | "helper_bundle";
+function buildFulltextUploadBody(params: {
   file: Blob;
   filename: string;
   sourceDoi?: string;
   sourceInput?: string;
 }) {
   const body = new FormData();
-  body.set(params.fileField, params.file, params.filename);
+  body.set("paper_file", params.file, params.filename);
   if (params.sourceDoi) {
     body.set("source_doi", params.sourceDoi);
   }
@@ -188,36 +186,13 @@ export function createApiClient(
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
     },
     createParseFulltextV2Task(payload: ParseFulltextV2Request) {
-      const body = buildHelperFirstParseBody({
-        fileField: "fulltext_file",
+      const body = buildFulltextUploadBody({
         file: payload.fulltextFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      const normalizedBody = new FormData();
-      const upload = body.get("fulltext_file");
-      if (upload instanceof Blob) {
-        normalizedBody.set("paper_file", upload, payload.filename ?? "paper.fulltext");
-      }
-      const sourceDoi = body.get("source_doi");
-      const sourceInput = body.get("source_input");
-      if (typeof sourceDoi === "string") normalizedBody.set("source_doi", sourceDoi);
-      if (typeof sourceInput === "string") normalizedBody.set("source_input", sourceInput);
       return requestWithFallback("/api/v1/tasks/upload", "/tasks/parse-upload-v2", {
-        method: "POST",
-        body: normalizedBody
-      }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
-    },
-    createParseHelperBundleV2Task(payload: ParseHelperBundleV2Request) {
-      const body = buildHelperFirstParseBody({
-        fileField: "helper_bundle",
-        file: payload.helperBundleFile,
-        filename: payload.filename ?? "helper-bundle.zip",
-        sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
-      });
-      return request("/tasks/parse-helper-bundle-v2", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);

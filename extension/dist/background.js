@@ -1,7 +1,7 @@
 // src/lib/api.ts
-function buildHelperFirstParseBody(params) {
+function buildFulltextUploadBody(params) {
   const body = new FormData();
-  body.set(params.fileField, params.file, params.filename);
+  body.set("paper_file", params.file, params.filename);
   if (params.sourceDoi) {
     body.set("source_doi", params.sourceDoi);
   }
@@ -133,36 +133,13 @@ function createApiClient(getSettings) {
       }, { requireAuth: true }).then((response) => response.json());
     },
     createParseFulltextV2Task(payload) {
-      const body = buildHelperFirstParseBody({
-        fileField: "fulltext_file",
+      const body = buildFulltextUploadBody({
         file: payload.fulltextFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      const normalizedBody = new FormData();
-      const upload = body.get("fulltext_file");
-      if (upload instanceof Blob) {
-        normalizedBody.set("paper_file", upload, payload.filename ?? "paper.fulltext");
-      }
-      const sourceDoi = body.get("source_doi");
-      const sourceInput = body.get("source_input");
-      if (typeof sourceDoi === "string") normalizedBody.set("source_doi", sourceDoi);
-      if (typeof sourceInput === "string") normalizedBody.set("source_input", sourceInput);
       return requestWithFallback("/api/v1/tasks/upload", "/tasks/parse-upload-v2", {
-        method: "POST",
-        body: normalizedBody
-      }, { requireAuth: true }).then((response) => response.json());
-    },
-    createParseHelperBundleV2Task(payload) {
-      const body = buildHelperFirstParseBody({
-        fileField: "helper_bundle",
-        file: payload.helperBundleFile,
-        filename: payload.filename ?? "helper-bundle.zip",
-        sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
-      });
-      return request("/tasks/parse-helper-bundle-v2", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json());
@@ -314,270 +291,6 @@ async function fetchElsevierXml(input, apiKey) {
   };
 }
 
-// src/lib/helper-bundle.ts
-var encoder = new TextEncoder();
-var CONNECTOR_PRESETS = {
-  local_file_upload: {
-    access: "unknown",
-    sourceName: "local_file_upload",
-    userPrivateRetention: true
-  },
-  elsevier_article_retrieval_api: {
-    access: "licensed",
-    sourceName: "elsevier_article_retrieval_api",
-    userPrivateRetention: true
-  },
-  wiley_tdm: {
-    access: "licensed",
-    sourceName: "wiley_tdm",
-    userPrivateRetention: true
-  },
-  springer_subscription_connector: {
-    access: "licensed",
-    sourceName: "springer_subscription_connector",
-    userPrivateRetention: true
-  },
-  taylor_francis_tdm: {
-    access: "licensed",
-    sourceName: "taylor_francis_tdm",
-    userPrivateRetention: true
-  },
-  taylor_francis_oa_epub: {
-    access: "open",
-    sourceName: "taylor_francis_oa_epub"
-  },
-  arxiv_native: {
-    access: "open",
-    sourceName: "arxiv_native"
-  },
-  cairn_html: {
-    access: "unknown",
-    sourceName: "cairn_html"
-  },
-  rsc_html: {
-    access: "unknown",
-    sourceName: "rsc_html"
-  },
-  nature_html: {
-    access: "unknown",
-    sourceName: "nature_html"
-  },
-  mdpi_html: {
-    access: "open",
-    sourceName: "mdpi_html"
-  },
-  ieee_html: {
-    access: "unknown",
-    sourceName: "ieee_html"
-  },
-  bepress: {
-    access: "open",
-    sourceName: "bepress"
-  },
-  pure: {
-    access: "open",
-    sourceName: "pure"
-  }
-};
-function buildHelperBundleBlob(options) {
-  const payloadBytes = toUint8Array(options.payload);
-  const extraFiles = Object.entries(options.extraFiles || {}).sort(([left], [right]) => left.localeCompare(right)).map(([name, payload]) => ({
-    name,
-    bytes: toUint8Array(payload)
-  }));
-  const manifest = {
-    connector: options.connector,
-    artifact_kind: options.artifactKind,
-    acquisition_mode: options.acquisitionMode || "browser_extension",
-    source_name: CONNECTOR_PRESETS[options.connector]?.sourceName || options.connector,
-    source_type: options.sourceType || defaultSourceType(options.artifactKind),
-    source_id: options.sourceId || null,
-    source_url: options.sourceUrl || null,
-    source_doi: options.sourceDoi || null,
-    license_name: options.licenseName || null,
-    rights_confidence: "high",
-    access: options.access || CONNECTOR_PRESETS[options.connector]?.access || "unknown",
-    explicit_open_license: false,
-    user_private_retention: Boolean(
-      options.userPrivateRetention ?? CONNECTOR_PRESETS[options.connector]?.userPrivateRetention ?? false
-    ),
-    payload_name: options.payloadName,
-    extra_files: extraFiles.map((entry) => entry.name),
-    acquisition_headers: options.acquisitionHeaders || null
-  };
-  const archive = buildStoredZip([
-    {
-      name: "manifest.json",
-      bytes: encoder.encode(JSON.stringify(manifest))
-    },
-    {
-      name: options.payloadName,
-      bytes: payloadBytes
-    },
-    ...extraFiles
-  ]);
-  return new Blob([archive], { type: "application/zip" });
-}
-function inferBrowserHelperBundleConnector(input, pageUrl) {
-  const haystack = `${String(input || "").toLowerCase()} ${String(pageUrl || "").toLowerCase()}`;
-  if (haystack.includes("cairn.info") || haystack.includes("shs.cairn.info")) {
-    return "cairn_html";
-  }
-  if (haystack.includes("pubs.rsc.org") || haystack.includes("10.1039/") || haystack.includes("10.1039")) {
-    return "rsc_html";
-  }
-  if (haystack.includes("nature.com/articles/") || haystack.includes("10.1038/")) {
-    return "nature_html";
-  }
-  if (haystack.includes("mdpi.com/")) {
-    return "mdpi_html";
-  }
-  if (haystack.includes("ieeexplore.ieee.org") || haystack.includes("10.1109/")) {
-    return "ieee_html";
-  }
-  if (haystack.includes("academicworks.cuny.edu") || haystack.includes("digitalcommons.liberty.edu") || haystack.includes("scholar.utc.edu")) {
-    return "bepress";
-  }
-  if (haystack.includes("research.birmingham.ac.uk") || haystack.includes("pure.au.dk") || haystack.includes("pure.eur.nl")) {
-    return "pure";
-  }
-  if (haystack.includes("arxiv.org") || haystack.includes("arxiv:")) {
-    return "arxiv_native";
-  }
-  if (haystack.includes("link.springer.com") || haystack.includes("springernature.com") || haystack.includes("springer.com")) {
-    return "springer_subscription_connector";
-  }
-  if (haystack.includes("onlinelibrary.wiley.com") || haystack.includes("10.1002/")) {
-    return "wiley_tdm";
-  }
-  if (haystack.includes("tandfonline.com") || haystack.includes("10.1080/")) {
-    return "taylor_francis_tdm";
-  }
-  if (haystack.includes("sciencedirect.com") || haystack.includes("elsevier.com") || haystack.includes("10.1016/")) {
-    return "elsevier_article_retrieval_api";
-  }
-  return "browser_extension_html_capture";
-}
-function inferBrowserHelperBundleAccess(connector) {
-  return CONNECTOR_PRESETS[connector]?.access || "unknown";
-}
-function defaultSourceType(artifactKind) {
-  if (artifactKind === "html") {
-    return "browser_extension_html";
-  }
-  if (artifactKind === "epub") {
-    return "browser_extension_epub";
-  }
-  if (artifactKind === "pdf") {
-    return "browser_extension_pdf";
-  }
-  if (artifactKind === "jats_xml") {
-    return "browser_extension_jats";
-  }
-  return "browser_extension_xml";
-}
-function toUint8Array(payload) {
-  if (typeof payload === "string") {
-    return encoder.encode(payload);
-  }
-  if (payload instanceof Uint8Array) {
-    return payload;
-  }
-  return new Uint8Array(payload);
-}
-function buildStoredZip(entries) {
-  const localParts = [];
-  const centralParts = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const nameBytes = encoder.encode(entry.name);
-    const crc = crc32(entry.bytes);
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 67324752, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, 0, true);
-    localView.setUint16(12, 0, true);
-    localView.setUint32(14, crc, true);
-    localView.setUint32(18, entry.bytes.length, true);
-    localView.setUint32(22, entry.bytes.length, true);
-    localView.setUint16(26, nameBytes.length, true);
-    localView.setUint16(28, 0, true);
-    localHeader.set(nameBytes, 30);
-    localParts.push(localHeader, entry.bytes);
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 33639248, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, 0, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, 0, true);
-    centralView.setUint16(14, 0, true);
-    centralView.setUint32(16, crc, true);
-    centralView.setUint32(20, entry.bytes.length, true);
-    centralView.setUint32(24, entry.bytes.length, true);
-    centralView.setUint16(28, nameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0, true);
-    centralView.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-    centralParts.push(centralHeader);
-    offset += localHeader.length + entry.bytes.length;
-  }
-  const centralDirectoryOffset = offset;
-  let centralDirectorySize = 0;
-  for (const part of centralParts) {
-    centralDirectorySize += part.length;
-  }
-  const endRecord = new Uint8Array(22);
-  const endView = new DataView(endRecord.buffer);
-  endView.setUint32(0, 101010256, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, entries.length, true);
-  endView.setUint16(10, entries.length, true);
-  endView.setUint32(12, centralDirectorySize, true);
-  endView.setUint32(16, centralDirectoryOffset, true);
-  endView.setUint16(20, 0, true);
-  const totalLength = localParts.reduce((sum, part) => sum + part.length, 0) + centralDirectorySize + endRecord.length;
-  const archive = new Uint8Array(totalLength);
-  let cursor = 0;
-  for (const part of localParts) {
-    archive.set(part, cursor);
-    cursor += part.length;
-  }
-  for (const part of centralParts) {
-    archive.set(part, cursor);
-    cursor += part.length;
-  }
-  archive.set(endRecord, cursor);
-  return archive;
-}
-var CRC32_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < 256; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) {
-      value = (value & 1) === 1 ? (3988292384 ^ value >>> 1) >>> 0 : value >>> 1;
-    }
-    table[index] = value >>> 0;
-  }
-  return table;
-})();
-function crc32(bytes) {
-  let value = 4294967295;
-  for (const item of bytes) {
-    value = CRC32_TABLE[(value ^ item) & 255] ^ value >>> 8;
-  }
-  return (value ^ 4294967295) >>> 0;
-}
-
 // src/lib/springer.ts
 var DOI_PATTERN = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
 var DOI_URL_PATTERN2 = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
@@ -635,18 +348,9 @@ async function runLegacyParseRequest(client2, message) {
       throw new Error(buildElsevierLocalAcquireGuidance());
     }
     const uploaded = await fetchElsevierXml(message.input, message.elsevierApiKey);
-    const helperBundle = buildHelperBundleBlob({
-      connector: "elsevier_article_retrieval_api",
-      artifactKind: "structured_xml",
-      payload: await uploaded.xmlBlob.arrayBuffer(),
-      payloadName: uploaded.filename,
-      extraFiles: uploaded.bundleExtraFiles,
-      sourceDoi: uploaded.sourceDoi,
-      access: "licensed"
-    });
-    return client2.createParseHelperBundleV2Task({
-      helperBundleFile: helperBundle,
-      filename: "helper-bundle.zip",
+    return client2.createParseFulltextV2Task({
+      fulltextFile: uploaded.xmlBlob,
+      filename: uploaded.filename,
       sourceDoi: uploaded.sourceDoi,
       sourceInput: uploaded.sourceInput
     });
@@ -668,13 +372,13 @@ async function runLegacyParseRequest(client2, message) {
     } catch {
     }
   }
-  const currentTabBundleTask = await tryCreateCurrentTabHelperBundleTask(client2, {
+  const currentTabRawUploadTask = await tryCreateCurrentTabRawUploadTask(client2, {
     input: message.input,
     springerOpenAccessApiKey: message.springerOpenAccessApiKey,
     pageContext: message.pageContext
   });
-  if (currentTabBundleTask) {
-    return currentTabBundleTask;
+  if (currentTabRawUploadTask) {
+    return currentTabRawUploadTask;
   }
   return client2.createParseTask({ input: message.input });
 }
@@ -717,7 +421,7 @@ function describeCurrentTabCaptureFailure(params) {
   }
   return failureMessage || "Browser page capture did not succeed on the current page.";
 }
-async function tryCreateCurrentTabHelperBundleTask(client2, message) {
+async function tryCreateCurrentTabRawUploadTask(client2, message) {
   const tabId = message.pageContext?.tabId;
   if (!tabId) {
     return null;
@@ -753,22 +457,9 @@ async function tryCreateCurrentTabHelperBundleTask(client2, message) {
       })
     );
   }
-  const connector = inferBrowserHelperBundleConnector(
-    message.input,
-    message.pageContext?.tabUrl || capture.sourceUrl
-  );
-  const helperBundle = buildHelperBundleBlob({
-    connector,
-    artifactKind: "html",
-    payload: capture.html,
-    payloadName: capture.payloadName || "paper.html",
-    sourceDoi: inferSourceDoi(message.input),
-    sourceUrl: message.pageContext?.tabUrl || capture.sourceUrl || void 0,
-    access: inferBrowserHelperBundleAccess(connector)
-  });
-  return client2.createParseHelperBundleV2Task({
-    helperBundleFile: helperBundle,
-    filename: "helper-bundle.zip",
+  return client2.createParseFulltextV2Task({
+    fulltextFile: new Blob([capture.html], { type: "text/html" }),
+    filename: capture.payloadName || "paper.html",
     sourceDoi: inferSourceDoi(message.input),
     sourceInput: message.input
   });
@@ -916,19 +607,10 @@ async function executeCaptureCurrentTabHtml(context) {
       springerOpenAccessApiKey: context.springerOpenAccessApiKey
     });
     if (response?.xml?.ok && response.xml.payloadText) {
-      const helperBundle2 = buildHelperBundleBlob({
-        connector: inferBrowserHelperBundleConnector(context.input, context.tabUrl),
-        artifactKind: "jats_xml",
-        payload: response.xml.payloadText,
-        payloadName: response.xml.payloadName || "paper.xml",
-        sourceDoi: inferSourceDoi2(context.input),
-        sourceUrl: context.tabUrl,
-        access: "open"
-      });
       return {
         success: true,
-        helperBundle: helperBundle2,
-        filename: "helper-bundle.zip",
+        rawArtifact: new Blob([response.xml.payloadText], { type: "application/xml" }),
+        filename: response.xml.payloadName || "paper.xml",
         sourceDoi: inferSourceDoi2(context.input)
       };
     }
@@ -942,20 +624,10 @@ async function executeCaptureCurrentTabHtml(context) {
         error: capture?.failureMessage || "Page capture failed"
       };
     }
-    const connector = inferBrowserHelperBundleConnector(context.input, context.tabUrl);
-    const helperBundle = buildHelperBundleBlob({
-      connector,
-      artifactKind: "html",
-      payload: capture.html,
-      payloadName: capture.payloadName || "paper.html",
-      sourceDoi: inferSourceDoi2(context.input),
-      sourceUrl: context.tabUrl || capture.sourceUrl,
-      access: inferBrowserHelperBundleAccess(connector)
-    });
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: new Blob([capture.html], { type: "text/html" }),
+      filename: capture.payloadName || "paper.html",
       sourceDoi: inferSourceDoi2(context.input)
     };
   } catch (error) {
@@ -973,19 +645,10 @@ async function executeFetchStructuredXml(context, routePlan) {
             context.springerOpenAccessApiKey,
             context.tabUrl
           );
-          const helperBundle = buildHelperBundleBlob({
-            connector: routePlan.top_connector || candidate.connector,
-            artifactKind: "jats_xml",
-            payload: await result.xmlBlob.arrayBuffer(),
-            payloadName: result.filename,
-            sourceDoi: result.sourceDoi,
-            sourceUrl: context.tabUrl,
-            access: "open"
-          });
           return {
             success: true,
-            helperBundle,
-            filename: "helper-bundle.zip",
+            rawArtifact: result.xmlBlob,
+            filename: result.filename,
             sourceDoi: result.sourceDoi
           };
         } catch {
@@ -996,19 +659,10 @@ async function executeFetchStructuredXml(context, routePlan) {
         try {
           const result = await fetchXmlArtifact([candidateUrl]);
           if (result.ok) {
-            const helperBundle = buildHelperBundleBlob({
-              connector: routePlan.top_connector || candidate.connector,
-              artifactKind: "jats_xml",
-              payload: result.payloadText,
-              payloadName: result.payloadName,
-              sourceDoi: inferSourceDoi2(context.input),
-              sourceUrl: result.sourceUrl,
-              access: candidate.access === "licensed" ? "licensed" : "open"
-            });
             return {
               success: true,
-              helperBundle,
-              filename: "helper-bundle.zip",
+              rawArtifact: new Blob([result.payloadText], { type: "application/xml" }),
+              filename: result.payloadName,
               sourceDoi: inferSourceDoi2(context.input)
             };
           }
@@ -1029,19 +683,10 @@ async function executeFetchElsevierXml(context, routePlan) {
   }
   try {
     const result = await fetchElsevierXml(context.input, context.elsevierApiKey);
-    const helperBundle = buildHelperBundleBlob({
-      connector: "elsevier_article_retrieval_api",
-      artifactKind: "structured_xml",
-      payload: await result.xmlBlob.arrayBuffer(),
-      payloadName: result.filename,
-      extraFiles: result.bundleExtraFiles,
-      sourceDoi: result.sourceDoi,
-      access: "licensed"
-    });
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: result.xmlBlob,
+      filename: result.filename,
       sourceDoi: result.sourceDoi
     };
   } catch (error) {
@@ -1069,21 +714,10 @@ async function executeFetchWileyTdmPdf(context, routePlan) {
     if (!response.ok) {
       return { success: false, requiresUpload: true, error: `Wiley TDM fetch failed: ${response.status}` };
     }
-    const payload = await response.arrayBuffer();
-    const helperBundle = buildHelperBundleBlob({
-      connector: "wiley_tdm",
-      artifactKind: "pdf",
-      payload,
-      payloadName: "paper.pdf",
-      sourceDoi,
-      sourceUrl: response.url,
-      access: "licensed",
-      acquisitionHeaders: { "Wiley-TDM-Client-Token": "<user-provided>" }
-    });
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: await response.blob(),
+      filename: "paper.pdf",
       sourceDoi
     };
   } catch (error) {
@@ -1113,19 +747,10 @@ async function executeFetchEpubAsset(context, routePlan) {
         error: download?.failureMessage || "Browser page context could not download the EPUB artifact."
       };
     }
-    const helperBundle = buildHelperBundleBlob({
-      connector: routePlan.top_connector || candidate.connector,
-      artifactKind: "epub",
-      payload: base64ToBytes(download.payloadBase64),
-      payloadName: download.payloadName || "paper.epub",
-      sourceDoi: inferSourceDoi2(context.input),
-      sourceUrl: download.sourceUrl || candidate.epub_url,
-      access: candidate.access === "licensed" ? "licensed" : "open"
-    });
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/epub+zip" }),
+      filename: download.payloadName || "paper.epub",
       sourceDoi: inferSourceDoi2(context.input)
     };
   } catch (error) {
@@ -1152,19 +777,10 @@ async function executeFetchOaRepository(context, routePlan) {
     }
     const html = await response.text();
     const finalUrl = response.url;
-    const helperBundle = buildHelperBundleBlob({
-      connector: routePlan.top_connector || inferBrowserHelperBundleConnector(context.input, finalUrl),
-      artifactKind: "html",
-      payload: html,
-      payloadName: "paper.html",
-      sourceDoi: inferSourceDoi2(context.input),
-      sourceUrl: finalUrl,
-      access: "open"
-    });
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: new Blob([html], { type: "text/html" }),
+      filename: "paper.html",
       sourceDoi: inferSourceDoi2(context.input)
     };
   } catch (error) {
@@ -1237,11 +853,11 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
       acquisition_candidates: routePlan.acquisition_candidates
     });
     if (result.success) {
-      if (result.helperBundle) {
+      if (result.rawArtifact) {
         try {
-          const task = await parseClient.createParseHelperBundleV2Task({
-            helperBundleFile: result.helperBundle,
-            filename: result.filename || "helper-bundle.zip",
+          const task = await parseClient.createParseFulltextV2Task({
+            fulltextFile: result.rawArtifact,
+            filename: result.filename || "paper.fulltext",
             sourceDoi: result.sourceDoi,
             sourceInput: context.input
           });

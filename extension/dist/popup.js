@@ -1,7 +1,7 @@
 // src/lib/api.ts
-function buildHelperFirstParseBody(params) {
+function buildFulltextUploadBody(params) {
   const body = new FormData();
-  body.set(params.fileField, params.file, params.filename);
+  body.set("paper_file", params.file, params.filename);
   if (params.sourceDoi) {
     body.set("source_doi", params.sourceDoi);
   }
@@ -133,36 +133,13 @@ function createApiClient(getSettings) {
       }, { requireAuth: true }).then((response) => response.json());
     },
     createParseFulltextV2Task(payload) {
-      const body = buildHelperFirstParseBody({
-        fileField: "fulltext_file",
+      const body = buildFulltextUploadBody({
         file: payload.fulltextFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      const normalizedBody = new FormData();
-      const upload = body.get("fulltext_file");
-      if (upload instanceof Blob) {
-        normalizedBody.set("paper_file", upload, payload.filename ?? "paper.fulltext");
-      }
-      const sourceDoi = body.get("source_doi");
-      const sourceInput = body.get("source_input");
-      if (typeof sourceDoi === "string") normalizedBody.set("source_doi", sourceDoi);
-      if (typeof sourceInput === "string") normalizedBody.set("source_input", sourceInput);
       return requestWithFallback("/api/v1/tasks/upload", "/tasks/parse-upload-v2", {
-        method: "POST",
-        body: normalizedBody
-      }, { requireAuth: true }).then((response) => response.json());
-    },
-    createParseHelperBundleV2Task(payload) {
-      const body = buildHelperFirstParseBody({
-        fileField: "helper_bundle",
-        file: payload.helperBundleFile,
-        filename: payload.filename ?? "helper-bundle.zip",
-        sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
-      });
-      return request("/tasks/parse-helper-bundle-v2", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json());

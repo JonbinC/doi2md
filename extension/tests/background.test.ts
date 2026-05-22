@@ -4,7 +4,6 @@ import { createFileParseMessage } from "../src/lib/runtime";
 const createParseTask = vi.fn();
 const createUploadedParseTask = vi.fn();
 const createParseFulltextV2Task = vi.fn();
-const createParseHelperBundleV2Task = vi.fn();
 const createTranslateTask = vi.fn();
 const getTask = vi.fn();
 const fetchRoutePlan = vi.fn();
@@ -21,7 +20,6 @@ vi.mock("../src/lib/api", () => ({
     createParseTask,
     createUploadedParseTask,
     createParseFulltextV2Task,
-    createParseHelperBundleV2Task,
     createTranslateTask,
     getTask
   })),
@@ -73,7 +71,6 @@ describe("extension background Elsevier routing", () => {
     createParseTask.mockResolvedValue({ task_id: "task-generic", status: "queued" });
     createUploadedParseTask.mockResolvedValue({ task_id: "task-legacy", status: "queued" });
     createParseFulltextV2Task.mockResolvedValue({ task_id: "task-v2", status: "queued" });
-    createParseHelperBundleV2Task.mockResolvedValue({ task_id: "task-bundle", status: "queued" });
     createTranslateTask.mockResolvedValue({ task_id: "task-translate", status: "queued" });
     getTask.mockResolvedValue({ task_id: "task-1", status: "queued" });
     fetchRoutePlan.mockReset();
@@ -81,7 +78,7 @@ describe("extension background Elsevier routing", () => {
     fetchSpringerOpenAccessJats.mockReset();
   });
 
-  it("routes Elsevier local XML acquisition through parse-helper-bundle-v2 without bundling figure bytes", async () => {
+  it("routes Elsevier local XML acquisition through raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(true);
@@ -110,30 +107,29 @@ describe("extension background Elsevier routing", () => {
     );
 
     await vi.waitFor(() => {
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          fulltextFile: expect.any(Blob),
+          filename: "paper.xml",
           sourceDoi: "10.1016/j.energy.2026.140192",
           sourceInput: "10.1016/j.energy.2026.140192"
         })
       );
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(createUploadedParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle", status: "queued" }
+        result: { task_id: "task-v2", status: "queued" }
       });
     });
 
-    const helperBundle = createParseHelperBundleV2Task.mock.calls[0]?.[0]?.helperBundleFile as Blob;
-    const text = new TextDecoder().decode(new Uint8Array(await helperBundle.arrayBuffer()));
-    expect(text).toContain("\"artifact_kind\":\"structured_xml\"");
-    expect(text).toContain("\"extra_files\":[]");
+    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+    expect(rawArtifact.type).toBe("application/xml");
+    const text = await rawArtifact.text();
+    expect(text).toContain("<article/>");
     expect(text).not.toContain("paper_files/gr1.jpg");
   });
 
-  it("routes current-tab browser capture through parse-helper-bundle-v2 before falling back to direct parse", async () => {
+  it("routes current-tab browser capture through raw fulltext upload before falling back to direct parse", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -171,23 +167,26 @@ describe("extension background Elsevier routing", () => {
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request"
       });
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          fulltextFile: expect.any(Blob),
+          filename: "paper.html",
           sourceInput: "https://example.com/paper"
         })
       );
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(createParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle", status: "queued" }
+        result: { task_id: "task-v2", status: "queued" }
       });
     });
+
+    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+    expect(rawArtifact.type).toBe("text/html");
+    await expect(rawArtifact.text()).resolves.toContain("Captured paper");
   });
 
-  it("skips current-tab helper bundling for arxiv inputs and falls back to native parse", async () => {
+  it("skips current-tab raw upload for arxiv abs inputs and falls back to native parse", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -212,7 +211,6 @@ describe("extension background Elsevier routing", () => {
 
     await vi.waitFor(() => {
       expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
-      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
       expect(createParseTask).toHaveBeenCalledWith({ input: "https://arxiv.org/abs/2507.01903" });
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
@@ -221,7 +219,7 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("captures current-tab helper bundles for arxiv html pages with full-text markers", async () => {
+  it("captures current-tab arxiv html pages through raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -258,19 +256,22 @@ describe("extension background Elsevier routing", () => {
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request"
       });
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          fulltextFile: expect.any(Blob),
+          filename: "paper.html",
           sourceInput: "https://arxiv.org/html/2401.00001"
         })
       );
       expect(createParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle", status: "queued" }
+        result: { task_id: "task-v2", status: "queued" }
       });
     });
+
+    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+    await expect(rawArtifact.text()).resolves.toContain("ltx_document");
   });
 
   it("routes local PDF uploads through the v1 upload endpoint", async () => {
@@ -297,7 +298,7 @@ describe("extension background Elsevier routing", () => {
           sourceInput: "demo.pdf"
         })
       );
-      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
+      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-legacy", status: "queued" }
@@ -335,7 +336,7 @@ describe("extension background Elsevier routing", () => {
           sourceInput: "demo.epub"
         })
       );
-      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
+      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-legacy", status: "queued" }
@@ -343,7 +344,7 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("executes SSOT helper-source routes through parse-helper-bundle-v2", async () => {
+  it("executes SSOT helper-source routes through raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -410,21 +411,24 @@ describe("extension background Elsevier routing", () => {
         type: "mdtero.capture_current_tab.request",
         springerOpenAccessApiKey: undefined
       });
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          fulltextFile: expect.any(Blob),
+          filename: "paper.html",
           sourceInput: "10.1000/demo"
         })
       );
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle" }
+        result: { task_id: "task-v2" }
       });
     });
+
+    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+    await expect(rawArtifact.text()).resolves.toContain("Captured paper");
   });
 
-  it("executes SSOT EPUB routes through browser download and parse-helper-bundle-v2", async () => {
+  it("executes SSOT EPUB routes through browser download and raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -484,26 +488,27 @@ describe("extension background Elsevier routing", () => {
         type: "mdtero.download_epub.request",
         artifactUrl: "https://www.tandfonline.com/doi/epub/10.1080/26395940.2021.1947159?needAccess=true"
       });
-      expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
         expect.objectContaining({
-          helperBundleFile: expect.any(Blob),
-          filename: "helper-bundle.zip",
+          fulltextFile: expect.any(Blob),
+          filename: "paper.epub",
           sourceDoi: "10.1080/26395940.2021.1947159",
           sourceInput: "10.1080/26395940.2021.1947159"
         })
       );
-      const helperBundle = createParseHelperBundleV2Task.mock.calls[0]?.[0]?.helperBundleFile as Blob;
-      const text = new TextDecoder().decode(new Uint8Array(await helperBundle.arrayBuffer()));
-      expect(text).toContain("\"artifact_kind\":\"epub\"");
-      expect(text).toContain("taylor_francis_oa_epub");
+      const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+      expect(rawArtifact.type).toBe("application/epub+zip");
+      const text = new TextDecoder().decode(new Uint8Array(await rawArtifact.arrayBuffer()));
+      expect(text).toContain("PK");
+      expect(text).toContain("bemo-epub");
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-bundle" }
+        result: { task_id: "task-v2" }
       });
     });
   });
 
-  it("executes SSOT OA repository routes through direct HTML fetch and parse-helper-bundle-v2", async () => {
+  it("executes SSOT OA repository routes through direct HTML fetch and raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -556,21 +561,20 @@ describe("extension background Elsevier routing", () => {
       await vi.waitFor(async () => {
         expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
         expect(globalThis.fetch).toHaveBeenCalledWith("https://example.org/articles/demo-open", { credentials: "include" });
-        expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+        expect(createParseFulltextV2Task).toHaveBeenCalledWith(
           expect.objectContaining({
-            helperBundleFile: expect.any(Blob),
-            filename: "helper-bundle.zip",
+            fulltextFile: expect.any(Blob),
+            filename: "paper.html",
             sourceDoi: "10.9999/demo-open",
             sourceInput: "10.9999/demo-open"
           })
         );
-        const helperBundle = createParseHelperBundleV2Task.mock.calls[0]?.[0]?.helperBundleFile as Blob;
-        const text = new TextDecoder().decode(new Uint8Array(await helperBundle.arrayBuffer()));
-        expect(text).toContain("\"artifact_kind\":\"html\"");
-        expect(text).toContain("best_oa_location_html");
+        const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+        const text = await rawArtifact.text();
+        expect(text).toContain("OA Demo");
         expect(sendResponse).toHaveBeenCalledWith({
           ok: true,
-          result: { task_id: "task-bundle" }
+          result: { task_id: "task-v2" }
         });
       });
     } finally {
@@ -651,22 +655,20 @@ describe("extension background Elsevier routing", () => {
           })
         );
         expect(globalThis.fetch).not.toHaveBeenCalled();
-        expect(createParseHelperBundleV2Task).toHaveBeenCalledWith(
+        expect(createParseFulltextV2Task).toHaveBeenCalledWith(
           expect.objectContaining({
-            helperBundleFile: expect.any(Blob),
-            filename: "helper-bundle.zip",
+            fulltextFile: expect.any(Blob),
+            filename: "paper.html",
             sourceDoi: "10.9999/demo-open",
             sourceInput: "10.9999/demo-open"
           })
         );
-        const helperBundle = createParseHelperBundleV2Task.mock.calls[0]?.[0]?.helperBundleFile as Blob;
-        const text = new TextDecoder().decode(new Uint8Array(await helperBundle.arrayBuffer()));
-        expect(text).toContain("\"artifact_kind\":\"html\"");
-        expect(text).toContain("browser_extension_html_capture");
+        const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+        const text = await rawArtifact.text();
         expect(text).toContain("Browser DOM Demo");
         expect(sendResponse).toHaveBeenCalledWith({
           ok: true,
-          result: { task_id: "task-bundle" }
+          result: { task_id: "task-v2" }
         });
       });
     } finally {
@@ -674,7 +676,7 @@ describe("extension background Elsevier routing", () => {
     }
   });
 
-  it("prefers current-tab XML over HTML helper bundles when the page context returns structured XML", async () => {
+  it("prefers current-tab XML over HTML capture when the page context returns structured XML", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     requiresElsevierLocalAcquire.mockReturnValue(false);
@@ -726,7 +728,6 @@ describe("extension background Elsevier routing", () => {
           sourceDoi: "10.1007/s12011-024-04385-0"
         })
       );
-      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-v2", status: "queued" }
@@ -782,7 +783,6 @@ describe("extension background Elsevier routing", () => {
           sourceDoi: "10.1007/s12011-024-04385-0"
         })
       );
-      expect(createParseHelperBundleV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-v2", status: "queued" }

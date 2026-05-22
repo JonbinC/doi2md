@@ -24,8 +24,8 @@ export interface RouteClientLike {
 }
 
 export interface ParseClientLike {
-  createParseHelperBundleV2Task(payload: {
-    helperBundleFile: Blob;
+  createParseFulltextV2Task(payload: {
+    fulltextFile: Blob;
     filename?: string;
     sourceDoi?: string;
     sourceInput?: string;
@@ -65,11 +65,11 @@ export async function executeSsotActionSequence(
     });
 
     if (result.success) {
-      if (result.helperBundle) {
+      if (result.rawArtifact) {
         try {
-          const task = await parseClient.createParseHelperBundleV2Task({
-            helperBundleFile: result.helperBundle,
-            filename: result.filename || "helper-bundle.zip",
+          const task = await parseClient.createParseFulltextV2Task({
+            fulltextFile: result.rawArtifact,
+            filename: result.filename || "paper.fulltext",
             sourceDoi: result.sourceDoi,
             sourceInput: context.input,
           });

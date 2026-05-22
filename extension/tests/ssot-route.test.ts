@@ -47,17 +47,17 @@ describe("ssot-route", () => {
     });
   });
 
-  it("submits helper bundles returned by action execution", async () => {
-    const helperBundle = new Blob(["demo"], { type: "application/zip" });
+  it("submits raw fulltext artifacts returned by action execution", async () => {
+    const rawArtifact = new Blob(["demo"], { type: "text/html" });
     executeAction.mockResolvedValue({
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact,
+      filename: "paper.html",
       sourceDoi: "10.1000/demo",
     });
 
     const parseClient = {
-      createParseHelperBundleV2Task: vi.fn().mockResolvedValue({ task_id: "task-123" }),
+      createParseFulltextV2Task: vi.fn().mockResolvedValue({ task_id: "task-123" }),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -80,9 +80,9 @@ describe("ssot-route", () => {
         top_connector: "wiley_tdm",
       }),
     );
-    expect(parseClient.createParseHelperBundleV2Task).toHaveBeenCalledWith({
-      helperBundleFile: helperBundle,
-      filename: "helper-bundle.zip",
+    expect(parseClient.createParseFulltextV2Task).toHaveBeenCalledWith({
+      fulltextFile: rawArtifact,
+      filename: "paper.html",
       sourceDoi: "10.1000/demo",
       sourceInput: "10.1000/demo",
     });
@@ -92,14 +92,14 @@ describe("ssot-route", () => {
     });
   });
 
-  it("fails closed when helper bundle submission fails on a fail-closed route", async () => {
+  it("fails closed when raw artifact submission fails on a fail-closed route", async () => {
     executeAction.mockResolvedValue({
       success: true,
-      helperBundle: new Blob(["demo"], { type: "application/zip" }),
+      rawArtifact: new Blob(["demo"], { type: "text/html" }),
     });
 
     const parseClient = {
-      createParseHelperBundleV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
+      createParseFulltextV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -113,11 +113,11 @@ describe("ssot-route", () => {
     expect(result.error).toContain("submit failed");
   });
 
-  it("continues to the next action when bundle submission fails on a non-fail-closed route", async () => {
+  it("continues to the next action when raw artifact submission fails on a non-fail-closed route", async () => {
     executeAction
       .mockResolvedValueOnce({
         success: true,
-        helperBundle: new Blob(["demo"], { type: "application/zip" }),
+        rawArtifact: new Blob(["demo"], { type: "text/html" }),
       })
       .mockResolvedValueOnce({
         success: true,
@@ -125,7 +125,7 @@ describe("ssot-route", () => {
       });
 
     const parseClient = {
-      createParseHelperBundleV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
+      createParseFulltextV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -153,7 +153,7 @@ describe("ssot-route", () => {
     });
 
     const parseClient = {
-      createParseHelperBundleV2Task: vi.fn(),
+      createParseFulltextV2Task: vi.fn(),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -161,7 +161,7 @@ describe("ssot-route", () => {
       input: "10.1000/demo",
     });
 
-    expect(parseClient.createParseHelperBundleV2Task).not.toHaveBeenCalled();
+    expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: false,
       requiresHelper: undefined,

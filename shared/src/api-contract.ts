@@ -16,13 +16,6 @@ export interface ParseFulltextV2Request {
   sourceInput?: string;
 }
 
-export interface ParseHelperBundleV2Request {
-  helperBundleFile: Blob;
-  filename?: string;
-  sourceDoi?: string;
-  sourceInput?: string;
-}
-
 export type ActionType =
   | "capture_current_tab_html"
   | "native_arxiv_parse"
@@ -93,7 +86,7 @@ export interface ActionContext {
 export interface ActionResult {
   success: boolean;
   taskId?: string;
-  helperBundle?: Blob;
+  rawArtifact?: Blob;
   filename?: string;
   sourceDoi?: string;
   error?: string;

@@ -4,11 +4,6 @@ import type {
   ActionType,
   AcquisitionCandidate,
 } from "@mdtero/shared";
-import {
-  buildHelperBundleBlob,
-  inferBrowserHelperBundleAccess,
-  inferBrowserHelperBundleConnector,
-} from "./helper-bundle";
 import { fetchXmlArtifact } from "./page-capture";
 import { fetchSpringerOpenAccessJats } from "./springer";
 import { fetchElsevierXml } from "./elsevier";
@@ -85,20 +80,10 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
 
     // Check for XML response first (Springer OA, etc.)
     if (response?.xml?.ok && response.xml.payloadText) {
-      const helperBundle = buildHelperBundleBlob({
-        connector: inferBrowserHelperBundleConnector(context.input, context.tabUrl),
-        artifactKind: "jats_xml",
-        payload: response.xml.payloadText,
-        payloadName: response.xml.payloadName || "paper.xml",
-        sourceDoi: inferSourceDoi(context.input),
-        sourceUrl: context.tabUrl,
-        access: "open",
-      });
-
       return {
         success: true,
-        helperBundle,
-        filename: "helper-bundle.zip",
+        rawArtifact: new Blob([response.xml.payloadText], { type: "application/xml" }),
+        filename: response.xml.payloadName || "paper.xml",
         sourceDoi: inferSourceDoi(context.input),
       };
     }
@@ -116,22 +101,10 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
       };
     }
 
-    // Build helper bundle from captured HTML
-    const connector = inferBrowserHelperBundleConnector(context.input, context.tabUrl);
-    const helperBundle = buildHelperBundleBlob({
-      connector,
-      artifactKind: "html",
-      payload: capture.html,
-      payloadName: capture.payloadName || "paper.html",
-      sourceDoi: inferSourceDoi(context.input),
-      sourceUrl: context.tabUrl || capture.sourceUrl,
-      access: inferBrowserHelperBundleAccess(connector),
-    });
-
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: new Blob([capture.html], { type: "text/html" }),
+      filename: capture.payloadName || "paper.html",
       sourceDoi: inferSourceDoi(context.input),
     };
   } catch (error) {
@@ -165,20 +138,10 @@ async function executeFetchStructuredXml(
             context.tabUrl
           );
           
-          const helperBundle = buildHelperBundleBlob({
-            connector: routePlan.top_connector || candidate.connector,
-            artifactKind: "jats_xml",
-            payload: await result.xmlBlob.arrayBuffer(),
-            payloadName: result.filename,
-            sourceDoi: result.sourceDoi,
-            sourceUrl: context.tabUrl,
-            access: "open",
-          });
-
           return {
             success: true,
-            helperBundle,
-            filename: "helper-bundle.zip",
+            rawArtifact: result.xmlBlob,
+            filename: result.filename,
             sourceDoi: result.sourceDoi,
           };
         } catch {
@@ -191,20 +154,10 @@ async function executeFetchStructuredXml(
         try {
           const result = await fetchXmlArtifact([candidateUrl]);
           if (result.ok) {
-            const helperBundle = buildHelperBundleBlob({
-              connector: routePlan.top_connector || candidate.connector,
-              artifactKind: "jats_xml",
-              payload: result.payloadText,
-              payloadName: result.payloadName,
-              sourceDoi: inferSourceDoi(context.input),
-              sourceUrl: result.sourceUrl,
-              access: candidate.access === "licensed" ? "licensed" : "open",
-            });
-
             return {
               success: true,
-              helperBundle,
-              filename: "helper-bundle.zip",
+              rawArtifact: new Blob([result.payloadText], { type: "application/xml" }),
+              filename: result.payloadName,
               sourceDoi: inferSourceDoi(context.input),
             };
           }
@@ -236,20 +189,10 @@ async function executeFetchElsevierXml(
   try {
     const result = await fetchElsevierXml(context.input, context.elsevierApiKey);
     
-    const helperBundle = buildHelperBundleBlob({
-      connector: "elsevier_article_retrieval_api",
-      artifactKind: "structured_xml",
-      payload: await result.xmlBlob.arrayBuffer(),
-      payloadName: result.filename,
-      extraFiles: result.bundleExtraFiles,
-      sourceDoi: result.sourceDoi,
-      access: "licensed",
-    });
-
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: result.xmlBlob,
+      filename: result.filename,
       sourceDoi: result.sourceDoi,
     };
   } catch (error) {
@@ -284,22 +227,10 @@ async function executeFetchWileyTdmPdf(
       return { success: false, requiresUpload: true, error: `Wiley TDM fetch failed: ${response.status}` };
     }
 
-    const payload = await response.arrayBuffer();
-    const helperBundle = buildHelperBundleBlob({
-      connector: "wiley_tdm",
-      artifactKind: "pdf",
-      payload,
-      payloadName: "paper.pdf",
-      sourceDoi,
-      sourceUrl: response.url,
-      access: "licensed",
-      acquisitionHeaders: { "Wiley-TDM-Client-Token": "<user-provided>" },
-    });
-
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: await response.blob(),
+      filename: "paper.pdf",
       sourceDoi,
     };
   } catch (error) {
@@ -340,20 +271,10 @@ async function executeFetchEpubAsset(
       };
     }
 
-    const helperBundle = buildHelperBundleBlob({
-      connector: routePlan.top_connector || candidate.connector,
-      artifactKind: "epub",
-      payload: base64ToBytes(download.payloadBase64),
-      payloadName: download.payloadName || "paper.epub",
-      sourceDoi: inferSourceDoi(context.input),
-      sourceUrl: download.sourceUrl || candidate.epub_url,
-      access: candidate.access === "licensed" ? "licensed" : "open",
-    });
-
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/epub+zip" }),
+      filename: download.payloadName || "paper.epub",
       sourceDoi: inferSourceDoi(context.input),
     };
   } catch (error) {
@@ -397,20 +318,10 @@ async function executeFetchOaRepository(
     const html = await response.text();
     const finalUrl = response.url;
 
-    const helperBundle = buildHelperBundleBlob({
-      connector: routePlan.top_connector || inferBrowserHelperBundleConnector(context.input, finalUrl),
-      artifactKind: "html",
-      payload: html,
-      payloadName: "paper.html",
-      sourceDoi: inferSourceDoi(context.input),
-      sourceUrl: finalUrl,
-      access: "open",
-    });
-
     return {
       success: true,
-      helperBundle,
-      filename: "helper-bundle.zip",
+      rawArtifact: new Blob([html], { type: "text/html" }),
+      filename: "paper.html",
       sourceDoi: inferSourceDoi(context.input),
     };
   } catch (error) {
