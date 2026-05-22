@@ -11,6 +11,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 2. Run `mdtero setup`
 3. Use `mdtero login --api-key <key>` when the environment is headless
 4. Run `mdtero doctor` before parse, translate, status, download, Zotero, RAG, or MCP work
+5. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime
 
 ## Setup Rules
 
@@ -30,6 +31,9 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - submit a project queue: `mdtero project parse --wait`
 - refresh project tasks: `mdtero project refresh`
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output`
+- create a server project for Voyage RAG: `mdtero project create-server`
+- bind an existing server project: `mdtero project link --server-project-id <id>`
+- import succeeded parse tasks into the bound server project: `mdtero project ingest`
 - parse a DOI/URL: `mdtero parse <doi-or-url>`
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub>`
 - parse a directory of files: `mdtero parse --batch ./papers`
@@ -38,9 +42,19 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - poll status: `mdtero status <task-id>`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir>`
 - translate Markdown: `mdtero translate <paper.md> --to zh-CN`
-- build server project RAG: `mdtero rag build --project-id <server-project-id>`
-- query server project RAG: `mdtero rag query "<question>" --project-id <server-project-id>`
+- build server project RAG after ingesting documents: `mdtero rag build`
+- query server project RAG after binding: `mdtero rag query "<question>"`
 - serve project MCP context: `mdtero mcp serve`
+
+## MCP Workflow
+
+When `mdtero mcp serve` is available, use these tools before guessing project state:
+
+- `project_status`: current project name, server project id, paper statuses, and next actions
+- `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
+- `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
+- `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
+- `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.
 
