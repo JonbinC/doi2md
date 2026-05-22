@@ -358,6 +358,80 @@ def test_mdpi_url_candidates_prefer_epub_before_page_fetch(monkeypatch):
     assert calls[0] == ("https://www.mdpi.com/2071-1050/17/5/2018/epub", "epub")
 
 
+def test_curl_cffi_tries_browser_profile_cascade(monkeypatch):
+    from mdtero import acquisition
+
+    profiles = []
+
+    class FakeResponse:
+        status_code = 200
+        content = b"<article>ok</article>"
+        headers = {"content-type": "text/html"}
+
+    class FakeSession:
+        def __init__(self, *, impersonate):
+            self.impersonate = impersonate
+
+        def __enter__(self):
+            profiles.append(self.impersonate)
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, **kwargs):
+            if self.impersonate == "chrome136":
+                raise RuntimeError("blocked")
+            return FakeResponse()
+
+    class FakeRequests:
+        Session = FakeSession
+
+    monkeypatch.setitem(__import__("sys").modules, "curl_cffi", type("FakeCurl", (), {"requests": FakeRequests})())
+    monkeypatch.setattr(acquisition.tempfile, "NamedTemporaryFile", lambda **kwargs: open(Path("/tmp/mdtero-test-profile.html"), "wb"))
+
+    artifact = acquisition._fetch_with_curl_cffi("https://example.test/paper", artifact_kind="html", timeout=12)
+
+    assert artifact.source == "curl_cffi:chrome124"
+    assert profiles[:2] == ["chrome136", "chrome124"]
+
+
+def test_curl_cffi_reports_profile_diagnostics_when_challenge_persists(monkeypatch):
+    from mdtero import acquisition
+
+    class FakeResponse:
+        status_code = 200
+        content = b"<html><title>Just a moment...</title></html>"
+        headers = {"content-type": "text/html"}
+
+    class FakeSession:
+        def __init__(self, *, impersonate):
+            self.impersonate = impersonate
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, **kwargs):
+            return FakeResponse()
+
+    class FakeRequests:
+        Session = FakeSession
+
+    monkeypatch.setitem(__import__("sys").modules, "curl_cffi", type("FakeCurl", (), {"requests": FakeRequests})())
+
+    try:
+        acquisition._fetch_with_curl_cffi("https://www.mdpi.com/demo/epub", artifact_kind="epub", timeout=12)
+    except AcquisitionError as exc:
+        assert exc.reason_code == "client_curl_cffi_request_failed"
+        assert exc.diagnostics["profiles"][0] == "chrome136"
+        assert exc.diagnostics["attempts"][0]["reason_code"] == "client_acquisition_challenge_page"
+    else:
+        raise AssertionError("expected AcquisitionError")
+
+
 def test_project_init_creates_local_project_state(tmp_path: Path):
     target = init_project(tmp_path, name="demo")
     state = load_project(tmp_path)

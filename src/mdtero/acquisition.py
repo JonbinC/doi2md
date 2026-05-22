@@ -24,6 +24,16 @@ CHALLENGE_MARKERS = (
     "verify you are human",
     "window._cf_chl_opt",
 )
+META_REFRESH_RE = re.compile(
+    rb"<meta[^>]+http-equiv=[\"']?refresh[\"']?[^>]+content=[\"'][^\"']*url=([^\"'>\s]+)",
+    re.I,
+)
+CURL_CFFI_IMPERSONATION_PROFILES = (
+    "chrome136",
+    "chrome124",
+    "safari184",
+    "chrome",
+)
 
 
 @dataclass
@@ -220,36 +230,40 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> Ac
             "curl_cffi is not available in this Python environment; falling back to httpx.",
             diagnostics={"error": exc.__class__.__name__},
         ) from exc
-    try:
-        response = curl_requests.get(
-            url,
-            timeout=timeout,
-            impersonate="chrome",
-            allow_redirects=True,
-            headers=_fetch_headers(),
-        )
-    except Exception as exc:
-        raise AcquisitionError(
-            "client_curl_cffi_request_failed",
-            "curl_cffi failed to fetch the routed source.",
-            diagnostics={"error": exc.__class__.__name__},
-        ) from exc
-    if response.status_code >= 400:
-        raise AcquisitionError(
-            "client_curl_cffi_http_error",
-            f"curl_cffi fetch returned HTTP {response.status_code}.",
-            diagnostics={"status_code": response.status_code},
-        )
-    content = bytes(response.content or b"")
-    content_type = str(response.headers.get("content-type") or "")
-    _validate_payload(content, url=url, expected_kind=artifact_kind, content_type=content_type, source="curl_cffi")
-    path = _write_payload(content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source="curl_cffi")
-    return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source="curl_cffi", status_code=response.status_code, content_type=content_type)
+    errors: list[dict[str, Any]] = []
+    for profile in CURL_CFFI_IMPERSONATION_PROFILES:
+        try:
+            with curl_requests.Session(impersonate=profile) as session:
+                response = session.get(
+                    url,
+                    timeout=timeout,
+                    allow_redirects=True,
+                    headers=_fetch_headers(url=url, artifact_kind=artifact_kind),
+                )
+                response = _follow_meta_refresh_once(
+                    session,
+                    response,
+                    base_url=url,
+                    timeout=timeout,
+                    artifact_kind=artifact_kind,
+                )
+        except Exception as exc:
+            errors.append({"profile": profile, "error": exc.__class__.__name__})
+            continue
+        try:
+            return _artifact_from_response(response, url=url, artifact_kind=artifact_kind, source=f"curl_cffi:{profile}")
+        except AcquisitionError as exc:
+            errors.append({"profile": profile, **exc.to_dict()})
+    raise AcquisitionError(
+        "client_curl_cffi_request_failed",
+        "curl_cffi failed to fetch a valid routed source with browser impersonation profiles.",
+        diagnostics={"profiles": list(CURL_CFFI_IMPERSONATION_PROFILES), "attempts": errors[-8:]},
+    )
 
 
 def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float) -> AcquiredArtifact:
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers()) as client:
+        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers(url=url, artifact_kind=artifact_kind)) as client:
             response = client.get(url)
     except Exception as exc:
         raise AcquisitionError(
@@ -263,10 +277,39 @@ def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float) -> Acquir
             f"httpx fetch returned HTTP {response.status_code}.",
             diagnostics={"status_code": response.status_code},
         )
+    return _artifact_from_response(response, url=url, artifact_kind=artifact_kind, source="httpx")
+
+
+def _artifact_from_response(response: Any, *, url: str, artifact_kind: str, source: str) -> AcquiredArtifact:
+    if response.status_code >= 400:
+        raise AcquisitionError(
+            "client_curl_cffi_http_error" if str(source).startswith("curl_cffi") else "client_httpx_http_error",
+            f"{source} fetch returned HTTP {response.status_code}.",
+            diagnostics={"status_code": response.status_code},
+        )
+    content = bytes(response.content or b"")
     content_type = str(response.headers.get("content-type") or "")
-    _validate_payload(response.content, url=url, expected_kind=artifact_kind, content_type=content_type, source="httpx")
-    path = _write_payload(response.content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source="httpx")
-    return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source="httpx", status_code=response.status_code, content_type=content_type)
+    _validate_payload(content, url=url, expected_kind=artifact_kind, content_type=content_type, source=source)
+    path = _write_payload(content, url=url, artifact_kind=_kind_from_content_type(artifact_kind, content_type), source=source)
+    return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source=source, status_code=response.status_code, content_type=content_type)
+
+
+def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, timeout: float, artifact_kind: str) -> Any:
+    content_type = str(response.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return response
+    marker = META_REFRESH_RE.search(bytes(response.content or b"")[:20_000])
+    if not marker:
+        return response
+    target = urllib.parse.urljoin(base_url, marker.group(1).decode("utf-8", errors="ignore").strip("'\""))
+    if not target or urllib.parse.urlparse(target).netloc != urllib.parse.urlparse(base_url).netloc:
+        return response
+    return session.get(
+        target,
+        timeout=timeout,
+        allow_redirects=True,
+        headers=_fetch_headers(url=target, artifact_kind=artifact_kind, referer=base_url),
+    )
 
 
 def _write_payload(content: bytes, *, url: str, artifact_kind: str, source: str) -> Path:
@@ -311,12 +354,27 @@ def _validate_payload(content: bytes, *, url: str, expected_kind: str, content_t
         )
 
 
-def _fetch_headers() -> dict[str, str]:
-    return {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,application/epub+zip;q=0.8,*/*;q=0.7",
+def _fetch_headers(*, url: str, artifact_kind: str, referer: str | None = None) -> dict[str, str]:
+    headers = {
+        "Accept": _accept_header(artifact_kind),
         "Accept-Language": "en-US,en;q=0.9",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36 Mdtero/0.2",
+        "Upgrade-Insecure-Requests": "1",
     }
+    if referer:
+        headers["Referer"] = referer
+    elif _infer_mdpi_epub_url(url):
+        headers["Referer"] = url.rsplit("/", 1)[0] if url.rstrip("/").endswith("/epub") else url
+    return headers
+
+
+def _accept_header(artifact_kind: str) -> str:
+    if artifact_kind == "pdf":
+        return "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8"
+    if artifact_kind == "epub":
+        return "application/epub+zip,application/octet-stream;q=0.9,text/html;q=0.7,*/*;q=0.6"
+    if artifact_kind == "xml":
+        return "application/xml,text/xml,application/xhtml+xml;q=0.9,text/html;q=0.7,*/*;q=0.6"
+    return "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
 
 def _kind_from_content_type(default: str, content_type: str) -> str:
