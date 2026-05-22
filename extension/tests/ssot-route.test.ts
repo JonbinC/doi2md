@@ -162,9 +162,36 @@ describe("ssot-route", () => {
     expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: false,
+      requiresBrowserCapture: undefined,
       requiresHelper: undefined,
       requiresUpload: true,
       error: "PDF upload required",
+    });
+  });
+
+  it("normalizes legacy helper failures to browser-capture failures for the extension UI", async () => {
+    executeAction.mockResolvedValue({
+      success: false,
+      requiresHelper: true,
+      error: "Open the article page and retry browser capture.",
+    });
+
+    const parseClient = {
+      createParseFulltextV2Task: vi.fn(),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(parseClient, buildRoutePlan(), {
+      input: "10.1000/demo",
+    });
+
+    expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: false,
+      requiresBrowserCapture: true,
+      requiresHelper: true,
+      requiresUpload: undefined,
+      error: "Open the article page and retry browser capture.",
     });
   });
 });
