@@ -47,7 +47,7 @@ test("install manifest stays mirrored and names Python as the runtime truth", as
   assert.equal(manifest.installScriptUrl, "https://mdtero.com/install.sh");
   assert.equal(manifest.quickInstallCommand, "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent <target>");
   assert.equal(manifest.cli?.packageName, "mdtero");
-  assert.equal(manifest.cli?.packageVersion, "0.2.0a4");
+  assert.equal(manifest.cli?.packageVersion, "0.2.0a5");
   assert.equal(manifest.cli?.packageManager, "uv");
   assert.equal(manifest.cli?.runtimeInstallCommand, "uv tool install git+https://github.com/JonbinC/doi2md.git");
   assert.equal(manifest.cli?.skillInstallCommand, "mdtero agent install --target <target>");

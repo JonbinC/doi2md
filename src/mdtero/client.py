@@ -10,6 +10,12 @@ from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_lo
 from .config import MdteroConfig, load_config
 
 
+class DiscoveryError(RuntimeError):
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        super().__init__(str(payload.get("message") or payload.get("error_code") or "discovery failed"))
+
+
 class MdteroClient:
     def __init__(self, config: MdteroConfig | None = None, *, timeout: float = 60.0) -> None:
         self.config = config or load_config()
@@ -114,16 +120,19 @@ class MdteroClient:
             time.sleep(interval)
 
     def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
+        local_error: str | None = None
         if self.config.has_semantic_scholar_key:
             try:
                 return self._semantic_scholar_search(query, limit=limit)
             except (httpx.HTTPError, ValueError) as exc:
-                result = self._server_discovery_search(query, limit=limit)
-                result["source"] = "openalex_server"
-                result["local_semantic_scholar_error"] = exc.__class__.__name__
-                return result
-        result = self._server_discovery_search(query, limit=limit)
+                local_error = exc.__class__.__name__
+        try:
+            result = self._server_discovery_search(query, limit=limit)
+        except (httpx.HTTPError, ValueError) as exc:
+            raise DiscoveryError(_discovery_failure_payload(exc, local_error=local_error)) from exc
         result.setdefault("source", "openalex_server")
+        if local_error:
+            result["local_semantic_scholar_error"] = local_error
         return result
 
     def _server_discovery_search(self, query: str, *, limit: int) -> dict[str, Any]:
@@ -214,3 +223,28 @@ def _filename_from_disposition(content_disposition: str | None, artifact: str) -
             if part.lower().startswith(marker):
                 return part[len(marker) :].strip('"') or f"{artifact}.bin"
     return f"{artifact}.bin"
+
+
+def _discovery_failure_payload(exc: Exception, *, local_error: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "failed",
+        "error_code": "discovery_failed",
+        "source": "openalex_server",
+        "server_error": exc.__class__.__name__,
+        "action_hint": "Check Mdtero API connectivity and whether server OpenAlex discovery is enabled.",
+    }
+    if local_error:
+        payload["local_semantic_scholar_error"] = local_error
+    if isinstance(exc, httpx.HTTPStatusError):
+        response = exc.response
+        payload["status_code"] = response.status_code
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text[:500]
+        payload["detail"] = detail
+        if isinstance(detail, dict) and detail.get("error_code"):
+            payload["error_code"] = str(detail["error_code"])
+    else:
+        payload["detail"] = str(exc)
+    return payload
