@@ -232,7 +232,9 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         cfg.api_key = str(_args.api_key).strip()
         save_config(cfg)
         console.print("Step 1: saved API-key login for this machine.")
-    elif not cfg.api_key:
+    elif cfg.is_authenticated:
+        console.print(f"Step 1: using existing API-key login from {cfg.api_key_source}.")
+    else:
         console.print("Step 1: authenticate.")
         if Confirm.ask("Use API-key login for this machine?", default=True):
             cfg.api_key = Prompt.ask("Paste Mdtero API key", password=True)
