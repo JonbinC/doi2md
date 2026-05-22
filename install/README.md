@@ -92,6 +92,8 @@ Current boundaries:
 - `mdtero zotero sync` is present, but reverse sync back to Zotero is not yet a completed public workflow.
 - GROBID is not exposed as a user-selectable public engine; PDF parsing is MinerU-first on the backend.
 
+For machines with a browser, run `mdtero login`; it opens Mdtero Account and stores the one-time CLI key returned through the local loopback callback.
+
 For headless agents, create a fresh API key in Mdtero Account and use:
 
 ```bash

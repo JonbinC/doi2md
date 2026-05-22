@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from pathlib import Path
 
 import httpx
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import detect_targets, install_targets, uninstall_targets
+from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
@@ -46,6 +48,67 @@ def test_setup_accepts_headless_api_key_argument():
     args = parser.parse_args(["setup", "--api-key", "mdt_live_demo"])
 
     assert args.api_key == "mdt_live_demo"
+
+
+def test_login_accepts_web_login_flags():
+    parser = build_parser()
+
+    args = parser.parse_args(["login", "--no-browser", "--timeout", "12"])
+
+    assert args.no_browser is True
+    assert args.timeout == 12
+
+
+def test_cli_login_url_carries_loopback_callback_and_state():
+    url = build_cli_login_url("https://mdtero.example/", callback_url="http://127.0.0.1:4173/callback", state="state-1")
+    parsed = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parsed.query)
+
+    assert url.startswith("https://mdtero.example/auth?")
+    assert query["cli_callback"] == ["http://127.0.0.1:4173/callback"]
+    assert query["cli_state"] == ["state-1"]
+
+
+def test_web_login_loopback_accepts_site_callback():
+    opened_urls: list[str] = []
+
+    def fake_open(url: str):
+        opened_urls.append(url)
+        parsed = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed.query)
+        response = httpx.post(
+            query["cli_callback"][0],
+            json={"state": query["cli_state"][0], "apiKey": "mdt_live_web", "prefix": "mdt_live"},
+            timeout=5,
+        )
+        assert response.status_code == 200
+        return True
+
+    result = run_web_login("https://mdtero.example", timeout_seconds=5, open_browser=fake_open)
+
+    assert opened_urls
+    assert result.api_key == "mdt_live_web"
+    assert result.prefix == "mdt_live"
+
+
+def test_login_command_saves_web_callback_key(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+
+    def fake_run_web_login(site_base_url, *, timeout_seconds, open_browser=None):
+        assert site_base_url == "https://mdtero.com"
+        assert timeout_seconds == 7
+        assert open_browser is None
+        return WebLoginResult(api_key="mdt_live_saved", prefix="mdt_live")
+
+    monkeypatch.setattr(cli, "run_web_login", fake_run_web_login)
+
+    assert cli.cmd_login(type("Args", (), {"api_key": "", "timeout": 7, "no_browser": False})()) == 0
+    cfg = load_config()
+
+    assert cfg.api_key == "mdt_live_saved"
+    assert "Saved web login API key" in capsys.readouterr().out
 
 
 def test_rag_status_accepts_agent_friendly_flags():
