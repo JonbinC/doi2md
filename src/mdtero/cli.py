@@ -640,10 +640,24 @@ def cmd_download(args: argparse.Namespace) -> int:
 
 def cmd_translate(args: argparse.Namespace) -> int:
     target = Path(args.task_or_file)
-    if target.exists():
-        result = MdteroClient().translate_text(target.read_text(encoding="utf-8"), filename=target.name, target_language=args.to)
-    else:
-        raise SystemExit("translate currently accepts a local markdown file in the Python client")
+    client = MdteroClient()
+    try:
+        if target.exists():
+            result = client.translate_text(target.read_text(encoding="utf-8"), filename=target.name, target_language=args.to)
+        else:
+            result = client.translate_task(args.task_or_file, target_language=args.to)
+    except ValueError as exc:
+        if str(exc) == "translation_source_artifact_missing":
+            payload = {
+                "status": "failed",
+                "error_code": "translation_source_artifact_missing",
+                "task_id": args.task_or_file,
+                "action_hint": "The parse task does not expose a server-side paper_md path for translation. Run `mdtero status <task-id> --json`; if only a download artifact is available, download paper_md and run `mdtero translate <paper.md> --to zh-CN`.",
+                "next_commands": [f"mdtero status {args.task_or_file} --json", f"mdtero download {args.task_or_file} paper_md --output-dir ./mdtero-output"],
+            }
+            _print_result(payload, json_output=args.json)
+            return 1
+        raise
     _print_result(result, json_output=args.json)
     return 0
 

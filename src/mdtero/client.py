@@ -152,6 +152,25 @@ class MdteroClient:
             },
         )
 
+    def translate_task(self, task_id: str, *, target_language: str = "zh-CN", artifact: str = "paper_md") -> dict[str, Any]:
+        task = self.task(task_id)
+        source_path = translation_source_path_from_task(task, artifact=artifact)
+        if not source_path:
+            raise ValueError("translation_source_artifact_missing")
+        return self.translate_server_path(source_path, target_language=target_language)
+
+    def translate_server_path(self, source_markdown_path: str, *, target_language: str = "zh-CN") -> dict[str, Any]:
+        return self._request_with_fallback(
+            "POST",
+            "/api/v1/tasks/translate",
+            "/tasks/translate",
+            json={
+                "source_markdown_path": source_markdown_path,
+                "target_language": target_language,
+                "mode": "full",
+            },
+        )
+
     def create_project(self, name: str, *, description: str | None = None) -> dict[str, Any]:
         return self._request_with_fallback("POST", "/api/v1/projects", "/projects", json={"name": name, "description": description})
 
@@ -258,3 +277,33 @@ def _discovery_failure_payload(exc: Exception, *, local_error: str | None = None
     else:
         payload["detail"] = str(exc)
     return payload
+
+
+def translation_source_path_from_task(task: dict[str, Any], *, artifact: str = "paper_md") -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    candidates: list[Any] = []
+    if artifact in artifacts:
+        candidates.append(artifacts.get(artifact))
+    if "paper_md" in artifacts and artifact != "paper_md":
+        candidates.append(artifacts.get("paper_md"))
+    for key in (artifact, "paper_md", "markdown_path", "source_markdown_path"):
+        if key in result:
+            candidates.append(result.get(key))
+    for candidate in candidates:
+        path = _artifact_path(candidate)
+        if path:
+            return path
+    return None
+
+
+def _artifact_path(value: Any) -> str | None:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    if isinstance(value, dict):
+        for key in ("path", "source_markdown_path", "local_path"):
+            cleaned = str(value.get(key) or "").strip()
+            if cleaned:
+                return cleaned
+    return None
