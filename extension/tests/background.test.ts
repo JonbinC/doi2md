@@ -440,6 +440,52 @@ describe("extension background Elsevier routing", () => {
     await expect(rawArtifact.text()).resolves.toContain("Captured paper");
   });
 
+  it("uses v1 server parse when the route planner is unavailable", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    requiresElsevierLocalAcquire.mockReturnValue(false);
+    fetchRoutePlan.mockResolvedValue({
+      input_kind: "unknown",
+      input_value: "",
+      top_connector: "server_parse",
+      route_kind: "server",
+      acquisition_mode: "server_parse",
+      requires_helper: false,
+      allows_current_tab: false,
+      action_sequence: ["server_parse"],
+      acceptance_rules: {},
+      fail_closed: true,
+      matched_connectors: ["server_parse"],
+      route_planner_fallback: true,
+      server_entrypoint: "/api/v1/tasks/parse",
+      upload_entrypoint: "/api/v1/tasks/upload"
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.ssot.request",
+        input: "10.1000/demo"
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(createParseTask).toHaveBeenCalledWith({ input: "10.1000/demo" });
+      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+      expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-generic", status: "queued" }
+      });
+    });
+  });
+
   it("executes SSOT EPUB routes through browser download and raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);

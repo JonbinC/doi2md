@@ -725,7 +725,8 @@ def test_client_keeps_task_submission_on_v1_when_route_is_not_deployed(monkeypat
 
     route = client.route("10.1000/demo")
 
-    assert route["legacy_fallback"] is True
+    assert route["route_planner_fallback"] is True
+    assert route["acquisition_mode"] == "server_parse"
     assert route["server_entrypoint"] == "/api/v1/tasks/parse"
     assert route["upload_entrypoint"] == "/api/v1/tasks/upload"
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
@@ -734,7 +735,7 @@ def test_client_keeps_task_submission_on_v1_when_route_is_not_deployed(monkeypat
     assert [call[1] for call in calls] == ["/api/v1/route", "/api/v1/tasks/parse"]
 
 
-def test_client_reports_v1_discovery_failure_without_legacy_fallback(monkeypatch):
+def test_client_reports_v1_discovery_failure_without_old_endpoint_fallback(monkeypatch):
     calls = []
 
     def fake_request(self, method, path, **kwargs):
@@ -1137,12 +1138,12 @@ def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
     assert should_acquire_locally({"action_sequence": [], "requires_raw_upload": False}, "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML") is True
 
 
-def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_legacy(monkeypatch, tmp_path: Path):
+def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_server_parse(monkeypatch, tmp_path: Path):
     acquired_path = tmp_path / "paper.xml"
     acquired_path.write_text("<article><front><article-meta /></front></article>", encoding="utf-8")
 
     def fake_acquire(route_arg, input_arg, *, timeout):
-        assert route_arg["route_kind"] == "legacy_parse"
+        assert route_arg["route_kind"] == "server_parse"
         assert input_arg.endswith("/fullTextXML")
         return AcquiredArtifact(
             url=input_arg,
@@ -1158,8 +1159,8 @@ def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_legac
     def fake_request(self, method, path, **kwargs):
         if path == "/api/v1/route":
             return {
-                "route_kind": "legacy_parse",
-                "acquisition_mode": "legacy_parse",
+                "route_kind": "server_parse",
+                "acquisition_mode": "server_parse",
                 "requires_raw_upload": False,
                 "action_hint": "Submit the DOI or URL to /api/v1/tasks/parse.",
             }
@@ -1174,7 +1175,7 @@ def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_legac
     input_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML"
     route_result, task, acquisition = MdteroClient(timeout=60.0).parse_with_route(input_url)
 
-    assert route_result["route_kind"] == "legacy_parse"
+    assert route_result["route_kind"] == "server_parse"
     assert task["task_id"] == "task-xml"
     assert task["client_acquisition"]["artifact_kind"] == "xml"
     assert acquisition["source"] == "curl_cffi"
@@ -1663,7 +1664,7 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
 
     def fake_parse_with_route(self, value):
         assert value == "10.1000/demo"
-        return {"route_kind": "legacy_parse"}, {"task_id": "task-1", "status": "queued"}, None
+        return {"route_kind": "server_parse"}, {"task_id": "task-1", "status": "queued"}, None
 
     def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
         assert task_id == "task-1"
@@ -1754,7 +1755,7 @@ def test_waited_parse_timeout_promotes_timeout_to_top_level(monkeypatch, tmp_pat
 
     def fake_parse_with_route(self, value):
         assert value == "10.1000/demo"
-        return {"route_kind": "legacy_parse"}, {"task_id": "task-1", "status": "queued"}, None
+        return {"route_kind": "server_parse"}, {"task_id": "task-1", "status": "queued"}, None
 
     def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
         raise TimeoutError("still queued")

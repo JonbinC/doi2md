@@ -74,7 +74,7 @@ class AcquisitionError(RuntimeError):
 def should_acquire_locally(route: dict[str, Any], input_value: str) -> bool:
     if _is_direct_local_artifact_url(input_value):
         return True
-    if route.get("legacy_fallback"):
+    if route.get("legacy_fallback") or route.get("route_planner_fallback"):
         return False
     if route.get("requires_raw_upload"):
         return True

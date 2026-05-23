@@ -44,13 +44,13 @@ class MdteroClient:
                 raise
             return {
                 "route_kind": "server",
-                "acquisition_mode": "legacy_parse",
+                "acquisition_mode": "server_parse",
                 "requires_raw_upload": False,
                 "action_hint": "The backend route planner is not available; submit the DOI or URL directly to /api/v1/tasks/parse.",
                 "server_entrypoint": "/api/v1/tasks/parse",
                 "upload_entrypoint": "/api/v1/tasks/upload",
                 "client_command": f"mdtero parse {input_value}",
-                "legacy_fallback": True,
+                "route_planner_fallback": True,
             }
 
     def parse(self, input_value: str) -> dict[str, Any]:

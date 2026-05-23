@@ -187,13 +187,22 @@ function createRouterSSOTClient(getSettings) {
     });
     if (response.status === 404 && path === "/api/v1/route") {
       return new Response(JSON.stringify({
+        input_kind: "unknown",
+        input_value: "",
+        top_connector: "server_parse",
         route_kind: "server",
-        acquisition_mode: "legacy_parse",
+        acquisition_mode: "server_parse",
+        requires_helper: false,
+        allows_current_tab: false,
+        action_sequence: ["server_parse"],
+        acceptance_rules: {},
+        fail_closed: true,
+        matched_connectors: ["server_parse"],
         requires_raw_upload: false,
-        action_hint: "Production backend has not enabled /api/v1/route yet; use legacy parse.",
-        server_entrypoint: "/tasks/parse",
-        upload_entrypoint: "/tasks/parse-upload-v2",
-        legacy_fallback: true
+        action_hint: "The backend route planner is not available; submit the DOI or URL directly to /api/v1/tasks/parse.",
+        server_entrypoint: "/api/v1/tasks/parse",
+        upload_entrypoint: "/api/v1/tasks/upload",
+        route_planner_fallback: true
       }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -731,6 +740,18 @@ async function fetchRoutePlanFromSsot(routeClient, input, pageContext) {
   });
 }
 async function executeSsotActionSequence(parseClient, routePlan, context) {
+  if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
+    try {
+      const task = await parseClient.createParseTask({ input: context.input });
+      return { success: true, taskId: task.task_id, task };
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+        nextCommand: `mdtero parse ${JSON.stringify(context.input)} --trace --wait --timeout 300 --json`
+      };
+    }
+  }
   for (const action of routePlan.action_sequence) {
     const result = await executeAction(action, context, {
       top_connector: routePlan.top_connector,

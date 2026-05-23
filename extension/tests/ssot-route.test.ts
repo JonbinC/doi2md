@@ -62,6 +62,7 @@ describe("ssot-route", () => {
       next_commands: ["mdtero status task-123 --wait --timeout 300 --json"],
     };
     const parseClient = {
+      createParseTask: vi.fn(),
       createParseFulltextV2Task: vi.fn().mockResolvedValue(task),
     };
 
@@ -103,6 +104,7 @@ describe("ssot-route", () => {
     });
 
     const parseClient = {
+      createParseTask: vi.fn(),
       createParseFulltextV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
     };
 
@@ -129,6 +131,7 @@ describe("ssot-route", () => {
       });
 
     const parseClient = {
+      createParseTask: vi.fn(),
       createParseFulltextV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
     };
 
@@ -158,6 +161,7 @@ describe("ssot-route", () => {
     });
 
     const parseClient = {
+      createParseTask: vi.fn(),
       createParseFulltextV2Task: vi.fn(),
     };
 
@@ -186,6 +190,7 @@ describe("ssot-route", () => {
     });
 
     const parseClient = {
+      createParseTask: vi.fn(),
       createParseFulltextV2Task: vi.fn(),
     };
 
@@ -203,5 +208,33 @@ describe("ssot-route", () => {
       error: "Open the article page and retry browser capture.",
       nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
+  });
+
+  it("submits server-parse fallback routes through v1 task creation", async () => {
+    const task = { task_id: "task-server", status: "queued" };
+    const parseClient = {
+      createParseTask: vi.fn().mockResolvedValue(task),
+      createParseFulltextV2Task: vi.fn(),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(
+      parseClient,
+      buildRoutePlan({
+        top_connector: "server_parse",
+        route_kind: "server",
+        acquisition_mode: "server_parse",
+        requires_helper: false,
+        allows_current_tab: false,
+        action_sequence: ["server_parse"],
+        route_planner_fallback: true,
+      }),
+      { input: "10.1000/demo" },
+    );
+
+    expect(executeAction).not.toHaveBeenCalled();
+    expect(parseClient.createParseTask).toHaveBeenCalledWith({ input: "10.1000/demo" });
+    expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: true, taskId: "task-server", task });
   });
 });
