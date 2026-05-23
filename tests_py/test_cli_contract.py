@@ -2942,6 +2942,20 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "next_commands" in combined
 
 
+def test_public_docs_and_skills_prefer_doctor_json_for_agents():
+    repo_root = Path(__file__).resolve().parents[1]
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    skill_source = (repo_root / "skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
+    packaged_skill = (repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "mdtero doctor --json" in readme
+    assert "safe auth/dependency/academic/Zotero/project/RAG summaries" in readme
+    for skill in [skill_source, packaged_skill]:
+        assert "Run `mdtero doctor --json` before parse" in skill
+        assert "safe `next_commands` without echoing secrets" in skill
+        assert "authenticated: true" in skill
+
+
 def test_public_docs_describe_setup_agent_detection_and_headless_skip():
     repo_root = Path(__file__).resolve().parents[1]
     combined = "\n".join(
@@ -2973,6 +2987,7 @@ def test_packaged_skill_template_is_available_to_python_installer():
 
     assert "mdtero agent install" in skill
     assert "mdtero parse <doi-or-url>" in skill
+    assert "mdtero doctor --json" in skill
 
 
 def test_legacy_agent_install_docs_use_json_friendly_cli_examples():

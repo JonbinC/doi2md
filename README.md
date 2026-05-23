@@ -61,6 +61,7 @@ clawhub install mdtero
 
 ```bash
 mdtero doctor
+mdtero doctor --json
 mdtero login
 mdtero login --api-key <key>
 mdtero config academic
@@ -96,7 +97,7 @@ mdtero tui
 
 Validated in the current alpha:
 
-- API-key login, `mdtero doctor`, and local config
+- API-key login, `mdtero doctor`, `mdtero doctor --json`, and local config; JSON diagnostics include safe auth/dependency/academic/Zotero/project/RAG summaries plus `next_commands` without echoing secrets
 - optional academic-key setup through either the interactive `mdtero config academic` flow or headless flags such as `--semantic-scholar-key <key> --json`; JSON output reports configured keys without echoing secrets
 - DOI/arXiv parse with task polling and Markdown/bundle download
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
@@ -107,7 +108,7 @@ Validated in the current alpha:
 - server-side translation requests from parse task ids or local Markdown files
 - server-side Voyage RAG build/query; query JSON returns extractive `answer`, stable `citations`, raw `matches`, `reason_code`, and `next_commands` for agents
 - local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, and recommended next commands
-- MCP and agent-facing recommended commands prefer `--json` on parse, refresh, ingest, RAG, and download steps so local agents can parse results without scraping terminal tables
+- MCP and agent-facing recommended commands prefer `--json` on doctor, parse, refresh, ingest, RAG, and download steps so local agents can parse results without scraping terminal tables
 - agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
 Known boundaries:
@@ -146,6 +147,7 @@ Mdtero 当前公开主线是 Python/uv 客户端、浏览器扩展和 agent skil
 uv tool install git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 mdtero doctor
+mdtero doctor --json
 ```
 
 常用流程：
@@ -171,3 +173,4 @@ mdtero mcp serve
 ```
 
 当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 自动绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，方便 agent 直接引用证据。MCP 的首选入口是 `agent_briefing`，会一次返回账户状态、项目健康、可下载成果、失败项、RAG 状态、agent skill 安装状态和下一步命令。agent skill 安装由 Python CLI 负责，不依赖 npm。
+`mdtero doctor --json` 是给本地 agent 和上线 smoke 用的结构化入口，会返回认证、依赖、学术 key 是否配置、Zotero、项目队列、server project/RAG readiness 和下一步命令，但不会输出任何 secret。
