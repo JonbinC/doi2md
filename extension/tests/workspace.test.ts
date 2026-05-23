@@ -74,6 +74,16 @@ describe("workspace", () => {
     expect(() => readFileSync(resolve("../site/src/index.html"), "utf-8")).toThrow();
   });
 
+  it("documents extension auth and helper boundaries", () => {
+    const readme = readFileSync(resolve("README.md"), "utf-8");
+
+    expect(readme).toContain("The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com`");
+    expect(readme).toContain("Publisher pages cannot mint extension tokens");
+    expect(readme).toContain("does not store publisher API keys, TDM keys, or local helper credentials");
+    expect(readme).toContain("does not use native messaging or a local helper process");
+    expect(readme).toContain("shows a CLI handoff command");
+  });
+
   it("declares warm brand assets for the extension", () => {
     const manifest = readFileSync(resolve("manifest.json"), "utf-8");
     const localeEn = readFileSync(resolve("_locales/en/messages.json"), "utf-8");

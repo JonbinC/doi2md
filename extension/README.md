@@ -15,6 +15,8 @@ npm run build
 
 Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/auth`; the website hands the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The extension no longer maintains its own email, password, or email-code login form.
 
+The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com` (plus localhost during development). Publisher pages cannot mint extension tokens, and the extension does not store publisher API keys, TDM keys, or local helper credentials.
+
 ## Parse Papers
 
 Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension creates a backend task, polls it, and shows returned artifacts. Markdown is the primary download when `paper_md` is available; when figure/assets are packaged separately, the backend returns a `paper_bundle` zip.
@@ -28,6 +30,8 @@ After a parse task succeeds, the Translate button uses the parsed Markdown artif
 ## Privacy And Local Files
 
 Tokens, email, and UI language are stored in browser local storage. Local PDF/EPUB intake uploads the chosen file to create a parse task. The extension does not bundle Python dependencies such as `curl_cffi`, `pyzotero`, or `fastmcp`; those belong to the Python CLI.
+
+The extension does not use native messaging or a local helper process. When browser capture is blocked by a challenge page, campus-network dependency, or logged-in session state, the popup shows a CLI handoff command instead of trying to bypass the page inside the extension.
 
 ## 中文版
 
