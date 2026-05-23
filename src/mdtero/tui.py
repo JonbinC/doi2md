@@ -10,7 +10,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Static
 
-from .agent import detect_targets
+from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
@@ -27,14 +27,17 @@ def build_dashboard_model(
     root = project_root or Path.cwd()
     cfg = config or load_config()
     project = ensure_project(root)
-    agents = detect_targets(agent_root)
+    agent_status = detect_target_status(agent_root)
+    detected_agents = [agent for agent in agent_status if agent.detected]
+    installed_agents = [agent for agent in agent_status if agent.installed]
+    pending_agent_installs = [agent for agent in agent_status if agent.detected and not agent.installed]
     pending = [paper for paper in project.papers if paper.status in {"pending", "created"} and not paper.task_id]
     running = [paper for paper in project.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     succeeded = [paper for paper in project.papers if paper.status == "succeeded"]
     failed = [paper for paper in project.papers if paper.status == "failed"]
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
-    briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg)
+    briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg, agent_root=agent_root)
     return {
         "account": {
             "api_base_url": cfg.api_base_url,
@@ -58,11 +61,28 @@ def build_dashboard_model(
             "commands": ["mdtero config zotero", "mdtero zotero import", "mdtero zotero sync"],
         },
         "agents": {
-            "detected": [agent.name for agent in agents],
-            "labels": [agent.label for agent in agents],
+            "detected": [agent.target for agent in detected_agents],
+            "labels": [agent.label for agent in detected_agents],
+            "detected_count": len(detected_agents),
+            "installed_count": len(installed_agents),
+            "pending_install_count": len(pending_agent_installs),
+            "pending_install_labels": [agent.label for agent in pending_agent_installs],
+            "status": [
+                {
+                    "target": agent.target,
+                    "label": agent.label,
+                    "detected": agent.detected,
+                    "installed": agent.installed,
+                    "skill_path": agent.skill_path,
+                    "install_command": agent.install_command,
+                    "selection_index": agent.selection_index,
+                }
+                for agent in agent_status
+            ],
             "detect_command": commands["agent_detect"],
             "install_command": commands["agent_install"],
             "fallback_install_command": "mdtero agent install --target codex --json",
+            "interactive_hint": "Use spaces to multi-select detected workspaces in `mdtero agent install --interactive`.",
         },
         "mcp": {
             "serve_command": commands["serve_mcp"],
@@ -231,6 +251,9 @@ def _integration_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Zotero", "configured" if zotero["configured"] else "not configured")
     table.add_row("Zotero library", str(zotero["library_id"] or "-"))
     table.add_row("Agents", ", ".join(agents["labels"]) if agents["labels"] else "none detected")
+    table.add_row("Agent skills", f"{agents['installed_count']} installed / {agents['pending_install_count']} pending")
+    if agents["pending_install_labels"]:
+        table.add_row("Pending", ", ".join(agents["pending_install_labels"]))
     table.add_row("Agent detect", agents["detect_command"])
     table.add_row("Agent install", agents["install_command"])
     return Panel(table, title="Integrations", border_style="yellow")
