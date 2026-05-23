@@ -1183,6 +1183,52 @@ def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, caps
     }
 
 
+def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="status-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/demo", task_id="task-1", status="queued"))
+
+    def fake_task(self, task_id):
+        assert task_id == "task-1"
+        return {
+            "task_id": "task-1",
+            "status": "succeeded",
+            "result": {"preferred_artifact": "paper_bundle"},
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-1", "wait": False, "json": True, "trace": False})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["preferred_artifact"] == "paper_bundle"
+    assert payload["next_commands"] == ["mdtero download task-1 paper_bundle --output-dir ./mdtero-output --json"]
+    assert load_project(tmp_path).papers[0].artifact == "paper_bundle"
+
+
+def test_project_refresh_json_includes_retry_next_command_for_failed_tasks(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="refresh-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/demo", task_id="task-1", status="queued"))
+
+    def fake_task(self, task_id):
+        assert task_id == "task-1"
+        return {"task_id": "task-1", "status": "failed", "reason_code": "parser_failed"}
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_refresh(type("Args", (), {"wait": False, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+    task = payload["items"][0]
+
+    assert task["next_commands"] == ["mdtero status task-1 --json", "mdtero project parse --include-failed --wait --json"]
+    assert load_project(tmp_path).papers[0].reason_code == "parser_failed"
+
+
 def test_submission_result_maps_provider_artifact_and_reason_to_project_record():
     paper = paper_from_submission(
         "paper.pdf",

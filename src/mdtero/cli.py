@@ -705,6 +705,7 @@ def cmd_project_refresh(args: argparse.Namespace) -> int:
     results = []
     for task_id in project_task_ids(state):
         task = client.wait(task_id) if args.wait else client.task(task_id)
+        _enrich_task_status(task)
         update_task(root, task)
         results.append(task)
     payload = {"refreshed_count": len(results), "items": results}
@@ -774,10 +775,37 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     client = MdteroClient()
     task = client.wait(args.task_id) if args.wait else client.task(args.task_id)
+    _enrich_task_status(task)
     update_task(Path.cwd(), task)
     payload = {"task": task, "workflow": status_trace(task).to_dict()} if args.trace else task
     _print_result(payload, json_output=args.json or args.trace)
     return 0
+
+
+def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(task.get("task_id") or task.get("id") or "").strip()
+    if not task_id:
+        return task
+    task.setdefault("task_id", task_id)
+    task.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    task.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    status = str(task.get("status") or "").strip().lower()
+    preferred_artifact = _preferred_parse_artifact(task)
+    if status == "succeeded":
+        task.setdefault("preferred_artifact", preferred_artifact)
+    next_commands = [str(command).strip() for command in task.get("next_commands") or [] if str(command).strip()]
+    defaults: list[str]
+    if status == "succeeded":
+        defaults = [f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json"]
+    elif status in {"failed", "cancelled"}:
+        defaults = [f"mdtero status {task_id} --json", "mdtero project parse --include-failed --wait --json"]
+    else:
+        defaults = [f"mdtero status {task_id} --wait --json"]
+    for command in defaults:
+        if command not in next_commands:
+            next_commands.append(command)
+    task["next_commands"] = next_commands
+    return task
 
 
 def cmd_download(args: argparse.Namespace) -> int:
