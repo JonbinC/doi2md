@@ -59,6 +59,49 @@ function fallbackArtifactFilename(artifact: string, preferredFilename?: string |
   return `${artifact}.bin`;
 }
 
+async function readErrorDetail(response: Response): Promise<string> {
+  const payload = await response
+    .clone()
+    .json()
+    .catch(() => null);
+  return describeErrorPayload(payload);
+}
+
+function describeErrorPayload(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+  if (!detail || typeof detail !== "object") {
+    return "";
+  }
+  const parts: string[] = [];
+  const record = detail as Record<string, unknown>;
+  const message = firstString(record.error_message, record.message, record.detail);
+  const reasonCode = firstString(record.reason_code, record.error_code);
+  const actionHint = firstString(record.action_hint);
+  const nextCommand = Array.isArray(record.next_commands)
+    ? record.next_commands.map((value) => String(value || "").trim()).find(Boolean)
+    : "";
+  if (message) parts.push(message);
+  if (reasonCode) parts.push(`Reason: ${reasonCode}`);
+  if (actionHint) parts.push(`Next: ${actionHint}`);
+  if (nextCommand) parts.push(`Command: ${nextCommand}`);
+  return parts.join(" ");
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
 export function createApiClient(
   getSettings: () => Promise<ApiClientSettings>
 ) {
@@ -91,16 +134,7 @@ export function createApiClient(
       headers
     });
     if (!response.ok) {
-      const detail = await response
-        .clone()
-        .json()
-        .then((payload) => {
-          if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
-            return payload.detail.trim();
-          }
-          return "";
-        })
-        .catch(() => "");
+      const detail = await readErrorDetail(response);
       throw new Error(detail || `API request failed: ${response.status}`);
     }
     return response;
@@ -131,16 +165,7 @@ export function createApiClient(
       });
     }
     if (!response.ok) {
-      const detail = await response
-        .clone()
-        .json()
-        .then((payload) => {
-          if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
-            return payload.detail.trim();
-          }
-          return "";
-        })
-        .catch(() => "");
+      const detail = await readErrorDetail(response);
       throw new Error(detail || `API request failed: ${response.status}`);
     }
     return response;
@@ -270,16 +295,7 @@ export function createRouterSSOTClient(
     }
 
     if (!response.ok) {
-      const detail = await response
-        .clone()
-        .json()
-        .then((payload) => {
-          if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
-            return payload.detail.trim();
-          }
-          return "";
-        })
-        .catch(() => "");
+      const detail = await readErrorDetail(response);
       throw new Error(detail || `API request failed: ${response.status}`);
     }
 

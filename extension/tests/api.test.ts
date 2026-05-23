@@ -251,6 +251,39 @@ describe("createApiClient", () => {
     ).rejects.toThrow("Elsevier and ScienceDirect inputs must be acquired locally first.");
   });
 
+  it("surfaces structured backend reason codes, action hints, and next commands", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            error_message: "MinerU URL API timed out while fetching the uploaded PDF.",
+            reason_code: "mineru_urlapi_timeout",
+            action_hint: "Retry later or upload the PDF again from the browser extension.",
+            next_commands: ["mdtero parse --file paper.pdf --wait --timeout 300 --json"]
+          }
+        }),
+        {
+          status: 504,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      )
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    await expect(client.downloadArtifact("task-123", "paper_md")).rejects.toThrow(
+      "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --wait --timeout 300 --json"
+    );
+  });
+
   it("refuses parse requests when the user is not signed in", async () => {
     const fetchMock = vi.mocked(fetch);
 
