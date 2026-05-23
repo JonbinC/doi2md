@@ -37,6 +37,22 @@ from mdtero.workflow import parse_trace_from_route, status_trace, upload_trace
 from mdtero.zotero import build_sync_note, paper_from_zotero_item, sync_project_to_zotero
 
 
+def mock_doctor_remote_auth_ok(monkeypatch):
+    from mdtero import cli
+
+    monkeypatch.setattr(
+        cli,
+        "_doctor_remote_auth",
+        lambda cfg: {"status": "ok", "email": "user@example.com", "wallet_balance_display": "$0.00"}
+        if cfg.is_authenticated
+        else {
+            "status": "missing",
+            "action_hint": "Authenticate with `mdtero login --api-key <key>` or run `mdtero setup`.",
+            "next_commands": ["mdtero setup", "mdtero login --api-key <key>"],
+        },
+    )
+
+
 def test_parser_exposes_next_gen_command_contract():
     parser = build_parser()
     help_text = parser.format_help()
@@ -182,6 +198,7 @@ def test_doctor_accepts_api_key_from_environment(monkeypatch, tmp_path: Path, ca
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+    mock_doctor_remote_auth_ok(monkeypatch)
 
     assert cli.cmd_doctor(type("Args", (), {})()) == 0
     output = capsys.readouterr().out
@@ -194,6 +211,7 @@ def test_doctor_reports_local_dependency_and_optional_integration_state(monkeypa
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    mock_doctor_remote_auth_ok(monkeypatch)
     save_config(MdteroConfig(
         api_key="mdt_live_config",
         academic=AcademicKeys(semantic_scholar_api_key="s2"),
@@ -225,6 +243,7 @@ def test_doctor_reports_optional_fallbacks_when_integrations_are_missing(monkeyp
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    mock_doctor_remote_auth_ok(monkeypatch)
     save_config(MdteroConfig(api_key="mdt_live_config"))
     monkeypatch.setattr(cli.importlib.util, "find_spec", lambda _name: None)
 
@@ -241,6 +260,7 @@ def test_doctor_reports_project_queue_and_rag_readiness(monkeypatch, tmp_path: P
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    mock_doctor_remote_auth_ok(monkeypatch)
     save_config(MdteroConfig(api_key="mdt_live_config"))
     init_project(tmp_path, name="doctor-demo")
     bind_server_project(tmp_path, "42")
@@ -264,6 +284,7 @@ def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_pat
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    mock_doctor_remote_auth_ok(monkeypatch)
     save_config(MdteroConfig(api_key="mdt_live_config"))
     init_project(tmp_path, name="doctor-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
@@ -283,6 +304,7 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    mock_doctor_remote_auth_ok(monkeypatch)
     secret = "mdt_live_config_secret"
     save_config(MdteroConfig(
         api_key=secret,
@@ -321,6 +343,33 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     assert "wiley-secret" not in raw
     assert "s2-secret" not in raw
     assert "zotero-secret" not in raw
+
+
+def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_invalid"))
+    monkeypatch.setattr(
+        cli,
+        "_doctor_remote_auth",
+        lambda _cfg: {
+            "status": "failed",
+            "error_code": "authentication_required",
+            "reason_code": "authentication_required",
+            "status_code": 401,
+            "next_commands": ["mdtero login --api-key <key>", "mdtero doctor --json"],
+        },
+    )
+
+    assert cli.cmd_doctor(type("Args", (), {"json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "invalid_auth"
+    assert payload["authenticated"] is False
+    assert payload["remote_auth"]["status_code"] == 401
+    assert payload["checks"][0] == {"check": "API key", "status": "invalid", "detail": "authentication_required"}
+    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor --json"]
 
 
 def test_doctor_json_reports_missing_auth_and_project_init_next_steps(monkeypatch, tmp_path: Path, capsys):
