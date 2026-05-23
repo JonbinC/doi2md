@@ -49,6 +49,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - query server project RAG after build: `mdtero rag query "<question>" --json`
 - serve project MCP context: `mdtero mcp serve`
 - detect or install agent skills: `mdtero agent detect --json`, `mdtero agent install --interactive`, or `mdtero agent install --target <target>`
+- `mdtero parse`, `mdtero project parse`, `mdtero status`, and `mdtero project refresh` JSON responses include `next_commands`; follow those returned commands before inventing a new continuation. For succeeded tasks, prefer the returned `preferred_artifact` and download command. For failed tasks, report `reason_code` / `action_hint` and use the returned retry or status command.
 
 ## MCP Workflow
 
@@ -70,7 +71,7 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 - prefer Markdown first
 - treat PDF as input, not as the normal output
 - use fallback bundles only when the workflow truly needs image or asset files
-- keep task ids, `reason_code`, and download artifact names visible in handoffs
+- keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, `next_commands`, and download artifact names visible in handoffs
 
 ## Verification Rule
 

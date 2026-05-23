@@ -2471,3 +2471,5 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "mdtero project ingest" in source_skill
     assert "server_rag_status" in source_skill
     assert "rag_query(question)" in source_skill
+    assert "JSON responses include `next_commands`" in source_skill
+    assert "preferred_artifact" in source_skill
