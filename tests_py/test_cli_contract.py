@@ -1438,6 +1438,33 @@ def test_status_json_preserves_server_recovery_contract(monkeypatch, tmp_path: P
     assert load_project(tmp_path).papers[0].artifact == "paper_md"
 
 
+def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    def fake_parse_with_route(self, value):
+        assert value == "10.1000/demo"
+        return {"route_kind": "legacy_parse"}, {"task_id": "task-1", "status": "queued"}, None
+
+    def fake_wait(self, task_id):
+        assert task_id == "task-1"
+        return {
+            "task_id": "task-1",
+            "status": "succeeded",
+            "result": {"preferred_artifact": "paper_md"},
+        }
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_parse(type("Args", (), {"input": "10.1000/demo", "file": None, "batch": None, "json": True, "wait": True, "trace": False})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["final_task"]["preferred_artifact"] == "paper_md"
+    assert payload["final_task"]["next_commands"] == ["mdtero download task-1 paper_md --output-dir ./mdtero-output --json"]
+    assert "error" not in payload["final_task"]
+
+
 def test_project_refresh_json_includes_retry_next_command_for_failed_tasks(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -1873,6 +1900,36 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     ]
     assert "agent_briefing" in briefing["mcp_tools"]
     assert "rag_query" in briefing["mcp_tools"]
+
+
+def test_mcp_briefing_command_prints_agent_context_without_starting_server(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_status(self, project_id):
+        assert project_id == "42"
+        return {
+            "status": "ready",
+            "reason_code": "indexed",
+            "summary": {"chunk_count": 8, "embedded_count": 8, "pending_embedding_count": 0},
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_mcp_briefing(type("Args", (), {"json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["project"]["name"] == "agent-demo"
+    assert payload["rag"]["status"] == "ready"
+    assert payload["rag"]["reason_code"] == "indexed"
+    assert "agent_briefing" in payload["mcp_tools"]
+    assert "mdtero mcp serve" in payload["recommended_next_commands"]
 
 
 def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
@@ -2548,6 +2605,52 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     assert "[1] Coating improves corrosion resistance." in output
     assert "Corrosion Paper:3-4 · 10.1000/rag" in output
     assert "mdtero mcp serve" in output
+
+
+def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matches(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(self, project_id, question):
+        assert project_id == "42"
+        assert question == "What is the contribution?"
+        return {
+            "project_id": 42,
+            "question": question,
+            "selected_provider": "voyage",
+            "retrieval_strategy": "voyage_embedding_v1",
+            "used_embeddings": True,
+            "reason_code": "ok",
+            "matches": [
+                {
+                    "citation_order": 1,
+                    "document_id": 7,
+                    "document_title": "Attention Is All You Need",
+                    "chunk_id": 9,
+                    "line_start": 53,
+                    "line_end": 58,
+                    "snippet": "The Transformer relies entirely on attention and avoids recurrence.",
+                    "score": 0.73,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "What is the contribution?", "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "succeeded"
+    assert payload["reason_code"] == "ok"
+    assert payload["server_project_id"] == "42"
+    assert payload["answer"] == "[1] The Transformer relies entirely on attention and avoids recurrence."
+    assert payload["citations"][0]["document_title"] == "Attention Is All You Need"
+    assert payload["citations"][0]["line_start"] == 53
+    assert payload["action_hint"] == "RAG query completed. Review the returned answer, citations, and matches."
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
 
 
 def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypatch, tmp_path: Path, capsys):
