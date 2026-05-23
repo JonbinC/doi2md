@@ -1,24 +1,25 @@
 :root {
   color-scheme: light;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  --background: #f7f8fb;
-  --foreground: #14151f;
-  --card: #ffffff;
-  --card-foreground: #14151f;
-  --primary: #111827;
-  --primary-foreground: #ffffff;
-  --secondary: #eef2f7;
-  --secondary-foreground: #1f2937;
-  --muted: #f1f4f8;
-  --muted-foreground: #647184;
-  --accent: #d9f3ee;
-  --accent-foreground: #0f766e;
-  --border: rgba(20, 21, 31, 0.12);
-  --border-strong: rgba(20, 21, 31, 0.22);
-  --input-background: #f8fafc;
+  --background: #fcf7f1;
+  --foreground: #2f1a12;
+  --card: #fffdf9;
+  --card-foreground: #2f1a12;
+  --primary: #6d3920;
+  --primary-foreground: #fff8f2;
+  --secondary: #f6e6d5;
+  --secondary-foreground: #50291a;
+  --muted: #f4ece3;
+  --muted-foreground: #7a5a49;
+  --accent: #e2b792;
+  --accent-foreground: #3f2419;
+  --border: rgba(109, 57, 32, 0.16);
+  --border-strong: rgba(109, 57, 32, 0.28);
+  --input-background: #f8f1e9;
   --success: #0f766e;
   --danger: #b91c1c;
-  --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  --shadow: 0 18px 60px rgba(109, 57, 32, 0.08);
+  --shadow-soft: 0 10px 34px rgba(109, 57, 32, 0.06);
   --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 12px;
@@ -31,7 +32,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: linear-gradient(180deg, #ffffff, var(--background));
+  background: radial-gradient(circle at top left, rgba(226, 183, 146, 0.22), transparent 32%), linear-gradient(180deg, #fffdf9, var(--background));
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
@@ -72,6 +73,11 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.hero {
+  background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(246, 230, 213, 0.55));
   box-shadow: var(--shadow);
 }
 
@@ -164,7 +170,7 @@ summary,
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--muted);
+  background: rgba(244, 236, 227, 0.78);
 }
 
 .account-bar > div {
@@ -193,7 +199,7 @@ summary,
   padding: 6px 7px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--secondary);
+  background: rgba(246, 230, 213, 0.82);
   color: var(--secondary-foreground);
   font-size: 11px;
   font-weight: 650;
@@ -216,9 +222,9 @@ summary,
 .meta-pill {
   flex: 0 0 auto;
   padding: 5px 9px;
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 1px solid rgba(109, 57, 32, 0.18);
   border-radius: 999px;
-  background: var(--accent);
+  background: rgba(226, 183, 146, 0.38);
   color: var(--accent-foreground);
   font-size: 11px;
   font-weight: 650;
@@ -243,7 +249,7 @@ summary,
   padding: 5px 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--secondary);
+  background: rgba(246, 230, 213, 0.82);
   color: var(--secondary-foreground);
   font-size: 12px;
   font-weight: 650;
@@ -298,7 +304,7 @@ summary,
 .recent-item {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--muted);
+  background: rgba(244, 236, 227, 0.72);
 }
 
 .support-group,
@@ -355,7 +361,7 @@ select {
 }
 
 input::placeholder {
-  color: rgba(100, 113, 132, 0.72);
+  color: rgba(122, 90, 73, 0.72);
 }
 
 select {
@@ -369,7 +375,7 @@ select {
 input:focus,
 select:focus,
 button:focus-visible {
-  outline: 2px solid rgba(15, 118, 110, 0.28);
+  outline: 2px solid rgba(109, 57, 32, 0.24);
   outline-offset: 2px;
 }
 
@@ -408,7 +414,7 @@ button:disabled {
 }
 
 .primary-button:hover {
-  background: #0b1220;
+  background: #50291a;
 }
 
 .secondary-button {
@@ -419,7 +425,7 @@ button:disabled {
 
 .secondary-button:hover {
   border-color: var(--border-strong);
-  background: #e6ebf2;
+  background: #efe2d4;
 }
 
 .ghost-chip {
@@ -428,7 +434,7 @@ button:disabled {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--card);
+  background: rgba(255, 253, 249, 0.9);
   color: var(--secondary-foreground);
   font-size: 12px;
   font-weight: 650;
@@ -455,7 +461,7 @@ button:disabled {
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--muted);
+  background: rgba(244, 236, 227, 0.72);
 }
 
 .cli-handoff[hidden] {
