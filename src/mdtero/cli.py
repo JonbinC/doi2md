@@ -816,8 +816,16 @@ def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
     status = str(task.get("status") or "").strip().lower()
     preferred_artifact = _preferred_parse_artifact(task)
     if status == "succeeded":
-        task.setdefault("preferred_artifact", preferred_artifact)
+        selected_artifact = str(task.get("preferred_artifact") or preferred_artifact or "").strip()
+        if selected_artifact:
+            task.setdefault("preferred_artifact", selected_artifact)
+            result = task.get("result") if isinstance(task.get("result"), dict) else {}
+            result.setdefault("preferred_artifact", selected_artifact)
+            task["result"] = result
     next_commands = [str(command).strip() for command in task.get("next_commands") or [] if str(command).strip()]
+    if next_commands:
+        task["next_commands"] = next_commands
+        return task
     defaults: list[str]
     if status == "succeeded":
         defaults = [f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json"]

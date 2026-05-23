@@ -1298,6 +1298,40 @@ def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypa
     assert load_project(tmp_path).papers[0].artifact == "paper_bundle"
 
 
+def test_status_json_preserves_server_recovery_contract(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="status-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/demo", task_id="task-1", status="queued"))
+
+    server_next = [
+        "mdtero status task-1 --json",
+        "mdtero download task-1 paper_md --output-dir ./mdtero-output --json",
+        "mdtero translate task-1 --to zh-CN --json",
+        "mdtero project ingest --json",
+        "mdtero rag build --json",
+    ]
+
+    def fake_task(self, task_id):
+        assert task_id == "task-1"
+        return {
+            "task_id": "task-1",
+            "status": "succeeded",
+            "preferred_artifact": "paper_md",
+            "next_commands": server_next,
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-1", "wait": False, "json": True, "trace": False})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["next_commands"] == server_next
+    assert "mdtero download task-1 paper_bundle --output-dir ./mdtero-output --json" not in payload["next_commands"]
+    assert load_project(tmp_path).papers[0].artifact == "paper_md"
+
+
 def test_project_refresh_json_includes_retry_next_command_for_failed_tasks(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
