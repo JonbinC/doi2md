@@ -315,8 +315,8 @@ function normalizeSpringerInput(input, pageUrl) {
   return null;
 }
 
-// src/lib/legacy-parse.ts
-async function runLegacyParseRequest(client2, message) {
+// src/lib/browser-parse.ts
+async function runBrowserParseRequest(client2, message) {
   if (requiresElsevierLocalAcquire(message.input)) {
     throw new Error(buildElsevierLocalAcquireGuidance());
   }
@@ -329,7 +329,7 @@ async function runLegacyParseRequest(client2, message) {
   }
   return client2.createParseTask({ input: message.input });
 }
-async function runLegacyFileParseRequest(client2, message) {
+async function runBrowserFileParseRequest(client2, message) {
   const filename = String(message.filename || "").trim() || "paper.bin";
   return client2.createUploadedParseTask({
     paperFile: message.file,
@@ -894,7 +894,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
-      return runLegacyParseRequest(client, {
+      return runBrowserParseRequest(client, {
         input: message.input,
         pageContext: message.pageContext
       });
@@ -910,7 +910,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!message.file) {
         throw new Error("No local file was provided.");
       }
-      return runLegacyFileParseRequest(client, {
+      return runBrowserFileParseRequest(client, {
         file: message.file,
         filename: message.filename,
         artifactKind: message.artifactKind
