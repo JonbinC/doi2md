@@ -476,12 +476,28 @@ def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str)
         )
         existing_inputs.add(target)
         added.append({"index": index, "input": target, "title": item.get("title"), "doi": item.get("doi")})
-    return {
+    source = str(result.get("source") or "unknown")
+    fallback = result.get("discovery_fallback") if isinstance(result.get("discovery_fallback"), dict) else None
+    summary = {
+        "selection": selected_indices,
+        "source": source,
+        "source_mode": "semantic_scholar_local" if source == "semantic_scholar_local" else "openalex_server",
+        "fallback_reason_code": fallback.get("reason_code") if fallback else None,
         "added_count": len(added),
         "skipped_count": len(skipped),
         "added": added,
         "skipped": skipped,
+        "next_commands": _discovery_project_next_commands(len(added)),
     }
+    if state is not None:
+        summary["project"] = _project_payload(load_project(Path.cwd()))
+    return summary
+
+
+def _discovery_project_next_commands(added_count: int) -> list[str]:
+    if added_count <= 0:
+        return ["mdtero project status --json", "mdtero discover \"<topic>\" --interactive"]
+    return ["mdtero project parse --wait --json", "mdtero project refresh --wait --json", "mdtero project download --output-dir ./mdtero-output --json"]
 
 
 def _parse_result_selection(selection: str, *, max_count: int) -> list[int]:
