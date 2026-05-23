@@ -599,7 +599,46 @@ def test_cmd_translate_accepts_task_id_and_outputs_json(monkeypatch, capsys):
     monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
 
     assert cli.cmd_translate(type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "json": True})()) == 0
-    assert json.loads(capsys.readouterr().out) == {"task_id": "translate-task", "status": "queued"}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "task_id": "translate-task",
+        "status": "queued",
+        "task_api": "/api/v1/tasks/{task_id}",
+        "download_api": "/api/v1/tasks/{task_id}/download/{artifact}",
+        "preferred_artifact": "translated_md",
+        "next_commands": [
+            "mdtero status translate-task --wait --json",
+            "mdtero download translate-task translated_md --output-dir ./mdtero-output --json",
+        ],
+    }
+
+
+def test_cmd_translate_preserves_server_next_commands(monkeypatch, capsys, tmp_path):
+    from mdtero import cli
+
+    paper = tmp_path / "paper.md"
+    paper.write_text("# Demo\n\nHello", encoding="utf-8")
+
+    def fake_translate_text(self, markdown, *, filename="paper.md", target_language="zh-CN"):
+        assert markdown == "# Demo\n\nHello"
+        assert filename == "paper.md"
+        assert target_language == "zh-CN"
+        return {
+            "task_id": "translate-task",
+            "status": "queued",
+            "next_commands": ["mdtero status translate-task --wait --json"],
+        }
+
+    monkeypatch.setattr(MdteroClient, "translate_text", fake_translate_text)
+
+    assert cli.cmd_translate(type("Args", (), {"task_or_file": str(paper), "to": "zh-CN", "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["preferred_artifact"] == "translated_md"
+    assert payload["next_commands"] == [
+        "mdtero status translate-task --wait --json",
+        "mdtero download translate-task translated_md --output-dir ./mdtero-output --json",
+    ]
 
 
 def test_cmd_translate_reports_missing_task_artifact_without_traceback(monkeypatch, capsys):
