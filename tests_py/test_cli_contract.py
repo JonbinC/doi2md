@@ -2368,6 +2368,55 @@ def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
 
+def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(project_id, question):
+        assert project_id == "42"
+        assert question == "What does attention replace?"
+        return {
+            "project_id": 42,
+            "selected_provider": "voyage",
+            "retrieval_strategy": "voyage_embedding_v1",
+            "used_embeddings": True,
+            "matches": [
+                {
+                    "citation_order": 1,
+                    "document_id": 7,
+                    "document_title": "Attention Is All You Need",
+                    "chunk_id": 9,
+                    "line_start": 53,
+                    "line_end": 58,
+                    "snippet": "The Transformer relies entirely on attention and avoids recurrence.",
+                    "score": 0.73,
+                    "doi": "10.48550/arXiv.1706.03762",
+                    "year": 2017,
+                    "venue": "arXiv",
+                }
+            ],
+        }
+
+    payload = query_server_rag("What does attention replace?", tmp_path, query_fn=fake_query)
+
+    assert payload["status"] == "succeeded"
+    assert payload["reason_code"] == "rag_query_succeeded"
+    assert payload["server_project_id"] == "42"
+    assert payload["answer"] == "[1] The Transformer relies entirely on attention and avoids recurrence."
+    assert payload["answer_kind"] == "extractive_evidence_pack"
+    assert payload["citations"][0]["document_title"] == "Attention Is All You Need"
+    assert payload["citations"][0]["line_start"] == 53
+    assert payload["source_nodes"][0]["node_id"] == "doc-7:chunk-9"
+    assert payload["source_nodes"][0]["metadata"]["doi"] == "10.48550/arXiv.1706.03762"
+    assert payload["source_nodes"][0]["metadata"]["year"] == 2017
+    assert payload["evidence_pack"]["answer_kind"] == "extractive_evidence_pack"
+    assert payload["evidence_pack"]["question"] == "What does attention replace?"
+    assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
+    assert "grounded evidence" in payload["evidence_pack"]["agent_instruction"]
+    assert "evidence_pack.context_markdown" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
+
+
 def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_path: Path):
     import builtins
 
