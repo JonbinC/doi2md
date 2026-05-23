@@ -95,15 +95,16 @@ describe("workspace", () => {
     expect(localeZh).not.toContain("publisher API / TDM");
   });
 
-  it("keeps the extension shell aligned with the neutral Mdtero product palette", () => {
+  it("keeps the extension shell aligned with the Mdtero website palette", () => {
     const styles = readFileSync(resolve("src/styles.css"), "utf-8");
 
-    expect(styles).toContain("--background: #f7f8fb");
-    expect(styles).toContain("--primary: #111827");
-    expect(styles).toContain("--accent-foreground: #0f766e");
-    expect(styles).not.toContain("#6d3920");
-    expect(styles).not.toContain("#f6e6d5");
-    expect(styles).not.toContain("#50291a");
+    expect(styles).toContain("--background: #fcf7f1");
+    expect(styles).toContain("--primary: #6d3920");
+    expect(styles).toContain("--secondary: #f6e6d5");
+    expect(styles).toContain("--accent: #e2b792");
+    expect(styles).toContain("--input-background: #f8f1e9");
+    expect(styles).toContain("--success: #0f766e");
+    expect(styles).not.toContain("--primary: #111827");
   });
 
   it("keeps popup and options layouts bounded for extension viewports", () => {
