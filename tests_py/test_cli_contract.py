@@ -1281,6 +1281,31 @@ def test_cmd_parse_enriches_doi_task_submission_for_agents(monkeypatch, tmp_path
     ]
 
 
+def test_project_parse_enriches_submitted_tasks_for_agents(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="project-demo")
+    add_paper(tmp_path, PaperRecord(input="10.48550/arXiv.1706.03762", source="manual"))
+
+    def fake_submit(client, paper):
+        assert paper.input == "10.48550/arXiv.1706.03762"
+        return {"task_id": "task-project", "status": "queued", "result": {"artifacts": {"paper_md": {"filename": "paper.md"}}}}
+
+    monkeypatch.setattr(cli, "_submit_project_paper", fake_submit)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_parse(type("Args", (), {"include_failed": False, "limit": None, "wait": False, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+    task = payload["items"][0]["task"]
+
+    assert task["task_id"] == "task-project"
+    assert task["preferred_artifact"] == "paper_md"
+    assert task["next_commands"] == [
+        "mdtero status task-project --wait --json",
+        "mdtero download task-project paper_md --output-dir ./mdtero-output --json",
+    ]
+
+
 def test_client_can_create_server_project(monkeypatch):
     calls = []
 
