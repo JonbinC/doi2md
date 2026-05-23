@@ -59,7 +59,7 @@ describe("ssot-route", () => {
     const task = {
       task_id: "task-123",
       status: "queued",
-      next_commands: ["mdtero status task-123 --wait --json"],
+      next_commands: ["mdtero status task-123 --wait --timeout 300 --json"],
     };
     const parseClient = {
       createParseFulltextV2Task: vi.fn().mockResolvedValue(task),
@@ -154,7 +154,7 @@ describe("ssot-route", () => {
       success: false,
       requiresUpload: true,
       error: "PDF upload required",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
 
     const parseClient = {
@@ -173,7 +173,7 @@ describe("ssot-route", () => {
       requiresHelper: undefined,
       requiresUpload: true,
       error: "PDF upload required",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
   });
 
@@ -182,7 +182,7 @@ describe("ssot-route", () => {
       success: false,
       requiresHelper: true,
       error: "Open the article page and retry browser capture.",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
 
     const parseClient = {
@@ -201,7 +201,7 @@ describe("ssot-route", () => {
       requiresHelper: true,
       requiresUpload: undefined,
       error: "Open the article page and retry browser capture.",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
   });
 });

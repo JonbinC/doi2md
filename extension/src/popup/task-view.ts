@@ -302,8 +302,9 @@ export function normalizeCliHandoffCommand(command?: string | null): string {
   }
   const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
   const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
-  const withoutWait = withoutJson.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --json`;
+  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
+  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --timeout 300 --json`;
 }
 
 export function buildCliParseCommand(input?: string | null): string {
@@ -314,7 +315,7 @@ export function buildCliParseCommand(input?: string | null): string {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --json`;
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
 }
 
 function shellQuote(value: string): string {

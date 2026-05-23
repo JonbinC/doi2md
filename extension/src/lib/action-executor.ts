@@ -17,7 +17,7 @@ function cliParseCommand(input: string): string {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --json`;
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
 }
 
 function shellQuote(value: string): string {

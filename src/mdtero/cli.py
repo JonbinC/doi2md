@@ -394,7 +394,7 @@ def _doctor_project_payload(root: Path) -> dict[str, Any]:
         return {
             "initialized": False,
             "path": str(target),
-            "next_commands": ["mdtero project init --name <name>", "mdtero parse <doi-or-url> --trace --wait --json"],
+            "next_commands": ["mdtero project init --name <name>", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"],
         }
     try:
         state = load_project(root)
@@ -415,13 +415,13 @@ def _doctor_project_payload(root: Path) -> dict[str, Any]:
         rag_next = ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
         rag_status = "check"
     elif state.server_project_id:
-        rag_next = ["mdtero project parse --wait --json", "mdtero project ingest --json"]
+        rag_next = ["mdtero project parse --wait --timeout 300 --json", "mdtero project ingest --json"]
         rag_status = "needs_papers"
     elif ready_for_ingest:
         rag_next = ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
         rag_status = "not_linked"
     else:
-        rag_next = ["mdtero discover \"<topic>\" --interactive", "mdtero project parse --wait --json"]
+        rag_next = ["mdtero discover \"<topic>\" --interactive", "mdtero project parse --wait --timeout 300 --json"]
         rag_status = "not_ready"
     return {
         "initialized": True,
@@ -603,7 +603,7 @@ def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("preferred_artifact", preferred_artifact)
     next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
     defaults = [
-        f"mdtero status {task_id} --wait --json",
+        f"mdtero status {task_id} --wait --timeout 300 --json",
         f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json",
     ]
     for command in defaults:
@@ -734,7 +734,7 @@ def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str)
 def _discovery_project_next_commands(added_count: int) -> list[str]:
     if added_count <= 0:
         return ["mdtero project status --json", "mdtero discover \"<topic>\" --interactive"]
-    return ["mdtero project parse --wait --json", "mdtero project refresh --wait --json", "mdtero project download --output-dir ./mdtero-output --json"]
+    return ["mdtero project parse --wait --timeout 300 --json", "mdtero project refresh --wait --timeout 300 --json", "mdtero project download --output-dir ./mdtero-output --json"]
 
 
 def _parse_result_selection(selection: str, *, max_count: int) -> list[int]:
@@ -1033,9 +1033,9 @@ def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
     if status == "succeeded":
         defaults = [f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json"]
     elif status in {"failed", "cancelled"}:
-        defaults = [f"mdtero status {task_id} --json", "mdtero project parse --include-failed --wait --json"]
+        defaults = [f"mdtero status {task_id} --json", "mdtero project parse --include-failed --wait --timeout 300 --json"]
     else:
-        defaults = [f"mdtero status {task_id} --wait --json"]
+        defaults = [f"mdtero status {task_id} --wait --timeout 300 --json"]
     for command in defaults:
         if command not in next_commands:
             next_commands.append(command)
@@ -1093,7 +1093,7 @@ def _enrich_translate_submission(result: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("preferred_artifact", "translated_md")
     next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
     defaults = [
-        f"mdtero status {task_id} --wait --json",
+        f"mdtero status {task_id} --wait --timeout 300 --json",
         f"mdtero download {task_id} translated_md --output-dir ./mdtero-output --json",
     ]
     for command in defaults:
@@ -1791,12 +1791,12 @@ def _print_next_steps(console: Console) -> None:
         (
             "Parse papers and files",
             [
-                "mdtero parse 10.48550/arXiv.1706.03762 --wait --json",
-                "mdtero parse https://example.org/open-paper --trace --wait --json",
-                "mdtero parse --file paper.pdf --wait --json",
-                "mdtero parse --batch ./papers --wait --json",
-                "mdtero project parse --wait --json",
-                "mdtero project refresh --wait --json",
+                "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+                "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json",
+                "mdtero parse --file paper.pdf --wait --timeout 300 --json",
+                "mdtero parse --batch ./papers --wait --timeout 300 --json",
+                "mdtero project parse --wait --timeout 300 --json",
+                "mdtero project refresh --wait --timeout 300 --json",
                 "mdtero project download --output-dir ./mdtero-output --json",
             ],
         ),

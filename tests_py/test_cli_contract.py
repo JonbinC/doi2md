@@ -485,14 +485,15 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
 
     cli._print_next_steps(Console())
     output = capsys.readouterr().out
+    compact_output = " ".join(output.split())
 
     assert "Start a local project" in output
     assert "mdtero project init --name literature-review" in output
     assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3" in output
-    assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --json" in output
-    assert "mdtero parse https://example.org/open-paper --trace --wait --json" in output
-    assert "mdtero parse --file paper.pdf --wait --json" in output
-    assert "mdtero parse --batch ./papers --wait --json" in output
+    assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json" in output
+    assert "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json" in compact_output
+    assert "mdtero parse --file paper.pdf --wait --timeout 300 --json" in output
+    assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in output
     assert "mdtero config zotero" in output
     assert "mdtero zotero import --limit 20" in output
     assert "mdtero zotero sync" in output
@@ -538,7 +539,7 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
     assert summary["source"] == "openalex_server"
     assert summary["source_mode"] == "openalex_server"
     assert summary["selection"] == [1, 2, 3]
-    assert summary["next_commands"] == ["mdtero project parse --wait --json", "mdtero project refresh --wait --json", "mdtero project download --output-dir ./mdtero-output --json"]
+    assert summary["next_commands"] == ["mdtero project parse --wait --timeout 300 --json", "mdtero project refresh --wait --timeout 300 --json", "mdtero project download --output-dir ./mdtero-output --json"]
     assert summary["project"]["pending_count"] == 2
     assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
     assert state.papers[0].source == "discover:openalex"
@@ -799,7 +800,7 @@ def test_cmd_translate_accepts_task_id_and_outputs_json(monkeypatch, capsys):
         "download_api": "/api/v1/tasks/{task_id}/download/{artifact}",
         "preferred_artifact": "translated_md",
         "next_commands": [
-            "mdtero status translate-task --wait --json",
+            "mdtero status translate-task --wait --timeout 300 --json",
             "mdtero download translate-task translated_md --output-dir ./mdtero-output --json",
         ],
     }
@@ -818,7 +819,7 @@ def test_cmd_translate_preserves_server_next_commands(monkeypatch, capsys, tmp_p
         return {
             "task_id": "translate-task",
             "status": "queued",
-            "next_commands": ["mdtero status translate-task --wait --json"],
+            "next_commands": ["mdtero status translate-task --wait --timeout 300 --json"],
         }
 
     monkeypatch.setattr(MdteroClient, "translate_text", fake_translate_text)
@@ -828,7 +829,7 @@ def test_cmd_translate_preserves_server_next_commands(monkeypatch, capsys, tmp_p
 
     assert payload["preferred_artifact"] == "translated_md"
     assert payload["next_commands"] == [
-        "mdtero status translate-task --wait --json",
+        "mdtero status translate-task --wait --timeout 300 --json",
         "mdtero download translate-task translated_md --output-dir ./mdtero-output --json",
     ]
 
@@ -1530,7 +1531,7 @@ def test_project_refresh_json_includes_retry_next_command_for_failed_tasks(monke
     payload = json.loads(capsys.readouterr().out)
     task = payload["items"][0]
 
-    assert task["next_commands"] == ["mdtero status task-1 --json", "mdtero project parse --include-failed --wait --json"]
+    assert task["next_commands"] == ["mdtero status task-1 --json", "mdtero project parse --include-failed --wait --timeout 300 --json"]
     assert load_project(tmp_path).papers[0].reason_code == "parser_failed"
 
 
@@ -1598,7 +1599,7 @@ def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path
     assert payload["items"][0]["download_api"] == "/api/v1/tasks/{task_id}/download/{artifact}"
     assert payload["items"][0]["preferred_artifact"] == "paper_md"
     assert payload["items"][0]["next_commands"] == [
-        "mdtero status task-a --wait --json",
+        "mdtero status task-a --wait --timeout 300 --json",
         "mdtero download task-a paper_md --output-dir ./mdtero-output --json",
     ]
 
@@ -1627,7 +1628,7 @@ def test_cmd_parse_enriches_doi_task_submission_for_agents(monkeypatch, tmp_path
     assert payload["download_api"] == "/api/v1/tasks/{task_id}/download/{artifact}"
     assert payload["preferred_artifact"] == "paper_bundle"
     assert payload["next_commands"] == [
-        "mdtero status task-parse --wait --json",
+        "mdtero status task-parse --wait --timeout 300 --json",
         "mdtero download task-parse paper_bundle --output-dir ./mdtero-output --json",
     ]
 
@@ -1652,7 +1653,7 @@ def test_project_parse_enriches_submitted_tasks_for_agents(monkeypatch, tmp_path
     assert task["task_id"] == "task-project"
     assert task["preferred_artifact"] == "paper_md"
     assert task["next_commands"] == [
-        "mdtero status task-project --wait --json",
+        "mdtero status task-project --wait --timeout 300 --json",
         "mdtero download task-project paper_md --output-dir ./mdtero-output --json",
     ]
 
@@ -1900,9 +1901,9 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["server_project_id"] == "42"
     assert status["ready_for_ingest_count"] == 1
     assert status["pending_count"] == 1
-    assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --json"
-    assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --json"
-    assert commands["commands"]["parse_batch"] == "mdtero parse --batch <directory> --wait --json"
+    assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
+    assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --timeout 300 --json"
+    assert commands["commands"]["parse_batch"] == "mdtero parse --batch <directory> --wait --timeout 300 --json"
     assert commands["commands"]["doctor"] == "mdtero doctor --json"
     assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
     assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --json"
@@ -1916,8 +1917,8 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
     assert commands["workflow"] == [
         "mdtero doctor --json",
-        "mdtero project parse --wait --json",
-        "mdtero project refresh --wait --json",
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
         "mdtero project ingest --json",
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --json",
@@ -1973,8 +1974,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["agents"]["pending_install_targets"] == ["codex"]
     assert briefing["agents"]["interactive_install_command"] == "mdtero agent install --interactive"
     assert briefing["recommended_next_commands"] == [
-        "mdtero project parse --wait --json",
-        "mdtero project parse --include-failed --wait --json",
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project parse --include-failed --wait --timeout 300 --json",
         "mdtero project download --output-dir ./mdtero-output --json",
         "mdtero agent install --interactive",
         "mdtero rag status --json",
@@ -2140,7 +2141,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
         "mdtero doctor --json",
         "mdtero discover \"<topic>\" --interactive",
         "mdtero project add <doi-or-url> --json",
-        "mdtero parse <doi-or-url> --trace --wait --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
     assert "mdtero rag build --json" in briefing["recommended_next_commands"]
 
@@ -2160,8 +2161,8 @@ def test_mcp_rag_context_prompts_rag_build_when_unlinked(tmp_path: Path):
     assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
     assert commands["workflow"] == [
         "mdtero doctor --json",
-        "mdtero project parse --wait --json",
-        "mdtero project refresh --wait --json",
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
         "mdtero rag build --json",
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --json",
@@ -2328,10 +2329,10 @@ def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path:
 
     assert model["health"]["status"] == "needs_attention"
     assert model["health"]["counts"]["blocked_items"] == 1
-    assert model["health"]["primary_next_command"] == "mdtero project parse --wait --json"
+    assert model["health"]["primary_next_command"] == "mdtero project parse --wait --timeout 300 --json"
     assert model["handoff"]["active_items"][0]["input"] == "10.1000/todo"
     assert model["handoff"]["blocked_items"][0]["reason_code"] == "parser_failed"
-    assert "mdtero project parse --include-failed --wait --json" in model["handoff"]["recommended_next_commands"]
+    assert "mdtero project parse --include-failed --wait --timeout 300 --json" in model["handoff"]["recommended_next_commands"]
     console = Console(record=True, width=140)
     console.print(rendered)
     assert "parser_failed" in console.export_text()
@@ -3198,10 +3199,10 @@ def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():
 
     for path in docs:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse --file paper.pdf --wait --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --wait --json" in content or "mdtero parse --file <path> --wait --json" in content
+        assert "mdtero parse --file paper.pdf --wait --timeout 300 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --wait --timeout 300 --json" in content or "mdtero parse --file <path> --wait --timeout 300 --json" in content
     for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse --batch ./papers --wait --json" in content
+        assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in content
         assert "mdtero parse --file <path> --json" not in content
         assert "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --json" not in content
         assert "mdtero parse --batch ./papers --json" not in content
@@ -3251,9 +3252,9 @@ def test_legacy_agent_install_docs_use_json_friendly_cli_examples():
     ]
     for path in docs:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse <doi-or-url> --trace --wait --json" in content
-        assert "mdtero status <task-id> --wait --json" in content
-        assert "mdtero parse --file <path> --wait --json" in content
+        assert "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json" in content
+        assert "mdtero status <task-id> --wait --timeout 300 --json" in content
+        assert "mdtero parse --file <path> --wait --timeout 300 --json" in content
         assert "mdtero translate <parse-task-id> --to zh-CN --json" in content
         assert "mdtero rag build --json" in content
         assert "mdtero rag status --json" in content

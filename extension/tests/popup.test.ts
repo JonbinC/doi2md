@@ -400,7 +400,7 @@ describe("getTaskFailureText", () => {
         "en"
       )
     ).toBe(
-      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --json"
+      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
     );
   });
 
@@ -425,15 +425,15 @@ describe("getTaskFailureText", () => {
 
   it("selects the first non-empty next command for CLI handoff", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
-    expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --json");
+    expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
     expect(firstNextCommand(null)).toBe("");
   });
 });
 
 describe("normalizeCliHandoffCommand", () => {
   it("keeps parse handoffs aligned with the wait-first CLI contract", () => {
-    expect(normalizeCliHandoffCommand("mdtero parse 10.1000/demo --json")).toBe("mdtero parse 10.1000/demo --trace --wait --json");
-    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --json")).toBe("mdtero parse --file paper.pdf --trace --wait --json");
+    expect(normalizeCliHandoffCommand("mdtero parse 10.1000/demo --json")).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
+    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --timeout 300 --json")).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
     expect(normalizeCliHandoffCommand("mdtero rag status --json")).toBe("mdtero rag status --json");
   });
 });
@@ -441,16 +441,16 @@ describe("normalizeCliHandoffCommand", () => {
 describe("buildCliParseCommand", () => {
   it("builds a traceable wait-and-json CLI handoff command for DOI and URL inputs", () => {
     expect(buildCliParseCommand("10.48550/arXiv.1706.03762")).toBe(
-      "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --json"
+      "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     );
     expect(buildCliParseCommand("https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML")).toBe(
-      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace --wait --json"
+      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace --wait --timeout 300 --json"
     );
   });
 
   it("quotes shell-sensitive URLs and avoids fake local-file commands", () => {
     expect(buildCliParseCommand("https://example.org/paper?q=a b&x='demo'")).toBe(
-      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --trace --wait --json"
+      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --trace --wait --timeout 300 --json"
     );
     expect(buildCliParseCommand("paper.pdf")).toBe("");
     expect(buildCliParseCommand("")).toBe("");

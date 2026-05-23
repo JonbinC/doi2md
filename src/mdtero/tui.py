@@ -207,7 +207,7 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
         return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --json"]
     if rag.get("ready_for_ingest_count", 0) > 0:
         return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
-    return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --wait --json"]
+    return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"]
 
 
 def _health_payload(
@@ -373,7 +373,7 @@ def _handoff_panel(model: dict[str, Any]) -> Panel:
         table.add_row("blocked", _brief_item_label(item), str(item.get("reason_code") or "check mdtero status"))
     for item in active[:3]:
         commands = item.get("recommended_commands") if isinstance(item.get("recommended_commands"), list) else []
-        table.add_row("active", _brief_item_label(item), str(commands[0] if commands else "mdtero project refresh --wait --json"))
+        table.add_row("active", _brief_item_label(item), str(commands[0] if commands else "mdtero project refresh --wait --timeout 300 --json"))
     commands = handoff.get("recommended_next_commands") or []
     if commands:
         table.add_row("agent", "Follow agent_briefing next_commands", str(commands[0]))
