@@ -584,7 +584,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
                 _enrich_task_status(task)
                 if task.get("status") != "timeout":
                     update_task(Path.cwd(), task)
-                result["final_task"] = task
+                _merge_waited_task_into_submission(result, task)
     results = [result for result, _, _ in submissions]
     payload = results[0] if len(results) == 1 else {"items": results}
     if args.trace:
@@ -611,6 +611,35 @@ def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
         if command not in next_commands:
             next_commands.append(command)
     result["next_commands"] = next_commands
+    return result
+
+
+def _merge_waited_task_into_submission(result: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
+    _promote_task_result_fields(task)
+    submission_status = str(result.get("status") or "").strip()
+    if submission_status:
+        result.setdefault("submission_status", submission_status)
+    result["final_task"] = task
+    for key in (
+        "status",
+        "stage",
+        "reason_code",
+        "error_code",
+        "error_message",
+        "selected_provider",
+        "parser_strategy",
+        "parse_outcome",
+        "download_artifacts",
+        "result",
+        "preferred_artifact",
+        "next_commands",
+    ):
+        if key in task:
+            result[key] = task[key]
+    if "task_id" in task:
+        result["task_id"] = task["task_id"]
+    result.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    result.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
     return result
 
 
@@ -1014,6 +1043,7 @@ def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
     task_id = str(task.get("task_id") or task.get("id") or "").strip()
     if not task_id:
         return task
+    _promote_task_result_fields(task)
     task.setdefault("task_id", task_id)
     task.setdefault("task_api", "/api/v1/tasks/{task_id}")
     task.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
@@ -1041,6 +1071,25 @@ def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
         if command not in next_commands:
             next_commands.append(command)
     task["next_commands"] = next_commands
+    return task
+
+
+def _promote_task_result_fields(task: dict[str, Any]) -> dict[str, Any]:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    if not isinstance(result, dict):
+        return task
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    parse_outcome = result.get("parse_outcome") if isinstance(result.get("parse_outcome"), dict) else None
+    promotions = {
+        "selected_provider": result.get("selected_provider") or quality.get("selected_pdf_provider") or quality.get("provider"),
+        "parser_strategy": result.get("parser_strategy") or quality.get("parser_strategy"),
+        "reason_code": result.get("reason_code"),
+        "parse_outcome": parse_outcome,
+        "download_artifacts": result.get("download_artifacts"),
+    }
+    for key, value in promotions.items():
+        if value not in (None, "", [], {}):
+            task.setdefault(key, value)
     return task
 
 
