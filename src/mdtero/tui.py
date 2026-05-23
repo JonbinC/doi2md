@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
@@ -38,7 +39,24 @@ def build_dashboard_model(
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
     briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg, agent_root=agent_root)
+    next_steps = _next_steps(cfg, project, rag, commands)
+    handoff = {
+        "ready_artifacts": briefing["ready_artifacts"],
+        "blocked_items": briefing["blocked_items"],
+        "active_items": briefing["active_items"],
+        "recommended_next_commands": briefing["recommended_next_commands"],
+    }
     return {
+        "health": _health_payload(
+            cfg=cfg,
+            project=project,
+            rag=rag,
+            detected_agents=detected_agents,
+            installed_agents=installed_agents,
+            pending_agent_installs=pending_agent_installs,
+            handoff=handoff,
+            next_steps=next_steps,
+        ),
         "account": {
             "api_base_url": cfg.api_base_url,
             "authenticated": cfg.is_authenticated,
@@ -90,23 +108,17 @@ def build_dashboard_model(
             "tools": briefing["mcp_tools"],
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
-        "handoff": {
-            "ready_artifacts": briefing["ready_artifacts"],
-            "blocked_items": briefing["blocked_items"],
-            "active_items": briefing["active_items"],
-            "recommended_next_commands": briefing["recommended_next_commands"],
-        },
+        "handoff": handoff,
         "commands": commands,
-        "next_steps": _next_steps(cfg, project, rag, commands),
+        "next_steps": next_steps,
     }
 
 
 def render_dashboard_text(model: dict[str, Any]) -> Group:
     return Group(
-        _account_panel(model),
-        _project_panel(model),
-        _rag_panel(model),
-        _integration_panel(model),
+        _hero_panel(model),
+        Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
+        Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
         _handoff_panel(model),
         _next_steps_panel(model),
     )
@@ -114,7 +126,7 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
 
 class MdteroTui(App):
     CSS = """
-    Screen { background: #f7f7f4; color: #1d2525; }
+    Screen { background: #fcf7f1; color: #2f1a12; }
     #dashboard { padding: 1 2; }
     """
 
@@ -195,6 +207,92 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
     if rag.get("ready_for_ingest_count", 0) > 0:
         return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
     return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --json"]
+
+
+def _health_payload(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    detected_agents: list[Any],
+    installed_agents: list[Any],
+    pending_agent_installs: list[Any],
+    handoff: dict[str, Any],
+    next_steps: list[str],
+) -> dict[str, Any]:
+    ready_artifacts = handoff.get("ready_artifacts") or []
+    blocked_items = handoff.get("blocked_items") or []
+    active_items = handoff.get("active_items") or []
+    primary_next_command = next_steps[0] if next_steps else "mdtero doctor"
+
+    if not cfg.is_authenticated:
+        status = "needs_auth"
+        headline = "Needs login"
+        detail = "Authenticate before parse, translation, discovery fallback, RAG, or MCP."
+    elif blocked_items:
+        status = "needs_attention"
+        headline = "Needs attention"
+        detail = f"{len(blocked_items)} failed item(s) need status review or retry."
+    elif not project.papers:
+        status = "empty_project"
+        headline = "Ready to start"
+        detail = "Add a DOI, run discovery, import BibTeX, or connect Zotero."
+    elif rag.get("server_status") == "ready":
+        status = "ready"
+        headline = "Project RAG ready"
+        detail = "Server-side Voyage RAG is ready for queries and MCP agent context."
+    elif ready_artifacts:
+        status = "results_ready"
+        headline = "Results ready"
+        detail = f"{len(ready_artifacts)} parsed artifact(s) can be downloaded or ingested into RAG."
+    elif active_items:
+        status = "working"
+        headline = "Work in progress"
+        detail = f"{len(active_items)} active or queued item(s) need parse/refresh."
+    else:
+        status = "configured"
+        headline = "Configured"
+        detail = "Run the next command to continue the project workflow."
+
+    return {
+        "status": status,
+        "headline": headline,
+        "detail": detail,
+        "primary_next_command": primary_next_command,
+        "cards": [
+            {"label": "Account", "value": "ok" if cfg.is_authenticated else "login required"},
+            {"label": "Project", "value": f"{len(project.papers)} papers"},
+            {"label": "RAG", "value": str(rag.get("server_status") or rag.get("reason_code") or "local")},
+            {"label": "Agents", "value": f"{len(installed_agents)}/{len(detected_agents)} installed" if detected_agents else "none detected"},
+        ],
+        "counts": {
+            "ready_artifacts": len(ready_artifacts),
+            "blocked_items": len(blocked_items),
+            "active_items": len(active_items),
+            "pending_agent_installs": len(pending_agent_installs),
+        },
+    }
+
+
+def _hero_panel(model: dict[str, Any]) -> Panel:
+    health = model["health"]
+    grid = Table.grid(expand=True)
+    grid.add_column(ratio=2)
+    grid.add_column(ratio=3)
+    grid.add_row(Text(str(health["headline"]), style="bold"), str(health["detail"]))
+    grid.add_row("Primary next command", str(health["primary_next_command"]))
+    grid.add_row("Status code", str(health["status"]))
+
+    cards = Table.grid(expand=True)
+    cards.add_column(ratio=1)
+    cards.add_column(ratio=1)
+    cards.add_column(ratio=1)
+    cards.add_column(ratio=1)
+    card_values = [f"{item['label']}: {item['value']}" for item in health.get("cards", [])]
+    while len(card_values) < 4:
+        card_values.append("")
+    cards.add_row(*card_values[:4])
+    return Panel(Group(grid, cards), title="Mdtero Control Console", border_style="yellow")
 
 
 def _account_panel(model: dict[str, Any]) -> Panel:

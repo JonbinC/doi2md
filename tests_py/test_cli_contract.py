@@ -1858,6 +1858,9 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
 
     model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key=None), agent_root=tmp_path)
 
+    assert model["health"]["status"] == "needs_auth"
+    assert model["health"]["headline"] == "Needs login"
+    assert model["health"]["primary_next_command"] == "mdtero login --api-key <key>"
     assert model["account"]["authenticated"] is False
     assert model["project"]["name"] == "tui-demo"
     assert model["rag"]["reason_code"] == "server_project_not_linked"
@@ -1900,6 +1903,9 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     rendered = render_dashboard_text(model)
 
     assert model["academic"]["discover_source"] == "local Semantic Scholar"
+    assert model["health"]["status"] == "results_ready"
+    assert model["health"]["counts"]["ready_artifacts"] == 1
+    assert model["health"]["counts"]["pending_agent_installs"] == 1
     assert model["rag"]["ready"] is False
     assert model["rag"]["server_status"] == "not_ready"
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
@@ -1918,6 +1924,8 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     console = Console(record=True, width=140)
     console.print(rendered)
     output = console.export_text()
+    assert "Mdtero Control Console" in output
+    assert "Results ready" in output
     assert "Agent Handoff" in output
     assert "Agent skills" in output
     assert rendered is not None
@@ -1946,6 +1954,9 @@ def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path:
     model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path)
     rendered = render_dashboard_text(model)
 
+    assert model["health"]["status"] == "needs_attention"
+    assert model["health"]["counts"]["blocked_items"] == 1
+    assert model["health"]["primary_next_command"] == "mdtero project parse --wait --json"
     assert model["handoff"]["active_items"][0]["input"] == "10.1000/todo"
     assert model["handoff"]["blocked_items"][0]["reason_code"] == "parser_failed"
     assert "mdtero project parse --include-failed --wait --json" in model["handoff"]["recommended_next_commands"]
@@ -1971,6 +1982,9 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
     )
     rendered = render_dashboard_text(model)
 
+    assert model["health"]["status"] == "ready"
+    assert model["health"]["headline"] == "Project RAG ready"
+    assert model["health"]["primary_next_command"] == "mdtero rag status --json"
     assert model["rag"]["ready"] is True
     assert model["rag"]["reason_code"] == "indexed"
     assert model["rag"]["server_summary"]["embedded_count"] == 3
