@@ -62,7 +62,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "zotero_sync": "mdtero zotero sync --json",
         "rag_status": "mdtero rag status --json",
         "rag_build": "mdtero rag build --json",
-        "rag_query": "mdtero rag query \"<question>\" --json",
+        "rag_query": "mdtero rag query \"<question>\" --build-if-needed --json",
         "mcp_briefing": "mdtero mcp briefing --json",
         "serve_mcp": "mdtero mcp serve",
         "agent_detect": "mdtero agent detect --json",
@@ -187,7 +187,7 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
             "server_project_id": None,
             "question": cleaned_question,
             "answer": None,
-            "action_hint": "Run `mdtero rag build --json` to create, bind, import, and build server-side Voyage RAG before querying from MCP.",
+            "action_hint": "Run `mdtero rag query \"<question>\" --build-if-needed --json` to create, bind, import, build, and query server-side Voyage RAG from one agent-safe command.",
             "next_commands": [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]],
         }
     try:

@@ -200,13 +200,13 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
     if project.papers and any(paper.status in {"pending", "created"} and not paper.task_id for paper in project.papers):
         return [commands["parse_pending"], commands["refresh"]]
     if not project.server_project_id:
-        return [commands["bootstrap_rag"], "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
+        return [commands["bootstrap_rag"], "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     if rag.get("server_status") == "ready":
-        return ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", commands["mcp_briefing"], commands["serve_mcp"]]
+        return ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", commands["mcp_briefing"], commands["serve_mcp"]]
     if rag.get("server_status") in {"not_ready", "partial"}:
-        return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --json"]
+        return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --build-if-needed --json"]
     if rag.get("ready_for_ingest_count", 0) > 0:
-        return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
+        return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"]
 
 
