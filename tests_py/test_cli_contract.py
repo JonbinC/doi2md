@@ -343,9 +343,37 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
     state = load_project(tmp_path)
     assert summary["added_count"] == 2
     assert summary["skipped_count"] == 1
+    assert summary["source"] == "openalex_server"
+    assert summary["source_mode"] == "openalex_server"
+    assert summary["selection"] == [1, 2, 3]
+    assert summary["next_commands"] == ["mdtero project parse --wait --json", "mdtero project refresh --wait --json", "mdtero project download --output-dir ./mdtero-output --json"]
+    assert summary["project"]["pending_count"] == 2
     assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
     assert state.papers[0].source == "discover:openalex"
     assert state.papers[0].title == "Paper A"
+
+
+def test_discover_project_add_summary_preserves_semantic_scholar_and_fallback_source(monkeypatch, tmp_path: Path):
+    init_project(tmp_path, name="discover-demo")
+    monkeypatch.chdir(tmp_path)
+
+    semantic_summary = _add_discovery_results_to_project(
+        {"source": "semantic_scholar_local", "items": [{"title": "S2 Paper", "doi": "10.1000/s2", "source": "semantic_scholar"}]},
+        selection="all",
+    )
+    fallback_summary = _add_discovery_results_to_project(
+        {
+            "source": "openalex_server",
+            "discovery_fallback": {"reason_code": "semantic_scholar_rate_limited"},
+            "items": [{"title": "OA Paper", "doi": "10.1000/oa", "source": "openalex"}],
+        },
+        selection="all",
+    )
+
+    assert semantic_summary["source_mode"] == "semantic_scholar_local"
+    assert semantic_summary["fallback_reason_code"] is None
+    assert fallback_summary["source_mode"] == "openalex_server"
+    assert fallback_summary["fallback_reason_code"] == "semantic_scholar_rate_limited"
 
 
 def test_discover_interactive_adds_prompted_results_to_project(monkeypatch, tmp_path: Path, capsys):
