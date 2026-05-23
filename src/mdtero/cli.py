@@ -60,6 +60,9 @@ ACADEMIC_OPTIONS = [
     },
 ]
 
+DEFAULT_WAIT_TIMEOUT_SECONDS = 600.0
+DEFAULT_WAIT_INTERVAL_SECONDS = 2.0
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
@@ -103,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     parse.add_argument("--batch", type=Path)
     parse.add_argument("--json", action="store_true")
     parse.add_argument("--wait", action="store_true")
+    _add_wait_options(parse)
     parse.add_argument("--trace", action="store_true")
 
     discover = _cmd(sub, "discover", "Search papers.", cmd_discover)
@@ -138,9 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     project_parse.add_argument("--limit", type=int, default=0)
     project_parse.add_argument("--include-failed", action="store_true")
     project_parse.add_argument("--wait", action="store_true")
+    _add_wait_options(project_parse)
     project_parse.add_argument("--json", action="store_true")
     project_refresh = _cmd(project_sub, "refresh", "Refresh task status for project papers.", cmd_project_refresh)
     project_refresh.add_argument("--wait", action="store_true")
+    _add_wait_options(project_refresh)
     project_refresh.add_argument("--json", action="store_true")
     project_download = _cmd(project_sub, "download", "Download completed project artifacts.", cmd_project_download)
     project_download.add_argument("--artifact", default="paper_md")
@@ -195,6 +201,7 @@ def build_parser() -> argparse.ArgumentParser:
     status = _cmd(sub, "status", "Poll one task and update the current project.", cmd_status)
     status.add_argument("task_id")
     status.add_argument("--wait", action="store_true")
+    _add_wait_options(status)
     status.add_argument("--json", action="store_true")
     status.add_argument("--trace", action="store_true")
 
@@ -230,6 +237,11 @@ def _cmd(subparsers: Any, name: str, help_text: str, func: Any) -> argparse.Argu
     parser = subparsers.add_parser(name, help=help_text)
     parser.set_defaults(func=func)
     return parser
+
+
+def _add_wait_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--timeout", type=float, default=DEFAULT_WAIT_TIMEOUT_SECONDS, help="Seconds to wait for a task to finish when --wait is set.")
+    parser.add_argument("--interval", type=float, default=DEFAULT_WAIT_INTERVAL_SECONDS, help="Seconds between task polls when --wait is set.")
 
 
 def cmd_setup(_args: argparse.Namespace) -> int:
@@ -567,16 +579,17 @@ def cmd_parse(args: argparse.Namespace) -> int:
         if result.get("task_id"):
             add_paper(Path.cwd(), paper_from_submission(input_value, result, source=source))
             if args.wait:
-                task = client.wait(str(result["task_id"]))
+                task = _wait_for_task(client, str(result["task_id"]), args=args)
                 _enrich_task_status(task)
-                update_task(Path.cwd(), task)
+                if task.get("status") != "timeout":
+                    update_task(Path.cwd(), task)
                 result["final_task"] = task
     results = [result for result, _, _ in submissions]
     payload = results[0] if len(results) == 1 else {"items": results}
     if args.trace:
         payload = {"result": payload, "workflow": traces[0] if len(traces) == 1 else traces}
     _print_result(payload, json_output=args.json or args.trace)
-    return 0
+    return 2 if any((result.get("final_task") or {}).get("status") == "timeout" for result in results) else 0
 
 
 def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
@@ -866,9 +879,10 @@ def cmd_project_parse(args: argparse.Namespace) -> int:
         _enrich_parse_submission(result)
         update_paper_submission(root, paper.input, result)
         if args.wait and result.get("task_id"):
-            task = client.wait(str(result["task_id"]))
+            task = _wait_for_task(client, str(result["task_id"]), args=args)
             _enrich_task_status(task)
-            update_task(root, task)
+            if task.get("status") != "timeout":
+                update_task(root, task)
             result["final_task"] = task
         results.append({"input": paper.input, "task": result})
     payload = {"submitted_count": len(results), "items": results}
@@ -880,7 +894,7 @@ def cmd_project_parse(args: argparse.Namespace) -> int:
             task = item["task"]
             table.add_row(item["input"], str(task.get("task_id") or ""), str(task.get("status") or ""), str(task.get("reason_code") or ""))
         Console().print(table)
-    return 0
+    return 2 if any((item["task"].get("final_task") or {}).get("status") == "timeout" for item in results) else 0
 
 
 def cmd_project_refresh(args: argparse.Namespace) -> int:
@@ -889,9 +903,10 @@ def cmd_project_refresh(args: argparse.Namespace) -> int:
     client = MdteroClient()
     results = []
     for task_id in project_task_ids(state):
-        task = client.wait(task_id) if args.wait else client.task(task_id)
+        task = _wait_for_task(client, task_id, args=args) if args.wait else client.task(task_id)
         _enrich_task_status(task)
-        update_task(root, task)
+        if task.get("status") != "timeout":
+            update_task(root, task)
         results.append(task)
     payload = {"refreshed_count": len(results), "items": results}
     if args.json:
@@ -901,7 +916,7 @@ def cmd_project_refresh(args: argparse.Namespace) -> int:
         for task in results:
             table.add_row(str(task.get("task_id") or ""), str(task.get("status") or ""), str(task.get("reason_code") or ""))
         Console().print(table)
-    return 0
+    return 2 if any(task.get("status") == "timeout" for task in results) else 0
 
 
 def cmd_project_download(args: argparse.Namespace) -> int:
@@ -959,12 +974,39 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     client = MdteroClient()
-    task = client.wait(args.task_id) if args.wait else client.task(args.task_id)
+    task = _wait_for_task(client, args.task_id, args=args) if args.wait else client.task(args.task_id)
     _enrich_task_status(task)
-    update_task(Path.cwd(), task)
+    if task.get("status") != "timeout":
+        update_task(Path.cwd(), task)
     payload = {"task": task, "workflow": status_trace(task).to_dict()} if args.trace else task
     _print_result(payload, json_output=args.json or args.trace)
-    return 0
+    return 2 if task.get("status") == "timeout" else 0
+
+
+def _wait_for_task(client: MdteroClient, task_id: str, *, args: argparse.Namespace) -> dict[str, Any]:
+    interval = max(0.25, float(getattr(args, "interval", DEFAULT_WAIT_INTERVAL_SECONDS) or DEFAULT_WAIT_INTERVAL_SECONDS))
+    timeout = max(0.25, float(getattr(args, "timeout", DEFAULT_WAIT_TIMEOUT_SECONDS) or DEFAULT_WAIT_TIMEOUT_SECONDS))
+    try:
+        return client.wait(task_id, interval=interval, timeout=timeout)
+    except TimeoutError:
+        return _task_wait_timeout_payload(task_id, timeout=timeout, interval=interval)
+
+
+def _task_wait_timeout_payload(task_id: str, *, timeout: float, interval: float) -> dict[str, Any]:
+    return {
+        "task_id": task_id,
+        "status": "timeout",
+        "stage": "waiting",
+        "reason_code": "task_wait_timeout",
+        "action_hint": "The task is still running or queued after the local wait timeout. Poll again later or use a larger --timeout value.",
+        "wait": {"timeout_seconds": timeout, "interval_seconds": interval},
+        "task_api": "/api/v1/tasks/{task_id}",
+        "download_api": "/api/v1/tasks/{task_id}/download/{artifact}",
+        "next_commands": [
+            f"mdtero status {task_id} --wait --timeout {int(timeout)} --json",
+            f"mdtero status {task_id} --json",
+        ],
+    }
 
 
 def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:

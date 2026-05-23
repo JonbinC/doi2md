@@ -61,6 +61,24 @@ def test_login_accepts_web_login_flags():
     assert args.timeout == 12
 
 
+def test_wait_commands_accept_timeout_and_interval_flags():
+    parser = build_parser()
+
+    parse_args = parser.parse_args(["parse", "10.1000/demo", "--wait", "--timeout", "5", "--interval", "0.5"])
+    status_args = parser.parse_args(["status", "task-1", "--wait", "--timeout", "7", "--interval", "1.5"])
+    project_parse_args = parser.parse_args(["project", "parse", "--wait", "--timeout", "9", "--interval", "2.5"])
+    project_refresh_args = parser.parse_args(["project", "refresh", "--wait", "--timeout", "11", "--interval", "3.5"])
+
+    assert parse_args.timeout == 5
+    assert parse_args.interval == 0.5
+    assert status_args.timeout == 7
+    assert status_args.interval == 1.5
+    assert project_parse_args.timeout == 9
+    assert project_parse_args.interval == 2.5
+    assert project_refresh_args.timeout == 11
+    assert project_refresh_args.interval == 3.5
+
+
 def test_cli_login_url_carries_loopback_callback_and_state():
     url = build_cli_login_url("https://mdtero.example/", callback_url="http://127.0.0.1:4173/callback", state="state-1")
     parsed = urllib.parse.urlparse(url)
@@ -1438,6 +1456,34 @@ def test_status_json_preserves_server_recovery_contract(monkeypatch, tmp_path: P
     assert load_project(tmp_path).papers[0].artifact == "paper_md"
 
 
+def test_status_wait_timeout_returns_structured_payload_without_updating_project(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="status-timeout-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/demo", task_id="task-1", status="queued"))
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        assert task_id == "task-1"
+        assert interval == 0.25
+        assert timeout == 1
+        raise TimeoutError("slow task")
+
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-1", "wait": True, "json": True, "trace": False, "timeout": 1, "interval": 0.25})()) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "timeout"
+    assert payload["reason_code"] == "task_wait_timeout"
+    assert payload["wait"] == {"timeout_seconds": 1.0, "interval_seconds": 0.25}
+    assert payload["next_commands"] == [
+        "mdtero status task-1 --wait --timeout 1 --json",
+        "mdtero status task-1 --json",
+    ]
+    assert load_project(tmp_path).papers[0].status == "queued"
+
+
 def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -1445,8 +1491,10 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
         assert value == "10.1000/demo"
         return {"route_kind": "legacy_parse"}, {"task_id": "task-1", "status": "queued"}, None
 
-    def fake_wait(self, task_id):
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
         assert task_id == "task-1"
+        assert interval == 0.5
+        assert timeout == 5
         return {
             "task_id": "task-1",
             "status": "succeeded",
@@ -1457,7 +1505,7 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
     monkeypatch.setattr(MdteroClient, "wait", fake_wait)
     monkeypatch.chdir(tmp_path)
 
-    assert cli.cmd_parse(type("Args", (), {"input": "10.1000/demo", "file": None, "batch": None, "json": True, "wait": True, "trace": False})()) == 0
+    assert cli.cmd_parse(type("Args", (), {"input": "10.1000/demo", "file": None, "batch": None, "json": True, "wait": True, "trace": False, "timeout": 5, "interval": 0.5})()) == 0
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["final_task"]["preferred_artifact"] == "paper_md"
@@ -1607,6 +1655,38 @@ def test_project_parse_enriches_submitted_tasks_for_agents(monkeypatch, tmp_path
         "mdtero status task-project --wait --json",
         "mdtero download task-project paper_md --output-dir ./mdtero-output --json",
     ]
+
+
+def test_project_parse_wait_timeout_returns_nonzero_without_overwriting_project_status(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="project-timeout-demo")
+    add_paper(tmp_path, PaperRecord(input="10.48550/arXiv.1706.03762", source="manual"))
+
+    def fake_submit(client, paper):
+        assert paper.input == "10.48550/arXiv.1706.03762"
+        return {"task_id": "task-project", "status": "queued", "result": {"artifacts": {"paper_md": {"filename": "paper.md"}}}}
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        assert task_id == "task-project"
+        assert interval == 1
+        assert timeout == 3
+        raise TimeoutError("still running")
+
+    monkeypatch.setattr(cli, "_submit_project_paper", fake_submit)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_parse(type("Args", (), {"include_failed": False, "limit": None, "wait": True, "json": True, "timeout": 3, "interval": 1})()) == 2
+    payload = json.loads(capsys.readouterr().out)
+    task = payload["items"][0]["task"]
+
+    assert task["status"] == "queued"
+    assert task["final_task"]["status"] == "timeout"
+    assert task["final_task"]["reason_code"] == "task_wait_timeout"
+    state = load_project(tmp_path)
+    assert state.papers[0].task_id == "task-project"
+    assert state.papers[0].status == "queued"
 
 
 def test_client_can_create_server_project(monkeypatch):
