@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .core import ArtifactRef, PaperDocument, ProviderResult
 
@@ -20,12 +21,14 @@ class PaperRecord:
     task_id: str | None = None
     status: str = "pending"
     reason_code: str | None = None
+    action_hint: str | None = None
     title: str | None = None
     doi: str | None = None
     source: str | None = None
     artifact: str | None = None
     provider: str | None = None
     parser_strategy: str | None = None
+    translation_attempts: list[dict[str, Any]] = field(default_factory=list)
     zotero_key: str | None = None
     zotero_synced_task_id: str | None = None
 
@@ -62,7 +65,7 @@ def load_project(root: Path) -> ProjectState:
     return ProjectState(
         name=str(payload.get("name") or root.resolve().name),
         server_project_id=str(payload.get("server_project_id") or "").strip() or None,
-        papers=[PaperRecord(**paper) for paper in payload.get("papers") or []],
+        papers=[_paper_record_from_payload(paper) for paper in payload.get("papers") or [] if isinstance(paper, dict)],
     )
 
 
@@ -104,9 +107,11 @@ def update_paper_submission(root: Path, input_value: str, result: dict) -> Proje
             paper.task_id = str(result.get("task_id") or paper.task_id or "")
             paper.status = str(result.get("status") or paper.status or "queued")
             paper.reason_code = _reason_code(result) or paper.reason_code
+            paper.action_hint = _action_hint(result) or paper.action_hint
             paper.artifact = _preferred_artifact(result) or paper.artifact
             paper.provider = _selected_provider(result) or paper.provider
             paper.parser_strategy = _parser_strategy(result) or paper.parser_strategy
+            paper.translation_attempts = _translation_attempts(result) or paper.translation_attempts
             break
     save_project(root, state)
     return state
@@ -118,12 +123,14 @@ def paper_from_submission(input_value: str, result: dict, *, source: str | None 
         task_id=str(result.get("task_id") or "") or None,
         status=str(result.get("status") or "queued"),
         reason_code=_reason_code(result),
+        action_hint=_action_hint(result),
         title=title,
         doi=doi,
         source=source,
         artifact=_preferred_artifact(result),
         provider=_selected_provider(result),
         parser_strategy=_parser_strategy(result),
+        translation_attempts=_translation_attempts(result),
     )
 
 
@@ -192,9 +199,11 @@ def update_task(root: Path, task: dict) -> ProjectState:
         if paper.task_id == task_id:
             paper.status = str(task.get("status") or paper.status)
             paper.reason_code = _reason_code(task) or paper.reason_code
+            paper.action_hint = _action_hint(task) or paper.action_hint
             paper.artifact = _preferred_artifact(task) or paper.artifact
             paper.provider = _selected_provider(task) or paper.provider
             paper.parser_strategy = _parser_strategy(task) or paper.parser_strategy
+            paper.translation_attempts = _translation_attempts(task) or paper.translation_attempts
     save_project(root, state)
     return state
 
@@ -218,15 +227,40 @@ def paper_to_document(paper: PaperRecord) -> PaperDocument:
             provider=paper.provider,
             strategy=paper.parser_strategy,
             reason_code=paper.reason_code,
+            action_hint=paper.action_hint,
+            diagnostics={"translation_attempts": paper.translation_attempts} if paper.translation_attempts else {},
         ),
         artifacts=artifacts,
     )
+
+
+def _paper_record_from_payload(payload: dict[str, Any]) -> PaperRecord:
+    allowed = PaperRecord.__dataclass_fields__.keys()
+    data = {key: value for key, value in payload.items() if key in allowed}
+    attempts = data.get("translation_attempts")
+    data["translation_attempts"] = attempts if isinstance(attempts, list) else []
+    return PaperRecord(**data)
 
 
 def _reason_code(task: dict) -> str | None:
     result = task.get("result") if isinstance(task.get("result"), dict) else {}
     quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
     return task.get("reason_code") or result.get("reason_code") or quality.get("reason_code") or task.get("error_code")
+
+
+def _action_hint(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    value = task.get("action_hint") or result.get("action_hint") or quality.get("action_hint")
+    return str(value).strip() if value else None
+
+
+def _translation_attempts(task: dict) -> list[dict[str, Any]]:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    attempts = task.get("translation_attempts") or result.get("translation_attempts")
+    if not isinstance(attempts, list):
+        return []
+    return [dict(item) for item in attempts if isinstance(item, dict)]
 
 
 def _preferred_artifact(task: dict) -> str | None:

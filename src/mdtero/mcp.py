@@ -487,9 +487,11 @@ def _paper_agent_summary(paper: Any, *, include_download: bool) -> dict[str, Any
         "task_id": paper.task_id,
         "status": paper.status,
         "reason_code": paper.reason_code,
+        "action_hint": paper.action_hint,
         "artifact": paper.artifact,
         "provider": paper.provider,
         "parser_strategy": paper.parser_strategy,
+        "translation_attempts": paper.translation_attempts,
         "source": paper.source,
         "recommended_commands": _paper_commands(paper),
     }
