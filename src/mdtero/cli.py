@@ -380,6 +380,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
         submissions.append((result, args.input, "manual"))
         traces.append(parse_trace_from_route(args.input, route, result).to_dict())
     for result, input_value, source in submissions:
+        _enrich_parse_submission(result)
         if result.get("task_id"):
             add_paper(Path.cwd(), paper_from_submission(input_value, result, source=source))
             if args.wait:
@@ -392,6 +393,45 @@ def cmd_parse(args: argparse.Namespace) -> int:
         payload = {"result": payload, "workflow": traces[0] if len(traces) == 1 else traces}
     _print_result(payload, json_output=args.json or args.trace)
     return 0
+
+
+def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(result.get("task_id") or result.get("id") or "").strip()
+    if not task_id:
+        return result
+    result.setdefault("task_id", task_id)
+    result.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    result.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    preferred_artifact = _preferred_parse_artifact(result)
+    result.setdefault("preferred_artifact", preferred_artifact)
+    next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
+    defaults = [
+        f"mdtero status {task_id} --wait --json",
+        f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json",
+    ]
+    for command in defaults:
+        if command not in next_commands:
+            next_commands.append(command)
+    result["next_commands"] = next_commands
+    return result
+
+
+def _preferred_parse_artifact(result: dict[str, Any]) -> str:
+    nested = result.get("result") if isinstance(result.get("result"), dict) else {}
+    candidates = [
+        result.get("preferred_artifact"),
+        nested.get("preferred_artifact") if isinstance(nested, dict) else None,
+        result.get("artifact"),
+        nested.get("artifact") if isinstance(nested, dict) else None,
+    ]
+    artifacts = nested.get("artifacts") if isinstance(nested, dict) and isinstance(nested.get("artifacts"), dict) else {}
+    if isinstance(artifacts, dict):
+        candidates.extend(["paper_md" if "paper_md" in artifacts else None, "paper_bundle" if "paper_bundle" in artifacts else None])
+    for candidate in candidates:
+        cleaned = str(candidate or "").strip()
+        if cleaned:
+            return cleaned
+    return "paper_md"
 
 
 def cmd_discover(args: argparse.Namespace) -> int:
