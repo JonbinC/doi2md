@@ -209,6 +209,48 @@ def test_doctor_reports_optional_fallbacks_when_integrations_are_missing(monkeyp
     assert "run mdtero config zotero" in output
 
 
+def test_doctor_reports_project_queue_and_rag_readiness(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_config"))
+    init_project(tmp_path, name="doctor-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_doctor(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+    rows = cli._doctor_project_rows(tmp_path)
+
+    assert "Project papers" in output
+    assert ("Project papers", "ok", "2 total / 1 pending / 0 running / 1 succeeded / 0 failed") in rows
+    assert "Server project" in output
+    assert "42" in output
+    assert "RAG readiness" in output
+    assert ("RAG readiness", "check", "run mdtero project ingest --json, then mdtero rag status --json") in rows
+
+
+def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_config"))
+    init_project(tmp_path, name="doctor-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_doctor(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+    rows = cli._doctor_project_rows(tmp_path)
+
+    assert "Server project" in output
+    assert "not linked" in output
+    assert "run mdtero rag build --json" in output
+    assert ("RAG readiness", "not linked", "run mdtero rag build --json to create, bind, ingest, and build") in rows
+
+
 def test_client_headers_use_environment_api_key(monkeypatch):
     monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
 
