@@ -185,7 +185,7 @@ describe("createApiClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("synthesizes a legacy route plan when v1 route is not deployed", async () => {
+  it("synthesizes a v1 server-parse route plan when v1 route is not deployed", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }));
 
@@ -198,8 +198,11 @@ describe("createApiClient", () => {
 
     const route = await client.fetchRoutePlan({ input: "10.1000/demo" }) as any;
 
-    expect(route.legacy_fallback).toBe(true);
-    expect(route.server_entrypoint).toBe("/tasks/parse");
+    expect(route.route_planner_fallback).toBe(true);
+    expect(route.acquisition_mode).toBe("server_parse");
+    expect(route.action_sequence).toEqual(["server_parse"]);
+    expect(route.server_entrypoint).toBe("/api/v1/tasks/parse");
+    expect(route.upload_entrypoint).toBe("/api/v1/tasks/upload");
   });
 
   it("uploads fulltext payloads through the v1 upload route", async () => {

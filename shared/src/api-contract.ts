@@ -35,7 +35,8 @@ export type ActionType =
   | "fetch_epub_asset"
   | "fetch_oa_repository"
   | "fetch_helper_source"
-  | "fallback_pdf_parse";
+  | "fallback_pdf_parse"
+  | "server_parse";
 
 export interface AcquisitionCandidate {
   connector: string;
@@ -79,6 +80,10 @@ export interface ExtensionRouteResponse {
   access_decision?: "open" | "subscription_or_user_entitled" | "unknown";
   best_oa_url?: string;
   acquisition_candidates?: AcquisitionCandidate[];
+  server_entrypoint?: string;
+  upload_entrypoint?: string;
+  action_hint?: string;
+  route_planner_fallback?: boolean;
 }
 
 export interface ActionContext {

@@ -22,6 +22,7 @@ export interface RouteClientLike {
 }
 
 export interface ParseClientLike {
+  createParseTask(payload: { input: string }): Promise<ParseTaskResponse>;
   createParseFulltextV2Task(payload: {
     fulltextFile: Blob;
     filename?: string;
@@ -56,6 +57,19 @@ export async function executeSsotActionSequence(
   requiresHelper?: boolean;
   requiresUpload?: boolean;
 }> {
+  if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
+    try {
+      const task = await parseClient.createParseTask({ input: context.input });
+      return { success: true, taskId: task.task_id, task };
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+        nextCommand: `mdtero parse ${JSON.stringify(context.input)} --trace --wait --timeout 300 --json`,
+      };
+    }
+  }
+
   for (const action of routePlan.action_sequence) {
     const result = await executeAction(action as ActionType, context, {
       top_connector: routePlan.top_connector,
