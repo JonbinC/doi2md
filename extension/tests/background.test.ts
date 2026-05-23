@@ -395,7 +395,7 @@ describe("extension background Elsevier routing", () => {
       );
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-v2" }
+        result: { task_id: "task-v2", status: "queued" }
       });
     });
 
@@ -478,7 +478,7 @@ describe("extension background Elsevier routing", () => {
       expect(text).toContain("bemo-epub");
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
-        result: { task_id: "task-v2" }
+        result: { task_id: "task-v2", status: "queued" }
       });
     });
   });
@@ -592,7 +592,7 @@ describe("extension background Elsevier routing", () => {
         expect(text).toContain("OA Demo");
         expect(sendResponse).toHaveBeenCalledWith({
           ok: true,
-          result: { task_id: "task-v2" }
+          result: { task_id: "task-v2", status: "queued" }
         });
       });
     } finally {
@@ -686,7 +686,7 @@ describe("extension background Elsevier routing", () => {
         expect(text).toContain("Browser DOM Demo");
         expect(sendResponse).toHaveBeenCalledWith({
           ok: true,
-          result: { task_id: "task-v2" }
+          result: { task_id: "task-v2", status: "queued" }
         });
       });
     } finally {

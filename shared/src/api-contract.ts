@@ -7,6 +7,14 @@ export interface ParseTaskRequest {
 export interface ParseTaskResponse {
   task_id: string;
   status: string;
+  task_api?: string;
+  download_api?: string;
+  preferred_artifact?: string;
+  selected_provider?: string | null;
+  parser_strategy?: string | null;
+  reason_code?: string | null;
+  action_hint?: string | null;
+  next_commands?: string[];
 }
 
 export interface ParseFulltextV2Request {
@@ -116,6 +124,9 @@ export interface TaskResult {
 export interface TaskRecord {
   task_id: string;
   status: "queued" | "running" | "succeeded" | "failed";
+  task_api?: string;
+  download_api?: string;
+  preferred_artifact?: string;
   task_kind: "parse" | "translate";
   paper_input?: string | null;
   input_summary: string;
@@ -127,6 +138,7 @@ export interface TaskRecord {
   action_hint?: string | null;
   error_code?: string | null;
   error_message?: string | null;
+  next_commands?: string[];
 }
 
 export type CheckoutProductCode =

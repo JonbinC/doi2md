@@ -56,8 +56,13 @@ describe("ssot-route", () => {
       sourceDoi: "10.1000/demo",
     });
 
+    const task = {
+      task_id: "task-123",
+      status: "queued",
+      next_commands: ["mdtero status task-123 --wait --json"],
+    };
     const parseClient = {
-      createParseFulltextV2Task: vi.fn().mockResolvedValue({ task_id: "task-123" }),
+      createParseFulltextV2Task: vi.fn().mockResolvedValue(task),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -87,6 +92,7 @@ describe("ssot-route", () => {
     expect(result).toEqual({
       success: true,
       taskId: "task-123",
+      task,
     });
   });
 
