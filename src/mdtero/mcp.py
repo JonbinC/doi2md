@@ -161,6 +161,70 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     return status
 
 
+def query_server_rag(question: str, project_root: Path | None = None, *, query_fn: Any | None = None) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    state = load_project(root)
+    cleaned_question = str(question or "").strip()
+    commands = build_agent_commands(root)["commands"]
+    if not cleaned_question:
+        return {
+            "status": "failed",
+            "reason_code": "rag_question_required",
+            "project": state.name,
+            "server_project_id": state.server_project_id,
+            "answer": None,
+            "action_hint": "Provide a concrete question for the project RAG index.",
+            "next_commands": [commands["rag_query"]],
+        }
+    if not state.server_project_id:
+        return {
+            "status": "not_ready",
+            "reason_code": "server_project_not_linked",
+            "project": state.name,
+            "server_project_id": None,
+            "question": cleaned_question,
+            "answer": None,
+            "action_hint": "Run `mdtero rag build --json` to create, bind, import, and build server-side Voyage RAG before querying from MCP.",
+            "next_commands": [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]],
+        }
+    try:
+        result = (query_fn or MdteroClient().rag_query)(state.server_project_id, cleaned_question)
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "reason_code": _rag_query_exception_reason(exc),
+            "project": state.name,
+            "server_project_id": state.server_project_id,
+            "question": cleaned_question,
+            "answer": None,
+            "error_type": exc.__class__.__name__,
+            "action_hint": "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready.",
+            "next_commands": ["mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
+        }
+    if not isinstance(result, dict):
+        result = {"answer": result}
+    result.setdefault("status", "succeeded")
+    result.setdefault("reason_code", "rag_query_succeeded")
+    result.setdefault("project", state.name)
+    result.setdefault("server_project_id", state.server_project_id)
+    result.setdefault("question", cleaned_question)
+    result.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], "mdtero mcp serve"])
+    return result
+
+
+def _rag_query_exception_reason(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    try:
+        detail = response.json().get("detail") if response is not None else None
+    except Exception:
+        detail = None
+    if isinstance(detail, dict):
+        reason = str(detail.get("reason_code") or "").strip()
+        if reason:
+            return reason
+    return "server_rag_query_failed"
+
+
 def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher: Any | None = None, config: MdteroConfig | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = load_project(root)
@@ -234,6 +298,7 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
             "paper_context",
             "rag_context",
             "server_rag_status",
+            "rag_query",
             "agent_commands",
         ],
     }
@@ -306,6 +371,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def server_rag_status() -> dict:
         return build_server_rag_status(root)
+
+    @mcp.tool
+    def rag_query(question: str) -> dict:
+        return query_server_rag(question, root)
 
     @mcp.tool
     def agent_briefing() -> dict:

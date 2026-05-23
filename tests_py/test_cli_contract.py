@@ -13,7 +13,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status
+from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -1465,6 +1465,56 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "mdtero mcp serve",
     ]
     assert "agent_briefing" in briefing["mcp_tools"]
+    assert "rag_query" in briefing["mcp_tools"]
+
+
+def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(project_id, question):
+        assert project_id == "42"
+        assert question == "What is the contribution?"
+        return {"answer": "A concise project answer.", "citations": [{"task_id": "task-1"}]}
+
+    payload = query_server_rag("  What is the contribution?  ", tmp_path, query_fn=fake_query)
+
+    assert payload["status"] == "succeeded"
+    assert payload["reason_code"] == "rag_query_succeeded"
+    assert payload["project"] == "agent-demo"
+    assert payload["server_project_id"] == "42"
+    assert payload["question"] == "What is the contribution?"
+    assert payload["answer"] == "A concise project answer."
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
+
+
+def test_mcp_rag_query_guides_unlinked_projects(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+
+    payload = query_server_rag("What is indexed?", tmp_path)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "server_project_not_linked"
+    assert payload["server_project_id"] is None
+    assert payload["answer"] is None
+    assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
+
+
+def test_mcp_rag_query_returns_reason_codes_on_backend_failures(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(_project_id, _question):
+        request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
+        response = httpx.Response(409, request=request, json={"detail": {"reason_code": "rag_index_not_built"}})
+        raise httpx.HTTPStatusError("not built", request=request, response=response)
+
+    payload = query_server_rag("Ready?", tmp_path, query_fn=fake_query)
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "rag_index_not_built"
+    assert payload["error_type"] == "HTTPStatusError"
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
 
 
 def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
