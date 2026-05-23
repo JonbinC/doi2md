@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
 from .projects import load_project, paper_to_document, project_documents
@@ -225,12 +226,22 @@ def _rag_query_exception_reason(exc: Exception) -> str:
     return "server_rag_query_failed"
 
 
-def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher: Any | None = None, config: MdteroConfig | None = None) -> dict[str, Any]:
+def build_agent_briefing(
+    project_root: Path | None = None,
+    *,
+    rag_status_fetcher: Any | None = None,
+    config: MdteroConfig | None = None,
+    agent_root: Path | None = None,
+) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = load_project(root)
     config = config or load_config()
     commands = build_agent_commands(root)["commands"]
     server_rag = build_server_rag_status(root, fetcher=rag_status_fetcher)
+    agent_status = detect_target_status(agent_root)
+    detected_agents = [agent for agent in agent_status if agent.detected]
+    installed_agents = [agent for agent in agent_status if agent.installed]
+    pending_agent_installs = [agent for agent in agent_status if agent.detected and not agent.installed]
 
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
     running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
@@ -254,6 +265,8 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
         next_commands.append("mdtero project parse --include-failed --wait --json")
     if succeeded:
         next_commands.append(commands["download_markdown"])
+    if pending_agent_installs:
+        next_commands.append(commands["agent_install"])
     next_commands.extend(str(command) for command in server_rag.get("next_commands", []) if command)
     next_commands.append(commands["serve_mcp"])
 
@@ -290,6 +303,26 @@ def build_agent_briefing(project_root: Path | None = None, *, rag_status_fetcher
             "agent_summary": server_rag.get("agent_summary"),
             "action_hint": server_rag.get("action_hint"),
             "next_commands": server_rag.get("next_commands", []),
+        },
+        "agents": {
+            "detected_count": len(detected_agents),
+            "installed_count": len(installed_agents),
+            "pending_install_count": len(pending_agent_installs),
+            "pending_install_targets": [agent.target for agent in pending_agent_installs],
+            "interactive_install_command": commands["agent_install"],
+            "action_hint": "Run `mdtero agent install --interactive` and select detected workspaces with spaces." if pending_agent_installs else "Agent skills are installed for detected workspaces, or no local agent workspace was detected.",
+            "targets": [
+                {
+                    "target": agent.target,
+                    "label": agent.label,
+                    "detected": agent.detected,
+                    "installed": agent.installed,
+                    "skill_path": agent.skill_path,
+                    "install_command": agent.install_command,
+                    "selection_index": agent.selection_index,
+                }
+                for agent in agent_status
+            ],
         },
         "recommended_next_commands": _dedupe_commands(next_commands),
         "mcp_tools": [

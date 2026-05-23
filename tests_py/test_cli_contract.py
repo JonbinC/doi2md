@@ -1618,6 +1618,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
+    (tmp_path / ".codex").mkdir()
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md", provider="mineru_precision"))
     add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
     add_paper(tmp_path, PaperRecord(input="10.1000/bad", task_id="task-bad", status="failed", reason_code="parser_failed"))
@@ -1630,7 +1631,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
             "summary": {"chunk_count": 8, "embedded_count": 8, "pending_embedding_count": 0},
         }
 
-    briefing = build_agent_briefing(tmp_path, rag_status_fetcher=fake_fetcher)
+    briefing = build_agent_briefing(tmp_path, rag_status_fetcher=fake_fetcher, agent_root=tmp_path)
 
     assert briefing["project"]["name"] == "agent-demo"
     assert briefing["account"] == {
@@ -1653,10 +1654,15 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["blocked_items"][0]["reason_code"] == "parser_failed"
     assert briefing["active_items"][0]["input"] == "10.1000/todo"
     assert briefing["rag"]["agent_summary"]["embedded_count"] == 8
+    assert briefing["agents"]["detected_count"] == 1
+    assert briefing["agents"]["installed_count"] == 0
+    assert briefing["agents"]["pending_install_targets"] == ["codex"]
+    assert briefing["agents"]["interactive_install_command"] == "mdtero agent install --interactive"
     assert briefing["recommended_next_commands"] == [
         "mdtero project parse --wait --json",
         "mdtero project parse --include-failed --wait --json",
         "mdtero project download --output-dir ./mdtero-output --json",
+        "mdtero agent install --interactive",
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --json",
         "mdtero mcp serve",
@@ -1862,11 +1868,33 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["handoff"]["recommended_next_commands"][0] == "mdtero project download --output-dir ./mdtero-output --json"
     assert model["zotero"]["configured"] is True
     assert model["agents"]["labels"] == ["Codex"]
+    assert model["agents"]["detected_count"] == 1
+    assert model["agents"]["installed_count"] == 0
+    assert model["agents"]["pending_install_count"] == 1
+    assert model["agents"]["pending_install_labels"] == ["Codex"]
+    assert model["agents"]["status"][0]["installed"] is False
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     console = Console(record=True, width=140)
     console.print(rendered)
-    assert "Agent Handoff" in console.export_text()
+    output = console.export_text()
+    assert "Agent Handoff" in output
+    assert "Agent skills" in output
     assert rendered is not None
+
+
+def test_tui_dashboard_model_reports_installed_agent_skills(tmp_path: Path):
+    init_project(tmp_path, name="tui-agent-installed")
+    skill_dir = tmp_path / ".codex" / "skills" / "mdtero"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# Mdtero", encoding="utf-8")
+
+    model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path)
+
+    assert model["agents"]["detected"] == ["codex"]
+    assert model["agents"]["installed_count"] == 1
+    assert model["agents"]["pending_install_count"] == 0
+    assert model["agents"]["pending_install_labels"] == []
+    assert model["agents"]["status"][0]["skill_path"].endswith(".codex/skills/mdtero")
 
 
 def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path: Path):

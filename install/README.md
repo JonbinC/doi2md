@@ -92,7 +92,7 @@ What is validated in the current alpha:
 - Zotero metadata import into the current Mdtero project, plus conservative note/tag sync for succeeded Zotero-origin parse tasks.
 - discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback. `--interactive` shows numbered results and lets a human multi-select papers into the local project queue; `--add --select 1,3` keeps the same flow scriptable.
 - server-side Voyage RAG query responses with extractive `answer`, stable `citations`, raw `matches`, `reason_code`, and `next_commands` for CLI and agent continuation.
-- agent skill installation without npm for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode.
+- agent skill installation without npm for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode, with TUI/MCP status showing detected, installed, and pending skill targets.
 
 Current boundaries:
 
@@ -170,4 +170,4 @@ mdtero zotero sync --json
 mdtero mcp serve
 ```
 
-当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，agent skill 安装走 Python CLI，不再依赖 npm。
+当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，TUI/MCP 会显示 agent skill 的 detected/installed/pending 状态，agent skill 安装走 Python CLI，不再依赖 npm。

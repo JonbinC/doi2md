@@ -105,7 +105,7 @@ Validated in the current alpha:
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests from parse task ids or local Markdown files
 - server-side Voyage RAG build/query; query JSON returns extractive `answer`, stable `citations`, raw `matches`, `reason_code`, and `next_commands` for agents
-- local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, and recommended next commands
+- local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, and recommended next commands
 - MCP and agent-facing recommended commands prefer `--json` on parse, refresh, ingest, RAG, and download steps so local agents can parse results without scraping terminal tables
 - agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
@@ -169,4 +169,4 @@ mdtero agent install --target codex
 mdtero mcp serve
 ```
 
-当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 自动绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，方便 agent 直接引用证据。MCP 的首选入口是 `agent_briefing`，会一次返回账户状态、项目健康、可下载成果、失败项、RAG 状态和下一步命令。agent skill 安装由 Python CLI 负责，不依赖 npm。
+当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 自动绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，方便 agent 直接引用证据。MCP 的首选入口是 `agent_briefing`，会一次返回账户状态、项目健康、可下载成果、失败项、RAG 状态、agent skill 安装状态和下一步命令。agent skill 安装由 Python CLI 负责，不依赖 npm。
