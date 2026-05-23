@@ -122,6 +122,9 @@ class MdteroClient:
             if task.get("status") in {"succeeded", "failed", "cancelled"}:
                 return task
             if time.monotonic() >= deadline:
+                final_task = self.task(task_id)
+                if final_task.get("status") in {"succeeded", "failed", "cancelled"}:
+                    return final_task
                 raise TimeoutError(f"timed out waiting for task {task_id}")
             time.sleep(interval)
 

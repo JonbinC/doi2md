@@ -1544,6 +1544,21 @@ def test_status_wait_timeout_returns_structured_payload_without_updating_project
     assert load_project(tmp_path).papers[0].status == "queued"
 
 
+def test_client_wait_returns_terminal_task_seen_on_final_timeout_poll(monkeypatch):
+    client = MdteroClient(config=MdteroConfig(api_key="test-key"))
+    calls = iter([
+        {"task_id": "task-1", "status": "running"},
+        {"task_id": "task-1", "status": "failed", "reason_code": "parser_failed"},
+    ])
+
+    monkeypatch.setattr(client, "task", lambda task_id: next(calls))
+    monkeypatch.setattr("mdtero.client.time.monotonic", lambda: 1000.0)
+
+    task = client.wait("task-1", interval=0.25, timeout=0.25)
+
+    assert task == {"task_id": "task-1", "status": "failed", "reason_code": "parser_failed"}
+
+
 def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
