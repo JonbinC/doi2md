@@ -19,25 +19,25 @@ interface ParseClientLike {
   }): Promise<unknown>;
 }
 
-interface LegacyPageContext {
+interface BrowserPageContext {
   tabId?: number;
   tabUrl?: string;
 }
 
-interface LegacyParseMessage {
+interface BrowserParseMessage {
   input: string;
-  pageContext?: LegacyPageContext;
+  pageContext?: BrowserPageContext;
 }
 
-interface LegacyFileMessage {
+interface BrowserFileMessage {
   file: Blob;
   filename?: string;
   artifactKind?: "pdf" | "epub";
 }
 
-export async function runLegacyParseRequest(
+export async function runBrowserParseRequest(
   client: ParseClientLike,
-  message: LegacyParseMessage,
+  message: BrowserParseMessage,
 ): Promise<unknown> {
   if (requiresElsevierLocalAcquire(message.input)) {
     throw new Error(buildElsevierLocalAcquireGuidance());
@@ -54,9 +54,9 @@ export async function runLegacyParseRequest(
   return client.createParseTask({ input: message.input });
 }
 
-export async function runLegacyFileParseRequest(
+export async function runBrowserFileParseRequest(
   client: ParseClientLike,
-  message: LegacyFileMessage,
+  message: BrowserFileMessage,
 ): Promise<unknown> {
   const filename = String(message.filename || "").trim() || "paper.bin";
   return client.createUploadedParseTask({
@@ -113,7 +113,7 @@ async function tryCreateCurrentTabRawUploadTask(
   client: ParseClientLike,
   message: {
     input: string;
-    pageContext?: LegacyPageContext;
+    pageContext?: BrowserPageContext;
   },
 ) {
   const tabId = message.pageContext?.tabId;

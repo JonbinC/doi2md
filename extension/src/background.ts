@@ -1,8 +1,8 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
 import {
-  runLegacyFileParseRequest,
-  runLegacyParseRequest,
-} from "./lib/legacy-parse";
+  runBrowserFileParseRequest,
+  runBrowserParseRequest,
+} from "./lib/browser-parse";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
 import { readSettings, writeSettings } from "./lib/storage";
 
@@ -72,14 +72,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  // Legacy routing with optional SSOT fallback
+  // Compatibility message used by older popup builds and tests. The shipping
+  // popup sends mdtero.parse.ssot.request, but this path still captures the
+  // current browser page before falling back to direct backend parsing.
   if (message?.type === "mdtero.parse.request") {
     (async () => {
       const settings = await readSettings();
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
-      return runLegacyParseRequest(client, {
+      return runBrowserParseRequest(client, {
         input: message.input,
         pageContext: message.pageContext,
       });
@@ -98,7 +100,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!message.file) {
         throw new Error("No local file was provided.");
       }
-      return runLegacyFileParseRequest(client, {
+      return runBrowserFileParseRequest(client, {
         file: message.file,
         filename: message.filename,
         artifactKind: message.artifactKind
