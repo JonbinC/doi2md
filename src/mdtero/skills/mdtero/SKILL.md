@@ -10,12 +10,13 @@ description: Use when Mdtero should be available inside an agent workspace for s
 1. During alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
 2. Run `mdtero setup`
 3. Use `mdtero login --api-key <key>` when the environment is headless
-4. Run `mdtero doctor` before parse, translate, status, download, Zotero, RAG, or MCP work
+4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; use its `next_commands` before guessing recovery steps
 5. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime; for human setup, use `mdtero agent install --interactive`
 
 ## Setup Rules
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
+- `mdtero doctor --json` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
 - when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --json` to inspect `client_acquisition` and final task state
 - local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --json`
@@ -49,6 +50,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - query server project RAG after build: `mdtero rag query "<question>" --json`
 - serve project MCP context: `mdtero mcp serve`
 - detect or install agent skills: `mdtero agent detect --json`, `mdtero agent install --interactive`, or `mdtero agent install --target <target>`
+- inspect install/project/RAG readiness for agents: `mdtero doctor --json`
 - `mdtero parse`, `mdtero project parse`, `mdtero status`, and `mdtero project refresh` JSON responses include `next_commands`; follow those returned commands before inventing a new continuation. For succeeded tasks, prefer the returned `preferred_artifact` and download command. For failed tasks, report `reason_code` / `action_hint` and use the returned retry or status command.
 
 ## MCP Workflow
@@ -75,6 +77,6 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 
 ## Verification Rule
 
-- do not treat installation as complete until `mdtero doctor` reports an API key source
+- do not treat installation as complete until `mdtero doctor --json` reports `authenticated: true` and an API key source
 - if `mdtero` is missing during alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
 - if a task fails, report `reason_code` and the server action hint before retrying
