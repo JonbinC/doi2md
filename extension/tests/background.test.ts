@@ -73,6 +73,43 @@ describe("extension background Elsevier routing", () => {
     normalizeSpringerInput.mockReturnValue(null);
   });
 
+  it("persists website OAuth tokens from the trusted auth bridge", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    readSettings.mockResolvedValue({
+      apiBaseUrl: "https://api.mdtero.com",
+      token: "old-token",
+      email: "old@example.com",
+      uiLanguage: "zh",
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    expect(listener).toBeTypeOf("function");
+    listener?.(
+      {
+        type: "mdtero.auth.save_token",
+        token: "web-token",
+        email: "reader@example.com",
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(writeSettings).toHaveBeenCalledWith({
+        apiBaseUrl: "https://api.mdtero.com",
+        token: "web-token",
+        email: "reader@example.com",
+        uiLanguage: "zh",
+      });
+      expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+    });
+  });
+
   it("does not accept direct Elsevier API keys in extension parse messages", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
