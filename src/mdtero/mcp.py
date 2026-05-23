@@ -48,14 +48,14 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "login_api_key": "mdtero login --api-key <key>",
         "doctor": "mdtero doctor --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
-        "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --json",
-        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --json",
-        "parse_batch": "mdtero parse --batch <directory> --wait --json",
+        "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --timeout 300 --json",
+        "parse_batch": "mdtero parse --batch <directory> --wait --timeout 300 --json",
         "project_init": "mdtero project init --name <name>",
         "project_add": "mdtero project add <doi-or-url> --json",
         "import_bib": "mdtero project import-bib <refs.bib> --json",
-        "parse_pending": "mdtero project parse --wait --json",
-        "refresh": "mdtero project refresh --wait --json",
+        "parse_pending": "mdtero project parse --wait --timeout 300 --json",
+        "refresh": "mdtero project refresh --wait --timeout 300 --json",
         "download_markdown": "mdtero project download --output-dir ./mdtero-output --json",
         "translate": "mdtero translate <task-id-or-markdown-file> --to zh-CN --json",
         "zotero_import": "mdtero zotero import --json",
@@ -268,7 +268,7 @@ def build_agent_briefing(
     if running:
         next_commands.append(commands["refresh"])
     if failed:
-        next_commands.append("mdtero project parse --include-failed --wait --json")
+        next_commands.append("mdtero project parse --include-failed --wait --timeout 300 --json")
     if succeeded:
         next_commands.append(commands["download_markdown"])
     if pending_agent_installs:
@@ -345,13 +345,13 @@ def build_agent_briefing(
 
 def _paper_commands(paper: Any) -> list[str]:
     if paper.status in {"pending", "created"} and not paper.task_id:
-        return ["mdtero project parse --wait --json"]
+        return ["mdtero project parse --wait --timeout 300 --json"]
     if paper.task_id and paper.status not in {"succeeded", "failed"}:
-        return [f"mdtero status {paper.task_id} --wait --json", "mdtero project refresh --wait --json"]
+        return [f"mdtero status {paper.task_id} --wait --timeout 300 --json", "mdtero project refresh --wait --timeout 300 --json"]
     if paper.task_id and paper.status == "succeeded":
         return [f"mdtero download {paper.task_id} {paper.artifact or 'paper_md'} --output-dir ./mdtero-output --json", "mdtero project ingest --json"]
     if paper.status == "failed":
-        return ["mdtero project parse --include-failed --wait --json"]
+        return ["mdtero project parse --include-failed --wait --timeout 300 --json"]
     return []
 
 

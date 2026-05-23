@@ -18,8 +18,8 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
 - `mdtero doctor --json` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
-- when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --json` to inspect `client_acquisition` and final task state
-- local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --wait --json`
+- when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --timeout 300 --json` to inspect `client_acquisition` and final task state
+- local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --wait --timeout 300 --json`
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
 
@@ -31,19 +31,19 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - import a BibTeX file: `mdtero project import-bib references.bib --json`
 - import Zotero items: `mdtero config zotero`, then `mdtero zotero import --json`
 - sync succeeded Zotero-origin parse task notes/tags back to Zotero: `mdtero zotero sync`
-- submit a project queue: `mdtero project parse --wait --json`
-- refresh project tasks: `mdtero project refresh --wait --json`
+- submit a project queue: `mdtero project parse --wait --timeout 300 --json`
+- refresh project tasks: `mdtero project refresh --wait --timeout 300 --json`
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output --json`
 - bootstrap server-side Voyage RAG for the current project: `mdtero rag build --json`
 - optionally create or bind a server project explicitly: `mdtero project create-server --json` or `mdtero project link --server-project-id <id> --json`
 - optionally re-import succeeded parse tasks into the bound server project: `mdtero project ingest --json`
-- parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --json`
-- parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --wait --json`
-- parse a directory of files: `mdtero parse --batch ./papers --wait --json`
+- parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
+- parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --wait --timeout 300 --json`
+- parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
 - search discovery: `mdtero discover "<query>" --json`
 - add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive`
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3`
-- poll status: `mdtero status <task-id> --wait --json`
+- poll status: `mdtero status <task-id> --wait --timeout 300 --json`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`
 - translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --json` or `mdtero translate <paper.md> --to zh-CN --json`
 - build server project RAG, automatically creating/binding/importing when needed: `mdtero rag build --json`

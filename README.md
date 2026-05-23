@@ -69,8 +69,8 @@ mdtero config academic --semantic-scholar-key <key> --json
 mdtero project init --json
 mdtero project status --json
 mdtero project import-bib references.bib --json
-mdtero project parse --wait --json
-mdtero project refresh --wait --json
+mdtero project parse --wait --timeout 300 --json
+mdtero project refresh --wait --timeout 300 --json
 mdtero project download --output-dir ./mdtero-output --json
 mdtero config zotero
 mdtero zotero import --json
@@ -79,10 +79,10 @@ mdtero discover "thermochemical energy storage" --limit 5 --json
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse https://example.org/open-paper --trace --wait --json
-mdtero parse --file paper.pdf --wait --json
-mdtero parse --batch ./papers --wait --json
-mdtero status <task-id> --wait --json
+mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json
+mdtero parse --file paper.pdf --wait --timeout 300 --json
+mdtero parse --batch ./papers --wait --timeout 300 --json
+mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --json
 mdtero translate <parse-task-id> --to zh-CN --json
 mdtero translate paper.md --to zh-CN --json
@@ -154,13 +154,13 @@ mdtero doctor --json
 
 ```bash
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse --file paper.pdf --wait --json
-mdtero status <task-id> --wait --json
+mdtero parse --file paper.pdf --wait --timeout 300 --json
+mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project init --name literature-review
 mdtero project status --json
 mdtero project import-bib references.bib --json
-mdtero project parse --wait --json
+mdtero project parse --wait --timeout 300 --json
 mdtero translate <parse-task-id> --to zh-CN --json
 mdtero rag status --json
 mdtero rag build --json

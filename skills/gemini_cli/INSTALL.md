@@ -28,8 +28,8 @@ Keep user-provided PDFs, local files, and licensed browser-context capture on th
 ## Cloud CLI Workflow
 
 ```bash
-mdtero parse <doi-or-url> --trace --wait --json
-mdtero status <task-id> --wait --json
+mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
+mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir . --json
 mdtero translate <parse-task-id> --to zh-CN --json
 mdtero download <task-id> translated_md --output-dir . --json
@@ -38,7 +38,7 @@ mdtero download <task-id> translated_md --output-dir . --json
 For user-provided PDF/HTML/XML/EPUB files, use:
 
 ```bash
-mdtero parse --file <path> --wait --json
+mdtero parse --file <path> --wait --timeout 300 --json
 ```
 
 For project RAG and local agent context, use:
