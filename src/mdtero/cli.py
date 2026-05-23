@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from . import __version__
-from .acquisition import AcquisitionError, curl_cffi_available
+from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroClient
 from .config import MdteroConfig, config_path, load_config, save_config
@@ -298,11 +299,37 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     table.add_row("API key", "ok" if cfg.is_authenticated else "missing", cfg.api_key_source)
     table.add_row("Config", "ok" if config_path().exists() else "not created", str(config_path()))
     table.add_row("API base", "ok", cfg.api_base_url)
-    table.add_row("curl_cffi", "ok" if curl_cffi_available() else "missing", "local route acquisition" if curl_cffi_available() else "httpx fallback only")
+    table.add_row(*_dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"))
+    table.add_row(*_dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"))
+    table.add_row(*_dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"))
+    table.add_row("Semantic Scholar", "ok" if cfg.has_semantic_scholar_key else "optional", "local discovery" if cfg.has_semantic_scholar_key else "server OpenAlex fallback")
+    table.add_row("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg))
     current_project = project_path(Path.cwd())
     table.add_row("Project", "ok" if current_project.exists() else "not initialized", str(current_project))
     console.print(table)
     return 0 if cfg.is_authenticated else 1
+
+
+def _dependency_check_row(label: str, *, import_name: str, ok_detail: str, missing_detail: str) -> tuple[str, str, str]:
+    try:
+        available = importlib.util.find_spec(import_name) is not None
+    except (ImportError, AttributeError, ValueError):
+        available = False
+    return (label, "ok" if available else "missing", ok_detail if available else missing_detail)
+
+
+def _zotero_configured(cfg: MdteroConfig) -> bool:
+    return bool(cfg.zotero.library_id and cfg.zotero.api_key)
+
+
+def _zotero_config_detail(cfg: MdteroConfig) -> str:
+    if not cfg.zotero.library_id and not cfg.zotero.api_key:
+        return "run mdtero config zotero"
+    if not cfg.zotero.library_id:
+        return "missing library id"
+    if not cfg.zotero.api_key:
+        return "missing API key"
+    return f"{cfg.zotero.library_type}:{cfg.zotero.library_id}"
 
 
 def cmd_config_academic(_args: argparse.Namespace) -> int:

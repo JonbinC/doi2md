@@ -161,6 +161,53 @@ def test_doctor_accepts_api_key_from_environment(monkeypatch, tmp_path: Path, ca
     assert "MDTERO_API_KEY" in output
 
 
+def test_doctor_reports_local_dependency_and_optional_integration_state(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(
+        api_key="mdt_live_config",
+        academic=AcademicKeys(semantic_scholar_api_key="s2"),
+        zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero"),
+    ))
+    seen_imports: list[str] = []
+
+    def fake_find_spec(name):
+        seen_imports.append(name)
+        return object() if name in {"curl_cffi.requests", "fastmcp", "pyzotero"} else None
+
+    monkeypatch.setattr(cli.importlib.util, "find_spec", fake_find_spec)
+
+    assert cli.cmd_doctor(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+
+    assert seen_imports == ["curl_cffi.requests", "fastmcp", "pyzotero"]
+    assert "FastMCP" in output
+    assert "MCP server available" in output
+    assert "pyzotero" in output
+    assert "Zotero client available" in output
+    assert "Semantic Scholar" in output
+    assert "local discovery" in output
+    assert "Zotero config" in output
+    assert "user:123" in output
+
+
+def test_doctor_reports_optional_fallbacks_when_integrations_are_missing(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_config"))
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda _name: None)
+
+    assert cli.cmd_doctor(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+
+    assert "httpx fallback only" in output
+    assert "Zotero import/sync unavailable" in output
+    assert "server OpenAlex fallback" in output
+    assert "run mdtero config zotero" in output
+
+
 def test_client_headers_use_environment_api_key(monkeypatch):
     monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
 
