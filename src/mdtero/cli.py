@@ -962,7 +962,7 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
         payload = _rag_command_failure("query", project_id, exc)
         _print_rag_command_failure(payload, json_output=args.json)
         return 1
-    _print_result(result, json_output=args.json)
+    _print_rag_query_result(result, json_output=args.json)
     return 0
 
 
@@ -1298,6 +1298,33 @@ def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) ->
     next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
     if next_commands:
         console.print("Next:")
+        for command in next_commands:
+            console.print(f"  {command}")
+
+
+def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    console = Console()
+    console.print(f"RAG query: {payload.get('status', 'succeeded')} ({payload.get('reason_code', 'rag_query_succeeded')})")
+    answer = str(payload.get("answer") or "").strip()
+    if answer:
+        console.print("\n[bold]Answer[/bold]")
+        console.print(answer)
+    citations = payload.get("citations") if isinstance(payload.get("citations"), list) else []
+    if citations:
+        console.print("\n[bold]Citations[/bold]")
+        for citation in citations[:5]:
+            title = str(citation.get("document_title") or citation.get("document_id") or "document").strip()
+            order = citation.get("citation_order") or "-"
+            line_start = citation.get("line_start")
+            line_end = citation.get("line_end")
+            line_ref = f":{line_start}-{line_end}" if line_start is not None and line_end is not None else ""
+            console.print(f"  [{order}] {title}{line_ref}")
+    next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
+    if next_commands:
+        console.print("\n[bold]Next[/bold]")
         for command in next_commands:
             console.print(f"  {command}")
 
