@@ -51,6 +51,7 @@ export async function executeSsotActionSequence(
   taskId?: string;
   task?: ParseTaskResponse;
   error?: string;
+  nextCommand?: string;
   requiresBrowserCapture?: boolean;
   requiresHelper?: boolean;
   requiresUpload?: boolean;
@@ -76,7 +77,7 @@ export async function executeSsotActionSequence(
           return { success: true, taskId: task.task_id, task };
         } catch (error) {
           if (routePlan.fail_closed) {
-            return { success: false, error: String(error) };
+            return { success: false, error: String(error), nextCommand: result.nextCommand };
           }
           continue;
         }
@@ -96,11 +97,12 @@ export async function executeSsotActionSequence(
         requiresHelper: result.requiresHelper,
         requiresUpload: result.requiresUpload,
         error: result.error,
+        nextCommand: result.nextCommand,
       };
     }
 
     if (routePlan.fail_closed) {
-      return { success: false, error: result.error || "Action failed" };
+      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand };
     }
   }
 

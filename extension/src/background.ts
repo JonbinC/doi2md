@@ -55,9 +55,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return result.task ?? { task_id: result.taskId };
       }
 
-      throw new Error(formatSsotFailure(result));
+      return {
+        ok: false,
+        error: formatSsotFailure(result),
+        nextCommand: result.nextCommand,
+      };
     })()
-    .then((result) => sendResponse({ ok: true, result }))
+    .then((result) => {
+      if (result && typeof result === "object" && "ok" in result && result.ok === false) {
+        sendResponse(result);
+        return;
+      }
+      sendResponse({ ok: true, result });
+    })
     .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -129,6 +139,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 function formatSsotFailure(result: {
   error?: string;
+  nextCommand?: string;
   requiresBrowserCapture?: boolean;
   requiresUpload?: boolean;
 }) {

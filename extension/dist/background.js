@@ -493,6 +493,22 @@ async function fetchXmlArtifact(candidateUrls) {
 
 // src/lib/action-executor.ts
 var CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
+function cliParseCommand(input) {
+  const normalized = String(input || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
+    return "";
+  }
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --json`;
+}
+function shellQuote(value) {
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
 async function executeAction(action, context, routePlan) {
   switch (action) {
     case "capture_current_tab_html":
@@ -518,7 +534,8 @@ async function executeAction(action, context, routePlan) {
       return {
         success: false,
         requiresUpload: true,
-        error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually."
+        error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
+        nextCommand: cliParseCommand(context.input)
       };
     default:
       return { success: false, error: `Unknown action: ${action}` };
@@ -547,7 +564,8 @@ async function executeCaptureCurrentTabHtml(context) {
     if (!capture?.ok || !capture.html) {
       return {
         success: false,
-        error: capture?.failureMessage || "Page capture failed"
+        error: capture?.failureMessage || "Page capture failed",
+        nextCommand: cliParseCommand(context.input)
       };
     }
     return {
@@ -587,21 +605,24 @@ async function executeFetchElsevierXml(context, routePlan) {
   return {
     success: false,
     requiresUpload: true,
-    error: routePlan.user_message || buildElsevierLocalAcquireGuidance()
+    error: routePlan.user_message || buildElsevierLocalAcquireGuidance(),
+    nextCommand: cliParseCommand(context.input)
   };
 }
-async function executeFetchWileyTdmPdf(_context, routePlan) {
+async function executeFetchWileyTdmPdf(context, routePlan) {
   return {
     success: false,
     requiresUpload: true,
-    error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`
+    error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`,
+    nextCommand: cliParseCommand(context.input)
   };
 }
 async function executeFetchEpubAsset(context, routePlan) {
   if (!context.tabId) {
     return {
       success: false,
-      error: routePlan.user_message || "Open the article page in the current tab and retry EPUB capture."
+      error: routePlan.user_message || "Open the article page in the current tab and retry EPUB capture.",
+      nextCommand: cliParseCommand(context.input)
     };
   }
   const candidate = pickEpubCandidate(routePlan);
@@ -617,7 +638,8 @@ async function executeFetchEpubAsset(context, routePlan) {
     if (!response?.ok || !download?.ok || !download.payloadBase64) {
       return {
         success: false,
-        error: download?.failureMessage || "Browser page context could not download the EPUB artifact."
+        error: download?.failureMessage || "Browser page context could not download the EPUB artifact.",
+        nextCommand: cliParseCommand(context.input)
       };
     }
     return {
@@ -641,7 +663,8 @@ async function executeFetchOaRepository(context, routePlan) {
       return {
         success: false,
         requiresUpload: true,
-        error: "OA source is PDF. Please download and upload manually."
+        error: "OA source is PDF. Please download and upload manually.",
+        nextCommand: cliParseCommand(context.input)
       };
     }
     const response = await fetch(oaUrl, { credentials: "include" });
@@ -665,7 +688,8 @@ async function executeFetchHelperSource(context, routePlan) {
     return {
       success: false,
       requiresUpload: true,
-      error: "This source requires browser capture. Open the article page and retry."
+      error: "This source requires browser capture. Open the article page and retry.",
+      nextCommand: cliParseCommand(context.input)
     };
   }
   return executeCaptureCurrentTabHtml(context);
@@ -737,7 +761,7 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
           return { success: true, taskId: task.task_id, task };
         } catch (error) {
           if (routePlan.fail_closed) {
-            return { success: false, error: String(error) };
+            return { success: false, error: String(error), nextCommand: result.nextCommand };
           }
           continue;
         }
@@ -753,11 +777,12 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
         requiresBrowserCapture: result.requiresBrowserCapture || result.requiresHelper,
         requiresHelper: result.requiresHelper,
         requiresUpload: result.requiresUpload,
-        error: result.error
+        error: result.error,
+        nextCommand: result.nextCommand
       };
     }
     if (routePlan.fail_closed) {
-      return { success: false, error: result.error || "Action failed" };
+      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand };
     }
   }
   return { success: false, error: "No executable action succeeded" };
@@ -829,8 +854,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (result.success && result.taskId) {
         return result.task ?? { task_id: result.taskId };
       }
-      throw new Error(formatSsotFailure(result));
-    })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+      return {
+        ok: false,
+        error: formatSsotFailure(result),
+        nextCommand: result.nextCommand
+      };
+    })().then((result) => {
+      if (result && typeof result === "object" && "ok" in result && result.ok === false) {
+        sendResponse(result);
+        return;
+      }
+      sendResponse({ ok: true, result });
+    }).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
   if (message?.type === "mdtero.parse.request") {

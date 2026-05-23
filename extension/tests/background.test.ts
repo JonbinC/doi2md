@@ -521,7 +521,8 @@ describe("extension background Elsevier routing", () => {
       expect(createParseFulltextV2Task).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
-        error: "This source requires browser capture. Open the article page and retry."
+        error: "This source requires browser capture. Open the article page and retry.",
+        nextCommand: "mdtero parse 10.1000/demo --trace --wait --json"
       });
     });
   });
