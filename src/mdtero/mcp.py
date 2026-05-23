@@ -6,7 +6,7 @@ from typing import Any
 from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
-from .projects import load_project, paper_to_document, project_documents
+from .projects import bind_server_project, load_project, paper_to_document, project_documents
 
 
 def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
@@ -164,7 +164,14 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     return status
 
 
-def query_server_rag(question: str, project_root: Path | None = None, *, query_fn: Any | None = None) -> dict[str, Any]:
+def query_server_rag(
+    question: str,
+    project_root: Path | None = None,
+    *,
+    query_fn: Any | None = None,
+    client: Any | None = None,
+    build_if_needed: bool = False,
+) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = load_project(root)
     cleaned_question = str(question or "").strip()
@@ -179,6 +186,14 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
             "action_hint": "Provide a concrete question for the project RAG index.",
             "next_commands": [commands["rag_query"]],
         }
+    bootstrap: dict[str, Any] | None = None
+    if build_if_needed:
+        bootstrap_client = client or MdteroClient()
+        project_id, bootstrap = _bootstrap_server_rag_for_query(bootstrap_client, root, state, commands)
+        if not project_id:
+            bootstrap.setdefault("question", cleaned_question)
+            return bootstrap
+        state = load_project(root)
     if not state.server_project_id:
         return {
             "status": "not_ready",
@@ -191,10 +206,10 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
             "next_commands": [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]],
         }
     try:
-        result = (query_fn or MdteroClient().rag_query)(state.server_project_id, cleaned_question)
+        result = (query_fn or (client or MdteroClient()).rag_query)(state.server_project_id, cleaned_question)
     except Exception as exc:
         detail = _rag_query_exception_detail(exc)
-        return {
+        payload = {
             "status": "failed",
             "reason_code": str(detail.get("reason_code") or "server_rag_query_failed"),
             "project": state.name,
@@ -205,6 +220,9 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
             "action_hint": str(detail.get("action_hint") or "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready."),
             "next_commands": _rag_query_failure_next_commands(detail, commands),
         }
+        if bootstrap is not None:
+            payload["bootstrap"] = bootstrap
+        return payload
     if not isinstance(result, dict):
         result = {"answer": result}
     result.setdefault("status", "succeeded")
@@ -213,7 +231,113 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
     result.setdefault("server_project_id", state.server_project_id)
     result.setdefault("question", cleaned_question)
     result.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
+    if bootstrap is not None:
+        result.setdefault("bootstrap", bootstrap)
     return result
+
+
+def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, commands: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    project_id = str(state.server_project_id or "").strip()
+    if project_id and not succeeded:
+        return project_id, {
+            "created_server_project": False,
+            "bound_local_project": True,
+            "ingest": {"server_project_id": project_id, "imported_count": 0, "failed_count": 0, "items": [], "failures": []},
+            "build_skipped": True,
+            "reason_code": "server_project_already_bound",
+        }
+    if not project_id and not succeeded:
+        return None, {
+            "status": "not_ready",
+            "reason_code": "no_succeeded_tasks",
+            "project": state.name,
+            "server_project_id": state.server_project_id,
+            "local_ready_for_ingest_count": 0,
+            "local_paper_count": len(state.papers),
+            "answer": None,
+            "action_hint": "Parse at least one project paper successfully before querying server-side Voyage RAG.",
+            "next_commands": [commands["parse_pending"], commands["refresh"], commands["rag_query"]],
+        }
+
+    bootstrap: dict[str, Any] = {
+        "created_server_project": False,
+        "bound_local_project": bool(project_id),
+        "ingest": {"imported_count": 0, "failed_count": 0, "items": [], "failures": []},
+    }
+    if not project_id:
+        try:
+            created = client.create_project(state.name, description=f"Mdtero local project: {state.name}")
+        except Exception as exc:
+            return None, _bootstrap_failure_payload(state, commands, exc, reason_code="server_project_create_failed")
+        project_id = str(created.get("id") or "").strip() if isinstance(created, dict) else ""
+        if not project_id:
+            return None, _bootstrap_failure_payload(state, commands, RuntimeError("server_project_id_missing"), reason_code="server_project_id_missing")
+        bind_server_project(root, project_id)
+        bootstrap.update({"created_server_project": True, "bound_local_project": True, "project": created})
+
+    items: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for paper in succeeded:
+        try:
+            result = client.import_task_to_project(project_id, paper.task_id)
+        except Exception as exc:
+            failures.append({
+                "input": paper.input,
+                "task_id": paper.task_id,
+                "status": "failed",
+                "error_type": exc.__class__.__name__,
+                "reason_code": "server_project_import_failed",
+            })
+            continue
+        items.append({"input": paper.input, "task_id": paper.task_id, "result": result})
+    bootstrap["ingest"] = {
+        "server_project_id": project_id,
+        "imported_count": len(items),
+        "failed_count": len(failures),
+        "items": items,
+        "failures": failures,
+    }
+    if failures:
+        return None, {
+            "status": "failed",
+            "reason_code": "server_project_import_failed",
+            "project": state.name,
+            "server_project_id": project_id,
+            "answer": None,
+            "bootstrap": bootstrap,
+            "action_hint": "Some succeeded parse tasks could not be imported into the server project. Fix import failures, then rerun RAG query.",
+            "next_commands": ["mdtero project ingest --json", "mdtero rag status --json", commands["rag_query"]],
+        }
+    try:
+        bootstrap["build"] = client.rag_build(project_id)
+    except Exception as exc:
+        detail = _rag_query_exception_detail(exc)
+        return None, {
+            "status": "failed",
+            "reason_code": str(detail.get("reason_code") or "server_rag_build_failed"),
+            "project": state.name,
+            "server_project_id": project_id,
+            "answer": None,
+            "error_type": exc.__class__.__name__,
+            "bootstrap": bootstrap,
+            "action_hint": str(detail.get("action_hint") or "Server RAG build failed. Check backend Voyage configuration and project import state."),
+            "next_commands": _rag_query_failure_next_commands(detail, commands),
+        }
+    return project_id, bootstrap
+
+
+def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Exception, *, reason_code: str) -> dict[str, Any]:
+    return {
+        "status": "failed",
+        "reason_code": reason_code,
+        "project": state.name,
+        "server_project_id": state.server_project_id,
+        "answer": None,
+        "error_type": exc.__class__.__name__,
+        "action_hint": "Create or link a server project before querying server-side Voyage RAG.",
+        "next_commands": ["mdtero project create-server --json", "mdtero project ingest --json", "mdtero rag status --json", commands["rag_query"]],
+    }
 
 
 def _rag_query_exception_detail(exc: Exception) -> dict[str, Any]:
@@ -418,7 +542,7 @@ def serve_project_context(project_root: Path | None = None) -> None:
 
     @mcp.tool
     def rag_query(question: str) -> dict:
-        return query_server_rag(question, root)
+        return query_server_rag(question, root, build_if_needed=True)
 
     @mcp.tool
     def agent_briefing() -> dict:
