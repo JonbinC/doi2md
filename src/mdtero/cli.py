@@ -679,6 +679,7 @@ def cmd_project_parse(args: argparse.Namespace) -> int:
     results = []
     for paper in pending:
         result = _submit_project_paper(client, paper)
+        _enrich_parse_submission(result)
         update_paper_submission(root, paper.input, result)
         if args.wait and result.get("task_id"):
             task = client.wait(str(result["task_id"]))
