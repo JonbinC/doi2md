@@ -86,7 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     config = sub.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command")
-    _cmd(config_sub, "academic", "Configure optional academic resource keys.", cmd_config_academic)
+    academic_config = _cmd(config_sub, "academic", "Configure optional academic resource keys.", cmd_config_academic)
+    academic_config.add_argument("--elsevier-key", help="Save an Elsevier API key without opening the interactive prompt.")
+    academic_config.add_argument("--wiley-tdm-token", help="Save a Wiley TDM token without opening the interactive prompt.")
+    academic_config.add_argument("--semantic-scholar-key", help="Save a Semantic Scholar API key without opening the interactive prompt.")
+    academic_config.add_argument("--json", action="store_true", help="Print a machine-readable safe summary without echoing secrets.")
     zotero_config = _cmd(config_sub, "zotero", "Configure Zotero library credentials.", cmd_config_zotero)
     zotero_config.add_argument("--library-id")
     zotero_config.add_argument("--library-type", choices=["user", "group"], default=None)
@@ -334,6 +338,26 @@ def _zotero_config_detail(cfg: MdteroConfig) -> str:
 
 def cmd_config_academic(_args: argparse.Namespace) -> int:
     cfg = load_config()
+    explicit = {
+        "elsevier_api_key": getattr(_args, "elsevier_key", None),
+        "wiley_tdm_token": getattr(_args, "wiley_tdm_token", None),
+        "semantic_scholar_api_key": getattr(_args, "semantic_scholar_key", None),
+    }
+    provided = {field: str(value).strip() for field, value in explicit.items() if value is not None and str(value).strip()}
+    if provided or getattr(_args, "json", False):
+        path = config_path()
+        if provided:
+            for field, value in provided.items():
+                setattr(cfg.academic, field, value)
+            path = save_config(cfg)
+        payload = _academic_config_summary(cfg, path=path, saved=bool(provided))
+        if getattr(_args, "json", False):
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            console = Console()
+            console.print(f"Saved academic config to {path}")
+            console.print(payload["discover_source"])
+        return 0
     _configure_academic(cfg, Console())
     return 0
 
@@ -1398,6 +1422,27 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
         console.print("Discover will use local Semantic Scholar first, with server OpenAlex as fallback.")
     else:
         console.print("Discover will use server OpenAlex. Add Semantic Scholar later with `mdtero config academic` if needed.")
+
+
+def _academic_config_summary(cfg: MdteroConfig, *, path: Path, saved: bool) -> dict[str, Any]:
+    configured = {
+        "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
+        "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
+        "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
+    }
+    return {
+        "status": "saved" if saved else "current",
+        "config_path": str(path),
+        "configured": configured,
+        "discover_source": "local_semantic_scholar" if configured["semantic_scholar_api_key"] else "server_openalex",
+        "application_links": {
+            str(option["field"]): option["url"] for option in ACADEMIC_OPTIONS
+        },
+        "next_commands": [
+            "mdtero discover \"<topic>\" --limit 5 --json",
+            "mdtero config academic --json",
+        ],
+    }
 
 
 def _parse_academic_selection(selection: str) -> set[str]:

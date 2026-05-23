@@ -59,6 +59,7 @@ mdtero doctor
 mdtero discover "thermochemical energy storage" --limit 5
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
+mdtero config academic --semantic-scholar-key <key> --json
 mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace
 mdtero parse --file paper.pdf
@@ -83,6 +84,7 @@ mdtero mcp serve
 
 What is validated in the current alpha:
 
+- interactive and headless academic-key setup. `mdtero config academic --json` prints a safe configured/missing summary, and flags such as `--semantic-scholar-key <key>` let agents or headless servers configure local Semantic Scholar discovery without a prompt.
 - DOI/arXiv parse, status polling, Markdown download, and bundle download.
 - PDF upload through the backend MinerU URL API path. The backend fetches the uploaded file URL for MinerU instead of relying on the older external OSS upload path.
 - backend-planned local source acquisition through `curl_cffi` for HTML/XML/EPUB/PDF URLs, with `httpx` fallback and `--trace` visibility.

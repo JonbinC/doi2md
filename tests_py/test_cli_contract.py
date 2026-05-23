@@ -10,7 +10,7 @@ from rich.console import Console
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
-from mdtero.cli import build_parser, _add_discovery_results_to_project, _parse_academic_selection, _parse_result_selection
+from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag
@@ -286,6 +286,74 @@ def test_academic_setup_selection_accepts_numbered_enter_flow():
         assert "Choose 1, 2, 3" in str(exc)
     else:
         raise AssertionError("expected invalid academic option")
+
+
+def test_config_academic_accepts_headless_key_flags():
+    parser = build_parser()
+
+    args = parser.parse_args([
+        "config",
+        "academic",
+        "--elsevier-key",
+        "elsevier-1",
+        "--wiley-tdm-token",
+        "wiley-1",
+        "--semantic-scholar-key",
+        "s2-1",
+        "--json",
+    ])
+
+    assert args.elsevier_key == "elsevier-1"
+    assert args.wiley_tdm_token == "wiley-1"
+    assert args.semantic_scholar_key == "s2-1"
+    assert args.json is True
+
+
+def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch, tmp_path: Path, capsys):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    args = build_parser().parse_args([
+        "config",
+        "academic",
+        "--elsevier-key",
+        "elsevier-secret",
+        "--wiley-tdm-token",
+        "wiley-secret",
+        "--semantic-scholar-key",
+        "s2-secret",
+        "--json",
+    ])
+
+    assert cmd_config_academic(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    cfg = load_config()
+
+    assert cfg.academic.elsevier_api_key == "elsevier-secret"
+    assert cfg.academic.wiley_tdm_token == "wiley-secret"
+    assert cfg.academic.semantic_scholar_api_key == "s2-secret"
+    assert payload["status"] == "saved"
+    assert payload["configured"] == {
+        "elsevier_api_key": True,
+        "wiley_tdm_token": True,
+        "semantic_scholar_api_key": True,
+    }
+    assert payload["discover_source"] == "local_semantic_scholar"
+    assert "https://dev.elsevier.com/apikey/manage" in payload["application_links"]["elsevier_api_key"]
+    output = json.dumps(payload)
+    assert "elsevier-secret" not in output
+    assert "wiley-secret" not in output
+    assert "s2-secret" not in output
+
+
+def test_config_academic_json_reports_server_openalex_when_s2_is_absent(monkeypatch, tmp_path: Path, capsys):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    args = build_parser().parse_args(["config", "academic", "--json"])
+
+    assert cmd_config_academic(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "current"
+    assert payload["configured"]["semantic_scholar_api_key"] is False
+    assert payload["discover_source"] == "server_openalex"
 
 
 def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
