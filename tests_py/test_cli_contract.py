@@ -1560,6 +1560,32 @@ def test_status_json_promotes_translation_provider_attempts(monkeypatch, tmp_pat
 
     assert payload["translation_attempts"] == attempts
     assert payload["next_commands"][0] == "mdtero status task-translate --json"
+    paper = load_project(tmp_path).papers[0]
+    assert paper.action_hint == "Refresh provider API keys or quota."
+    assert paper.translation_attempts == attempts
+
+
+def test_project_load_tolerates_legacy_and_future_paper_fields(tmp_path: Path):
+    project_dir = tmp_path / ".mdtero"
+    project_dir.mkdir()
+    (project_dir / "project.json").write_text(
+        json.dumps({
+            "name": "legacy-demo",
+            "papers": [
+                {"input": "10.1000/legacy", "status": "pending", "unknown_future_field": "ignored"},
+                {"input": "10.1000/attempts", "translation_attempts": None},
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    state = load_project(tmp_path)
+
+    assert state.name == "legacy-demo"
+    assert state.papers[0].input == "10.1000/legacy"
+    assert state.papers[0].action_hint is None
+    assert state.papers[0].translation_attempts == []
+    assert state.papers[1].translation_attempts == []
 
 
 def test_status_text_prints_translation_provider_attempt_table(monkeypatch, tmp_path: Path, capsys):
@@ -2221,7 +2247,18 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     (tmp_path / ".codex").mkdir()
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md", provider="mineru_precision"))
     add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
-    add_paper(tmp_path, PaperRecord(input="10.1000/bad", task_id="task-bad", status="failed", reason_code="parser_failed"))
+    attempts = [{"provider": "codex", "reason_code": "translation_provider_auth_failed", "provider_status_code": 401}]
+    add_paper(
+        tmp_path,
+        PaperRecord(
+            input="10.1000/bad",
+            task_id="task-bad",
+            status="failed",
+            reason_code="translation_provider_chain_failed",
+            action_hint="Refresh provider API keys or quota.",
+            translation_attempts=attempts,
+        ),
+    )
 
     def fake_fetcher(project_id):
         assert project_id == "42"
@@ -2251,7 +2288,9 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "rag_reason_code": "indexed",
     }
     assert briefing["ready_artifacts"][0]["download_command"] == "mdtero download task-done paper_md --output-dir ./mdtero-output --json"
-    assert briefing["blocked_items"][0]["reason_code"] == "parser_failed"
+    assert briefing["blocked_items"][0]["reason_code"] == "translation_provider_chain_failed"
+    assert briefing["blocked_items"][0]["action_hint"] == "Refresh provider API keys or quota."
+    assert briefing["blocked_items"][0]["translation_attempts"] == attempts
     assert briefing["active_items"][0]["input"] == "10.1000/todo"
     assert briefing["rag"]["agent_summary"]["embedded_count"] == 8
     assert briefing["agents"]["detected_count"] == 1
@@ -2664,7 +2703,18 @@ def test_tui_dashboard_model_reports_installed_agent_skills(tmp_path: Path):
 def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path: Path):
     init_project(tmp_path, name="handoff-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
-    add_paper(tmp_path, PaperRecord(input="10.1000/bad", task_id="task-bad", status="failed", reason_code="parser_failed"))
+    attempts = [{"provider": "codex", "reason_code": "translation_provider_auth_failed", "provider_status_code": 401}]
+    add_paper(
+        tmp_path,
+        PaperRecord(
+            input="10.1000/bad",
+            task_id="task-bad",
+            status="failed",
+            reason_code="translation_provider_chain_failed",
+            action_hint="Refresh provider API keys or quota.",
+            translation_attempts=attempts,
+        ),
+    )
 
     model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path)
     rendered = render_dashboard_text(model)
@@ -2673,11 +2723,15 @@ def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path:
     assert model["health"]["counts"]["blocked_items"] == 1
     assert model["health"]["primary_next_command"] == "mdtero project parse --wait --timeout 300 --json"
     assert model["handoff"]["active_items"][0]["input"] == "10.1000/todo"
-    assert model["handoff"]["blocked_items"][0]["reason_code"] == "parser_failed"
+    assert model["handoff"]["blocked_items"][0]["reason_code"] == "translation_provider_chain_failed"
+    assert model["handoff"]["blocked_items"][0]["action_hint"] == "Refresh provider API keys or quota."
+    assert model["handoff"]["blocked_items"][0]["translation_attempts"] == attempts
     assert "mdtero project parse --include-failed --wait --timeout 300 --json" in model["handoff"]["recommended_next_commands"]
     console = Console(record=True, width=140)
     console.print(rendered)
-    assert "parser_failed" in console.export_text()
+    output = console.export_text()
+    assert "Refresh provider API keys or quota" in output
+    assert "codex:translation_provider_auth_failed" in output
 
 
 def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):

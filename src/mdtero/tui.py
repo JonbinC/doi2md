@@ -160,7 +160,9 @@ def _project_payload(
                 "task_id": paper.task_id,
                 "status": paper.status,
                 "reason_code": paper.reason_code,
+                "action_hint": paper.action_hint,
                 "artifact": paper.artifact,
+                "translation_attempts": paper.translation_attempts,
             }
             for paper in project.papers[-6:]
         ],
@@ -370,7 +372,7 @@ def _handoff_panel(model: dict[str, Any]) -> Panel:
     for item in ready[:3]:
         table.add_row("ready", _brief_item_label(item), str(item.get("download_command") or "mdtero project download --output-dir ./mdtero-output --json"))
     for item in blocked[:3]:
-        table.add_row("blocked", _brief_item_label(item), str(item.get("reason_code") or "check mdtero status"))
+        table.add_row("blocked", _brief_item_label(item), _blocked_next_hint(item))
     for item in active[:3]:
         commands = item.get("recommended_commands") if isinstance(item.get("recommended_commands"), list) else []
         table.add_row("active", _brief_item_label(item), str(commands[0] if commands else "mdtero project refresh --wait --timeout 300 --json"))
@@ -388,6 +390,22 @@ def _brief_item_label(item: dict[str, Any]) -> str:
     if task_id and task_id not in label:
         label = f"{label} ({task_id})"
     return label[:90]
+
+
+def _blocked_next_hint(item: dict[str, Any]) -> str:
+    hint = str(item.get("action_hint") or item.get("reason_code") or "check mdtero status").strip()
+    attempts = item.get("translation_attempts")
+    if isinstance(attempts, list) and attempts:
+        provider_bits = []
+        for attempt in attempts[:3]:
+            if not isinstance(attempt, dict):
+                continue
+            provider = str(attempt.get("provider") or "provider").strip()
+            reason = str(attempt.get("reason_code") or attempt.get("provider_error_code") or "failed").strip()
+            provider_bits.append(f"{provider}:{reason}")
+        if provider_bits:
+            hint = f"{hint} ({'; '.join(provider_bits)})"
+    return hint[:120]
 
 
 def _next_steps_panel(model: dict[str, Any]) -> Panel:
