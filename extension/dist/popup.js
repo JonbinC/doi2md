@@ -527,11 +527,14 @@ function getTaskFailureText(task, fallback, language = "en") {
   if (actionHint) {
     parts.push(language === "zh" ? `\u4E0B\u4E00\u6B65\uFF1A${actionHint}` : `Next: ${actionHint}`);
   }
-  const nextCommand = firstNextCommand(task?.next_commands);
+  const nextCommand = firstTaskNextCommand(task);
   if (nextCommand) {
     parts.push(language === "zh" ? `\u547D\u4EE4\uFF1A${nextCommand}` : `Command: ${nextCommand}`);
   }
   return parts.join(" ");
+}
+function firstTaskNextCommand(task) {
+  return firstNextCommand([...task?.next_commands ?? [], ...task?.result?.next_commands ?? []]);
 }
 function firstNextCommand(commands) {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
@@ -1103,7 +1106,7 @@ async function pollTask(taskId, kind) {
       )
     );
     if (kind === "parse") {
-      setCliHandoff(currentInput, firstNextCommand(task.next_commands));
+      setCliHandoff(currentInput, firstTaskNextCommand(task));
       isParsing = false;
     } else {
       isTranslating = false;
