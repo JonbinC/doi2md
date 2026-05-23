@@ -21,6 +21,41 @@ function fallbackArtifactFilename(artifact, preferredFilename) {
   if (artifact === "translated_md") return "translated.md";
   return `${artifact}.bin`;
 }
+async function readErrorDetail(response) {
+  const payload = await response.clone().json().catch(() => null);
+  return describeErrorPayload(payload);
+}
+function describeErrorPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+  const detail = payload.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+  if (!detail || typeof detail !== "object") {
+    return "";
+  }
+  const parts = [];
+  const record = detail;
+  const message = firstString(record.error_message, record.message, record.detail);
+  const reasonCode = firstString(record.reason_code, record.error_code);
+  const actionHint = firstString(record.action_hint);
+  const nextCommand = Array.isArray(record.next_commands) ? record.next_commands.map((value) => String(value || "").trim()).find(Boolean) : "";
+  if (message) parts.push(message);
+  if (reasonCode) parts.push(`Reason: ${reasonCode}`);
+  if (actionHint) parts.push(`Next: ${actionHint}`);
+  if (nextCommand) parts.push(`Command: ${nextCommand}`);
+  return parts.join(" ");
+}
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
 function createApiClient(getSettings) {
   async function requireSignedInSettings() {
     const settings = await getSettings();
@@ -49,12 +84,7 @@ function createApiClient(getSettings) {
       headers
     });
     if (!response.ok) {
-      const detail = await response.clone().json().then((payload) => {
-        if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
-          return payload.detail.trim();
-        }
-        return "";
-      }).catch(() => "");
+      const detail = await readErrorDetail(response);
       throw new Error(detail || `API request failed: ${response.status}`);
     }
     return response;
@@ -84,12 +114,7 @@ function createApiClient(getSettings) {
       });
     }
     if (!response.ok) {
-      const detail = await response.clone().json().then((payload) => {
-        if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
-          return payload.detail.trim();
-        }
-        return "";
-      }).catch(() => "");
+      const detail = await readErrorDetail(response);
       throw new Error(detail || `API request failed: ${response.status}`);
     }
     return response;
