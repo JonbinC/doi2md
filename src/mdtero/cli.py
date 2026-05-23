@@ -774,8 +774,29 @@ def cmd_translate(args: argparse.Namespace) -> int:
             _print_result(payload, json_output=args.json)
             return 1
         raise
+    _enrich_translate_submission(result)
     _print_result(result, json_output=args.json)
     return 0
+
+
+def _enrich_translate_submission(result: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(result.get("task_id") or result.get("id") or "").strip()
+    if not task_id:
+        return result
+    result.setdefault("task_id", task_id)
+    result.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    result.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    result.setdefault("preferred_artifact", "translated_md")
+    next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
+    defaults = [
+        f"mdtero status {task_id} --wait --json",
+        f"mdtero download {task_id} translated_md --output-dir ./mdtero-output --json",
+    ]
+    for command in defaults:
+        if command not in next_commands:
+            next_commands.append(command)
+    result["next_commands"] = next_commands
+    return result
 
 
 def cmd_zotero_import(args: argparse.Namespace) -> int:
