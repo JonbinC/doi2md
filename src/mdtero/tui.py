@@ -60,7 +60,9 @@ def build_dashboard_model(
         "agents": {
             "detected": [agent.name for agent in agents],
             "labels": [agent.label for agent in agents],
-            "install_command": "mdtero agent install" if agents else "mdtero agent install --target codex",
+            "detect_command": commands["agent_detect"],
+            "install_command": commands["agent_install"],
+            "fallback_install_command": "mdtero agent install --target codex --json",
         },
         "mcp": {
             "serve_command": commands["serve_mcp"],
@@ -222,6 +224,7 @@ def _integration_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Zotero", "configured" if zotero["configured"] else "not configured")
     table.add_row("Zotero library", str(zotero["library_id"] or "-"))
     table.add_row("Agents", ", ".join(agents["labels"]) if agents["labels"] else "none detected")
+    table.add_row("Agent detect", agents["detect_command"])
     table.add_row("Agent install", agents["install_command"])
     return Panel(table, title="Integrations", border_style="yellow")
 
