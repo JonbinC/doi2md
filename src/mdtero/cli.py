@@ -15,7 +15,7 @@ from rich.table import Table
 from . import __version__
 from .acquisition import AcquisitionError
 from .auth import run_web_login
-from .client import DiscoveryError, MdteroClient
+from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
 from .projects import (
     PaperRecord,
@@ -572,6 +572,12 @@ def cmd_parse(args: argparse.Namespace) -> int:
                 "diagnostics": exc.diagnostics,
             }
             _print_result(failure, json_output=args.json or args.trace)
+            return 2
+        except MdteroApiError as exc:
+            _print_result(exc.payload, json_output=args.json or args.trace)
+            return 2
+        except httpx.HTTPStatusError as exc:
+            _print_result(api_failure_payload(exc, method=exc.request.method, path=exc.request.url.path), json_output=args.json or args.trace)
             return 2
         submissions.append((result, args.input, "manual"))
         traces.append(parse_trace_from_route(args.input, route, result).to_dict())

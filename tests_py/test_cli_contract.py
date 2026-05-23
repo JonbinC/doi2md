@@ -1539,6 +1539,27 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
     assert "error" not in payload["final_task"]
 
 
+def test_cmd_parse_auth_failure_returns_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    def fake_request(self, method, path, **kwargs):
+        request = httpx.Request(method, f"https://api.mdtero.test{path}")
+        response = httpx.Response(401, json={"detail": "missing or invalid credentials"}, request=request)
+        raise httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_parse(type("Args", (), {"input": "10.1000/demo", "file": None, "batch": None, "json": True, "wait": True, "trace": False, "timeout": 5, "interval": 0.5})()) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "failed"
+    assert payload["error_code"] == "authentication_required"
+    assert payload["reason_code"] == "authentication_required"
+    assert payload["status_code"] == 401
+    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor --json"]
+
+
 def test_status_promotes_nested_provider_strategy_and_outcome(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
