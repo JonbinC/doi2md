@@ -206,7 +206,7 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
         return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --json"]
     if rag.get("ready_for_ingest_count", 0) > 0:
         return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
-    return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --json"]
+    return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --wait --json"]
 
 
 def _health_payload(

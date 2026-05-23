@@ -28,7 +28,7 @@ Keep user-provided PDFs, local files, and licensed browser-context capture on th
 ## Cloud CLI Workflow
 
 ```bash
-mdtero parse <doi-or-url> --trace --json
+mdtero parse <doi-or-url> --trace --wait --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir . --json
 mdtero translate <parse-task-id> --to zh-CN --json
