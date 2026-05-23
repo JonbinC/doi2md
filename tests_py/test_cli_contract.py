@@ -2304,6 +2304,41 @@ def test_rag_query_not_built_outputs_next_commands(monkeypatch, tmp_path: Path, 
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
 
 
+def test_rag_query_failure_preserves_backend_next_commands(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(self, project_id, question):
+        assert project_id == "42"
+        assert question == "demo"
+        request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
+        response = httpx.Response(
+            503,
+            request=request,
+            json={
+                "detail": {
+                    "error_code": "server_rag_failed",
+                    "reason_code": "voyage_not_configured",
+                    "action_hint": "Server RAG is not configured in production.",
+                    "next_commands": ["mdtero rag status --json"],
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "demo", "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["reason_code"] == "voyage_not_configured"
+    assert payload["action_hint"] == "Server RAG is not configured in production."
+    assert payload["next_commands"] == ["mdtero rag status --json"]
+
+
 def test_rag_query_failure_plain_output_is_actionable(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -2437,6 +2472,39 @@ def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch,
         ("import", "42", "task-done"),
         ("build", "42"),
     ]
+
+
+def test_rag_build_bootstrap_failure_preserves_backend_next_commands(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+
+    def fake_create(self, name, *, description=None):
+        request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects")
+        response = httpx.Response(
+            503,
+            request=request,
+            json={
+                "detail": {
+                    "error_code": "project_api_unavailable",
+                    "reason_code": "project_api_unavailable",
+                    "action_hint": "Project API is unavailable; retry after backend deploy.",
+                    "next_commands": ["mdtero doctor", "mdtero rag status --json"],
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["command"] == "rag_build"
+    assert payload["reason_code"] == "project_api_unavailable"
+    assert payload["action_hint"] == "Project API is unavailable; retry after backend deploy."
+    assert payload["next_commands"] == ["mdtero doctor", "mdtero rag status --json"]
 
 
 def test_rag_query_unlinked_project_plain_output_is_actionable(monkeypatch, tmp_path: Path, capsys):
