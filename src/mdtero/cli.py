@@ -1288,6 +1288,7 @@ def _rag_command_failure(command: str, project_id: str, exc: Exception) -> dict[
     detail = _http_error_detail(exc)
     reason_code = str(detail.get("reason_code") or "server_rag_command_failed")
     action_hint = str(detail.get("action_hint") or _rag_action_hint(command, reason_code))
+    next_commands = _detail_next_commands(detail) or _rag_failure_next_commands(command, reason_code)
     return {
         "status": "failed",
         "command": f"rag_{command}",
@@ -1297,7 +1298,7 @@ def _rag_command_failure(command: str, project_id: str, exc: Exception) -> dict[
         "http_status": exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None,
         "error_type": exc.__class__.__name__,
         "action_hint": action_hint,
-        "next_commands": _rag_failure_next_commands(command, reason_code),
+        "next_commands": next_commands,
     }
 
 
@@ -1308,6 +1309,7 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
         action_hint = "The server project creation response did not include an id. Check the backend project API contract, then rerun `mdtero rag build --json`."
     else:
         action_hint = str(detail.get("action_hint") or "Create or link a server project before running server-side Voyage RAG.")
+    next_commands = _detail_next_commands(detail) or ["mdtero project create-server --json", "mdtero project ingest --json", "mdtero rag status --json", f"mdtero rag {command} --json"]
     return {
         "status": "failed",
         "command": f"rag_{command}",
@@ -1317,8 +1319,12 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
         "http_status": exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None,
         "error_type": exc.__class__.__name__,
         "action_hint": action_hint,
-        "next_commands": ["mdtero project create-server --json", "mdtero project ingest --json", "mdtero rag status --json", f"mdtero rag {command} --json"],
+        "next_commands": next_commands,
     }
+
+
+def _detail_next_commands(detail: dict[str, Any]) -> list[str]:
+    return [str(command).strip() for command in detail.get("next_commands") or [] if str(command).strip()]
 
 
 def _http_error_detail(exc: Exception) -> dict[str, Any]:
