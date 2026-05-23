@@ -161,11 +161,16 @@ describe("createApiClient", () => {
     );
   });
 
-  it("falls back to legacy parse routes when v1 task endpoints are not deployed", async () => {
+  it("surfaces v1 task endpoint failures without falling back to legacy task routes", async () => {
     const fetchMock = vi.mocked(fetch);
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ task_id: "legacy-task", status: "queued" }), { status: 200 }));
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Not Found" }), {
+        status: 404,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      })
+    );
 
     const client = createApiClient(() =>
       Promise.resolve({
@@ -174,11 +179,10 @@ describe("createApiClient", () => {
       })
     );
 
-    const result = await client.createParseTask({ input: "10.1000/demo" });
+    await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.toThrow("Not Found");
 
-    expect(result.task_id).toBe("legacy-task");
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8000/api/v1/tasks/parse", expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:8000/tasks/parse", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("synthesizes a legacy route plan when v1 route is not deployed", async () => {
