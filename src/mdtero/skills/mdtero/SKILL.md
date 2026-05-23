@@ -17,7 +17,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
-- when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --json` to inspect `client_acquisition`
+- when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --json` to inspect `client_acquisition` and final task state
 - local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --json`
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
@@ -36,7 +36,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - bootstrap server-side Voyage RAG for the current project: `mdtero rag build --json`
 - optionally create or bind a server project explicitly: `mdtero project create-server --json` or `mdtero project link --server-project-id <id> --json`
 - optionally re-import succeeded parse tasks into the bound server project: `mdtero project ingest --json`
-- parse a DOI/URL: `mdtero parse <doi-or-url> --trace --json`
+- parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --json`
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --json`
 - parse a directory of files: `mdtero parse --batch ./papers --json`
 - search discovery: `mdtero discover "<query>" --json`

@@ -48,7 +48,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "login_api_key": "mdtero login --api-key <key>",
         "doctor": "mdtero doctor",
         "discover": "mdtero discover \"<topic>\" --interactive",
-        "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --json",
+        "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --json",
         "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json",
         "parse_batch": "mdtero parse --batch <directory> --json",
         "project_init": "mdtero project init --name <name>",

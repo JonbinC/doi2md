@@ -78,7 +78,7 @@ mdtero discover "thermochemical energy storage" --limit 5 --json
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse https://example.org/open-paper --trace --json
+mdtero parse https://example.org/open-paper --trace --wait --json
 mdtero parse --file paper.pdf --json
 mdtero parse --batch ./papers --json
 mdtero status <task-id> --wait --json

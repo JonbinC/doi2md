@@ -1522,7 +1522,7 @@ def _print_next_steps(console: Console) -> None:
             "Parse papers and files",
             [
                 "mdtero parse 10.48550/arXiv.1706.03762 --wait --json",
-                "mdtero parse https://example.org/open-paper --trace --json",
+                "mdtero parse https://example.org/open-paper --trace --wait --json",
                 "mdtero parse --file paper.pdf --wait --json",
                 "mdtero parse --batch ./papers --wait --json",
                 "mdtero project parse --wait --json",

@@ -519,7 +519,7 @@ function buildCliParseCommand(input) {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace --json`;
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --json`;
 }
 function shellQuote(value) {
   if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {

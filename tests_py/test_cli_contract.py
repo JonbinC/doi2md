@@ -367,7 +367,7 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero project init --name literature-review" in output
     assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3" in output
     assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --json" in output
-    assert "mdtero parse https://example.org/open-paper --trace --json" in output
+    assert "mdtero parse https://example.org/open-paper --trace --wait --json" in output
     assert "mdtero parse --file paper.pdf --wait --json" in output
     assert "mdtero parse --batch ./papers --wait --json" in output
     assert "mdtero config zotero" in output
@@ -1688,7 +1688,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["server_project_id"] == "42"
     assert status["ready_for_ingest_count"] == 1
     assert status["pending_count"] == 1
-    assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --json"
+    assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --json"
     assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json"
     assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
     assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --json"
@@ -2785,7 +2785,7 @@ def test_legacy_agent_install_docs_use_json_friendly_cli_examples():
     ]
     for path in docs:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse <doi-or-url> --trace --json" in content
+        assert "mdtero parse <doi-or-url> --trace --wait --json" in content
         assert "mdtero status <task-id> --wait --json" in content
         assert "mdtero translate <parse-task-id> --to zh-CN --json" in content
         assert "mdtero parse <doi-or-url>\n" not in content
