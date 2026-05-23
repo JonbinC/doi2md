@@ -3173,8 +3173,15 @@ def test_legacy_agent_install_docs_use_json_friendly_cli_examples():
         content = path.read_text(encoding="utf-8")
         assert "mdtero parse <doi-or-url> --trace --wait --json" in content
         assert "mdtero status <task-id> --wait --json" in content
+        assert "mdtero parse --file <path> --wait --json" in content
         assert "mdtero translate <parse-task-id> --to zh-CN --json" in content
+        assert "mdtero rag build --json" in content
+        assert "mdtero rag status --json" in content
+        assert "mdtero rag query \"<question>\" --json" in content
+        assert "mdtero mcp briefing --json" in content
+        assert "mdtero mcp serve" in content
         assert "mdtero parse <doi-or-url>\n" not in content
+        assert "mdtero parse --file <path> --json" not in content
         assert "mdtero translate <parse-task-id> zh" not in content
 
 

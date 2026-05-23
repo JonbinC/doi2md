@@ -38,7 +38,17 @@ mdtero download <task-id> translated_md --output-dir . --json
 For user-provided PDF/HTML/XML/EPUB files, use:
 
 ```bash
-mdtero parse --file <path> --json
+mdtero parse --file <path> --wait --json
+```
+
+For project RAG and local agent context, use:
+
+```bash
+mdtero rag build --json
+mdtero rag status --json
+mdtero rag query "<question>" --json
+mdtero mcp briefing --json
+mdtero mcp serve
 ```
 
 ## Direct API Notes
