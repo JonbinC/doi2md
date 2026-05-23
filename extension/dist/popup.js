@@ -509,7 +509,18 @@ function getTaskFailureText(task, fallback, language = "en") {
   return parts.join(" ");
 }
 function firstNextCommand(commands) {
-  return (commands ?? []).map((command) => String(command || "").trim()).find(Boolean) || "";
+  const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
+  return normalizeCliHandoffCommand(command);
+}
+function normalizeCliHandoffCommand(command) {
+  const trimmed = String(command || "").trim();
+  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
+  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
+  const withoutWait = withoutJson.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --json`;
 }
 function buildCliParseCommand(input) {
   const normalized = String(input || "").trim();

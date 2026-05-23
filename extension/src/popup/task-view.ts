@@ -291,7 +291,19 @@ export function getTaskFailureText(
 }
 
 export function firstNextCommand(commands?: string[] | null): string {
-  return (commands ?? []).map((command) => String(command || "").trim()).find(Boolean) || "";
+  const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
+  return normalizeCliHandoffCommand(command);
+}
+
+export function normalizeCliHandoffCommand(command?: string | null): string {
+  const trimmed = String(command || "").trim();
+  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
+  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
+  const withoutWait = withoutJson.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --json`;
 }
 
 export function buildCliParseCommand(input?: string | null): string {
