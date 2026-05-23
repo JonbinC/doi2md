@@ -19,6 +19,7 @@ import {
   getTaskFailureText,
   firstNextCommand,
   firstTaskNextCommand,
+  getTranslationAttemptSummary,
   getSavedResultSummary,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -422,6 +423,54 @@ describe("getTaskFailureText", () => {
         "zh"
       )
     ).toBe("解析失败，请重试。 原因：client_acquisition_challenge_page 下一步：请用扩展上传 PDF/EPUB，或在 CLI 中继续。");
+  });
+
+  it("summarizes translation provider attempts for failed translation tasks", () => {
+    expect(
+      getTaskFailureText(
+        {
+          error_message: "translate provider chain failed",
+          error_code: "translation_provider_chain_failed",
+          reason_code: "translation_provider_chain_failed",
+          action_hint: "Refresh provider API keys or quota.",
+          result: {
+            translation_attempts: [
+              {
+                provider: "codex",
+                reason_code: "translation_provider_auth_failed",
+                provider_error_code: "auth_error",
+                provider_status_code: 401
+              },
+              {
+                provider: "local_legacy",
+                reason_code: "translation_provider_rate_limited",
+                provider_error_code: "rate_limited",
+                provider_status_code: 429
+              }
+            ]
+          }
+        },
+        "Translation failed. Please try again.",
+        "en"
+      )
+    ).toContain(
+      "Provider attempts: codex: translation_provider_auth_failed 401; local_legacy: translation_provider_rate_limited 429"
+    );
+  });
+
+  it("localizes translation provider attempt summaries", () => {
+    expect(
+      getTranslationAttemptSummary(
+        [
+          {
+            provider: "mimo",
+            reason_code: "translation_provider_auth_failed",
+            provider_status_code: 401
+          }
+        ],
+        "zh"
+      )
+    ).toBe("服务端尝试：mimo: translation_provider_auth_failed 401");
   });
 
   it("selects the first non-empty next command for CLI handoff", () => {

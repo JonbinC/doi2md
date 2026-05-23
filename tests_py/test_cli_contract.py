@@ -1516,6 +1516,83 @@ def test_status_json_preserves_server_recovery_contract(monkeypatch, tmp_path: P
     assert load_project(tmp_path).papers[0].artifact == "paper_md"
 
 
+def test_status_json_promotes_translation_provider_attempts(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="translation-status-demo")
+    add_paper(tmp_path, PaperRecord(input="translate-input", task_id="task-translate", status="running"))
+
+    attempts = [
+        {
+            "provider": "codex",
+            "status": "failed",
+            "reason_code": "translation_provider_auth_failed",
+            "provider_error_code": "auth_error",
+            "provider_status_code": 401,
+        },
+        {
+            "provider": "local_legacy",
+            "status": "failed",
+            "reason_code": "translation_provider_rate_limited",
+            "provider_error_code": "rate_limited",
+            "provider_status_code": 429,
+        },
+    ]
+
+    def fake_task(self, task_id):
+        assert task_id == "task-translate"
+        return {
+            "task_id": "task-translate",
+            "task_kind": "translate",
+            "status": "failed",
+            "stage": "failed",
+            "error_code": "translation_provider_chain_failed",
+            "reason_code": "translation_provider_chain_failed",
+            "action_hint": "Refresh provider API keys or quota.",
+            "result": {"reason_code": "translation_provider_chain_failed", "translation_attempts": attempts},
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-translate", "wait": False, "json": True, "trace": False})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["translation_attempts"] == attempts
+    assert payload["next_commands"][0] == "mdtero status task-translate --json"
+
+
+def test_status_text_prints_translation_provider_attempt_table(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="translation-status-text-demo")
+
+    def fake_task(self, task_id):
+        return {
+            "task_id": task_id,
+            "task_kind": "translate",
+            "status": "failed",
+            "reason_code": "translation_provider_chain_failed",
+            "result": {
+                "translation_attempts": [
+                    {"provider": "codex", "reason_code": "translation_provider_auth_failed", "provider_status_code": 401},
+                    {"provider": "local_legacy", "reason_code": "translation_provider_rate_limited", "provider_status_code": 429},
+                ]
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-translate", "wait": False, "json": False, "trace": False})()) == 0
+    output = capsys.readouterr().out
+
+    assert "codex" in output
+    assert "translation_provider_auth_failed" in output
+    assert "local_legacy" in output
+    assert "translation_provider_rate_limited" in output
+
+
 def test_status_wait_timeout_returns_structured_payload_without_updating_project(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
