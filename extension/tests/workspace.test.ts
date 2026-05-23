@@ -20,6 +20,7 @@ describe("workspace", () => {
     expect(popupHtml).toContain('href="./styles.css"');
     expect(popupHtml).toContain('src="./popup.js"');
     expect(popupHtml).toContain('id="connection-pill"');
+    expect(popupHtml).toContain('id="mdtero-popup-bg"');
     expect(popupHtml).toContain('id="workflow-translate"');
     expect(popupHtml).toContain('Parse / Upload');
     expect(popupHtml).toContain('Translate');
@@ -45,6 +46,7 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('href="./styles.css"');
     expect(optionsHtml).toContain('src="./options.js"');
     expect(optionsHtml).toContain('id="settings-overview-card"');
+    expect(optionsHtml).toContain('id="mdtero-options-bg"');
     expect(optionsHtml).toContain('id="open-account"');
     expect(optionsHtml).toContain('id="website-auth-note"');
     expect(optionsHtml).toContain('Parse / Upload');
