@@ -48,8 +48,8 @@ const COPY = {
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
-    signInHint: "Sign in on mdtero.com/auth, then return here to parse, translate, and download.",
-    signInButton: "Open Mdtero Account",
+    signInHint: "Sign in through website OAuth at mdtero.com/auth, then return here to parse, translate, and download.",
+    signInButton: "Open website OAuth",
     connectionPillSignedOut: "Website OAuth",
     connectionPillSignedIn: "Connected",
     workflowAuth: "Login",
@@ -105,8 +105,8 @@ const COPY = {
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
-    signInHint: "请在 mdtero.com/auth 登录，然后回到扩展解析、翻译和下载。",
-    signInButton: "打开 Mdtero Account",
+    signInHint: "请通过 mdtero.com/auth 的网页登录授权扩展，然后回到这里解析、翻译和下载。",
+    signInButton: "打开网页登录",
     connectionPillSignedOut: "网页登录",
     connectionPillSignedIn: "已连接",
     workflowAuth: "登录",
