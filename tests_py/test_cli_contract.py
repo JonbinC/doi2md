@@ -1817,6 +1817,33 @@ def test_mcp_rag_query_returns_reason_codes_on_backend_failures(tmp_path: Path):
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
 
 
+def test_mcp_rag_query_preserves_backend_action_hint_and_next_commands(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(_project_id, _question):
+        request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
+        response = httpx.Response(
+            503,
+            request=request,
+            json={
+                "detail": {
+                    "reason_code": "voyage_not_configured",
+                    "action_hint": "Configure VOYAGE_API_KEY on the backend before querying.",
+                    "next_commands": ["mdtero rag status --json"],
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("voyage missing", request=request, response=response)
+
+    payload = query_server_rag("Ready?", tmp_path, query_fn=fake_query)
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "voyage_not_configured"
+    assert payload["action_hint"] == "Configure VOYAGE_API_KEY on the backend before querying."
+    assert payload["next_commands"] == ["mdtero rag status --json"]
+
+
 def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.delenv("MDTERO_API_KEY", raising=False)
@@ -1833,7 +1860,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
         "mdtero doctor",
         "mdtero discover \"<topic>\" --interactive",
         "mdtero project add <doi-or-url> --json",
-        "mdtero parse <doi-or-url> --json",
+        "mdtero parse <doi-or-url> --trace --wait --json",
     ]
     assert "mdtero rag build --json" in briefing["recommended_next_commands"]
 

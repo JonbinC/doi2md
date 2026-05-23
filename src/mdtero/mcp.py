@@ -191,16 +191,17 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
     try:
         result = (query_fn or MdteroClient().rag_query)(state.server_project_id, cleaned_question)
     except Exception as exc:
+        detail = _rag_query_exception_detail(exc)
         return {
             "status": "failed",
-            "reason_code": _rag_query_exception_reason(exc),
+            "reason_code": str(detail.get("reason_code") or "server_rag_query_failed"),
             "project": state.name,
             "server_project_id": state.server_project_id,
             "question": cleaned_question,
             "answer": None,
             "error_type": exc.__class__.__name__,
-            "action_hint": "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready.",
-            "next_commands": ["mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
+            "action_hint": str(detail.get("action_hint") or "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready."),
+            "next_commands": _rag_query_failure_next_commands(detail, commands),
         }
     if not isinstance(result, dict):
         result = {"answer": result}
@@ -213,17 +214,20 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
     return result
 
 
-def _rag_query_exception_reason(exc: Exception) -> str:
+def _rag_query_exception_detail(exc: Exception) -> dict[str, Any]:
     response = getattr(exc, "response", None)
     try:
         detail = response.json().get("detail") if response is not None else None
     except Exception:
         detail = None
-    if isinstance(detail, dict):
-        reason = str(detail.get("reason_code") or "").strip()
-        if reason:
-            return reason
-    return "server_rag_query_failed"
+    return detail if isinstance(detail, dict) else {}
+
+
+def _rag_query_failure_next_commands(detail: dict[str, Any], commands: dict[str, Any]) -> list[str]:
+    server_commands = [str(command).strip() for command in detail.get("next_commands") or [] if str(command).strip()]
+    if server_commands:
+        return server_commands
+    return ["mdtero rag status --json", commands["rag_build"], commands["rag_query"]]
 
 
 def build_agent_briefing(
@@ -255,7 +259,7 @@ def build_agent_briefing(
         next_commands.extend([
             "mdtero discover \"<topic>\" --interactive",
             "mdtero project add <doi-or-url> --json",
-            "mdtero parse <doi-or-url> --json",
+            commands["parse_doi_or_url"],
         ])
     if pending:
         next_commands.append(commands["parse_pending"])
