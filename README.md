@@ -80,8 +80,8 @@ mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse https://example.org/open-paper --trace --wait --json
-mdtero parse --file paper.pdf --json
-mdtero parse --batch ./papers --json
+mdtero parse --file paper.pdf --wait --json
+mdtero parse --batch ./papers --wait --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --json
 mdtero translate <parse-task-id> --to zh-CN --json
@@ -154,7 +154,7 @@ mdtero doctor --json
 
 ```bash
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse --file paper.pdf --json
+mdtero parse --file paper.pdf --wait --json
 mdtero status <task-id> --wait --json
 mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project init --name literature-review
