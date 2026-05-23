@@ -86,13 +86,13 @@ describe("extension options page", () => {
 
     await loadOptionsModule();
 
-    expect(document.querySelector("#account-status")?.textContent).toBe("Not signed in.");
+    expect(document.querySelector("#account-status")?.textContent).toBe("Not signed in with website OAuth.");
     expect(document.querySelector("#usage-status")?.textContent).toBe("Balance and quota appear after sign-in.");
     expect(document.querySelector("#helper-status")).toBeNull();
     expect(document.querySelector("#connector-keys-section")).toBeNull();
     expect(document.querySelector("#shadow-status")).toBeNull();
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(true);
-    expect(document.querySelector("#open-account")?.textContent).toBe("Open Mdtero Account");
+    expect(document.querySelector("#open-account")?.textContent).toBe("Open website OAuth");
     expect(document.querySelector("#password-input")).toBeNull();
     expect(document.querySelector("#code-input")).toBeNull();
   });

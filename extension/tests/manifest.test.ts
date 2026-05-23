@@ -95,11 +95,13 @@ describe("extension manifest", () => {
     expect(popupSource).toContain("Use EPUB");
     expect(popupSource).toContain("mdtero.com/auth");
     expect(popupSource).not.toContain("mdtero.com/account");
-    expect(popupSource).toContain("Open Mdtero Account");
+    expect(popupSource).toContain("Open website OAuth");
     expect(popupSource).toContain("Copy CLI command");
     expect(optionsSource).toContain("Website sign-in");
     expect(optionsSource).toContain("mdtero.com/auth");
     expect(optionsSource).not.toContain("mdtero.com/account");
+    expect(optionsSource).toContain("Open website OAuth");
+    expect(optionsSource).toContain("trusted auth bridge");
     expect(optionsSource).toContain("browser capture, upload, translation, and download settings");
     expect(optionsSource).toContain("Browser capture reuses the active tab");
     expect(optionsSource).not.toContain("publisher API");
