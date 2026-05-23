@@ -1621,7 +1621,7 @@ def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, 
             continue
         try:
             result = client.import_task_to_project(project_id, paper.task_id)
-        except httpx.HTTPStatusError as exc:
+        except (httpx.HTTPStatusError, MdteroApiError) as exc:
             failures.append(_project_ingest_failure(project_id, paper, exc))
             continue
         results.append({"input": paper.input, "task_id": paper.task_id, "result": result})
@@ -1634,22 +1634,26 @@ def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, 
     }
 
 
-def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: httpx.HTTPStatusError) -> dict[str, Any]:
-    status_code = exc.response.status_code
+def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: Exception) -> dict[str, Any]:
+    status_code = _exception_status_code(exc)
+    detail = _http_error_detail(exc)
+    reason_code = str(detail.get("reason_code") or detail.get("error_code") or "server_project_import_failed")
     error_code = "server_project_import_unavailable" if status_code == 404 else "server_project_import_failed"
     action_hint = (
         "The backend did not expose the project task import endpoint yet. Deploy the backend branch with "
         "POST /api/v1/projects/{id}/tasks/{task_id}/import, then rerun `mdtero project ingest --json`; "
         "use `mdtero rag status --json` to verify the linked server project."
         if status_code == 404
-        else "Check the server project id, API key permissions, and task ownership, then rerun `mdtero project ingest --json`."
+        else str(detail.get("action_hint") or "Check the server project id, API key permissions, and task ownership, then rerun `mdtero project ingest --json`.")
     )
     return {
         "input": paper.input,
         "task_id": paper.task_id,
         "status": "failed",
         "error_code": error_code,
+        "reason_code": reason_code,
         "http_status": status_code,
+        "error_type": exc.__class__.__name__,
         "server_project_id": project_id,
         "action_hint": action_hint,
     }
@@ -1699,6 +1703,12 @@ def _detail_next_commands(detail: dict[str, Any]) -> list[str]:
 
 
 def _http_error_detail(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, MdteroApiError):
+        detail = exc.payload.get("detail") if isinstance(exc.payload, dict) else None
+        if isinstance(detail, dict):
+            nested = detail.get("detail") if isinstance(detail.get("detail"), dict) else detail
+            return nested if isinstance(nested, dict) else detail
+        return exc.payload if isinstance(exc.payload, dict) else {}
     if not isinstance(exc, httpx.HTTPStatusError):
         return {}
     try:
@@ -1707,6 +1717,15 @@ def _http_error_detail(exc: Exception) -> dict[str, Any]:
         return {}
     detail = payload.get("detail") if isinstance(payload, dict) else None
     return detail if isinstance(detail, dict) else {}
+
+
+def _exception_status_code(exc: Exception) -> int | None:
+    if isinstance(exc, MdteroApiError):
+        value = exc.payload.get("status_code") if isinstance(exc.payload, dict) else None
+        return int(value) if isinstance(value, int) else None
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    return None
 
 
 def _rag_action_hint(command: str, reason_code: str) -> str:
