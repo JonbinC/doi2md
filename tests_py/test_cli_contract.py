@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 import urllib.parse
 from pathlib import Path
 
@@ -2644,10 +2645,13 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
     repo_root = Path(__file__).resolve().parents[1]
     manifest = json.loads((repo_root / "install" / "manifest.json").read_text(encoding="utf-8"))
     site_manifest = json.loads((repo_root.parent / "nextmdtero" / "public" / "install" / "manifest.json").read_text(encoding="utf-8"))
+    package_version = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
     assert manifest == site_manifest
     assert manifest["quickInstallCommand"] == "uv tool install git+https://github.com/JonbinC/doi2md.git && mdtero setup"
     assert manifest["cli"]["packageName"] == "mdtero"
+    assert manifest["cli"]["packageVersion"] == package_version
+    assert manifest["releaseTruth"]["current"]["cli"]["version"] == package_version
     assert manifest["cli"]["packageManager"] == "uv"
     assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
     assert "legacyNpmCompatibility" not in json.dumps(manifest)
