@@ -2093,6 +2093,45 @@ def test_rag_query_failure_plain_output_is_actionable(monkeypatch, tmp_path: Pat
     assert "mdtero rag build" in output
 
 
+def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(self, project_id, question):
+        assert project_id == "42"
+        assert question == "What improves corrosion?"
+        return {
+            "status": "succeeded",
+            "reason_code": "rag_query_succeeded",
+            "answer": "[1] Coating improves corrosion resistance.",
+            "citations": [
+                {
+                    "citation_order": 1,
+                    "document_title": "Corrosion Paper",
+                    "document_id": 7,
+                    "chunk_id": 9,
+                    "line_start": 3,
+                    "line_end": 4,
+                }
+            ],
+            "next_commands": ["mdtero rag status --json", "mdtero mcp serve"],
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "What improves corrosion?", "json": False})()) == 0
+    output = capsys.readouterr().out
+
+    assert "RAG query: succeeded (rag_query_succeeded)" in output
+    assert "Answer" in output
+    assert "[1] Coating improves corrosion resistance." in output
+    assert "Corrosion Paper:3-4" in output
+    assert "mdtero mcp serve" in output
+
+
 def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -2517,3 +2556,4 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "rag_query(question)" in source_skill
     assert "JSON responses include `next_commands`" in source_skill
     assert "preferred_artifact" in source_skill
+    assert "returned `answer` and `citations`" in source_skill
