@@ -388,7 +388,12 @@ def serve_project_context(project_root: Path | None = None) -> None:
     try:
         from fastmcp import FastMCP
     except Exception as exc:  # pragma: no cover - optional runtime import
-        raise RuntimeError("FastMCP is required for `mdtero mcp serve`. Install with `uv tool install mdtero`.") from exc
+        raise RuntimeError(
+            "FastMCP is required for `mdtero mcp serve`. Run `mdtero doctor --json` first; "
+            "during alpha, reinstall the public client with "
+            "`uv tool install --force git+https://github.com/JonbinC/doi2md.git`. "
+            "After the PyPI handoff, `uv tool install --force mdtero` is the stable command."
+        ) from exc
 
     root = project_root or Path.cwd()
     mcp = FastMCP("mdtero")

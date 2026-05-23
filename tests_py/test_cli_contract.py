@@ -14,7 +14,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag
+from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, serve_project_context
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -1892,6 +1892,31 @@ def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
     assert payload["citations"][0]["source_url"] == "https://doi.org/10.1000/rag"
     assert payload["matches"][0]["doi"] == "10.1000/rag"
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
+
+
+def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_path: Path):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "fastmcp":
+            raise ImportError("missing fastmcp")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    try:
+        serve_project_context(tmp_path)
+    except RuntimeError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - defensive guard
+        raise AssertionError("serve_project_context should fail when FastMCP is unavailable")
+
+    assert "mdtero doctor --json" in message
+    assert "uv tool install --force git+https://github.com/JonbinC/doi2md.git" in message
+    assert "uv tool install --force mdtero" in message
+    assert "npm" not in message.lower()
 
 
 def test_mcp_rag_query_guides_unlinked_projects(tmp_path: Path):
