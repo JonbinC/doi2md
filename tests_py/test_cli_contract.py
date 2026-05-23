@@ -1497,11 +1497,16 @@ def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Pa
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    monkeypatch.setattr(
+        "mdtero.agent.detect_target_status",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("headless setup should not scan agent workspaces")),
+    )
 
     assert cli.cmd_setup(type("Args", (), {"api_key": "mdt_live_demo"})()) == 0
     output = capsys.readouterr().out
 
     assert output.count("Step 1: saved API-key login for this machine.") == 1
+    assert "Step 3: agent skill detection skipped for headless setup." in output
 
 
 def test_setup_rejects_blank_api_key_without_academic_prompt(monkeypatch, tmp_path: Path, capsys):
@@ -1526,14 +1531,64 @@ def test_setup_uses_environment_api_key_without_prompting(monkeypatch, tmp_path:
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup should not prompt for auth")))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup should not prompt for auth")))
+    monkeypatch.setattr(
+        "mdtero.agent.detect_target_status",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("environment-key setup should not scan agent workspaces")),
+    )
 
     assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
     output = capsys.readouterr().out
     cfg = load_config()
 
     assert "Step 1: using existing API-key login from MDTERO_API_KEY." in output
+    assert "Step 3: agent skill detection skipped for headless setup." in output
     assert cfg.api_key is None
     assert cfg.effective_api_key == "mdt_live_env"
+
+
+def test_setup_interactive_installs_detected_agent_skills(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    config_dir = tmp_path / "config"
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".hermes").mkdir()
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+
+    confirms = iter([True, True])
+    prompts = iter(["mdt_live_demo", "1 4"])
+    monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: next(prompts))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    output = capsys.readouterr().out
+
+    assert "Step 3: local agent workspaces." in output
+    assert "Detected: Codex, Hermes Agent" in output
+    assert (home / ".codex" / "skills" / "mdtero" / "SKILL.md").exists()
+    assert (home / ".hermes" / "skills" / "mdtero" / "SKILL.md").exists()
+
+
+def test_setup_interactive_skips_agent_install_when_user_declines(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+
+    confirms = iter([True, False])
+    monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_demo")
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    output = capsys.readouterr().out
+
+    assert "Skipped agent skill install." in output
+    assert not (home / ".codex" / "skills" / "mdtero" / "SKILL.md").exists()
 
 
 def test_client_can_import_task_to_server_project(monkeypatch):

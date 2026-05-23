@@ -233,7 +233,9 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     console = Console()
     console.rule("[bold]Mdtero setup")
     cfg = load_config()
+    headless_auth = False
     if getattr(_args, "api_key", ""):
+        headless_auth = True
         cfg.api_key = _normalize_api_key_arg(str(_args.api_key), console=console)
         if not cfg.api_key:
             return 2
@@ -241,6 +243,7 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         console.print("Step 1: saved API-key login for this machine.")
     elif cfg.is_authenticated:
         console.print(f"Step 1: using existing API-key login from {cfg.api_key_source}.")
+        headless_auth = cfg.api_key_source == "MDTERO_API_KEY"
     else:
         console.print("Step 1: authenticate.")
         if Confirm.ask("Use API-key login for this machine?", default=True):
@@ -251,6 +254,7 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         else:
             _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False)
     _configure_academic(cfg, console)
+    _configure_detected_agent_skills(console, skip_prompt=headless_auth)
     console.print("\n[bold green]Configuration complete.[/bold green]")
     _print_next_steps(console)
     return 0
@@ -1128,10 +1132,10 @@ def cmd_agent_install(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _prompt_agent_targets(detections: list[Any]) -> list[str]:
+def _prompt_agent_targets(detections: list[Any], *, console: Console | None = None) -> list[str]:
     from .agent import default_interactive_targets, parse_agent_selection
 
-    console = Console(stderr=True)
+    console = console or Console(stderr=True)
     table = Table("No", "Agent", "Detected", "Installed", "Workspace")
     for item in detections:
         table.add_row(
@@ -1151,6 +1155,40 @@ def _prompt_agent_targets(detections: list[Any]) -> list[str]:
             return parse_agent_selection(selection, detections)
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
+
+
+def _configure_detected_agent_skills(console: Console, *, skip_prompt: bool = False) -> None:
+    if skip_prompt:
+        console.print("\nStep 3: agent skill detection skipped for headless setup.")
+        console.print("Run `mdtero agent install --interactive` later to detect and configure local agent workspaces.")
+        return
+    from .agent import detect_target_status, install_targets
+
+    detections = detect_target_status()
+    detected = [item for item in detections if item.detected]
+    pending = [item for item in detections if item.detected and not item.installed]
+    console.print("\nStep 3: local agent workspaces.")
+    if not detected:
+        console.print("No Codex, Claude Code, Gemini CLI, Hermes, or OpenCode workspace was detected.")
+        console.print("Create an agent workspace, then run `mdtero agent install --interactive`.")
+        return
+    labels = ", ".join(item.label for item in detected)
+    console.print(f"Detected: {labels}")
+    if not pending:
+        console.print("Mdtero skills are already installed for detected workspaces.")
+        return
+    if not Confirm.ask("Install Mdtero skills for detected agent workspaces now?", default=True):
+        console.print("Skipped agent skill install. Run `mdtero agent install --interactive` later.")
+        return
+    targets = _prompt_agent_targets(detections, console=console)
+    if not targets:
+        console.print("No agent target selected. Run `mdtero agent install --interactive` later.")
+        return
+    results = install_targets(targets)
+    table = Table("Agent", "Action", "Path")
+    for result in results:
+        table.add_row(result.label, result.action, result.path)
+    console.print(table)
 
 
 def cmd_agent_uninstall(_args: argparse.Namespace) -> int:
