@@ -70,6 +70,12 @@ def build_dashboard_model(
             "tools": briefing["mcp_tools"],
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
+        "handoff": {
+            "ready_artifacts": briefing["ready_artifacts"],
+            "blocked_items": briefing["blocked_items"],
+            "active_items": briefing["active_items"],
+            "recommended_next_commands": briefing["recommended_next_commands"],
+        },
         "commands": commands,
         "next_steps": _next_steps(cfg, project, rag, commands),
     }
@@ -81,6 +87,7 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
         _project_panel(model),
         _rag_panel(model),
         _integration_panel(model),
+        _handoff_panel(model),
         _next_steps_panel(model),
     )
 
@@ -227,6 +234,37 @@ def _integration_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Agent detect", agents["detect_command"])
     table.add_row("Agent install", agents["install_command"])
     return Panel(table, title="Integrations", border_style="yellow")
+
+
+def _handoff_panel(model: dict[str, Any]) -> Panel:
+    handoff = model["handoff"]
+    table = Table("State", "Item", "Next", expand=True)
+    ready = handoff.get("ready_artifacts") or []
+    blocked = handoff.get("blocked_items") or []
+    active = handoff.get("active_items") or []
+    if not ready and not blocked and not active:
+        table.add_row("empty", "No papers in the local project yet", "mdtero discover \"<topic>\" --interactive")
+    for item in ready[:3]:
+        table.add_row("ready", _brief_item_label(item), str(item.get("download_command") or "mdtero project download --output-dir ./mdtero-output --json"))
+    for item in blocked[:3]:
+        table.add_row("blocked", _brief_item_label(item), str(item.get("reason_code") or "check mdtero status"))
+    for item in active[:3]:
+        commands = item.get("recommended_commands") if isinstance(item.get("recommended_commands"), list) else []
+        table.add_row("active", _brief_item_label(item), str(commands[0] if commands else "mdtero project refresh --wait --json"))
+    commands = handoff.get("recommended_next_commands") or []
+    if commands:
+        table.add_row("agent", "Follow agent_briefing next_commands", str(commands[0]))
+    return Panel(table, title="Agent Handoff", border_style="blue")
+
+
+def _brief_item_label(item: dict[str, Any]) -> str:
+    title = str(item.get("title") or "").strip()
+    task_id = str(item.get("task_id") or "").strip()
+    input_value = str(item.get("input") or "").strip()
+    label = title or task_id or input_value or "paper"
+    if task_id and task_id not in label:
+        label = f"{label} ({task_id})"
+    return label[:90]
 
 
 def _next_steps_panel(model: dict[str, Any]) -> Panel:
