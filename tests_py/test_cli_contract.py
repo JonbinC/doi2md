@@ -728,6 +728,28 @@ def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch
     assert payload["status_code"] == 503
 
 
+def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
+    def fake_request(self, method, path, **kwargs):
+        request = httpx.Request(method, "https://api.mdtero.test/api/v1/discovery/search")
+        response = httpx.Response(401, json={"detail": "missing or invalid credentials"}, request=request)
+        raise httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    try:
+        MdteroClient(config=MdteroConfig(api_key=None)).discover("rag", limit=1)
+    except Exception as exc:
+        payload = exc.payload
+    else:
+        raise AssertionError("expected discovery failure")
+
+    assert payload["error_code"] == "authentication_required"
+    assert payload["reason_code"] == "authentication_required"
+    assert payload["status_code"] == 401
+    assert "mdtero login --api-key <key>" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor", "mdtero discover \"<topic>\" --json"]
+
+
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
     route = {
         "route_kind": "html_helper_first",
