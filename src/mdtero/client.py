@@ -199,6 +199,9 @@ class MdteroClient:
     def rag_status(self, project_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/projects/{project_id}/rag/status")
 
+    def usage(self) -> dict[str, Any]:
+        return self._request("GET", "/me/usage")
+
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         with httpx.Client(timeout=self.timeout) as client:
             response = client.request(method, self._url(path), headers=self._headers(), **kwargs)

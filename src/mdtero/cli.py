@@ -318,21 +318,29 @@ def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds:
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
     cfg = load_config()
-    rows = _doctor_rows(cfg, Path.cwd())
+    remote_auth = _doctor_remote_auth(cfg)
+    rows = _doctor_rows(cfg, Path.cwd(), remote_auth=remote_auth)
     if getattr(_args, "json", False):
-        print(json.dumps(_doctor_payload(cfg, Path.cwd(), rows), indent=2, ensure_ascii=False))
-        return 0 if cfg.is_authenticated else 1
+        payload = _doctor_payload(cfg, Path.cwd(), rows, remote_auth=remote_auth)
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0 if payload["status"] == "ok" else 1
     console = Console()
     table = Table("Check", "Status", "Detail")
     for row in rows:
         table.add_row(*row)
     console.print(table)
-    return 0 if cfg.is_authenticated else 1
+    return 0 if cfg.is_authenticated and remote_auth.get("status") != "failed" else 1
 
 
-def _doctor_rows(cfg: MdteroConfig, root: Path) -> list[tuple[str, str, str]]:
+def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
+    remote_auth = remote_auth or _doctor_remote_auth(cfg)
+    api_key_status = "ok" if cfg.is_authenticated else "missing"
+    api_key_detail = cfg.api_key_source
+    if remote_auth.get("status") == "failed":
+        api_key_status = "invalid"
+        api_key_detail = str(remote_auth.get("reason_code") or remote_auth.get("error_code") or "authentication_failed")
     rows = [
-        ("API key", "ok" if cfg.is_authenticated else "missing", cfg.api_key_source),
+        ("API key", api_key_status, api_key_detail),
         ("Config", "ok" if config_path().exists() else "not created", str(config_path())),
         ("API base", "ok", cfg.api_base_url),
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
@@ -348,12 +356,17 @@ def _doctor_rows(cfg: MdteroConfig, root: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
-def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]]) -> dict[str, Any]:
+def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None) -> dict[str, Any]:
     row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
+    remote_auth = remote_auth or _doctor_remote_auth(cfg)
+    status = "ok" if cfg.is_authenticated else "missing_auth"
+    if remote_auth.get("status") == "failed":
+        status = "invalid_auth"
     payload: dict[str, Any] = {
-        "status": "ok" if cfg.is_authenticated else "missing_auth",
-        "authenticated": cfg.is_authenticated,
+        "status": status,
+        "authenticated": cfg.is_authenticated and remote_auth.get("status") != "failed",
         "api_key_source": cfg.api_key_source,
+        "remote_auth": remote_auth,
         "config_path": str(config_path()),
         "api_base_url": cfg.api_base_url,
         "checks": row_payload,
@@ -374,12 +387,47 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "library_type": cfg.zotero.library_type,
         },
         "project": _doctor_project_payload(root),
-        "next_commands": ["mdtero setup"] if not cfg.is_authenticated else ["mdtero doctor --json"],
+        "next_commands": _doctor_auth_next_commands(cfg, remote_auth),
     }
     project_next = payload["project"].get("next_commands") if isinstance(payload.get("project"), dict) else None
-    if isinstance(project_next, list):
+    if status != "invalid_auth" and isinstance(project_next, list):
         payload["next_commands"] = _dedupe_string_list([*payload["next_commands"], *project_next])
     return payload
+
+
+def _doctor_remote_auth(cfg: MdteroConfig) -> dict[str, Any]:
+    if not cfg.is_authenticated:
+        return {
+            "status": "missing",
+            "action_hint": "Authenticate with `mdtero login --api-key <key>` or run `mdtero setup`.",
+            "next_commands": ["mdtero setup", "mdtero login --api-key <key>"],
+        }
+    try:
+        usage = MdteroClient(config=cfg, timeout=10.0).usage()
+    except MdteroApiError as exc:
+        return {**exc.payload, "status": "failed"}
+    except httpx.HTTPError as exc:
+        return {
+            "status": "unverified",
+            "error_code": "api_connectivity_failed",
+            "reason_code": "api_connectivity_failed",
+            "detail": str(exc),
+            "action_hint": "API key exists locally, but Mdtero could not verify it against the server. Check connectivity and rerun `mdtero doctor --json`.",
+            "next_commands": ["mdtero doctor --json"],
+        }
+    return {
+        "status": "ok",
+        "email": usage.get("email"),
+        "wallet_balance_display": usage.get("wallet_balance_display"),
+    }
+
+
+def _doctor_auth_next_commands(cfg: MdteroConfig, remote_auth: dict[str, Any]) -> list[str]:
+    if not cfg.is_authenticated:
+        return ["mdtero setup"]
+    if remote_auth.get("status") == "failed":
+        return [str(command) for command in remote_auth.get("next_commands") or ["mdtero login --api-key <key>", "mdtero doctor --json"]]
+    return ["mdtero doctor --json"]
 
 
 def _doctor_row_status(rows: list[tuple[str, str, str]], check: str) -> dict[str, str] | None:
