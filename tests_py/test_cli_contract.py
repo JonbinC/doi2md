@@ -2998,6 +2998,26 @@ def test_public_docs_and_skills_prefer_doctor_json_for_agents():
         assert "authenticated: true" in skill
 
 
+def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():
+    repo_root = Path(__file__).resolve().parents[1]
+    docs = [
+        repo_root / "README.md",
+        repo_root / "install" / "README.md",
+        repo_root / "skills" / "mdtero" / "SKILL.md",
+        repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
+    ]
+
+    for path in docs:
+        content = path.read_text(encoding="utf-8")
+        assert "mdtero parse --file paper.pdf --wait --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --wait --json" in content or "mdtero parse --file <path> --wait --json" in content
+    for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
+        content = path.read_text(encoding="utf-8")
+        assert "mdtero parse --batch ./papers --wait --json" in content
+        assert "mdtero parse --file <path> --json" not in content
+        assert "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --json" not in content
+        assert "mdtero parse --batch ./papers --json" not in content
+
+
 def test_public_docs_describe_setup_agent_detection_and_headless_skip():
     repo_root = Path(__file__).resolve().parents[1]
     combined = "\n".join(
