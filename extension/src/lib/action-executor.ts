@@ -9,6 +9,24 @@ import { buildElsevierLocalAcquireGuidance } from "./elsevier";
 
 const CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
 
+function cliParseCommand(input: string): string {
+  const normalized = String(input || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
+    return "";
+  }
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --json`;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
 /**
  * Execute a single action from the sequence
  */
@@ -58,6 +76,7 @@ export async function executeAction(
         success: false,
         requiresUpload: true,
         error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
+        nextCommand: cliParseCommand(context.input),
       };
 
     default:
@@ -98,6 +117,7 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
       return {
         success: false,
         error: capture?.failureMessage || "Page capture failed",
+        nextCommand: cliParseCommand(context.input),
       };
     }
 
@@ -160,17 +180,19 @@ async function executeFetchElsevierXml(
     success: false,
     requiresUpload: true,
     error: routePlan.user_message || buildElsevierLocalAcquireGuidance(),
+    nextCommand: cliParseCommand(context.input),
   };
 }
 
 async function executeFetchWileyTdmPdf(
-  _context: ActionContext,
+  context: ActionContext,
   routePlan: { user_message?: string }
 ): Promise<ActionResult> {
   return {
     success: false,
     requiresUpload: true,
     error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`,
+    nextCommand: cliParseCommand(context.input),
   };
 }
 
@@ -186,6 +208,7 @@ async function executeFetchEpubAsset(
     return {
       success: false,
       error: routePlan.user_message || "Open the article page in the current tab and retry EPUB capture.",
+      nextCommand: cliParseCommand(context.input),
     };
   }
 
@@ -204,6 +227,7 @@ async function executeFetchEpubAsset(
       return {
         success: false,
         error: download?.failureMessage || "Browser page context could not download the EPUB artifact.",
+        nextCommand: cliParseCommand(context.input),
       };
     }
 
@@ -242,6 +266,7 @@ async function executeFetchOaRepository(
         success: false,
         requiresUpload: true,
         error: "OA source is PDF. Please download and upload manually.",
+        nextCommand: cliParseCommand(context.input),
       };
     }
 
@@ -281,6 +306,7 @@ async function executeFetchHelperSource(
       success: false,
       requiresUpload: true,
       error: "This source requires browser capture. Open the article page and retry.",
+      nextCommand: cliParseCommand(context.input),
     };
   }
 

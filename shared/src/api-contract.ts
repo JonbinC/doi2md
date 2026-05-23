@@ -95,6 +95,7 @@ export interface ActionResult {
   filename?: string;
   sourceDoi?: string;
   error?: string;
+  nextCommand?: string;
   requiresBrowserCapture?: boolean;
   requiresHelper?: boolean;
   requiresUpload?: boolean;

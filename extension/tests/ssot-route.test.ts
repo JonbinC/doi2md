@@ -154,6 +154,7 @@ describe("ssot-route", () => {
       success: false,
       requiresUpload: true,
       error: "PDF upload required",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
     });
 
     const parseClient = {
@@ -172,6 +173,7 @@ describe("ssot-route", () => {
       requiresHelper: undefined,
       requiresUpload: true,
       error: "PDF upload required",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
     });
   });
 
@@ -180,6 +182,7 @@ describe("ssot-route", () => {
       success: false,
       requiresHelper: true,
       error: "Open the article page and retry browser capture.",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
     });
 
     const parseClient = {
@@ -198,6 +201,7 @@ describe("ssot-route", () => {
       requiresHelper: true,
       requiresUpload: undefined,
       error: "Open the article page and retry browser capture.",
+      nextCommand: "mdtero parse 10.1000/demo --trace --wait --json",
     });
   });
 });

@@ -856,7 +856,7 @@ parseButton?.addEventListener("click", async () => {
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().parseFailed);
-    setCliHandoff(input);
+    setCliHandoff(input, response?.nextCommand);
     return;
   }
 
