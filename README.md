@@ -63,6 +63,7 @@ mdtero doctor
 mdtero login
 mdtero login --api-key <key>
 mdtero config academic
+mdtero config academic --semantic-scholar-key <key> --json
 mdtero project init --json
 mdtero project status --json
 mdtero project import-bib references.bib --json
@@ -95,6 +96,7 @@ mdtero tui
 Validated in the current alpha:
 
 - API-key login, `mdtero doctor`, and local config
+- optional academic-key setup through either the interactive `mdtero config academic` flow or headless flags such as `--semantic-scholar-key <key> --json`; JSON output reports configured keys without echoing secrets
 - DOI/arXiv parse with task polling and Markdown/bundle download
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
 - local project init/add/remove/list/status, BibTeX import with de-duplication, project parse/refresh/download, and agent-readable JSON for project management commands
