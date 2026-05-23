@@ -1678,7 +1678,11 @@ def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
     def fake_query(project_id, question):
         assert project_id == "42"
         assert question == "What is the contribution?"
-        return {"answer": "A concise project answer.", "citations": [{"task_id": "task-1"}]}
+        return {
+            "answer": "A concise project answer.",
+            "citations": [{"task_id": "task-1", "doi": "10.1000/rag", "source_url": "https://doi.org/10.1000/rag"}],
+            "matches": [{"chunk_id": 9, "doi": "10.1000/rag", "source_url": "https://doi.org/10.1000/rag"}],
+        }
 
     payload = query_server_rag("  What is the contribution?  ", tmp_path, query_fn=fake_query)
 
@@ -1688,6 +1692,9 @@ def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
     assert payload["server_project_id"] == "42"
     assert payload["question"] == "What is the contribution?"
     assert payload["answer"] == "A concise project answer."
+    assert payload["citations"][0]["doi"] == "10.1000/rag"
+    assert payload["citations"][0]["source_url"] == "https://doi.org/10.1000/rag"
+    assert payload["matches"][0]["doi"] == "10.1000/rag"
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
 
 
@@ -2210,6 +2217,8 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
                     "chunk_id": 9,
                     "line_start": 3,
                     "line_end": 4,
+                    "doi": "10.1000/rag",
+                    "source_url": "https://doi.org/10.1000/rag",
                 }
             ],
             "next_commands": ["mdtero rag status --json", "mdtero mcp serve"],
@@ -2224,7 +2233,7 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     assert "RAG query: succeeded (rag_query_succeeded)" in output
     assert "Answer" in output
     assert "[1] Coating improves corrosion resistance." in output
-    assert "Corrosion Paper:3-4" in output
+    assert "Corrosion Paper:3-4 · 10.1000/rag" in output
     assert "mdtero mcp serve" in output
 
 
