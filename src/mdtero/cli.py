@@ -262,13 +262,14 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         headless_auth = cfg.api_key_source == "MDTERO_API_KEY"
     else:
         console.print("Step 1: authenticate.")
-        if Confirm.ask("Use API-key login for this machine?", default=True):
+        if Confirm.ask("Open browser OAuth login for this machine?", default=True):
+            _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False)
+        else:
+            console.print("Use API-key login for headless servers or remote shells where browser OAuth cannot call back to this machine.")
             cfg.api_key = _normalize_api_key_arg(Prompt.ask("Paste Mdtero API key", password=True), console=console)
             if not cfg.api_key:
                 return 2
             save_config(cfg)
-        else:
-            _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False)
     _configure_academic(cfg, console)
     _configure_detected_agent_skills(console, skip_prompt=headless_auth)
     console.print("\n[bold green]Configuration complete.[/bold green]")

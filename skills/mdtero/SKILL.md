@@ -64,7 +64,7 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
-- `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use the returned `answer` and `citations` first, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
+- `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.
@@ -74,7 +74,7 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 - prefer Markdown first
 - treat PDF as input, not as the normal output
 - use fallback bundles only when the workflow truly needs image or asset files
-- keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, RAG `answer` / `citations`, `next_commands`, and download artifact names visible in handoffs
+- keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, RAG `answer` / `citations` / `source_nodes` / `evidence_pack`, `next_commands`, and download artifact names visible in handoffs
 
 ## Verification Rule
 

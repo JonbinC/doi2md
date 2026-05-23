@@ -1922,6 +1922,51 @@ def test_setup_uses_environment_api_key_without_prompting(monkeypatch, tmp_path:
     assert cfg.effective_api_key == "mdt_live_env"
 
 
+def test_setup_interactive_prefers_browser_oauth_login(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+    from mdtero.auth import WebLoginResult
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: None)
+    monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("browser setup should not ask for an API key")))
+
+    def fake_run_web_login(site_base_url, *, timeout_seconds, open_browser=None):
+        assert site_base_url == "https://mdtero.com"
+        assert timeout_seconds == 180.0
+        assert open_browser is None
+        return WebLoginResult(api_key="mdt_live_web", prefix="mdt_live")
+
+    monkeypatch.setattr(cli, "run_web_login", fake_run_web_login)
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "Opening https://mdtero.com/auth for Mdtero web login" in output
+    assert "Saved web login API key" in output
+    assert cfg.api_key == "mdt_live_web"
+
+
+def test_setup_interactive_api_key_is_explicit_headless_fallback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: None)
+    monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: False)
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_headless")
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("headless fallback should not run browser login")))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "Use API-key login for headless servers" in output
+    assert cfg.api_key == "mdt_live_headless"
+
+
 def test_setup_interactive_installs_detected_agent_skills(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -1933,7 +1978,7 @@ def test_setup_interactive_installs_detected_agent_skills(monkeypatch, tmp_path:
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
 
-    confirms = iter([True, True])
+    confirms = iter([False, True])
     prompts = iter(["mdt_live_demo", "1 4"])
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: next(prompts))
@@ -1956,7 +2001,7 @@ def test_setup_interactive_skips_agent_install_when_user_declines(monkeypatch, t
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
 
-    confirms = iter([True, False])
+    confirms = iter([False, False])
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_demo")
 
@@ -3477,14 +3522,26 @@ def test_public_docs_describe_rag_answer_citation_contract():
     repo_root = Path(__file__).resolve().parents[1]
     combined = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in [repo_root / "README.md", repo_root / "install" / "README.md"]
+        for path in [repo_root / "README.md", repo_root / "install" / "README.md", repo_root / "docs" / "public" / "README.md"]
     )
 
     assert "RAG query" in combined
     assert "answer" in combined
     assert "citations" in combined
     assert "matches" in combined
+    assert "source_nodes" in combined
+    assert "evidence_pack.context_markdown" in combined
     assert "next_commands" in combined
+
+
+def test_packaged_skill_guides_agents_to_structured_rag_evidence():
+    repo_root = Path(__file__).resolve().parents[1]
+    for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
+        content = path.read_text(encoding="utf-8")
+        assert "evidence_pack.context_markdown" in content
+        assert "source_nodes" in content
+        assert "extractive summary" in content
+        assert "grounded evidence" in content
 
 
 def test_public_docs_and_skills_prefer_doctor_json_for_agents():
@@ -3595,4 +3652,6 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "rag_query(question)" in source_skill
     assert "JSON responses include `next_commands`" in source_skill
     assert "preferred_artifact" in source_skill
-    assert "returned `answer` and `citations`" in source_skill
+    assert "evidence_pack.context_markdown" in source_skill
+    assert "source_nodes" in source_skill
+    assert "grounded evidence" in source_skill
