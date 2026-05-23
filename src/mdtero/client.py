@@ -46,15 +46,15 @@ class MdteroClient:
                 "route_kind": "server",
                 "acquisition_mode": "legacy_parse",
                 "requires_raw_upload": False,
-                "action_hint": "Production backend has not enabled /api/v1/route yet; using legacy /tasks/parse.",
-                "server_entrypoint": "/tasks/parse",
-                "upload_entrypoint": "/tasks/parse-upload-v2",
+                "action_hint": "The backend route planner is not available; submit the DOI or URL directly to /api/v1/tasks/parse.",
+                "server_entrypoint": "/api/v1/tasks/parse",
+                "upload_entrypoint": "/api/v1/tasks/upload",
                 "client_command": f"mdtero parse {input_value}",
                 "legacy_fallback": True,
             }
 
     def parse(self, input_value: str) -> dict[str, Any]:
-        return self._request_with_fallback("POST", "/api/v1/tasks/parse", "/tasks/parse", json={"input": input_value})
+        return self._request("POST", "/api/v1/tasks/parse", json={"input": input_value})
 
     def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
         route = self.route(input_value)
@@ -80,7 +80,7 @@ class MdteroClient:
             data["source_doi"] = source_doi
         with file_path.open("rb") as handle:
             files = {"paper_file": (file_path.name, handle, _mime_type(file_path))}
-            return self._request_with_fallback("POST", "/api/v1/tasks/upload", "/tasks/parse-upload-v2", data=data, files=files)
+            return self._request("POST", "/api/v1/tasks/upload", data=data, files=files)
 
     def upload_acquired(self, artifact: AcquiredArtifact, *, source_input: str | None = None, source_doi: str | None = None) -> dict[str, Any]:
         data = {
@@ -94,14 +94,14 @@ class MdteroClient:
             data["source_doi"] = source_doi
         with artifact.path.open("rb") as handle:
             files = {"paper_file": (artifact.path.name, handle, _mime_type(artifact.path))}
-            return self._request_with_fallback("POST", "/api/v1/tasks/upload", "/tasks/parse-upload-v2", data=data, files=files)
+            return self._request("POST", "/api/v1/tasks/upload", data=data, files=files)
 
     def task(self, task_id: str) -> dict[str, Any]:
-        return self._request_with_fallback("GET", f"/api/v1/tasks/{task_id}", f"/tasks/{task_id}")
+        return self._request("GET", f"/api/v1/tasks/{task_id}")
 
     def download(self, task_id: str, artifact: str, output_dir: Path) -> Path:
         output_dir.mkdir(parents=True, exist_ok=True)
-        response = self._raw_request_with_fallback("GET", f"/api/v1/tasks/{task_id}/download/{artifact}", f"/tasks/{task_id}/download/{artifact}")
+        response = self._raw_request("GET", f"/api/v1/tasks/{task_id}/download/{artifact}")
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -137,7 +137,7 @@ class MdteroClient:
                 local_failure = _local_semantic_scholar_failure(exc)
         try:
             result = self._server_discovery_search(query, limit=limit)
-        except (httpx.HTTPError, ValueError) as exc:
+        except (MdteroApiError, httpx.HTTPError, ValueError) as exc:
             raise DiscoveryError(_discovery_failure_payload(exc, local_failure=local_failure)) from exc
         result.setdefault("source", "openalex_server")
         if local_failure:
@@ -152,13 +152,12 @@ class MdteroClient:
         return result
 
     def _server_discovery_search(self, query: str, *, limit: int) -> dict[str, Any]:
-        return self._request_with_fallback("GET", "/api/v1/discovery/search", "/me/discovery/search", params={"query": query, "limit": limit})
+        return self._request("GET", "/api/v1/discovery/search", params={"query": query, "limit": limit})
 
     def translate_text(self, markdown: str, *, filename: str = "paper.md", target_language: str = "zh-CN") -> dict[str, Any]:
-        return self._request_with_fallback(
+        return self._request(
             "POST",
             "/api/v1/tasks/translate",
-            "/tasks/translate",
             json={
                 "source_markdown_path": "",
                 "source_markdown_text": markdown,
@@ -176,10 +175,9 @@ class MdteroClient:
         return self.translate_server_path(source_path, target_language=target_language)
 
     def translate_server_path(self, source_markdown_path: str, *, target_language: str = "zh-CN") -> dict[str, Any]:
-        return self._request_with_fallback(
+        return self._request(
             "POST",
             "/api/v1/tasks/translate",
-            "/tasks/translate",
             json={
                 "source_markdown_path": source_markdown_path,
                 "target_language": target_language,
@@ -188,7 +186,7 @@ class MdteroClient:
         )
 
     def create_project(self, name: str, *, description: str | None = None) -> dict[str, Any]:
-        return self._request_with_fallback("POST", "/api/v1/projects", "/projects", json={"name": name, "description": description})
+        return self._request("POST", "/api/v1/projects", json={"name": name, "description": description})
 
     def import_task_to_project(self, project_id: str, task_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/projects/{project_id}/tasks/{task_id}/import")
@@ -217,19 +215,9 @@ class MdteroClient:
             raise ValueError("Mdtero API returned a non-object payload")
         return payload
 
-    def _request_with_fallback(self, method: str, primary_path: str, fallback_path: str, **kwargs: Any) -> dict[str, Any]:
-        try:
-            return self._request(method, primary_path, **kwargs)
-        except (MdteroApiError, httpx.HTTPStatusError) as exc:
-            if _api_error_status_code(exc) != 404:
-                raise
-            return self._request(method, fallback_path, **kwargs)
-
-    def _raw_request_with_fallback(self, method: str, primary_path: str, fallback_path: str, **kwargs: Any) -> httpx.Response:
+    def _raw_request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-            response = client.request(method, self._url(primary_path), headers=self._headers(), **kwargs)
-            if response.status_code == 404:
-                response = client.request(method, self._url(fallback_path), headers=self._headers(), **kwargs)
+            response = client.request(method, self._url(path), headers=self._headers(), **kwargs)
         return response
 
     def _semantic_scholar_search(self, query: str, *, limit: int) -> dict[str, Any]:

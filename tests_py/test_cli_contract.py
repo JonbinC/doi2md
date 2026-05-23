@@ -6,13 +6,14 @@ import urllib.parse
 from pathlib import Path
 
 import httpx
+import pytest
 from rich.console import Console
 
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
-from mdtero.client import MdteroClient, translation_source_path_from_task
+from mdtero.client import DiscoveryError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, serve_project_context
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -704,7 +705,7 @@ def test_config_keeps_environment_api_key_as_runtime_override(monkeypatch, tmp_p
     assert cfg.is_authenticated is True
 
 
-def test_client_falls_back_to_legacy_parse_when_v1_route_is_not_deployed(monkeypatch):
+def test_client_keeps_task_submission_on_v1_when_route_is_not_deployed(monkeypatch):
     calls = []
 
     def fake_request(self, method, path, **kwargs):
@@ -717,23 +718,23 @@ def test_client_falls_back_to_legacy_parse_when_v1_route_is_not_deployed(monkeyp
             request = httpx.Request(method, "https://api.mdtero.test/api/v1/tasks/parse")
             response = httpx.Response(404, request=request)
             raise httpx.HTTPStatusError("not found", request=request, response=response)
-        if path == "/tasks/parse":
-            return {"task_id": "legacy-task", "status": "queued"}
         raise AssertionError(path)
 
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
     client = MdteroClient()
 
     route = client.route("10.1000/demo")
-    task = client.parse("10.1000/demo")
 
     assert route["legacy_fallback"] is True
-    assert route["server_entrypoint"] == "/tasks/parse"
-    assert task["task_id"] == "legacy-task"
-    assert [call[1] for call in calls] == ["/api/v1/route", "/api/v1/tasks/parse", "/tasks/parse"]
+    assert route["server_entrypoint"] == "/api/v1/tasks/parse"
+    assert route["upload_entrypoint"] == "/api/v1/tasks/upload"
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        client.parse("10.1000/demo")
+    assert exc_info.value.response.status_code == 404
+    assert [call[1] for call in calls] == ["/api/v1/route", "/api/v1/tasks/parse"]
 
 
-def test_client_falls_back_to_legacy_discovery_when_v1_is_not_deployed(monkeypatch):
+def test_client_reports_v1_discovery_failure_without_legacy_fallback(monkeypatch):
     calls = []
 
     def fake_request(self, method, path, **kwargs):
@@ -742,36 +743,33 @@ def test_client_falls_back_to_legacy_discovery_when_v1_is_not_deployed(monkeypat
             request = httpx.Request(method, "https://api.mdtero.test/api/v1/discovery/search")
             response = httpx.Response(404, request=request)
             raise httpx.HTTPStatusError("not found", request=request, response=response)
-        if path == "/me/discovery/search":
-            return {"items": [{"title": "Demo"}]}
         raise AssertionError(path)
 
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
-    result = MdteroClient().discover("rag", limit=1)
+    with pytest.raises(DiscoveryError) as exc_info:
+        MdteroClient().discover("rag", limit=1)
 
-    assert result["items"][0]["title"] == "Demo"
-    assert result["source"] == "openalex_server"
-    assert [call[1] for call in calls] == ["/api/v1/discovery/search", "/me/discovery/search"]
+    assert exc_info.value.payload["error_code"] == "discovery_failed"
+    assert exc_info.value.payload["status_code"] == 404
+    assert [call[1] for call in calls] == ["/api/v1/discovery/search"]
 
 
 def test_translate_text_payload_is_compatible_with_v1_schema(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_request_with_fallback(self, method, primary_path, fallback_path, **kwargs):
+    def fake_request(self, method, path, **kwargs):
         captured["method"] = method
-        captured["primary_path"] = primary_path
-        captured["fallback_path"] = fallback_path
+        captured["path"] = path
         captured["json"] = kwargs.get("json")
         return {"task_id": "translate-task", "status": "queued"}
 
-    monkeypatch.setattr(MdteroClient, "_request_with_fallback", fake_request_with_fallback)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
     result = MdteroClient().translate_text("# Title\n\nHello", filename="paper.md", target_language="zh-CN")
 
     assert result == {"task_id": "translate-task", "status": "queued"}
     assert captured["method"] == "POST"
-    assert captured["primary_path"] == "/api/v1/tasks/translate"
-    assert captured["fallback_path"] == "/tasks/translate"
+    assert captured["path"] == "/api/v1/tasks/translate"
     assert captured["json"] == {
         "source_markdown_path": "",
         "source_markdown_text": "# Title\n\nHello",
@@ -784,21 +782,19 @@ def test_translate_text_payload_is_compatible_with_v1_schema(monkeypatch):
 def test_translate_server_path_payload_is_compatible_with_v1_schema(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_request_with_fallback(self, method, primary_path, fallback_path, **kwargs):
+    def fake_request(self, method, path, **kwargs):
         captured["method"] = method
-        captured["primary_path"] = primary_path
-        captured["fallback_path"] = fallback_path
+        captured["path"] = path
         captured["json"] = kwargs.get("json")
         return {"task_id": "translate-task", "status": "queued"}
 
-    monkeypatch.setattr(MdteroClient, "_request_with_fallback", fake_request_with_fallback)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
     result = MdteroClient().translate_server_path("/app/tasks/parse-1/paper.md", target_language="zh-CN")
 
     assert result == {"task_id": "translate-task", "status": "queued"}
     assert captured["method"] == "POST"
-    assert captured["primary_path"] == "/api/v1/tasks/translate"
-    assert captured["fallback_path"] == "/tasks/translate"
+    assert captured["path"] == "/api/v1/tasks/translate"
     assert captured["json"] == {
         "source_markdown_path": "/app/tasks/parse-1/paper.md",
         "target_language": "zh-CN",
@@ -960,7 +956,7 @@ def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch
         raise httpx.ConnectError("socks tls failed")
 
     def fake_request(self, method, path, **kwargs):
-        request = httpx.Request(method, "https://api.mdtero.test/me/discovery/search")
+        request = httpx.Request(method, "https://api.mdtero.test/api/v1/discovery/search")
         response = httpx.Response(503, json={"error_code": "discovery_provider_disabled"}, request=request)
         raise httpx.HTTPStatusError("disabled", request=request, response=response)
 
@@ -1959,16 +1955,16 @@ def test_project_parse_wait_timeout_returns_nonzero_without_overwriting_project_
 def test_client_can_create_server_project(monkeypatch):
     calls = []
 
-    def fake_request_with_fallback(self, method, primary_path, fallback_path, **kwargs):
-        calls.append((method, primary_path, fallback_path, kwargs))
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
         return {"id": 42, "name": kwargs["json"]["name"]}
 
-    monkeypatch.setattr(MdteroClient, "_request_with_fallback", fake_request_with_fallback)
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
     result = MdteroClient().create_project("demo", description="local project")
 
     assert result["id"] == 42
-    assert calls == [("POST", "/api/v1/projects", "/projects", {"json": {"name": "demo", "description": "local project"}})]
+    assert calls == [("POST", "/api/v1/projects", {"json": {"name": "demo", "description": "local project"}})]
 
 
 def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Path, capsys):
