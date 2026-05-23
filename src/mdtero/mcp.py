@@ -46,7 +46,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     commands: dict[str, Any] = {
         "setup": "mdtero setup",
         "login_api_key": "mdtero login --api-key <key>",
-        "doctor": "mdtero doctor",
+        "doctor": "mdtero doctor --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
         "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --json",
         "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json",
@@ -254,7 +254,7 @@ def build_agent_briefing(
 
     next_commands: list[str] = []
     if not config.is_authenticated:
-        next_commands.extend(["mdtero login --api-key <key>", "mdtero doctor"])
+        next_commands.extend([commands["login_api_key"], commands["doctor"]])
     if not state.papers:
         next_commands.extend([
             "mdtero discover \"<topic>\" --interactive",
@@ -285,8 +285,8 @@ def build_agent_briefing(
             "authenticated": config.is_authenticated,
             "api_key_source": config.api_key_source,
             "api_base_url": config.api_base_url,
-            "action_hint": "Run `mdtero doctor` before cloud parse, translation, discovery fallback, or RAG." if config.is_authenticated else "Authenticate before cloud parse, translation, discovery fallback, or RAG.",
-            "next_commands": ["mdtero doctor"] if config.is_authenticated else ["mdtero login --api-key <key>", "mdtero doctor"],
+            "action_hint": "Run `mdtero doctor --json` before cloud parse, translation, discovery fallback, RAG, or MCP." if config.is_authenticated else "Authenticate before cloud parse, translation, discovery fallback, RAG, or MCP.",
+            "next_commands": [commands["doctor"]] if config.is_authenticated else [commands["login_api_key"], commands["doctor"]],
         },
         "health": {
             "pending_count": len(pending),

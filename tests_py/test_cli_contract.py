@@ -921,7 +921,7 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
     assert "mdtero login --api-key <key>" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor", "mdtero discover \"<topic>\" --json"]
+    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
 
 
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
@@ -1795,6 +1795,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["pending_count"] == 1
     assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --json"
     assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json"
+    assert commands["commands"]["doctor"] == "mdtero doctor --json"
     assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
     assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --json"
     assert commands["commands"]["zotero_import"] == "mdtero zotero import --json"
@@ -1833,8 +1834,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "authenticated": True,
         "api_key_source": "MDTERO_API_KEY",
         "api_base_url": "https://api.mdtero.com",
-        "action_hint": "Run `mdtero doctor` before cloud parse, translation, discovery fallback, or RAG.",
-        "next_commands": ["mdtero doctor"],
+        "action_hint": "Run `mdtero doctor --json` before cloud parse, translation, discovery fallback, RAG, or MCP.",
+        "next_commands": ["mdtero doctor --json"],
     }
     assert briefing["health"] == {
         "pending_count": 1,
@@ -1962,7 +1963,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
     assert briefing["health"]["rag_reason_code"] == "server_project_not_linked"
     assert briefing["recommended_next_commands"][:5] == [
         "mdtero login --api-key <key>",
-        "mdtero doctor",
+        "mdtero doctor --json",
         "mdtero discover \"<topic>\" --interactive",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --trace --wait --json",
@@ -2058,7 +2059,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["handoff"]["active_items"] == []
-    assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor"]
+    assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor --json"]
 
 
 def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: Path):
@@ -2069,7 +2070,7 @@ def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: 
 
     assert model["account"]["authenticated"] is True
     assert model["account"]["auth_source"] == "MDTERO_API_KEY"
-    assert model["next_steps"][:2] != ["mdtero login --api-key <key>", "mdtero doctor"]
+    assert model["next_steps"][:2] != ["mdtero login --api-key <key>", "mdtero doctor --json"]
 
 
 def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path):
