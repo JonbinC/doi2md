@@ -2516,6 +2516,20 @@ def test_public_docs_do_not_advertise_npm_installer_runtime():
         assert "npm install -g" not in content
 
 
+def test_public_docs_describe_rag_answer_citation_contract():
+    repo_root = Path(__file__).resolve().parents[1]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [repo_root / "README.md", repo_root / "install" / "README.md"]
+    )
+
+    assert "RAG query" in combined
+    assert "answer" in combined
+    assert "citations" in combined
+    assert "matches" in combined
+    assert "next_commands" in combined
+
+
 def test_packaged_skill_template_is_available_to_python_installer():
     from importlib import resources
 
