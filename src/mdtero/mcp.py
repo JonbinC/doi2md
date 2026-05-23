@@ -82,6 +82,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "commands": commands,
         "recovery_commands": recovery_commands,
         "workflow": [
+            commands["doctor"],
             commands["parse_pending"],
             commands["refresh"],
             commands["rag_build"] if not state.server_project_id else commands["ingest_for_rag"],
