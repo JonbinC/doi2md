@@ -2626,6 +2626,16 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "next_commands" in combined
 
 
+def test_public_docs_keep_account_and_academic_key_boundaries_clear():
+    repo_root = Path(__file__).resolve().parents[1]
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    boundary = readme.split("## Product Boundary", 1)[1].split("## Repo Map", 1)[0]
+
+    assert "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts" in boundary
+    assert "Academic source keys stay in local `mdtero config academic` configuration" in boundary
+    assert "diagnostics" not in boundary.lower()
+
+
 def test_packaged_skill_template_is_available_to_python_installer():
     from importlib import resources
 
