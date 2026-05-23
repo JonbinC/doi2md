@@ -1751,6 +1751,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["detect_command"] == "mdtero agent detect --json"
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
+    assert model["handoff"]["active_items"] == []
     assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor"]
 
 
@@ -1789,10 +1790,31 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --json"]
     assert model["mcp"]["serve_command"] == "mdtero mcp serve"
     assert "mdtero rag build --json" in model["mcp"]["recommended_next_commands"]
+    assert model["handoff"]["ready_artifacts"][0]["download_command"] == "mdtero download task-done paper_md --output-dir ./mdtero-output --json"
+    assert model["handoff"]["recommended_next_commands"][0] == "mdtero project download --output-dir ./mdtero-output --json"
     assert model["zotero"]["configured"] is True
     assert model["agents"]["labels"] == ["Codex"]
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
+    console = Console(record=True, width=140)
+    console.print(rendered)
+    assert "Agent Handoff" in console.export_text()
     assert rendered is not None
+
+
+def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path: Path):
+    init_project(tmp_path, name="handoff-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/bad", task_id="task-bad", status="failed", reason_code="parser_failed"))
+
+    model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path)
+    rendered = render_dashboard_text(model)
+
+    assert model["handoff"]["active_items"][0]["input"] == "10.1000/todo"
+    assert model["handoff"]["blocked_items"][0]["reason_code"] == "parser_failed"
+    assert "mdtero project parse --include-failed --wait --json" in model["handoff"]["recommended_next_commands"]
+    console = Console(record=True, width=140)
+    console.print(rendered)
+    assert "parser_failed" in console.export_text()
 
 
 def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
