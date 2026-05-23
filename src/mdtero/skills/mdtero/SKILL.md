@@ -48,6 +48,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --json` or `mdtero translate <paper.md> --to zh-CN --json`
 - build server project RAG, automatically creating/binding/importing when needed: `mdtero rag build --json`
 - query server project RAG after build: `mdtero rag query "<question>" --json`
+- print local agent context without starting a server: `mdtero mcp briefing --json`
 - serve project MCP context: `mdtero mcp serve`
 - detect or install agent skills: `mdtero agent detect --json`, `mdtero agent install --interactive`, or `mdtero agent install --target <target>`
 - inspect install/project/RAG readiness for agents: `mdtero doctor --json`
@@ -55,7 +56,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 ## MCP Workflow
 
-When `mdtero mcp serve` is available, use these tools before guessing project state:
+Before starting a long agent workflow, run `mdtero mcp briefing --json` for a one-shot account/project/RAG handoff. When `mdtero mcp serve` is available, use these tools before guessing project state:
 
 - `agent_briefing`: one-call account status, project health, ready downloads, blocked items, RAG status, and recommended next commands
 - Agent-facing recommended commands include `--json` where supported. Prefer those exact commands over human-readable variants when automating workflows.

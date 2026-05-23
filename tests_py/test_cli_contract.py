@@ -3194,6 +3194,8 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
 
     assert source_skill == packaged_skill
     assert "mdtero rag build --project-id" not in source_skill
+    assert "mdtero mcp briefing --json" in source_skill
+    assert "one-shot account/project/RAG handoff" in source_skill
     assert "mdtero project ingest" in source_skill
     assert "server_rag_status" in source_skill
     assert "rag_query(question)" in source_skill
