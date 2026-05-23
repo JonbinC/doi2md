@@ -64,7 +64,7 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
-- `rag_query(question)`: directly ask the bound server-side Voyage RAG index; when ready, use the returned `answer` and `citations` first, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
+- `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use the returned `answer` and `citations` first, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.

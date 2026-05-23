@@ -2091,6 +2091,63 @@ def test_mcp_rag_query_guides_unlinked_projects(tmp_path: Path):
     assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
 
 
+def test_mcp_rag_query_build_if_needed_bootstraps_unlinked_project(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    class FakeClient:
+        def create_project(self, name, *, description=None):
+            calls.append(("create", name, description))
+            return {"id": 42, "name": name}
+
+        def import_task_to_project(self, project_id, task_id):
+            calls.append(("import", project_id, task_id))
+            return {"document_id": "doc-1"}
+
+        def rag_build(self, project_id):
+            calls.append(("build", project_id))
+            return {"status": "ready", "reason_code": "indexed"}
+
+        def rag_query(self, project_id, question):
+            calls.append(("query", project_id, question))
+            return {"answer": "Bootstrapped answer.", "matches": []}
+
+    payload = query_server_rag("What is indexed?", tmp_path, client=FakeClient(), build_if_needed=True)
+    state = load_project(tmp_path)
+
+    assert payload["status"] == "succeeded"
+    assert payload["answer"] == "Bootstrapped answer."
+    assert payload["server_project_id"] == "42"
+    assert payload["bootstrap"]["created_server_project"] is True
+    assert payload["bootstrap"]["ingest"]["imported_count"] == 1
+    assert payload["bootstrap"]["build"]["reason_code"] == "indexed"
+    assert state.server_project_id == "42"
+    assert calls == [
+        ("create", "agent-demo", "Mdtero local project: agent-demo"),
+        ("import", "42", "task-done"),
+        ("build", "42"),
+        ("query", "42", "What is indexed?"),
+    ]
+
+
+def test_mcp_rag_query_build_if_needed_guides_projects_without_succeeded_tasks(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+
+    payload = query_server_rag("What is indexed?", tmp_path, build_if_needed=True)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "no_succeeded_tasks"
+    assert payload["answer"] is None
+    assert payload["local_ready_for_ingest_count"] == 0
+    assert payload["next_commands"] == [
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
+
+
 def test_mcp_rag_query_returns_reason_codes_on_backend_failures(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
