@@ -79,7 +79,7 @@ mdtero translate <parse-task-id> --to zh-CN
 mdtero translate paper.md --to zh-CN
 mdtero rag status --json
 mdtero rag build --json
-mdtero rag query "What are the strongest findings?" --json
+mdtero rag query "What are the strongest findings?" --build-if-needed --json
 mdtero mcp serve
 ```
 
@@ -97,7 +97,7 @@ What is validated in the current alpha:
 
 Current boundaries:
 
-- RAG is server-side Voyage RAG. `mdtero rag build` creates and binds a server project when needed, imports succeeded parse tasks, and starts the backend Voyage build; `mdtero rag status --json` reports readiness and next commands; `mdtero rag query --json` returns `answer`, `citations`, and `matches`.
+- RAG is server-side Voyage RAG. `mdtero rag build` creates and binds a server project when needed, imports succeeded parse tasks, and starts the backend Voyage build; `mdtero rag status --json` reports readiness and next commands; `mdtero rag query --build-if-needed --json` can create, bind, import, build, and query from one agent-safe command, returning `answer`, `citations`, and `matches`.
 - `mdtero zotero sync` is conservative: it writes Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
 - GROBID is not exposed as a user-selectable public engine; PDF parsing is MinerU-first on the backend.
 
@@ -164,7 +164,7 @@ mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project import-bib references.bib
 mdtero rag status --json
 mdtero rag build --json
-mdtero rag query "这批论文的核心方法是什么？" --json
+mdtero rag query "这批论文的核心方法是什么？" --build-if-needed --json
 mdtero config zotero
 mdtero zotero import --limit 20 --json
 mdtero zotero sync --json

@@ -48,7 +48,7 @@ For project RAG and local agent context, use:
 ```bash
 mdtero rag build --json
 mdtero rag status --json
-mdtero rag query "<question>" --json
+mdtero rag query "<question>" --build-if-needed --json
 mdtero mcp briefing --json
 mdtero mcp serve
 ```

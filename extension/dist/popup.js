@@ -519,8 +519,9 @@ function normalizeCliHandoffCommand(command) {
   }
   const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
   const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
-  const withoutWait = withoutJson.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --json`;
+  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
+  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --timeout 300 --json`;
 }
 function buildCliParseCommand(input) {
   const normalized = String(input || "").trim();
@@ -530,7 +531,7 @@ function buildCliParseCommand(input) {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --json`;
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
 }
 function shellQuote(value) {
   if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {

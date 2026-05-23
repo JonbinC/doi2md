@@ -88,7 +88,7 @@ mdtero translate <parse-task-id> --to zh-CN --json
 mdtero translate paper.md --to zh-CN --json
 mdtero rag status --json
 mdtero rag build --json
-mdtero rag query "What are the strongest findings?" --json
+mdtero rag query "What are the strongest findings?" --build-if-needed --json
 mdtero mcp serve
 mdtero tui
 ```
@@ -114,7 +114,7 @@ Validated in the current alpha:
 Known boundaries:
 
 - Zotero reverse sync is conservative: it creates Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
-- `mdtero rag build/query` talks to server-side Voyage RAG. `mdtero rag build` now bootstraps the server project when needed, imports succeeded parse tasks, and starts the backend Voyage build. `mdtero rag query --json` returns `answer`, `citations`, and `matches`; `mdtero project create-server` and `mdtero project ingest` remain available for explicit or recovery workflows.
+- `mdtero rag build/query` talks to server-side Voyage RAG. `mdtero rag build` now bootstraps the server project when needed, imports succeeded parse tasks, and starts the backend Voyage build. `mdtero rag query --build-if-needed --json` can create, bind, import, build, and query from one agent-safe command, returning `answer`, `citations`, and `matches`; `mdtero project create-server` and `mdtero project ingest` remain available for explicit or recovery workflows.
 - GROBID is not a public product option. PDF parsing is MinerU-first on the backend, with internal fallback behavior owned by the service.
 
 ## Product Boundary
@@ -164,7 +164,7 @@ mdtero project parse --wait --timeout 300 --json
 mdtero translate <parse-task-id> --to zh-CN --json
 mdtero rag status --json
 mdtero rag build --json
-mdtero rag query "这批论文的核心方法是什么？" --json
+mdtero rag query "这批论文的核心方法是什么？" --build-if-needed --json
 mdtero zotero import --limit 20 --json
 mdtero zotero sync --json
 mdtero agent install --interactive
