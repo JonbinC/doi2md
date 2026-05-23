@@ -314,8 +314,44 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     table.add_row("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg))
     current_project = project_path(Path.cwd())
     table.add_row("Project", "ok" if current_project.exists() else "not initialized", str(current_project))
+    if current_project.exists():
+        for row in _doctor_project_rows(Path.cwd()):
+            table.add_row(*row)
     console.print(table)
     return 0 if cfg.is_authenticated else 1
+
+
+def _doctor_project_rows(root: Path) -> list[tuple[str, str, str]]:
+    try:
+        state = load_project(root)
+    except Exception as exc:
+        return [("Project state", "unreadable", f"{exc.__class__.__name__}: {exc}")]
+    pending = sum(1 for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id)
+    running = sum(1 for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"})
+    succeeded = sum(1 for paper in state.papers if paper.status == "succeeded")
+    failed = sum(1 for paper in state.papers if paper.status == "failed")
+    ready_for_ingest = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    rows = [
+        (
+            "Project papers",
+            "ok" if state.papers else "empty",
+            f"{len(state.papers)} total / {pending} pending / {running} running / {succeeded} succeeded / {failed} failed",
+        ),
+        (
+            "Server project",
+            "ok" if state.server_project_id else "not linked",
+            state.server_project_id or "run mdtero rag build --json",
+        ),
+    ]
+    if state.server_project_id and ready_for_ingest:
+        rows.append(("RAG readiness", "check", "run mdtero project ingest --json, then mdtero rag status --json"))
+    elif state.server_project_id:
+        rows.append(("RAG readiness", "needs papers", "parse papers before mdtero project ingest --json"))
+    elif ready_for_ingest:
+        rows.append(("RAG readiness", "not linked", "run mdtero rag build --json to create, bind, ingest, and build"))
+    else:
+        rows.append(("RAG readiness", "not ready", "add and parse papers before RAG"))
+    return rows
 
 
 def _dependency_check_row(label: str, *, import_name: str, ok_detail: str, missing_detail: str) -> tuple[str, str, str]:
