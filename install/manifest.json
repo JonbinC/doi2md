@@ -5,7 +5,7 @@
   "installScriptUrl": "https://mdtero.com/install.sh",
   "quickInstallCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git && mdtero setup",
   "helperCommand": "mdtero",
-  "accountBoundaryNote": "Mdtero Account is the control plane for API keys, quota, history, diagnostics, and install prompts. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
+  "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
     "packageName": "mdtero",
     "packageVersion": "0.2.0a6",
