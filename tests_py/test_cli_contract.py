@@ -1804,6 +1804,14 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert commands["commands"]["rag_status"] == "mdtero rag status --json"
     assert commands["commands"]["rag_build"] == "mdtero rag build --json"
     assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
+    assert commands["workflow"] == [
+        "mdtero doctor --json",
+        "mdtero project parse --wait --json",
+        "mdtero project refresh --wait --json",
+        "mdtero project ingest --json",
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --json",
+    ]
     assert rag["ready"] is True
     assert rag["reason_code"] == "ready"
     assert "mdtero project ingest --json" in paper["recommended_commands"]
@@ -2009,6 +2017,14 @@ def test_mcp_rag_context_prompts_rag_build_when_unlinked(tmp_path: Path):
     assert commands["commands"]["bootstrap_rag"] == "mdtero rag build --json"
     assert "create_server_project" not in commands["commands"]
     assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
+    assert commands["workflow"] == [
+        "mdtero doctor --json",
+        "mdtero project parse --wait --json",
+        "mdtero project refresh --wait --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --json",
+    ]
 
 
 def test_mcp_server_rag_status_reports_unlinked_next_commands(tmp_path: Path):
