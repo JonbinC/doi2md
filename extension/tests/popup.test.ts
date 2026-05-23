@@ -12,6 +12,7 @@ import {
   getDownloadLabel,
   getPreflightHintText,
   buildCliParseCommand,
+  normalizeCliHandoffCommand,
   getUsageStatusText,
   getPreferredArtifactKey,
   getResultWarningText,
@@ -399,7 +400,7 @@ describe("getTaskFailureText", () => {
         "en"
       )
     ).toBe(
-      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --json"
+      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --json"
     );
   });
 
@@ -424,7 +425,16 @@ describe("getTaskFailureText", () => {
 
   it("selects the first non-empty next command for CLI handoff", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
+    expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --json");
     expect(firstNextCommand(null)).toBe("");
+  });
+});
+
+describe("normalizeCliHandoffCommand", () => {
+  it("keeps parse handoffs aligned with the wait-first CLI contract", () => {
+    expect(normalizeCliHandoffCommand("mdtero parse 10.1000/demo --json")).toBe("mdtero parse 10.1000/demo --trace --wait --json");
+    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --json")).toBe("mdtero parse --file paper.pdf --trace --wait --json");
+    expect(normalizeCliHandoffCommand("mdtero rag status --json")).toBe("mdtero rag status --json");
   });
 });
 
