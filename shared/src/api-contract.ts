@@ -118,6 +118,7 @@ export interface TaskResult {
   artifacts?: Record<string, TaskArtifactDescriptor>;
   reason_code?: string | null;
   action_hint?: string | null;
+  next_commands?: string[];
   warning_code?: string;
   warning_message?: string;
 }
