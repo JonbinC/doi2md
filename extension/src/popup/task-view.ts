@@ -266,7 +266,7 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
 export function getTaskFailureText(
   task:
     | (Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint" | "next_commands"> & {
-        result?: Pick<TaskResult, "reason_code" | "action_hint" | "next_commands"> | null;
+        result?: Pick<TaskResult, "reason_code" | "action_hint" | "next_commands" | "translation_attempts"> | null;
       })
     | null
     | undefined,
@@ -283,11 +283,34 @@ export function getTaskFailureText(
   if (actionHint) {
     parts.push(language === "zh" ? `下一步：${actionHint}` : `Next: ${actionHint}`);
   }
+  const attempts = getTranslationAttemptSummary(task?.result?.translation_attempts, language);
+  if (attempts) {
+    parts.push(attempts);
+  }
   const nextCommand = firstTaskNextCommand(task);
   if (nextCommand) {
     parts.push(language === "zh" ? `命令：${nextCommand}` : `Command: ${nextCommand}`);
   }
   return parts.join(" ");
+}
+
+export function getTranslationAttemptSummary(
+  attempts: TaskResult["translation_attempts"] | null | undefined,
+  language: UiLanguage = "en"
+): string {
+  const items = (attempts ?? [])
+    .map((attempt) => {
+      const provider = String(attempt?.provider || "provider").trim();
+      const reason = String(attempt?.reason_code || attempt?.provider_error_code || "failed").trim();
+      const statusCode = attempt?.provider_status_code;
+      const status = typeof statusCode === "number" ? ` ${statusCode}` : "";
+      return `${provider}: ${reason}${status}`;
+    })
+    .filter(Boolean);
+  if (!items.length) {
+    return "";
+  }
+  return language === "zh" ? `服务端尝试：${items.join("; ")}` : `Provider attempts: ${items.join("; ")}`;
 }
 
 export function firstTaskNextCommand(

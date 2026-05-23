@@ -1141,6 +1141,7 @@ def _promote_task_result_fields(task: dict[str, Any]) -> dict[str, Any]:
         "reason_code": result.get("reason_code"),
         "parse_outcome": parse_outcome,
         "download_artifacts": result.get("download_artifacts"),
+        "translation_attempts": result.get("translation_attempts"),
     }
     for key, value in promotions.items():
         if value not in (None, "", [], {}):
@@ -2055,8 +2056,32 @@ def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
         reason = payload.get("reason_code") or payload.get("action_hint")
         if reason:
             console.print(str(reason))
+        _print_translation_attempts(payload, console)
     else:
         console.print(payload)
+
+
+def _print_translation_attempts(payload: dict[str, Any], console: Console) -> None:
+    attempts = payload.get("translation_attempts")
+    if attempts is None and isinstance(payload.get("result"), dict):
+        attempts = payload["result"].get("translation_attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return
+    table = Table("Provider", "Reason", "Status")
+    for attempt in attempts:
+        if not isinstance(attempt, dict):
+            continue
+        status = ""
+        if attempt.get("provider_status_code") is not None:
+            status = str(attempt.get("provider_status_code"))
+        elif attempt.get("status"):
+            status = str(attempt.get("status"))
+        table.add_row(
+            str(attempt.get("provider") or "provider"),
+            str(attempt.get("reason_code") or attempt.get("provider_error_code") or "failed"),
+            status,
+        )
+    console.print(table)
 
 
 if __name__ == "__main__":

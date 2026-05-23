@@ -527,11 +527,28 @@ function getTaskFailureText(task, fallback, language = "en") {
   if (actionHint) {
     parts.push(language === "zh" ? `\u4E0B\u4E00\u6B65\uFF1A${actionHint}` : `Next: ${actionHint}`);
   }
+  const attempts = getTranslationAttemptSummary(task?.result?.translation_attempts, language);
+  if (attempts) {
+    parts.push(attempts);
+  }
   const nextCommand = firstTaskNextCommand(task);
   if (nextCommand) {
     parts.push(language === "zh" ? `\u547D\u4EE4\uFF1A${nextCommand}` : `Command: ${nextCommand}`);
   }
   return parts.join(" ");
+}
+function getTranslationAttemptSummary(attempts, language = "en") {
+  const items = (attempts ?? []).map((attempt) => {
+    const provider = String(attempt?.provider || "provider").trim();
+    const reason = String(attempt?.reason_code || attempt?.provider_error_code || "failed").trim();
+    const statusCode = attempt?.provider_status_code;
+    const status = typeof statusCode === "number" ? ` ${statusCode}` : "";
+    return `${provider}: ${reason}${status}`;
+  }).filter(Boolean);
+  if (!items.length) {
+    return "";
+  }
+  return language === "zh" ? `\u670D\u52A1\u7AEF\u5C1D\u8BD5\uFF1A${items.join("; ")}` : `Provider attempts: ${items.join("; ")}`;
 }
 function firstTaskNextCommand(task) {
   return firstNextCommand([...task?.next_commands ?? [], ...task?.result?.next_commands ?? []]);

@@ -119,8 +119,19 @@ export interface TaskResult {
   reason_code?: string | null;
   action_hint?: string | null;
   next_commands?: string[];
+  translation_attempts?: TranslationProviderAttempt[];
   warning_code?: string;
   warning_message?: string;
+}
+
+export interface TranslationProviderAttempt {
+  provider?: string | null;
+  status?: string | null;
+  reason_code?: string | null;
+  provider_error_code?: string | null;
+  provider_status_code?: number | null;
+  retryable?: boolean | null;
+  message?: string | null;
 }
 
 export interface TaskRecord {
