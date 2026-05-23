@@ -251,6 +251,67 @@ def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_pat
     assert ("RAG readiness", "not linked", "run mdtero rag build --json to create, bind, ingest, and build") in rows
 
 
+def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    secret = "mdt_live_config_secret"
+    save_config(MdteroConfig(
+        api_key=secret,
+        academic=AcademicKeys(
+            elsevier_api_key="elsevier-secret",
+            wiley_tdm_token="wiley-secret",
+            semantic_scholar_api_key="s2-secret",
+        ),
+        zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero-secret"),
+    ))
+    init_project(tmp_path, name="doctor-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_doctor(type("Args", (), {"json": True})()) == 0
+    raw = capsys.readouterr().out
+    payload = json.loads(raw)
+
+    assert payload["status"] == "ok"
+    assert payload["authenticated"] is True
+    assert payload["api_key_source"] == "saved config"
+    assert payload["academic"] == {
+        "elsevier_api_key": True,
+        "wiley_tdm_token": True,
+        "semantic_scholar_api_key": True,
+        "discover_source": "local_semantic_scholar",
+    }
+    assert payload["zotero"] == {"configured": True, "library_id": "123", "library_type": "user"}
+    assert payload["project"]["server_project_id"] == "42"
+    assert payload["project"]["ready_for_ingest_count"] == 1
+    assert payload["project"]["rag_status"] == "check"
+    assert "mdtero project ingest --json" in payload["next_commands"]
+    assert secret not in raw
+    assert "elsevier-secret" not in raw
+    assert "wiley-secret" not in raw
+    assert "s2-secret" not in raw
+    assert "zotero-secret" not in raw
+
+
+def test_doctor_json_reports_missing_auth_and_project_init_next_steps(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_doctor(type("Args", (), {"json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "missing_auth"
+    assert payload["authenticated"] is False
+    assert payload["project"]["initialized"] is False
+    assert payload["project"]["path"].endswith(".mdtero/project.json")
+    assert payload["next_commands"][0] == "mdtero setup"
+    assert "mdtero project init --name <name>" in payload["next_commands"]
+
+
 def test_client_headers_use_environment_api_key(monkeypatch):
     monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
 
@@ -262,8 +323,10 @@ def test_client_headers_use_environment_api_key(monkeypatch):
 def test_rag_status_accepts_agent_friendly_flags():
     parser = build_parser()
 
+    doctor_args = parser.parse_args(["doctor", "--json"])
     args = parser.parse_args(["rag", "status", "--project-id", "42", "--json"])
 
+    assert doctor_args.json is True
     assert args.project_id == "42"
     assert args.json is True
 

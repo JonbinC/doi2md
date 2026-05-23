@@ -78,7 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup = _cmd(sub, "setup", "Run the onboarding wizard.", cmd_setup)
     setup.add_argument("--api-key", default="", help="Save an API key during setup for headless servers.")
-    _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
+    doctor = _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
+    doctor.add_argument("--json", action="store_true", help="Print a machine-readable safe diagnostic summary without echoing secrets.")
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
     login.add_argument("--api-key", default="")
     login.add_argument("--no-browser", action="store_true", help="Print the loopback web-login URL instead of opening a browser.")
@@ -302,23 +303,139 @@ def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds:
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
     cfg = load_config()
+    rows = _doctor_rows(cfg, Path.cwd())
+    if getattr(_args, "json", False):
+        print(json.dumps(_doctor_payload(cfg, Path.cwd(), rows), indent=2, ensure_ascii=False))
+        return 0 if cfg.is_authenticated else 1
     console = Console()
     table = Table("Check", "Status", "Detail")
-    table.add_row("API key", "ok" if cfg.is_authenticated else "missing", cfg.api_key_source)
-    table.add_row("Config", "ok" if config_path().exists() else "not created", str(config_path()))
-    table.add_row("API base", "ok", cfg.api_base_url)
-    table.add_row(*_dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"))
-    table.add_row(*_dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"))
-    table.add_row(*_dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"))
-    table.add_row("Semantic Scholar", "ok" if cfg.has_semantic_scholar_key else "optional", "local discovery" if cfg.has_semantic_scholar_key else "server OpenAlex fallback")
-    table.add_row("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg))
-    current_project = project_path(Path.cwd())
-    table.add_row("Project", "ok" if current_project.exists() else "not initialized", str(current_project))
-    if current_project.exists():
-        for row in _doctor_project_rows(Path.cwd()):
-            table.add_row(*row)
+    for row in rows:
+        table.add_row(*row)
     console.print(table)
     return 0 if cfg.is_authenticated else 1
+
+
+def _doctor_rows(cfg: MdteroConfig, root: Path) -> list[tuple[str, str, str]]:
+    rows = [
+        ("API key", "ok" if cfg.is_authenticated else "missing", cfg.api_key_source),
+        ("Config", "ok" if config_path().exists() else "not created", str(config_path())),
+        ("API base", "ok", cfg.api_base_url),
+        _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
+        _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
+        _dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"),
+        ("Semantic Scholar", "ok" if cfg.has_semantic_scholar_key else "optional", "local discovery" if cfg.has_semantic_scholar_key else "server OpenAlex fallback"),
+        ("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg)),
+    ]
+    current_project = project_path(root)
+    rows.append(("Project", "ok" if current_project.exists() else "not initialized", str(current_project)))
+    if current_project.exists():
+        rows.extend(_doctor_project_rows(root))
+    return rows
+
+
+def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]]) -> dict[str, Any]:
+    row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
+    payload: dict[str, Any] = {
+        "status": "ok" if cfg.is_authenticated else "missing_auth",
+        "authenticated": cfg.is_authenticated,
+        "api_key_source": cfg.api_key_source,
+        "config_path": str(config_path()),
+        "api_base_url": cfg.api_base_url,
+        "checks": row_payload,
+        "dependencies": {
+            "curl_cffi": _doctor_row_status(rows, "curl_cffi"),
+            "fastmcp": _doctor_row_status(rows, "FastMCP"),
+            "pyzotero": _doctor_row_status(rows, "pyzotero"),
+        },
+        "academic": {
+            "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
+            "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
+            "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
+            "discover_source": "local_semantic_scholar" if cfg.has_semantic_scholar_key else "server_openalex",
+        },
+        "zotero": {
+            "configured": _zotero_configured(cfg),
+            "library_id": cfg.zotero.library_id,
+            "library_type": cfg.zotero.library_type,
+        },
+        "project": _doctor_project_payload(root),
+        "next_commands": ["mdtero setup"] if not cfg.is_authenticated else ["mdtero doctor --json"],
+    }
+    project_next = payload["project"].get("next_commands") if isinstance(payload.get("project"), dict) else None
+    if isinstance(project_next, list):
+        payload["next_commands"] = _dedupe_string_list([*payload["next_commands"], *project_next])
+    return payload
+
+
+def _doctor_row_status(rows: list[tuple[str, str, str]], check: str) -> dict[str, str] | None:
+    for row_check, status, detail in rows:
+        if row_check == check:
+            return {"status": status, "detail": detail}
+    return None
+
+
+def _doctor_project_payload(root: Path) -> dict[str, Any]:
+    target = project_path(root)
+    if not target.exists():
+        return {
+            "initialized": False,
+            "path": str(target),
+            "next_commands": ["mdtero project init --name <name>", "mdtero parse <doi-or-url> --trace --wait --json"],
+        }
+    try:
+        state = load_project(root)
+    except Exception as exc:
+        return {
+            "initialized": True,
+            "path": str(target),
+            "readable": False,
+            "error_type": exc.__class__.__name__,
+            "next_commands": ["mdtero project status --json"],
+        }
+    pending = sum(1 for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id)
+    running = sum(1 for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"})
+    succeeded = sum(1 for paper in state.papers if paper.status == "succeeded")
+    failed = sum(1 for paper in state.papers if paper.status == "failed")
+    ready_for_ingest = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    if state.server_project_id and ready_for_ingest:
+        rag_next = ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
+        rag_status = "check"
+    elif state.server_project_id:
+        rag_next = ["mdtero project parse --wait --json", "mdtero project ingest --json"]
+        rag_status = "needs_papers"
+    elif ready_for_ingest:
+        rag_next = ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
+        rag_status = "not_linked"
+    else:
+        rag_next = ["mdtero discover \"<topic>\" --interactive", "mdtero project parse --wait --json"]
+        rag_status = "not_ready"
+    return {
+        "initialized": True,
+        "readable": True,
+        "path": str(target),
+        "name": state.name,
+        "server_project_id": state.server_project_id,
+        "paper_count": len(state.papers),
+        "pending_count": pending,
+        "running_count": running,
+        "succeeded_count": succeeded,
+        "failed_count": failed,
+        "ready_for_ingest_count": ready_for_ingest,
+        "rag_status": rag_status,
+        "next_commands": rag_next,
+    }
+
+
+def _dedupe_string_list(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        cleaned = str(value or "").strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned)
+    return result
 
 
 def _doctor_project_rows(root: Path) -> list[tuple[str, str, str]]:
