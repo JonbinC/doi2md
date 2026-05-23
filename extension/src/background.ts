@@ -52,7 +52,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       );
 
       if (result.success && result.taskId) {
-        return { task_id: result.taskId };
+        return result.task ?? { task_id: result.taskId };
       }
 
       throw new Error(formatSsotFailure(result));

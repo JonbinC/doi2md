@@ -2,6 +2,7 @@ import type {
   ActionType,
   ExtensionRouteRequest,
   ExtensionRouteResponse,
+  ParseTaskResponse,
 } from "@mdtero/shared";
 
 import { executeAction } from "./action-executor";
@@ -26,7 +27,7 @@ export interface ParseClientLike {
     filename?: string;
     sourceDoi?: string;
     sourceInput?: string;
-  }): Promise<{ task_id: string }>;
+  }): Promise<ParseTaskResponse>;
 }
 
 export async function fetchRoutePlanFromSsot(
@@ -48,6 +49,7 @@ export async function executeSsotActionSequence(
 ): Promise<{
   success: boolean;
   taskId?: string;
+  task?: ParseTaskResponse;
   error?: string;
   requiresBrowserCapture?: boolean;
   requiresHelper?: boolean;
@@ -71,7 +73,7 @@ export async function executeSsotActionSequence(
             sourceDoi: result.sourceDoi,
             sourceInput: context.input,
           });
-          return { success: true, taskId: task.task_id };
+          return { success: true, taskId: task.task_id, task };
         } catch (error) {
           if (routePlan.fail_closed) {
             return { success: false, error: String(error) };
