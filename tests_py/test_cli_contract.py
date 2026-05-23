@@ -1455,6 +1455,9 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["rag"]["reason_code"] == "server_project_not_linked"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert "agent_briefing" in model["mcp"]["tools"]
+    assert model["agents"]["detect_command"] == "mdtero agent detect --json"
+    assert model["agents"]["install_command"] == "mdtero agent install --interactive"
+    assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor"]
 
 
@@ -1495,6 +1498,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "mdtero rag build --json" in model["mcp"]["recommended_next_commands"]
     assert model["zotero"]["configured"] is True
     assert model["agents"]["labels"] == ["Codex"]
+    assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert rendered is not None
 
 
