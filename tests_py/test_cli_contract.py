@@ -2954,8 +2954,16 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     assert payload["reason_code"] == "ok"
     assert payload["server_project_id"] == "42"
     assert payload["answer"] == "[1] The Transformer relies entirely on attention and avoids recurrence."
+    assert payload["answer_kind"] == "extractive_evidence_pack"
     assert payload["citations"][0]["document_title"] == "Attention Is All You Need"
     assert payload["citations"][0]["line_start"] == 53
+    assert payload["source_nodes"][0]["node_id"] == "doc-7:chunk-9"
+    assert payload["source_nodes"][0]["metadata"]["citation_order"] == 1
+    assert payload["source_nodes"][0]["metadata"]["line_end"] == 58
+    assert payload["evidence_pack"]["answer_kind"] == "extractive_evidence_pack"
+    assert payload["evidence_pack"]["question"] == "What is the contribution?"
+    assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
+    assert "grounded evidence" in payload["evidence_pack"]["agent_instruction"]
     assert payload["action_hint"] == "RAG query completed. Review the returned answer, citations, and matches."
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 

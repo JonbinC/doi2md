@@ -1780,13 +1780,18 @@ def _normalize_rag_query_payload(payload: dict[str, Any], *, project_id: str, qu
     if not isinstance(payload, dict):
         payload = {"answer": str(payload)}
     matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    source_nodes = payload.get("source_nodes") if isinstance(payload.get("source_nodes"), list) else _rag_source_nodes_from_matches(matches)
+    citations = payload.get("citations") if isinstance(payload.get("citations"), list) else _rag_citations_from_matches(matches)
     payload.setdefault("project_id", project_id)
     payload.setdefault("server_project_id", str(project_id))
     payload.setdefault("question", question)
     payload.setdefault("status", "succeeded")
     payload.setdefault("reason_code", "rag_query_succeeded" if matches or payload.get("answer") else "no_matches")
+    payload.setdefault("answer_kind", "extractive_evidence_pack")
     payload.setdefault("answer", _extract_rag_answer(matches))
-    payload.setdefault("citations", _rag_citations_from_matches(matches))
+    payload.setdefault("citations", citations)
+    payload.setdefault("source_nodes", source_nodes)
+    payload.setdefault("evidence_pack", _rag_evidence_pack(question=question, source_nodes=source_nodes, citations=citations))
     payload.setdefault("action_hint", "RAG query completed. Review the returned answer, citations, and matches.")
     payload.setdefault(
         "next_commands",
@@ -1822,6 +1827,65 @@ def _rag_citations_from_matches(matches: list[Any]) -> list[dict[str, Any]]:
             "source_url": match.get("source_url"),
         })
     return citations
+
+
+def _rag_source_nodes_from_matches(matches: list[Any]) -> list[dict[str, Any]]:
+    source_nodes: list[dict[str, Any]] = []
+    for index, match in enumerate(matches, start=1):
+        if not isinstance(match, dict):
+            continue
+        document_id = match.get("document_id")
+        chunk_id = match.get("chunk_id")
+        source_nodes.append({
+            "node_id": f"doc-{document_id}:chunk-{chunk_id}",
+            "score": match.get("score"),
+            "text": str(match.get("snippet") or ""),
+            "metadata": {
+                "citation_order": match.get("citation_order") or index,
+                "document_id": document_id,
+                "document_title": match.get("document_title"),
+                "chunk_id": chunk_id,
+                "line_start": match.get("line_start"),
+                "line_end": match.get("line_end"),
+                "doi": match.get("doi"),
+                "source_url": match.get("source_url"),
+                "year": match.get("year"),
+                "venue": match.get("venue"),
+                "external_source": match.get("external_source"),
+                "external_key": match.get("external_key"),
+            },
+        })
+    return source_nodes
+
+
+def _rag_evidence_pack(*, question: str, source_nodes: list[dict[str, Any]], citations: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "question": question,
+        "answer_kind": "extractive_evidence_pack",
+        "source_nodes": source_nodes,
+        "citations": citations,
+        "context_markdown": _rag_context_markdown(source_nodes),
+        "agent_instruction": (
+            "Use source_nodes and citations as grounded evidence. Treat answer as an extractive summary, "
+            "not a generated final synthesis, unless a downstream LLM rewrites it with citations preserved."
+        ),
+    }
+
+
+def _rag_context_markdown(source_nodes: list[dict[str, Any]]) -> str:
+    blocks: list[str] = []
+    for node in source_nodes:
+        metadata = node.get("metadata") if isinstance(node.get("metadata"), dict) else {}
+        order = metadata.get("citation_order") or "?"
+        title = str(metadata.get("document_title") or "Untitled document").strip()
+        doi = str(metadata.get("doi") or metadata.get("source_url") or "").strip()
+        location = ""
+        if metadata.get("line_start") is not None and metadata.get("line_end") is not None:
+            location = f":{metadata['line_start']}-{metadata['line_end']}"
+        suffix = f" ({doi})" if doi else ""
+        text = " ".join(str(node.get("text") or "").split())
+        blocks.append(f"[{order}] {title}{location}{suffix}\n{text}")
+    return "\n\n".join(blocks)
 
 
 def _server_project_id(args: argparse.Namespace) -> str:
