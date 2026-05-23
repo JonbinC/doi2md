@@ -18,6 +18,7 @@ import {
   getResultWarningText,
   getTaskFailureText,
   firstNextCommand,
+  firstTaskNextCommand,
   getSavedResultSummary,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -427,6 +428,17 @@ describe("getTaskFailureText", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
     expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
     expect(firstNextCommand(null)).toBe("");
+  });
+
+  it("falls back to result-level next commands for CLI handoff", () => {
+    expect(
+      firstTaskNextCommand({
+        next_commands: [],
+        result: {
+          next_commands: ["mdtero parse https://example.org/paper --json"]
+        }
+      })
+    ).toBe("mdtero parse https://example.org/paper --trace --wait --timeout 300 --json");
   });
 });
 

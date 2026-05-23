@@ -34,7 +34,7 @@ import {
   getSavedResultSummary,
   getUsageStatusText,
   getTaskFailureText,
-  firstNextCommand,
+  firstTaskNextCommand,
   buildCliParseCommand,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -609,7 +609,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
       )
     );
     if (kind === "parse") {
-      setCliHandoff(currentInput, firstNextCommand(task.next_commands));
+      setCliHandoff(currentInput, firstTaskNextCommand(task));
       isParsing = false;
     } else {
       isTranslating = false;
