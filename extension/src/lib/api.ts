@@ -140,37 +140,6 @@ export function createApiClient(
     return response;
   }
 
-  async function requestWithFallback(path: string, fallbackPath: string, init?: RequestInit, options?: { requireAuth?: boolean }) {
-    const settings = options?.requireAuth ? await requireSignedInSettings() : await getSettings();
-    const makeHeaders = () => {
-      const headers = new Headers(init?.headers ?? {});
-      if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
-        headers.set("Content-Type", "application/json");
-      }
-      if (settings.token) {
-        headers.set("Authorization", `Bearer ${settings.token}`);
-      }
-      headers.set("X-Client-Channel", "extension");
-      headers.set("X-Client-Version", getRuntimeVersion());
-      return headers;
-    };
-    let response = await fetch(`${settings.apiBaseUrl}${path}`, {
-      ...init,
-      headers: makeHeaders()
-    });
-    if (response.status === 404) {
-      response = await fetch(`${settings.apiBaseUrl}${fallbackPath}`, {
-        ...init,
-        headers: makeHeaders()
-      });
-    }
-    if (!response.ok) {
-      const detail = await readErrorDetail(response);
-      throw new Error(detail || `API request failed: ${response.status}`);
-    }
-    return response;
-  }
-
   function extractFilename(contentDisposition: string | null, fallback: string) {
     const match = contentDisposition?.match(/filename="([^"]+)"/i);
     return match?.[1] ?? fallback;
@@ -187,7 +156,7 @@ export function createApiClient(
       return request("/me/tasks", undefined, { requireAuth: true }).then((response) => response.json() as Promise<{items: TaskRecord[]}>);
     },
     createParseTask(payload: ParseTaskRequest) {
-      return requestWithFallback("/api/v1/tasks/parse", "/tasks/parse", {
+      return request("/api/v1/tasks/parse", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
@@ -205,7 +174,7 @@ export function createApiClient(
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
-      return requestWithFallback("/api/v1/tasks/upload", "/tasks/parse-upload-v2", {
+      return request("/api/v1/tasks/upload", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
@@ -217,22 +186,22 @@ export function createApiClient(
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
       });
-      return requestWithFallback("/api/v1/tasks/upload", "/tasks/parse-upload-v2", {
+      return request("/api/v1/tasks/upload", {
         method: "POST",
         body
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
     },
     createTranslateTask(payload: TranslateTaskRequest) {
-      return requestWithFallback("/api/v1/tasks/translate", "/tasks/translate", {
+      return request("/api/v1/tasks/translate", {
         method: "POST",
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
     getTask(taskId: string) {
-      return requestWithFallback(`/api/v1/tasks/${taskId}`, `/tasks/${taskId}`, undefined, { requireAuth: true }).then((response) => response.json() as Promise<TaskRecord>);
+      return request(`/api/v1/tasks/${taskId}`, undefined, { requireAuth: true }).then((response) => response.json() as Promise<TaskRecord>);
     },
     downloadArtifact(taskId: string, artifact: string, preferredFilename?: string | null) {
-      return requestWithFallback(`/api/v1/tasks/${taskId}/download/${artifact}`, `/tasks/${taskId}/download/${artifact}`, undefined, { requireAuth: true }).then(async (response) => ({
+      return request(`/api/v1/tasks/${taskId}/download/${artifact}`, undefined, { requireAuth: true }).then(async (response) => ({
         blob: await response.blob(),
         filename: extractFilename(
           response.headers.get("Content-Disposition"),
