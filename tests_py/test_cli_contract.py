@@ -1509,7 +1509,13 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
         return {
             "task_id": "task-1",
             "status": "succeeded",
-            "result": {"preferred_artifact": "paper_md"},
+            "result": {
+                "preferred_artifact": "paper_md",
+                "selected_provider": "arxiv",
+                "parser_strategy": "html_arxiv",
+                "parse_outcome": {"outcome_code": "fulltext_accepted"},
+                "download_artifacts": {"paper_md": {"filename": "paper.md"}},
+            },
         }
 
     monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
@@ -1519,9 +1525,71 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
     assert cli.cmd_parse(type("Args", (), {"input": "10.1000/demo", "file": None, "batch": None, "json": True, "wait": True, "trace": False, "timeout": 5, "interval": 0.5})()) == 0
     payload = json.loads(capsys.readouterr().out)
 
+    assert payload["submission_status"] == "queued"
+    assert payload["status"] == "succeeded"
+    assert payload["result"]["preferred_artifact"] == "paper_md"
+    assert payload["selected_provider"] == "arxiv"
+    assert payload["parser_strategy"] == "html_arxiv"
+    assert payload["parse_outcome"] == {"outcome_code": "fulltext_accepted"}
+    assert payload["download_artifacts"] == {"paper_md": {"filename": "paper.md"}}
+    assert payload["preferred_artifact"] == "paper_md"
+    assert payload["next_commands"] == ["mdtero download task-1 paper_md --output-dir ./mdtero-output --json"]
     assert payload["final_task"]["preferred_artifact"] == "paper_md"
     assert payload["final_task"]["next_commands"] == ["mdtero download task-1 paper_md --output-dir ./mdtero-output --json"]
     assert "error" not in payload["final_task"]
+
+
+def test_status_promotes_nested_provider_strategy_and_outcome(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    def fake_task(self, task_id):
+        return {
+            "task_id": task_id,
+            "status": "succeeded",
+            "result": {
+                "quality": {"provider": "mineru_precision", "parser_strategy": "mineru_precision_markdown"},
+                "parse_outcome": {"outcome_code": "fulltext_accepted"},
+                "download_artifacts": {"paper_md": {"filename": "paper.md"}},
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-1", "wait": False, "json": True, "trace": False})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["selected_provider"] == "mineru_precision"
+    assert payload["parser_strategy"] == "mineru_precision_markdown"
+    assert payload["parse_outcome"] == {"outcome_code": "fulltext_accepted"}
+    assert payload["download_artifacts"] == {"paper_md": {"filename": "paper.md"}}
+
+
+def test_waited_parse_timeout_promotes_timeout_to_top_level(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    def fake_parse_with_route(self, value):
+        assert value == "10.1000/demo"
+        return {"route_kind": "legacy_parse"}, {"task_id": "task-1", "status": "queued"}, None
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        raise TimeoutError("still queued")
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_parse(type("Args", (), {"input": "10.1000/demo", "file": None, "batch": None, "json": True, "wait": True, "trace": False, "timeout": 5, "interval": 0.5})()) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["submission_status"] == "queued"
+    assert payload["status"] == "timeout"
+    assert payload["reason_code"] == "task_wait_timeout"
+    assert payload["final_task"]["status"] == "timeout"
+    assert payload["next_commands"] == [
+        "mdtero status task-1 --wait --timeout 5 --json",
+        "mdtero status task-1 --json",
+    ]
 
 
 def test_project_refresh_json_includes_retry_next_command_for_failed_tasks(monkeypatch, tmp_path: Path, capsys):
