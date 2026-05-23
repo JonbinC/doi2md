@@ -734,7 +734,7 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
             sourceDoi: result.sourceDoi,
             sourceInput: context.input
           });
-          return { success: true, taskId: task.task_id };
+          return { success: true, taskId: task.task_id, task };
         } catch (error) {
           if (routePlan.fail_closed) {
             return { success: false, error: String(error) };
@@ -827,7 +827,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
       );
       if (result.success && result.taskId) {
-        return { task_id: result.taskId };
+        return result.task ?? { task_id: result.taskId };
       }
       throw new Error(formatSsotFailure(result));
     })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));

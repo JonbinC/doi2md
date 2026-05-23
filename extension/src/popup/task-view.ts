@@ -265,7 +265,7 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
 
 export function getTaskFailureText(
   task:
-    | (Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint"> & {
+    | (Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint" | "next_commands"> & {
         result?: Pick<TaskResult, "reason_code" | "action_hint"> | null;
       })
     | null
@@ -283,7 +283,15 @@ export function getTaskFailureText(
   if (actionHint) {
     parts.push(language === "zh" ? `下一步：${actionHint}` : `Next: ${actionHint}`);
   }
+  const nextCommand = firstNextCommand(task?.next_commands);
+  if (nextCommand) {
+    parts.push(language === "zh" ? `命令：${nextCommand}` : `Command: ${nextCommand}`);
+  }
   return parts.join(" ");
+}
+
+export function firstNextCommand(commands?: string[] | null): string {
+  return (commands ?? []).map((command) => String(command || "").trim()).find(Boolean) || "";
 }
 
 export function buildCliParseCommand(input?: string | null): string {

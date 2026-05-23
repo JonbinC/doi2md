@@ -502,7 +502,14 @@ function getTaskFailureText(task, fallback, language = "en") {
   if (actionHint) {
     parts.push(language === "zh" ? `\u4E0B\u4E00\u6B65\uFF1A${actionHint}` : `Next: ${actionHint}`);
   }
+  const nextCommand = firstNextCommand(task?.next_commands);
+  if (nextCommand) {
+    parts.push(language === "zh" ? `\u547D\u4EE4\uFF1A${nextCommand}` : `Command: ${nextCommand}`);
+  }
   return parts.join(" ");
+}
+function firstNextCommand(commands) {
+  return (commands ?? []).map((command) => String(command || "").trim()).find(Boolean) || "";
 }
 function buildCliParseCommand(input) {
   const normalized = String(input || "").trim();
@@ -693,8 +700,8 @@ function setResult(message) {
     resultEl.textContent = message;
   }
 }
-function setCliHandoff(input) {
-  const command = buildCliParseCommand(input);
+function setCliHandoff(input, commandOverride) {
+  const command = String(commandOverride || "").trim() || buildCliParseCommand(input);
   if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton) {
     return;
   }
@@ -1059,7 +1066,7 @@ async function pollTask(taskId, kind) {
       )
     );
     if (kind === "parse") {
-      setCliHandoff(currentInput);
+      setCliHandoff(currentInput, firstNextCommand(task.next_commands));
       isParsing = false;
     } else {
       isTranslating = false;

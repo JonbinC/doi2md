@@ -34,6 +34,7 @@ import {
   getSavedResultSummary,
   getUsageStatusText,
   getTaskFailureText,
+  firstNextCommand,
   buildCliParseCommand,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
@@ -218,8 +219,8 @@ function setResult(message: string) {
   }
 }
 
-function setCliHandoff(input?: string | null) {
-  const command = buildCliParseCommand(input);
+function setCliHandoff(input?: string | null, commandOverride?: string | null) {
+  const command = String(commandOverride || "").trim() || buildCliParseCommand(input);
   if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton) {
     return;
   }
@@ -608,7 +609,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
       )
     );
     if (kind === "parse") {
-      setCliHandoff(currentInput);
+      setCliHandoff(currentInput, firstNextCommand(task.next_commands));
       isParsing = false;
     } else {
       isTranslating = false;
