@@ -1593,7 +1593,10 @@ def _normalize_rag_query_payload(payload: dict[str, Any], *, project_id: str, qu
     payload.setdefault("answer", _extract_rag_answer(matches))
     payload.setdefault("citations", _rag_citations_from_matches(matches))
     payload.setdefault("action_hint", "RAG query completed. Review the returned answer, citations, and matches.")
-    payload.setdefault("next_commands", ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"])
+    payload.setdefault(
+        "next_commands",
+        ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
+    )
     return payload
 
 
@@ -1769,6 +1772,7 @@ def _print_next_steps(console: Console) -> None:
                 "mdtero rag build --json",
                 "mdtero rag status --json",
                 "mdtero rag query \"What are the key claims and methods?\" --json",
+                "mdtero mcp briefing --json",
                 "mdtero mcp serve",
                 "mdtero agent install",
                 "mdtero tui",

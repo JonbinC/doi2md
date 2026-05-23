@@ -49,8 +49,8 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "doctor": "mdtero doctor --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
         "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --json",
-        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --json",
-        "parse_batch": "mdtero parse --batch <directory> --json",
+        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --json",
+        "parse_batch": "mdtero parse --batch <directory> --wait --json",
         "project_init": "mdtero project init --name <name>",
         "project_add": "mdtero project add <doi-or-url> --json",
         "import_bib": "mdtero project import-bib <refs.bib> --json",
@@ -63,6 +63,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "rag_status": "mdtero rag status --json",
         "rag_build": "mdtero rag build --json",
         "rag_query": "mdtero rag query \"<question>\" --json",
+        "mcp_briefing": "mdtero mcp briefing --json",
         "serve_mcp": "mdtero mcp serve",
         "agent_detect": "mdtero agent detect --json",
         "agent_install": "mdtero agent install --interactive",
@@ -142,7 +143,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     reason_code = str(status.get("reason_code") or "unknown")
     next_commands = ["mdtero rag status --json"]
     if server_status == "ready" or reason_code == "indexed":
-        next_commands.extend([commands["rag_query"], "mdtero mcp serve"])
+        next_commands.extend([commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
     elif local_ready > 0:
         next_commands.extend([commands["ingest_for_rag"], commands["rag_build"], commands["rag_query"]])
     else:
@@ -211,7 +212,7 @@ def query_server_rag(question: str, project_root: Path | None = None, *, query_f
     result.setdefault("project", state.name)
     result.setdefault("server_project_id", state.server_project_id)
     result.setdefault("question", cleaned_question)
-    result.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], "mdtero mcp serve"])
+    result.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
     return result
 
 
@@ -273,7 +274,7 @@ def build_agent_briefing(
     if pending_agent_installs:
         next_commands.append(commands["agent_install"])
     next_commands.extend(str(command) for command in server_rag.get("next_commands", []) if command)
-    next_commands.append(commands["serve_mcp"])
+    next_commands.extend([commands["mcp_briefing"], commands["serve_mcp"]])
 
     return {
         "project": {
