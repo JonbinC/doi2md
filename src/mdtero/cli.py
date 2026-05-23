@@ -1345,7 +1345,9 @@ def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> No
             line_start = citation.get("line_start")
             line_end = citation.get("line_end")
             line_ref = f":{line_start}-{line_end}" if line_start is not None and line_end is not None else ""
-            console.print(f"  [{order}] {title}{line_ref}")
+            source_ref = str(citation.get("doi") or citation.get("source_url") or "").strip()
+            suffix = f" · {source_ref}" if source_ref else ""
+            console.print(f"  [{order}] {title}{line_ref}{suffix}")
     next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
     if next_commands:
         console.print("\n[bold]Next[/bold]")
