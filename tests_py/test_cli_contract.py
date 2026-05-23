@@ -2742,6 +2742,20 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "next_commands" in combined
 
 
+def test_public_docs_describe_setup_agent_detection_and_headless_skip():
+    repo_root = Path(__file__).resolve().parents[1]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [repo_root / "README.md", repo_root / "install" / "README.md"]
+    )
+
+    assert "`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection" in combined
+    assert "detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces" in combined
+    assert "Headless setup with `mdtero setup --api-key <key>` or `MDTERO_API_KEY`" in combined
+    assert "skips agent detection" in combined
+    assert "mdtero agent install --interactive" in combined
+
+
 def test_public_docs_keep_account_and_academic_key_boundaries_clear():
     repo_root = Path(__file__).resolve().parents[1]
     readme = (repo_root / "README.md").read_text(encoding="utf-8")
