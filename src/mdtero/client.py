@@ -16,6 +16,12 @@ class DiscoveryError(RuntimeError):
         super().__init__(str(payload.get("message") or payload.get("error_code") or "discovery failed"))
 
 
+class MdteroApiError(RuntimeError):
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        super().__init__(str(payload.get("message") or payload.get("error_code") or "Mdtero API request failed"))
+
+
 class MdteroClient:
     def __init__(self, config: MdteroConfig | None = None, *, timeout: float = 60.0) -> None:
         self.config = config or load_config()
@@ -33,8 +39,8 @@ class MdteroClient:
     def route(self, input_value: str) -> dict[str, Any]:
         try:
             return self._request("POST", "/api/v1/route", json={"input": input_value})
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code != 404:
+        except (MdteroApiError, httpx.HTTPStatusError) as exc:
+            if _api_error_status_code(exc) != 404:
                 raise
             return {
                 "route_kind": "server",
@@ -196,7 +202,10 @@ class MdteroClient:
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         with httpx.Client(timeout=self.timeout) as client:
             response = client.request(method, self._url(path), headers=self._headers(), **kwargs)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise MdteroApiError(api_failure_payload(exc, method=method, path=path)) from exc
         payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("Mdtero API returned a non-object payload")
@@ -205,8 +214,8 @@ class MdteroClient:
     def _request_with_fallback(self, method: str, primary_path: str, fallback_path: str, **kwargs: Any) -> dict[str, Any]:
         try:
             return self._request(method, primary_path, **kwargs)
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code != 404:
+        except (MdteroApiError, httpx.HTTPStatusError) as exc:
+            if _api_error_status_code(exc) != 404:
                 raise
             return self._request(method, fallback_path, **kwargs)
 
@@ -324,6 +333,52 @@ def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] 
     else:
         payload["detail"] = str(exc)
     return payload
+
+
+def _api_error_status_code(exc: Exception) -> int | None:
+    if isinstance(exc, MdteroApiError):
+        value = exc.payload.get("status_code")
+        return int(value) if isinstance(value, int) else None
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    return None
+
+
+def api_failure_payload(exc: httpx.HTTPStatusError, *, method: str, path: str) -> dict[str, Any]:
+    response = exc.response
+    try:
+        detail: Any = response.json()
+    except ValueError:
+        detail = response.text[:500]
+    reason_code = "api_request_failed"
+    error_code = "api_request_failed"
+    action_hint = "Run `mdtero doctor --json`, check the API base URL, then retry the command."
+    next_commands = ["mdtero doctor --json"]
+    if isinstance(detail, dict):
+        nested = detail.get("detail") if isinstance(detail.get("detail"), dict) else detail
+        if isinstance(nested, dict):
+            reason_code = str(nested.get("reason_code") or nested.get("error_code") or reason_code)
+            error_code = str(nested.get("error_code") or reason_code)
+            action_hint = str(nested.get("action_hint") or action_hint)
+            nested_commands = [str(command).strip() for command in nested.get("next_commands") or [] if str(command).strip()]
+            if nested_commands:
+                next_commands = nested_commands
+    if response.status_code in {401, 403}:
+        error_code = "authentication_required" if response.status_code == 401 else "forbidden"
+        reason_code = "authentication_required" if response.status_code == 401 else "access_forbidden"
+        action_hint = "Authenticate with `mdtero login --api-key <key>` or run `mdtero setup`, then rerun `mdtero doctor --json`."
+        next_commands = ["mdtero login --api-key <key>", "mdtero doctor --json"]
+    return {
+        "status": "failed",
+        "error_code": error_code,
+        "reason_code": reason_code,
+        "status_code": response.status_code,
+        "method": method,
+        "path": path,
+        "detail": detail,
+        "action_hint": action_hint,
+        "next_commands": next_commands,
+    }
 
 
 def translation_source_path_from_task(task: dict[str, Any], *, artifact: str = "paper_md") -> str | None:
