@@ -1243,6 +1243,42 @@ def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path
     assert [paper.input for paper in state.papers] == [str(pdf), str(epub)]
     assert [paper.source for paper in state.papers] == ["file:pdf", "file:epub"]
     assert [paper.provider for paper in state.papers] == ["mineru_precision", "mineru_precision"]
+    assert payload["items"][0]["task_api"] == "/api/v1/tasks/{task_id}"
+    assert payload["items"][0]["download_api"] == "/api/v1/tasks/{task_id}/download/{artifact}"
+    assert payload["items"][0]["preferred_artifact"] == "paper_md"
+    assert payload["items"][0]["next_commands"] == [
+        "mdtero status task-a --wait --json",
+        "mdtero download task-a paper_md --output-dir ./mdtero-output --json",
+    ]
+
+
+def test_cmd_parse_enriches_doi_task_submission_for_agents(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="parse-demo")
+
+    def fake_parse_with_route(self, input_value):
+        assert input_value == "10.48550/arXiv.1706.03762"
+        return (
+            {"route_kind": "source_first", "acquisition_mode": "native_source_adapter"},
+            {"task_id": "task-parse", "status": "queued", "result": {"preferred_artifact": "paper_bundle"}},
+            None,
+        )
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["parse", "10.48550/arXiv.1706.03762", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["task_id"] == "task-parse"
+    assert payload["task_api"] == "/api/v1/tasks/{task_id}"
+    assert payload["download_api"] == "/api/v1/tasks/{task_id}/download/{artifact}"
+    assert payload["preferred_artifact"] == "paper_bundle"
+    assert payload["next_commands"] == [
+        "mdtero status task-parse --wait --json",
+        "mdtero download task-parse paper_bundle --output-dir ./mdtero-output --json",
+    ]
 
 
 def test_client_can_create_server_project(monkeypatch):
