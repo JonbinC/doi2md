@@ -188,6 +188,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp = sub.add_parser("mcp")
     mcp_sub = mcp.add_subparsers(dest="mcp_command")
+    mcp_briefing = _cmd(mcp_sub, "briefing", "Print the local MCP agent briefing without starting a server.", cmd_mcp_briefing)
+    mcp_briefing.add_argument("--json", action="store_true")
     _cmd(mcp_sub, "serve", "Serve local project context over FastMCP.", cmd_mcp_serve)
 
     status = _cmd(sub, "status", "Poll one task and update the current project.", cmd_status)
@@ -566,6 +568,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
             add_paper(Path.cwd(), paper_from_submission(input_value, result, source=source))
             if args.wait:
                 task = client.wait(str(result["task_id"]))
+                _enrich_task_status(task)
                 update_task(Path.cwd(), task)
                 result["final_task"] = task
     results = [result for result, _, _ in submissions]
@@ -864,6 +867,7 @@ def cmd_project_parse(args: argparse.Namespace) -> int:
         update_paper_submission(root, paper.input, result)
         if args.wait and result.get("task_id"):
             task = client.wait(str(result["task_id"]))
+            _enrich_task_status(task)
             update_task(root, task)
             result["final_task"] = task
         results.append({"input": paper.input, "task": result})
@@ -1151,6 +1155,7 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
         payload = _rag_command_failure("query", project_id, exc)
         _print_rag_command_failure(payload, json_output=args.json)
         return 1
+    result = _normalize_rag_query_payload(result, project_id=project_id, question=args.question)
     _print_rag_query_result(result, json_output=args.json)
     return 0
 
@@ -1237,6 +1242,22 @@ def cmd_mcp_serve(_args: argparse.Namespace) -> int:
     from .mcp import serve_project_context
 
     serve_project_context(Path.cwd())
+    return 0
+
+
+def cmd_mcp_briefing(args: argparse.Namespace) -> int:
+    from .mcp import build_agent_briefing
+
+    payload = build_agent_briefing(Path.cwd())
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        console = Console()
+        console.print(f"Project: {payload['project']['name']}")
+        console.print(f"RAG: {payload['rag']['status']} ({payload['rag']['reason_code']})")
+        console.print("Next:")
+        for command in payload.get("recommended_next_commands", [])[:8]:
+            console.print(f"  {command}")
     return 0
 
 
@@ -1558,6 +1579,51 @@ def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> No
         console.print("\n[bold]Next[/bold]")
         for command in next_commands:
             console.print(f"  {command}")
+
+
+def _normalize_rag_query_payload(payload: dict[str, Any], *, project_id: str, question: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        payload = {"answer": str(payload)}
+    matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    payload.setdefault("project_id", project_id)
+    payload.setdefault("server_project_id", str(project_id))
+    payload.setdefault("question", question)
+    payload.setdefault("status", "succeeded")
+    payload.setdefault("reason_code", "rag_query_succeeded" if matches or payload.get("answer") else "no_matches")
+    payload.setdefault("answer", _extract_rag_answer(matches))
+    payload.setdefault("citations", _rag_citations_from_matches(matches))
+    payload.setdefault("action_hint", "RAG query completed. Review the returned answer, citations, and matches.")
+    payload.setdefault("next_commands", ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"])
+    return payload
+
+
+def _extract_rag_answer(matches: list[Any]) -> str | None:
+    snippets: list[str] = []
+    for index, match in enumerate(matches[:3], start=1):
+        if not isinstance(match, dict):
+            continue
+        snippet = " ".join(str(match.get("snippet") or "").split())
+        if snippet:
+            snippets.append(f"[{index}] {snippet}")
+    return "\n\n".join(snippets) if snippets else None
+
+
+def _rag_citations_from_matches(matches: list[Any]) -> list[dict[str, Any]]:
+    citations: list[dict[str, Any]] = []
+    for index, match in enumerate(matches, start=1):
+        if not isinstance(match, dict):
+            continue
+        citations.append({
+            "citation_order": match.get("citation_order") or index,
+            "document_id": match.get("document_id"),
+            "document_title": match.get("document_title"),
+            "chunk_id": match.get("chunk_id"),
+            "line_start": match.get("line_start"),
+            "line_end": match.get("line_end"),
+            "doi": match.get("doi"),
+            "source_url": match.get("source_url"),
+        })
+    return citations
 
 
 def _server_project_id(args: argparse.Namespace) -> str:
