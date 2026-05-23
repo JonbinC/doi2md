@@ -103,6 +103,7 @@ def build_dashboard_model(
             "interactive_hint": "Use spaces to multi-select detected workspaces in `mdtero agent install --interactive`.",
         },
         "mcp": {
+            "briefing_command": commands["mcp_briefing"],
             "serve_command": commands["serve_mcp"],
             "primary_tool": "agent_briefing",
             "tools": briefing["mcp_tools"],
@@ -201,7 +202,7 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
     if not project.server_project_id:
         return [commands["bootstrap_rag"], "mdtero rag status --json", "mdtero rag query \"<question>\" --json"]
     if rag.get("server_status") == "ready":
-        return ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", "mdtero mcp serve"]
+        return ["mdtero rag status --json", "mdtero rag query \"<question>\" --json", commands["mcp_briefing"], commands["serve_mcp"]]
     if rag.get("server_status") in {"not_ready", "partial"}:
         return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --json"]
     if rag.get("ready_for_ingest_count", 0) > 0:
@@ -335,7 +336,8 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
         table.add_row("Embeddings", f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunks")
     elif rag.get("server_error_type"):
         table.add_row("Server RAG", f"unavailable ({rag.get('server_error_type')})")
-    table.add_row("MCP", mcp["serve_command"])
+    table.add_row("MCP briefing", mcp["briefing_command"])
+    table.add_row("MCP server", mcp["serve_command"])
     table.add_row("Agent briefing", mcp["primary_tool"])
     return Panel(table, title="RAG & MCP", border_style="magenta")
 
