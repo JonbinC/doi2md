@@ -302,7 +302,7 @@ def _normalize_api_key_arg(value: str, *, console: Console) -> str | None:
 def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds: float, no_browser: bool) -> None:
     if no_browser:
         console.print("Printing a loopback web-login URL instead of opening a browser.")
-        console.print("Use `mdtero login --api-key <key>` for remote/headless servers where 127.0.0.1 cannot receive the browser callback.")
+        console.print("Use `mdtero setup --api-key <key>` for remote/headless servers where 127.0.0.1 cannot receive the browser callback.")
         console.print("Open the URL below from a browser that can reach this machine's loopback callback. Waiting for the callback...")
         opener = lambda url: console.print(f"  {url}")
     else:
@@ -400,8 +400,8 @@ def _doctor_remote_auth(cfg: MdteroConfig) -> dict[str, Any]:
     if not cfg.is_authenticated:
         return {
             "status": "missing",
-            "action_hint": "Authenticate with `mdtero login --api-key <key>` or run `mdtero setup`.",
-            "next_commands": ["mdtero setup", "mdtero login --api-key <key>"],
+            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key <key>` for headless environments.",
+            "next_commands": ["mdtero setup", "mdtero setup --api-key <key>"],
         }
     try:
         usage = MdteroClient(config=cfg, timeout=10.0).usage()
@@ -427,7 +427,7 @@ def _doctor_auth_next_commands(cfg: MdteroConfig, remote_auth: dict[str, Any]) -
     if not cfg.is_authenticated:
         return ["mdtero setup"]
     if remote_auth.get("status") == "failed":
-        return [str(command) for command in remote_auth.get("next_commands") or ["mdtero login --api-key <key>", "mdtero doctor --json"]]
+        return [str(command) for command in remote_auth.get("next_commands") or ["mdtero setup --api-key <key>", "mdtero doctor --json"]]
     return ["mdtero doctor --json"]
 
 

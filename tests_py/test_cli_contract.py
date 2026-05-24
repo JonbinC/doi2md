@@ -48,8 +48,8 @@ def mock_doctor_remote_auth_ok(monkeypatch):
         if cfg.is_authenticated
         else {
             "status": "missing",
-            "action_hint": "Authenticate with `mdtero login --api-key <key>` or run `mdtero setup`.",
-            "next_commands": ["mdtero setup", "mdtero login --api-key <key>"],
+            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key <key>` for headless environments.",
+            "next_commands": ["mdtero setup", "mdtero setup --api-key <key>"],
         },
     )
 
@@ -176,7 +176,7 @@ def test_login_no_browser_explains_loopback_and_headless_api_key(monkeypatch, tm
     output = capsys.readouterr().out
 
     assert "loopback web-login URL" in output
-    assert "mdtero login --api-key <key>" in output
+    assert "mdtero setup --api-key <key>" in output
     assert "127.0.0.1" in output
     assert "https://mdtero.com/auth?cli_callback=" in output
 
@@ -359,7 +359,7 @@ def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path,
             "error_code": "authentication_required",
             "reason_code": "authentication_required",
             "status_code": 401,
-            "next_commands": ["mdtero login --api-key <key>", "mdtero doctor --json"],
+            "next_commands": ["mdtero setup --api-key <key>", "mdtero doctor --json"],
         },
     )
 
@@ -370,7 +370,7 @@ def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path,
     assert payload["authenticated"] is False
     assert payload["remote_auth"]["status_code"] == 401
     assert payload["checks"][0] == {"check": "API key", "status": "invalid", "detail": "authentication_required"}
-    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor --json"]
+    assert payload["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
 
 
 def test_doctor_json_reports_missing_auth_and_project_init_next_steps(monkeypatch, tmp_path: Path, capsys):
@@ -995,8 +995,8 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
     assert payload["error_code"] == "authentication_required"
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
-    assert "mdtero login --api-key <key>" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+    assert "mdtero setup --api-key <key>" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
 
 
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
@@ -1721,7 +1721,7 @@ def test_cmd_parse_auth_failure_returns_agent_json_without_traceback(monkeypatch
     assert payload["error_code"] == "authentication_required"
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
-    assert payload["next_commands"] == ["mdtero login --api-key <key>", "mdtero doctor --json"]
+    assert payload["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
 
 
 def test_status_promotes_nested_provider_strategy_and_outcome(monkeypatch, tmp_path: Path, capsys):
@@ -2564,7 +2564,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
     assert briefing["health"]["pending_count"] == 0
     assert briefing["health"]["rag_reason_code"] == "server_project_not_linked"
     assert briefing["recommended_next_commands"][:5] == [
-        "mdtero login --api-key <key>",
+        "mdtero setup --api-key <key>",
         "mdtero doctor --json",
         "mdtero discover \"<topic>\" --interactive",
         "mdtero project add <doi-or-url> --json",
@@ -2659,7 +2659,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
 
     assert model["health"]["status"] == "needs_auth"
     assert model["health"]["headline"] == "Needs login"
-    assert model["health"]["primary_next_command"] == "mdtero login --api-key <key>"
+    assert model["health"]["primary_next_command"] == "mdtero setup --api-key <key>"
     assert model["account"]["authenticated"] is False
     assert model["project"]["name"] == "tui-demo"
     assert model["rag"]["reason_code"] == "server_project_not_linked"
@@ -2669,7 +2669,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["handoff"]["active_items"] == []
-    assert model["next_steps"][:2] == ["mdtero login --api-key <key>", "mdtero doctor --json"]
+    assert model["next_steps"][:2] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
 
 
 def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: Path):
@@ -2680,7 +2680,7 @@ def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: 
 
     assert model["account"]["authenticated"] is True
     assert model["account"]["auth_source"] == "MDTERO_API_KEY"
-    assert model["next_steps"][:2] != ["mdtero login --api-key <key>", "mdtero doctor --json"]
+    assert model["next_steps"][:2] != ["mdtero setup --api-key <key>", "mdtero doctor --json"]
 
 
 def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path):

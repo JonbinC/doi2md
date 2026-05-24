@@ -63,7 +63,7 @@ clawhub install mdtero
 mdtero doctor
 mdtero doctor --json
 mdtero login
-mdtero login --api-key <key>
+mdtero setup --api-key <key>
 mdtero config academic
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero project init --json

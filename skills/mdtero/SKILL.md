@@ -9,7 +9,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 1. During alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
 2. Run `mdtero setup`
-3. Use `mdtero login --api-key <key>` when the environment is headless
+3. Use `mdtero setup --api-key <key>` when the environment is headless
 4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; use its `next_commands` before guessing recovery steps
 5. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime; for human setup, use `mdtero agent install --interactive`
 
