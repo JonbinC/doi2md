@@ -473,19 +473,27 @@ button:disabled {
   background: rgba(47, 26, 18, 0.04);
 }
 
+.cli-handoff-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .cli-handoff[hidden] {
   display: none;
 }
 
 .cli-handoff code {
   min-width: 0;
-  overflow: hidden;
+  overflow: auto;
   color: var(--foreground);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .action-card label {

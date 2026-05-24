@@ -36,6 +36,8 @@ import {
   getTaskFailureText,
   firstTaskNextCommand,
   buildCliParseCommand,
+  getCliHandoffNote,
+  shouldShowCliHandoffForPreflight,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
 } from "./task-view";
@@ -185,6 +187,7 @@ const translateButton = document.querySelector<HTMLButtonElement>("#translate-bu
 const translateLanguageEl = document.querySelector<HTMLSelectElement>("#translate-language");
 const resultEl = document.querySelector<HTMLParagraphElement>("#result");
 const cliHandoffEl = document.querySelector<HTMLDivElement>("#cli-handoff");
+const cliHandoffNoteEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-note");
 const cliHandoffCommandEl = document.querySelector<HTMLElement>("#cli-handoff-command");
 const copyCliHandoffButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff");
 const artifactActionsEl = document.querySelector<HTMLElement>("#artifact-actions");
@@ -221,10 +224,11 @@ function setResult(message: string) {
 
 function setCliHandoff(input?: string | null, commandOverride?: string | null) {
   const command = String(commandOverride || "").trim() || buildCliParseCommand(input);
-  if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton) {
+  if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton || !cliHandoffNoteEl) {
     return;
   }
   cliHandoffEl.hidden = !command;
+  cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
@@ -259,16 +263,20 @@ async function updatePreflightHint() {
   const settings = await readSettings();
   const input = inputEl?.value.trim() || currentInput || "";
   const pageUrl = detectedPageContext?.tabUrl || "";
-  setPreflightHint(
-    getPreflightHintText(
-      {
-        input,
-        pageUrl,
-        bridgeStatus: currentBridgeStatus,
-      },
-      uiLanguage
-    )
+  const hint = getPreflightHintText(
+    {
+      input,
+      pageUrl,
+      bridgeStatus: currentBridgeStatus,
+    },
+    uiLanguage
   );
+  setPreflightHint(hint);
+  if (shouldShowCliHandoffForPreflight(hint, input)) {
+    setCliHandoff(input);
+  } else if (!isParsing) {
+    setCliHandoff(null);
+  }
 }
 
 function toggleLanguageLabel(language: UiLanguage) {

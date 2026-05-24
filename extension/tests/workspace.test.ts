@@ -33,6 +33,7 @@ describe("workspace", () => {
     expect(popupHtml).toContain('id="file-intake-card"');
     expect(popupHtml).toContain('id="local-file-input"');
     expect(popupHtml).toContain('id="cli-handoff"');
+    expect(popupHtml).toContain('id="cli-handoff-note"');
     expect(popupHtml).toContain('id="copy-cli-handoff"');
     expect(popupHtml).not.toContain('id="campus-hint"');
     expect(popupHtml).not.toContain('id="helper-status"');
@@ -133,6 +134,8 @@ describe("workspace", () => {
     expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
     expect(styles).toContain("button { min-height: 40px;");
+    expect(styles).toContain(".cli-handoff code { min-width: 0; overflow: auto;");
+    expect(styles).toContain("white-space: pre-wrap;");
     expect(styles).toContain(".hero { background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 250, 244, 0.88)), linear-gradient(135deg, rgba(109, 57, 32, 0.06), transparent 52%);");
   });
 });

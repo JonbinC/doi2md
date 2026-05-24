@@ -11,7 +11,9 @@ import {
   getDownloadLabel,
   getPreflightHintText,
   buildCliParseCommand,
+  getCliHandoffNote,
   normalizeCliHandoffCommand,
+  shouldShowCliHandoffForPreflight,
   getUsageStatusText,
   getPreferredArtifactKey,
   getResultWarningText,
@@ -272,16 +274,17 @@ describe("getPreflightHintText", () => {
   });
 
   it("warns when a supported live page is open but browser capture is unavailable", () => {
-    expect(
-      getPreflightHintText(
+    const hint = getPreflightHintText(
         {
           input: "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490",
           pageUrl: "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490",
           bridgeStatus: { state: "unavailable", runnerState: "idle" },
         },
         "en"
-      )
-    ).toContain("mdtero parse");
+      );
+
+    expect(hint).toContain("mdtero parse");
+    expect(shouldShowCliHandoffForPreflight(hint, "https://onlinelibrary.wiley.com/doi/full/10.1002/er.7490")).toBe(true);
   });
 
   it("confirms local capture readiness on supported live pages", () => {
@@ -308,6 +311,18 @@ describe("getPreflightHintText", () => {
         "en"
       )
     ).toContain("HTML full-text page");
+  });
+});
+
+describe("getCliHandoffNote", () => {
+  it("explains terminal handoff for campus-network and challenge-page cases", () => {
+    expect(getCliHandoffNote("mdtero parse https://example.org/paper --trace --wait --timeout 300 --json", "en")).toContain("campus networks");
+    expect(getCliHandoffNote("mdtero parse https://example.org/paper --trace --wait --timeout 300 --json", "zh")).toContain("反爬挑战页");
+  });
+
+  it("explains file-upload command placeholders separately", () => {
+    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json", "en")).toContain("replace the path");
+    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json", "zh")).toContain("文件路径");
   });
 });
 
