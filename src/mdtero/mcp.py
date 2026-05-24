@@ -45,7 +45,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     state = load_project(root)
     commands: dict[str, Any] = {
         "setup": "mdtero setup",
-        "login_api_key": "mdtero login --api-key <key>",
+        "login_api_key": "mdtero setup --api-key <key>",
         "doctor": "mdtero doctor --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
         "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",

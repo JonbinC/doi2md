@@ -106,7 +106,7 @@ For machines with a browser, run `mdtero login`; it opens Mdtero Account and sto
 For headless agents, create a fresh API key in Mdtero Account and use:
 
 ```bash
-mdtero login --api-key <key>
+mdtero setup --api-key <key>
 ```
 
 ## Update Or Uninstall
@@ -124,7 +124,7 @@ uv tool uninstall mdtero
 
 - If `mdtero` is missing during alpha, run `uv tool install git+https://github.com/JonbinC/doi2md.git`.
 - If `uv` is missing, install it from `https://docs.astral.sh/uv/getting-started/installation/`.
-- If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero login --api-key <key>`.
+- If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero setup --api-key <key>`.
 - If no agent workspace is detected, pass an explicit `--target`.
 - If OpenClaw is needed, use `clawhub install mdtero`; `mdtero agent install --target openclaw` is intentionally unsupported.
 

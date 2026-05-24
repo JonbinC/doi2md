@@ -61,7 +61,7 @@ def build_dashboard_model(
             "api_base_url": cfg.api_base_url,
             "authenticated": cfg.is_authenticated,
             "auth_source": cfg.api_key_source,
-            "auth_hint": "mdtero login --api-key <key>" if not cfg.is_authenticated else "mdtero doctor --json",
+            "auth_hint": "mdtero setup --api-key <key>" if not cfg.is_authenticated else "mdtero doctor --json",
         },
         "academic": {
             "elsevier": bool(cfg.academic.elsevier_api_key),
@@ -196,7 +196,7 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
     rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
     if not cfg.is_authenticated:
-        return ["mdtero login --api-key <key>", "mdtero doctor --json"]
+        return ["mdtero setup --api-key <key>", "mdtero doctor --json"]
     if not project.papers:
         return ["mdtero project add 10.48550/arXiv.1706.03762 --json", commands["parse_pending"]]
     if project.papers and any(paper.status in {"pending", "created"} and not paper.task_id for paper in project.papers):

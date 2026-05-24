@@ -15,7 +15,7 @@ This installs the Mdtero CLI runtime, then copies the Mdtero workflow into `.gem
 
 ## After Install
 
-1. Run `mdtero login` or `mdtero login --api-key <key>`.
+1. Run `mdtero setup` or `mdtero setup --api-key <key>`.
 2. Run `mdtero doctor` to confirm `MDTERO_API_KEY` is visible.
 3. Continue with parse, translation, task status, or download work only after doctor passes.
 

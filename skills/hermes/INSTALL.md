@@ -15,7 +15,7 @@ This installs the Mdtero CLI runtime, then copies the Mdtero skill into `.hermes
 
 ## After Install
 
-1. Run `mdtero login` or `mdtero login --api-key <key>`.
+1. Run `mdtero setup` or `mdtero setup --api-key <key>`.
 2. Run `mdtero doctor` before parse, translation, status, or download work.
 3. Use Mdtero Account for API keys, quota, history, diagnostics, and install prompts; use the `mdtero` CLI for discovery, parse, translation, status, and download work.
 
