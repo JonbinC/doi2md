@@ -2770,8 +2770,56 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
         "mdtero rag query \"<question>\" --build-if-needed --json",
     ]
     assert rag["ready"] is True
+    assert rag["status"] == "ready"
     assert rag["reason_code"] == "ready"
+    assert rag["next_commands"] == [
+        "mdtero project ingest --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+        "mdtero mcp briefing --json",
+    ]
+    assert "linked server project" in rag["action_hint"]
     assert "mdtero project ingest --json" in paper["recommended_commands"]
+
+
+def test_mcp_rag_context_guides_unlinked_ready_project(tmp_path: Path):
+    init_project(tmp_path, name="rag-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    rag = build_rag_context(tmp_path)
+
+    assert rag["status"] == "not_ready"
+    assert rag["ready"] is False
+    assert rag["reason_code"] == "server_project_not_linked"
+    assert rag["server_project_id"] is None
+    assert rag["ready_for_ingest_count"] == 1
+    assert rag["next_commands"] == [
+        "mdtero rag build --json",
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
+    assert "create and bind a server project" in rag["action_hint"]
+
+
+def test_mcp_rag_context_guides_project_without_successful_tasks(tmp_path: Path):
+    init_project(tmp_path, name="rag-empty")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+
+    rag = build_rag_context(tmp_path)
+
+    assert rag["status"] == "not_ready"
+    assert rag["ready"] is False
+    assert rag["reason_code"] == "project_has_pending_items"
+    assert rag["ready_for_ingest_count"] == 0
+    assert rag["pending_count"] == 1
+    assert rag["next_commands"] == [
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+    ]
+    assert "Submit pending papers" in rag["action_hint"]
 
 
 def test_mcp_project_status_guides_uninitialized_agent_workflows(tmp_path: Path):
@@ -3429,7 +3477,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["health"]["primary_next_command"] == "mdtero setup --api-key <key>"
     assert model["account"]["authenticated"] is False
     assert model["project"]["name"] == "tui-demo"
-    assert model["rag"]["reason_code"] == "server_project_not_linked"
+    assert model["rag"]["reason_code"] == "no_succeeded_tasks"
+    assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert "agent_briefing" in model["mcp"]["tools"]
     assert model["extension_handoff"]["commands"][0] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
