@@ -1,7 +1,7 @@
 import type { TaskResult } from "@mdtero/shared";
 import type { PopupState, UiLanguage } from "../lib/storage";
 import { requiresElsevierLocalAcquire } from "../lib/elsevier";
-import { isBridgeSupportedPage } from "../lib/bridge-wake";
+import { isSupportedPaperPage } from "../lib/supported-page";
 
 const SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"] as const;
 const SOURCE_ORDER = ["paper_pdf", "paper_xml"] as const;
@@ -200,7 +200,7 @@ export function getPreflightHintText(
   const bridgeReady = bridgeState === "connected";
   const bridgeMissing = bridgeState === "unavailable" || bridgeState === "disconnected";
   const candidate = pageUrl || input;
-  const livePageSupported = isBridgeSupportedPage(candidate);
+  const livePageSupported = isSupportedPaperPage(candidate);
   const looksLikePdfShell =
     candidate.includes("/pdf") ||
     candidate.includes("/epdf") ||

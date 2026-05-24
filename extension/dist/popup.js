@@ -318,8 +318,8 @@ function requiresElsevierLocalAcquire(input) {
   return normalizeElsevierInput(input) !== null;
 }
 
-// src/lib/bridge-wake.ts
-var BRIDGE_SUPPORTED_URL_PATTERNS = [
+// src/lib/supported-page.ts
+var SUPPORTED_PAPER_URL_PATTERNS = [
   "arxiv.org",
   "dl.acm.org",
   "ieeexplore.ieee.org",
@@ -335,9 +335,9 @@ var BRIDGE_SUPPORTED_URL_PATTERNS = [
   "onlinelibrary.wiley.com",
   "tandfonline.com"
 ];
-function isBridgeSupportedPage(url) {
+function isSupportedPaperPage(url) {
   const normalized = String(url || "").trim().toLowerCase();
-  return BRIDGE_SUPPORTED_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
+  return SUPPORTED_PAPER_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 
 // src/popup/task-view.ts
@@ -451,7 +451,7 @@ function getPreflightHintText(params, language = "en") {
   const bridgeReady = bridgeState === "connected";
   const bridgeMissing = bridgeState === "unavailable" || bridgeState === "disconnected";
   const candidate = pageUrl || input;
-  const livePageSupported = isBridgeSupportedPage(candidate);
+  const livePageSupported = isSupportedPaperPage(candidate);
   const looksLikePdfShell = candidate.includes("/pdf") || candidate.includes("/epdf") || candidate.includes("download=true") || candidate.includes("/epub/");
   if (looksLikePdfShell) {
     return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u76F4\u63A5\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\u3002" : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";

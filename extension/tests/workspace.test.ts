@@ -21,6 +21,7 @@ describe("workspace", () => {
     expect(popupHtml).toContain('src="./popup.js"');
     expect(popupHtml).toContain('id="connection-pill"');
     expect(popupHtml).toContain('id="mdtero-popup-bg"');
+    expect(popupHtml).not.toContain('id="mdtero-popup-ink"');
     expect(popupHtml).toContain('id="workflow-translate"');
     expect(popupHtml).toContain('Parse / Upload');
     expect(popupHtml).toContain('Translate');
@@ -47,6 +48,7 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('src="./options.js"');
     expect(optionsHtml).toContain('id="settings-overview-card"');
     expect(optionsHtml).toContain('id="mdtero-options-bg"');
+    expect(optionsHtml).not.toContain('id="mdtero-options-ink"');
     expect(optionsHtml).toContain('id="open-account"');
     expect(optionsHtml).toContain('id="website-auth-note"');
     expect(optionsHtml).toContain('Parse / Upload');
@@ -110,9 +112,11 @@ describe("workspace", () => {
 
     expect(styles).toContain("--background: #fcf7f1");
     expect(styles).toContain("--primary: #6d3920");
-    expect(styles).toContain("--secondary: #f6e6d5");
+    expect(styles).toContain("--secondary: #f7efe6");
     expect(styles).toContain("--accent: #e2b792");
     expect(styles).toContain("--input-background: #f8f1e9");
+    expect(styles).toContain("--surface: rgba(255, 253, 249, 0.88)");
+    expect(styles).toContain("--surface-muted: rgba(244, 236, 227, 0.58)");
     expect(styles).toContain("--success: #0f766e");
     expect(styles).not.toContain("--primary: #111827");
   });
@@ -129,5 +133,6 @@ describe("workspace", () => {
     expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
     expect(styles).toContain("button { min-height: 40px;");
+    expect(styles).toContain(".hero { background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 250, 244, 0.88)), linear-gradient(135deg, rgba(109, 57, 32, 0.06), transparent 52%);");
   });
 });
