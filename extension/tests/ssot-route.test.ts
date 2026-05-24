@@ -140,7 +140,7 @@ describe("ssot-route", () => {
       parseClient,
       buildRoutePlan({
         fail_closed: false,
-        action_sequence: ["fetch_browser_source", "native_arxiv_parse"],
+        action_sequence: ["fetch_browser_source", "capture_current_tab_html"],
       }),
       { input: "10.1000/demo" },
     );

@@ -5,16 +5,15 @@ import type {
   AcquisitionCandidate,
 } from "@mdtero/shared";
 import { fetchXmlArtifact } from "./page-capture";
-import { buildElsevierLocalAcquireGuidance } from "./elsevier";
 import { buildCliParseCommand } from "./cli-handoff";
 
-const CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
+type RouteAction = ActionType | string;
 
 /**
  * Execute a single action from the sequence
  */
 export async function executeAction(
-  action: ActionType,
+  action: RouteAction,
   context: ActionContext,
   routePlan: {
     top_connector?: string;
@@ -35,13 +34,6 @@ export async function executeAction(
     case "fetch_structured_xml":
       return executeFetchStructuredXml(context, routePlan);
 
-    case "fetch_elsevier_xml":
-      return executeFetchElsevierXml(context, routePlan);
-
-    case "fetch_wiley_tdm_pdf":
-      return executeFetchWileyTdmPdf(context, routePlan);
-
-    case "fetch_springer_pdf":
     case "fetch_remote_html":
       return executeFetchBrowserSource(context, routePlan);
 
@@ -150,33 +142,6 @@ async function executeFetchStructuredXml(
   }
 
   return { success: false, error: "No structured XML source available" };
-}
-
-/**
- * Fetch Elsevier XML via API when the user has configured an Elsevier key.
- */
-async function executeFetchElsevierXml(
-  context: ActionContext,
-  routePlan: { user_message?: string }
-): Promise<ActionResult> {
-  return {
-    success: false,
-    requiresUpload: true,
-    error: routePlan.user_message || buildElsevierLocalAcquireGuidance(),
-    nextCommand: buildCliParseCommand(context.input),
-  };
-}
-
-async function executeFetchWileyTdmPdf(
-  context: ActionContext,
-  routePlan: { user_message?: string }
-): Promise<ActionResult> {
-  return {
-    success: false,
-    requiresUpload: true,
-    error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`,
-    nextCommand: buildCliParseCommand(context.input),
-  };
 }
 
 async function executeFetchEpubAsset(

@@ -3545,6 +3545,12 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
         "status": "not_ready",
         "reason_code": "rag_index_not_built",
         "summary": {"chunk_count": 2, "embedded_count": 0},
+        "selected_provider": "voyage",
+        "provider_state": "configured",
+        "provider_configured": True,
+        "embedding_model": "voyage-4",
+        "action_hint": "Build the server project index before querying.",
+        "next_commands": ["mdtero rag build --json", "mdtero rag status --json"],
     })
     rendered = render_dashboard_text(model)
 
@@ -3554,6 +3560,23 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["health"]["counts"]["pending_agent_installs"] == 1
     assert model["rag"]["ready"] is False
     assert model["rag"]["server_status"] == "not_ready"
+    assert model["rag"]["selected_provider"] == "voyage"
+    assert model["rag"]["provider_state"] == "configured"
+    assert model["rag"]["provider_configured"] is True
+    assert model["rag"]["embedding_model"] == "voyage-4"
+    assert model["rag"]["action_hint"] == "Build the server project index before querying."
+    assert model["rag"]["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json"]
+    assert model["rag"]["server_agent_summary"] == {
+        "status": "not_ready",
+        "reason_code": "rag_index_not_built",
+        "selected_provider": "voyage",
+        "provider_state": "configured",
+        "provider_configured": True,
+        "embedding_model": "voyage-4",
+        "embedded_count": 0,
+        "chunk_count": 2,
+        "pending_embedding_count": 0,
+    }
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     assert model["mcp"]["serve_command"] == "mdtero mcp serve"
     assert model["mcp"]["briefing_command"] == "mdtero mcp briefing --json"
@@ -3590,6 +3613,10 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Shortcuts" in output
     assert "Command Palette" in output
     assert "Create/bind/import/build Voyage index" in output
+    assert "voyage / configured" in output
+    assert "voyage-4" in output
+    assert "Build the server project index before" in output
+    assert "querying" in output
     assert "r" in output
     assert "refresh" in output
     assert rendered is not None
@@ -3668,6 +3695,9 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
             "status": "ready",
             "reason_code": "indexed",
             "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
+            "selected_provider": "voyage",
+            "provider_state": "configured",
+            "provider_configured": True,
         },
     )
     rendered = render_dashboard_text(model)
@@ -3678,6 +3708,11 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
     assert model["rag"]["ready"] is True
     assert model["rag"]["reason_code"] == "indexed"
     assert model["rag"]["server_summary"]["embedded_count"] == 3
+    assert model["rag"]["selected_provider"] == "voyage"
+    assert model["rag"]["provider_state"] == "configured"
+    assert model["rag"]["provider_configured"] is True
+    assert model["rag"]["embedding_model"] == "voyage-test"
+    assert model["rag"]["server_agent_summary"]["embedding_model"] == "voyage-test"
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
     assert model["mcp"]["briefing_command"] == "mdtero mcp briefing --json"
     assert model["mcp"]["recommended_next_commands"][-1] == "mdtero mcp serve"
@@ -4792,9 +4827,13 @@ def test_extension_contract_prefers_browser_source_over_retired_helper_action():
     shared_contract = (repo_root / "shared" / "src" / "api-contract.ts").read_text(encoding="utf-8")
     ssot_tests = (repo_root / "extension" / "tests" / "ssot-route.test.ts").read_text(encoding="utf-8")
     background_tests = (repo_root / "extension" / "tests" / "background.test.ts").read_text(encoding="utf-8")
+    action_executor = (repo_root / "extension" / "src" / "lib" / "action-executor.ts").read_text(encoding="utf-8")
 
     assert '"fetch_browser_source"' in shared_contract
     assert '"fetch_helper_source"' not in shared_contract
+    assert '"fetch_elsevier_xml"' not in shared_contract
+    assert '"fetch_wiley_tdm_pdf"' not in shared_contract
+    assert '"fetch_springer_pdf"' not in shared_contract
     assert "requiresBrowserCapture?: boolean" in shared_contract
     assert "requiresHelper?: boolean" not in shared_contract
     assert 'action_sequence: ["fetch_browser_source"]' in ssot_tests
@@ -4802,6 +4841,55 @@ def test_extension_contract_prefers_browser_source_over_retired_helper_action():
     assert 'fetch_helper_source' not in ssot_tests
     assert "html_helper_first" not in ssot_tests
     assert "requiresHelper" not in ssot_tests
+    assert "RETIRED_PUBLISHER_ACTIONS" not in action_executor
+    assert "fetch_elsevier_xml" not in action_executor
+    assert "fetch_wiley_tdm_pdf" not in action_executor
+    assert "fetch_springer_pdf" not in action_executor
+
+
+def test_extension_dist_smoke_rejects_retired_publisher_action_names(tmp_path: Path):
+    repo_root = Path(__file__).resolve().parents[1]
+    run_smoke = load_python_script(repo_root / "scripts" / "ci" / "extension_dist_smoke.py").run_smoke
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    for relative in [
+        "background.js",
+        "content.js",
+        "popup.html",
+        "popup.js",
+        "options.html",
+        "options.js",
+        "styles.css",
+        "assets/icon-16.png",
+        "assets/icon-32.png",
+        "assets/icon-48.png",
+        "assets/icon-128.png",
+    ]:
+        path = dist / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    (dist / "manifest.json").write_text(json.dumps({
+        "manifest_version": 3,
+        "permissions": ["storage", "downloads", "tabs"],
+        "host_permissions": ["https://api.mdtero.com/*"],
+        "background": {"service_worker": "background.js"},
+        "action": {"default_popup": "popup.html"},
+        "options_page": "options.html",
+        "content_scripts": [{"matches": ["https://mdtero.com/*"], "js": ["content.js"]}],
+    }), encoding="utf-8")
+    (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff mdtero parse", encoding="utf-8")
+    (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
+    (dist / "options.html").write_text("Website sign-in Connection guide Website OAuth is connected", encoding="utf-8")
+    (dist / "options.js").write_text("browser capture, upload, translation, and download settings fetch_elsevier_xml", encoding="utf-8")
+
+    payload = run_smoke(dist)
+
+    assert payload["status"] == "failed"
+    assert any(
+        failure.get("marker") == "fetch_elsevier_xml" and failure.get("reason_code") == "extension_forbidden_marker_present"
+        for failure in payload["failures"]
+    )
 
 
 def test_public_docs_describe_rag_answer_citation_contract():
@@ -4835,7 +4923,7 @@ def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
     assert "citation_count=5" in report
     assert "match_count=5" in report
     assert "196 passed" in report
-    assert "143 passed" in report
+    assert "141 passed" in report
     assert "241 passed" in report
     assert "99 passed" in report
     assert "npm run smoke:routes -- --base-url <production-url> --json" in report

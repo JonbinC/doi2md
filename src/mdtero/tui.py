@@ -237,12 +237,32 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
         payload["server_error_type"] = exc.__class__.__name__
         return payload
     summary = server_status.get("summary") if isinstance(server_status.get("summary"), dict) else {}
+    next_commands = [str(command).strip() for command in server_status.get("next_commands") or [] if str(command).strip()]
     payload["server_status"] = server_status.get("status")
     payload["server_reason_code"] = server_status.get("reason_code")
     payload["server_summary"] = summary
     payload["ready"] = server_status.get("status") == "ready"
     if server_status.get("reason_code"):
         payload["reason_code"] = str(server_status["reason_code"])
+    for key in ["selected_provider", "provider_state", "provider_configured", "voyage_configured"]:
+        if key in server_status:
+            payload[key] = server_status.get(key)
+    payload["embedding_model"] = server_status.get("embedding_model") or summary.get("embedding_model")
+    if server_status.get("action_hint"):
+        payload["action_hint"] = str(server_status["action_hint"])
+    if next_commands:
+        payload["next_commands"] = next_commands
+    payload["server_agent_summary"] = {
+        "status": payload.get("server_status"),
+        "reason_code": payload.get("server_reason_code"),
+        "selected_provider": payload.get("selected_provider"),
+        "provider_state": payload.get("provider_state"),
+        "provider_configured": payload.get("provider_configured", payload.get("voyage_configured")),
+        "embedding_model": payload.get("embedding_model"),
+        "embedded_count": summary.get("embedded_count", 0),
+        "chunk_count": summary.get("chunk_count", 0),
+        "pending_embedding_count": summary.get("pending_embedding_count", 0),
+    }
     return payload
 
 
@@ -531,6 +551,16 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
         table.add_row("Server RAG", f"{rag.get('server_status')} ({rag.get('server_reason_code')})")
         summary = rag.get("server_summary") if isinstance(rag.get("server_summary"), dict) else {}
         table.add_row("Embeddings", f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunks")
+        provider = rag.get("selected_provider") or "server"
+        provider_state = rag.get("provider_state") or ("configured" if rag.get("provider_configured") else "unknown")
+        table.add_row("Provider", f"{provider} / {provider_state}")
+        if rag.get("embedding_model"):
+            table.add_row("Model", str(rag.get("embedding_model")))
+        if rag.get("action_hint"):
+            table.add_row("Hint", str(rag.get("action_hint"))[:120])
+        next_commands = rag.get("next_commands") if isinstance(rag.get("next_commands"), list) else []
+        if next_commands:
+            table.add_row("Next", str(next_commands[0])[:120])
     elif rag.get("server_error_type"):
         table.add_row("Server RAG", f"unavailable ({rag.get('server_error_type')})")
     table.add_row("MCP briefing", mcp["briefing_command"])

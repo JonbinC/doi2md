@@ -38,6 +38,9 @@ FORBIDDEN_DIST_MARKERS = (
     "elsevierApiKey",
     "wileyTdmToken",
     "springerOpenAccessApiKey",
+    "fetch_elsevier_xml",
+    "fetch_wiley_tdm_pdf",
+    "fetch_springer_pdf",
 )
 
 POPUP_REQUIRED_MARKERS = (

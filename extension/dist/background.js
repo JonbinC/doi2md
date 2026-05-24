@@ -402,17 +402,7 @@ async function fetchXmlArtifact(candidateUrls) {
   };
 }
 
-// src/lib/elsevier.ts
-function buildElsevierLocalAcquireGuidance() {
-  return [
-    "This Elsevier or ScienceDirect paper needs licensed full-text acquisition before parsing.",
-    "Use the browser extension on an already-open full-text page, upload the PDF/XML manually, or run `mdtero config academic` and retry with the CLI.",
-    "If Elsevier only returns the abstract, check whether this machine is on a campus or institutional network IP."
-  ].join(" ");
-}
-
 // src/lib/action-executor.ts
-var CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
 async function executeAction(action, context, routePlan) {
   switch (action) {
     case "capture_current_tab_html":
@@ -421,11 +411,6 @@ async function executeAction(action, context, routePlan) {
       return { success: true };
     case "fetch_structured_xml":
       return executeFetchStructuredXml(context, routePlan);
-    case "fetch_elsevier_xml":
-      return executeFetchElsevierXml(context, routePlan);
-    case "fetch_wiley_tdm_pdf":
-      return executeFetchWileyTdmPdf(context, routePlan);
-    case "fetch_springer_pdf":
     case "fetch_remote_html":
       return executeFetchBrowserSource(context, routePlan);
     case "fetch_epub_asset":
@@ -504,22 +489,6 @@ async function executeFetchStructuredXml(context, routePlan) {
     }
   }
   return { success: false, error: "No structured XML source available" };
-}
-async function executeFetchElsevierXml(context, routePlan) {
-  return {
-    success: false,
-    requiresUpload: true,
-    error: routePlan.user_message || buildElsevierLocalAcquireGuidance(),
-    nextCommand: buildCliParseCommand(context.input)
-  };
-}
-async function executeFetchWileyTdmPdf(context, routePlan) {
-  return {
-    success: false,
-    requiresUpload: true,
-    error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`,
-    nextCommand: buildCliParseCommand(context.input)
-  };
 }
 async function executeFetchEpubAsset(context, routePlan) {
   if (!context.tabId) {
