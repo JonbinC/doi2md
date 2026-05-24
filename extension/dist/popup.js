@@ -470,6 +470,29 @@ function getPreflightHintText(params, language = "en") {
   }
   return language === "zh" ? "\u5F53\u524D\u9875\u9762\u652F\u6301\u6269\u5C55\u8BFB\u53D6\u3002\u89E3\u6790\u524D\u8BF7\u786E\u8BA4\u9875\u9762\u6B63\u6587\u5DF2\u7ECF\u52A0\u8F7D\u3002" : "This page supports extension capture. Confirm the article body has loaded before parsing.";
 }
+function shouldShowCliHandoffForPreflight(hint, input) {
+  const normalizedHint = String(hint || "").trim().toLowerCase();
+  if (!buildCliParseCommand(input)) {
+    return false;
+  }
+  return normalizedHint.includes("mdtero parse") || normalizedHint.includes("cli") || normalizedHint.includes("\u7EC8\u7AEF");
+}
+function getCliHandoffNote(command, language = "en") {
+  const normalized = String(command || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (language === "zh") {
+    if (/^mdtero\s+parse\s+--file\b/.test(normalized)) {
+      return "\u5728\u7EC8\u7AEF\u7EE7\u7EED\u4E0A\u4F20\u672C\u5730\u6587\u4EF6\uFF1B\u590D\u5236\u547D\u4EE4\u540E\u628A\u6587\u4EF6\u8DEF\u5F84\u66FF\u6362\u4E3A\u4F60\u7684 PDF/EPUB\u3002";
+    }
+    return "\u5728\u7EC8\u7AEF\u7EE7\u7EED\u89E3\u6790\uFF1B\u9002\u5408\u6821\u56ED\u7F51\u3001\u53CD\u722C\u6311\u6218\u9875\u6216\u9700\u8981\u672C\u673A\u4F9D\u8D56\u7684\u8865\u6293\u53D6\u573A\u666F\u3002";
+  }
+  if (/^mdtero\s+parse\s+--file\b/.test(normalized)) {
+    return "Continue local file upload in the terminal; replace the path with your PDF/EPUB.";
+  }
+  return "Continue parsing in the terminal; useful for campus networks, challenge pages, or local acquisition dependencies.";
+}
 function getSavedResultSummary(state, language = "en") {
   const filename = state?.translatedFilename ?? state?.parseFilename;
   if (!filename) {
@@ -698,6 +721,7 @@ var translateButton = document.querySelector("#translate-button");
 var translateLanguageEl = document.querySelector("#translate-language");
 var resultEl = document.querySelector("#result");
 var cliHandoffEl = document.querySelector("#cli-handoff");
+var cliHandoffNoteEl = document.querySelector("#cli-handoff-note");
 var cliHandoffCommandEl = document.querySelector("#cli-handoff-command");
 var copyCliHandoffButton = document.querySelector("#copy-cli-handoff");
 var artifactActionsEl = document.querySelector("#artifact-actions");
@@ -729,10 +753,11 @@ function setResult(message) {
 }
 function setCliHandoff(input, commandOverride) {
   const command = String(commandOverride || "").trim() || buildCliParseCommand(input);
-  if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton) {
+  if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton || !cliHandoffNoteEl) {
     return;
   }
   cliHandoffEl.hidden = !command;
+  cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
@@ -762,16 +787,20 @@ async function updatePreflightHint() {
   const settings = await readSettings();
   const input = inputEl?.value.trim() || currentInput || "";
   const pageUrl = detectedPageContext?.tabUrl || "";
-  setPreflightHint(
-    getPreflightHintText(
-      {
-        input,
-        pageUrl,
-        bridgeStatus: currentBridgeStatus
-      },
-      uiLanguage
-    )
+  const hint = getPreflightHintText(
+    {
+      input,
+      pageUrl,
+      bridgeStatus: currentBridgeStatus
+    },
+    uiLanguage
   );
+  setPreflightHint(hint);
+  if (shouldShowCliHandoffForPreflight(hint, input)) {
+    setCliHandoff(input);
+  } else if (!isParsing) {
+    setCliHandoff(null);
+  }
 }
 function toggleLanguageLabel(language) {
   return language === "en" ? "\u4E2D\u6587" : "EN";

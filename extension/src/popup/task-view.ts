@@ -240,6 +240,31 @@ export function getPreflightHintText(
     : "This page supports extension capture. Confirm the article body has loaded before parsing.";
 }
 
+export function shouldShowCliHandoffForPreflight(hint: string, input?: string | null): boolean {
+  const normalizedHint = String(hint || "").trim().toLowerCase();
+  if (!buildCliParseCommand(input)) {
+    return false;
+  }
+  return normalizedHint.includes("mdtero parse") || normalizedHint.includes("cli") || normalizedHint.includes("终端");
+}
+
+export function getCliHandoffNote(command?: string | null, language: UiLanguage = "en"): string {
+  const normalized = String(command || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (language === "zh") {
+    if (/^mdtero\s+parse\s+--file\b/.test(normalized)) {
+      return "在终端继续上传本地文件；复制命令后把文件路径替换为你的 PDF/EPUB。";
+    }
+    return "在终端继续解析；适合校园网、反爬挑战页或需要本机依赖的补抓取场景。";
+  }
+  if (/^mdtero\s+parse\s+--file\b/.test(normalized)) {
+    return "Continue local file upload in the terminal; replace the path with your PDF/EPUB.";
+  }
+  return "Continue parsing in the terminal; useful for campus networks, challenge pages, or local acquisition dependencies.";
+}
+
 export function getSavedResultSummary(
   state: Pick<PopupState, "parseFilename" | "translatedFilename"> | undefined,
   language: UiLanguage = "en"
