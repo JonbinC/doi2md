@@ -303,6 +303,10 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     status["agent_summary"] = {
         "status": server_status,
         "reason_code": reason_code,
+        "selected_provider": status.get("selected_provider"),
+        "provider_state": status.get("provider_state"),
+        "provider_configured": status.get("provider_configured", status.get("voyage_configured")),
+        "embedding_model": status.get("embedding_model") or summary.get("embedding_model"),
         "embedded_count": summary.get("embedded_count", 0),
         "chunk_count": summary.get("chunk_count", 0),
         "pending_embedding_count": summary.get("pending_embedding_count", 0),

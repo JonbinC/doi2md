@@ -2864,6 +2864,10 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         return {
             "status": "ready",
             "reason_code": "indexed",
+            "selected_provider": "voyage",
+            "provider_state": "configured",
+            "provider_configured": True,
+            "embedding_model": "voyage-test",
             "summary": {"chunk_count": 8, "embedded_count": 8, "pending_embedding_count": 0},
         }
 
@@ -2892,6 +2896,10 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["blocked_items"][0]["translation_attempts"] == attempts
     assert briefing["active_items"][0]["input"] == "10.1000/todo"
     assert briefing["rag"]["agent_summary"]["embedded_count"] == 8
+    assert briefing["rag"]["agent_summary"]["selected_provider"] == "voyage"
+    assert briefing["rag"]["agent_summary"]["provider_state"] == "configured"
+    assert briefing["rag"]["agent_summary"]["provider_configured"] is True
+    assert briefing["rag"]["agent_summary"]["embedding_model"] == "voyage-test"
     assert briefing["agents"]["detected_count"] == 1
     assert briefing["agents"]["installed_count"] == 0
     assert briefing["agents"]["pending_install_targets"] == ["codex"]
@@ -3435,6 +3443,9 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
             "status": "ready",
             "reason_code": "indexed",
             "selected_provider": "voyage",
+            "provider_state": "configured",
+            "provider_configured": True,
+            "embedding_model": "voyage-test",
             "summary": {"chunk_count": 5, "embedded_count": 5, "pending_embedding_count": 0},
         }
 
@@ -3444,6 +3455,10 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
     assert status["agent_summary"] == {
         "status": "ready",
         "reason_code": "indexed",
+        "selected_provider": "voyage",
+        "provider_state": "configured",
+        "provider_configured": True,
+        "embedding_model": "voyage-test",
         "embedded_count": 5,
         "chunk_count": 5,
         "pending_embedding_count": 0,
