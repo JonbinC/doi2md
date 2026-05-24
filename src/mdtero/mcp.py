@@ -188,14 +188,58 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
         }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
-    return {
+    pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
+    running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
+    failed = [paper for paper in state.papers if paper.status == "failed"]
+    commands = build_agent_commands(root)["commands"]
+
+    if state.server_project_id and succeeded:
+        status = "ready"
+        reason_code = "ready"
+        action_hint = "Local project has succeeded parse tasks and a linked server project. Ingest or refresh server-side Voyage RAG, then query through CLI or MCP."
+        next_commands = [
+            commands.get("ingest_for_rag", "mdtero project ingest --json"),
+            commands["rag_status"],
+            commands["rag_build"],
+            commands["rag_query"],
+            commands["mcp_briefing"],
+        ]
+    elif not state.server_project_id and succeeded:
+        status = "not_ready"
+        reason_code = "server_project_not_linked"
+        action_hint = "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start backend Voyage RAG."
+        next_commands = [commands["rag_build"], commands["rag_status"], commands["rag_query"]]
+    elif running:
+        status = "not_ready"
+        reason_code = "project_has_running_tasks"
+        action_hint = "Wait for running parse tasks to finish before building or querying server-side Voyage RAG."
+        next_commands = [commands["refresh"], commands["rag_status"]]
+    elif pending:
+        status = "not_ready"
+        reason_code = "project_has_pending_items"
+        action_hint = "Submit pending papers and refresh task status before building server-side Voyage RAG."
+        next_commands = [commands["parse_pending"], commands["refresh"], commands["rag_build"]]
+    else:
+        status = "not_ready"
+        reason_code = "no_succeeded_tasks"
+        action_hint = "Parse at least one paper successfully before building or querying server-side Voyage RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project."
+        next_commands = _rag_recovery_commands(commands)
+
+    return redact_sensitive_payload({
         "project": state.name,
         "server_project_id": state.server_project_id,
+        "status": status,
         "ready": bool(state.server_project_id and succeeded),
         "ready_for_ingest_count": len(succeeded),
-        "reason_code": "ready" if state.server_project_id and succeeded else "server_project_not_linked" if not state.server_project_id else "no_succeeded_tasks",
-        "commands": build_agent_commands(root)["commands"],
-    }
+        "local_paper_count": len(state.papers),
+        "pending_count": len(pending),
+        "running_count": len(running),
+        "failed_count": len(failed),
+        "reason_code": reason_code,
+        "action_hint": action_hint,
+        "commands": commands,
+        "next_commands": _dedupe_commands(next_commands),
+    })
 
 
 def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | None = None) -> dict[str, Any]:
