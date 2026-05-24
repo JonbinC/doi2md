@@ -3693,6 +3693,8 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
     assert manifest["releaseTruth"]["current"]["cli"]["version"] == package_version
     assert manifest["cli"]["packageManager"] == "uv"
     assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
+    assert manifest["cliCommand"] == "mdtero"
+    assert "helperCommand" not in manifest
     assert "legacyNpmCompatibility" not in json.dumps(manifest)
     assert "mdtero-install" not in json.dumps(manifest)
 
