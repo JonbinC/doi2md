@@ -1,3 +1,67 @@
+// src/lib/cli-handoff.ts
+function shellQuote(value) {
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+function normalizeCliHandoffCommand(command) {
+  const trimmed = String(command || "").trim();
+  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
+  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
+  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
+  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --timeout 300 --json`;
+}
+function buildCliParseCommand(input) {
+  const normalized = String(input || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
+    return "";
+  }
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
+}
+function buildCliFileParseCommand(filename, artifactKind) {
+  const normalized = String(filename || "").trim();
+  const extension = inferFileExtension(normalized, artifactKind);
+  const path = normalized || `paper.${extension}`;
+  return `mdtero parse --file ${shellQuote(path)} --trace --wait --timeout 300 --json`;
+}
+function inferFileExtension(filename, artifactKind) {
+  const normalized = String(filename || "").trim().toLowerCase();
+  if (normalized.endsWith(".epub") || artifactKind === "epub") {
+    return "epub";
+  }
+  if (normalized.endsWith(".html") || normalized.endsWith(".htm") || artifactKind === "html") {
+    return "html";
+  }
+  if (normalized.endsWith(".xml") || artifactKind === "xml") {
+    return "xml";
+  }
+  return "pdf";
+}
+
+// src/lib/redact.ts
+var SENSITIVE_QUERY_KEYS = "(api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
+function redactSensitiveText(value) {
+  const text = String(value ?? "");
+  if (!text) {
+    return "";
+  }
+  return text.replace(/\b(Bearer|ApiKey)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]").replace(/\b(mdtero|mdt)_(secret|live|test|key)_[A-Za-z0-9_-]+/gi, "[redacted-key]").replace(
+    new RegExp(`([?&]${SENSITIVE_QUERY_KEYS}=)[^&#\\s"'<>]+`, "gi"),
+    "$1[redacted]"
+  ).replace(
+    new RegExp(`\\b(${SENSITIVE_QUERY_KEYS})(\\s*[:=]\\s*)['"]?[^\\s&'",;]+`, "gi"),
+    "$1$2[redacted]"
+  ).replace(/https?:\/\/[^\s"'<>]*aliyuncs\.com[^\s"'<>]*/gi, "[redacted-url]").replace(/https?:\/\/[^\s"'<>]*oss-cn-[^\s"'<>]*/gi, "[redacted-url]");
+}
+
 // src/lib/api.ts
 function buildFulltextUploadBody(params) {
   const body = new FormData();
@@ -41,12 +105,12 @@ function describeErrorPayload(payload) {
   const message = firstString(record.error_message, record.message, record.detail);
   const reasonCode = firstString(record.reason_code, record.error_code);
   const actionHint = firstString(record.action_hint);
-  const nextCommand = Array.isArray(record.next_commands) ? record.next_commands.map((value) => String(value || "").trim()).find(Boolean) : "";
+  const nextCommand = Array.isArray(record.next_commands) ? normalizeCliHandoffCommand(record.next_commands.map((value) => String(value || "").trim()).find(Boolean)) : "";
   if (message) parts.push(message);
   if (reasonCode) parts.push(`Reason: ${reasonCode}`);
   if (actionHint) parts.push(`Next: ${actionHint}`);
   if (nextCommand) parts.push(`Command: ${nextCommand}`);
-  return parts.join(" ");
+  return redactSensitiveText(parts.join(" "));
 }
 function firstString(...values) {
   for (const value of values) {
@@ -127,9 +191,9 @@ function createApiClient(getSettings) {
         body
       }, { requireAuth: true }).then((response) => response.json());
     },
-    createParseFulltextV2Task(payload) {
+    createRawUploadTask(payload) {
       const body = buildFulltextUploadBody({
-        file: payload.fulltextFile,
+        file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
@@ -343,24 +407,33 @@ function isSupportedPaperPage(url) {
 // src/popup/task-view.ts
 var SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"];
 var SOURCE_ORDER = ["paper_pdf", "paper_xml"];
+function getArtifactKeys(result) {
+  const keyed = Object.keys(result?.artifacts ?? {});
+  const listed = (result?.download_artifacts ?? []).map((artifact) => String(artifact.artifact || "").trim()).filter((artifact) => artifact.length > 0);
+  return Array.from(/* @__PURE__ */ new Set([...keyed, ...listed]));
+}
+function getArtifactFilename(result, artifactKey) {
+  return result?.artifacts?.[artifactKey]?.filename || result?.download_artifacts?.find((artifact) => artifact.artifact === artifactKey)?.filename;
+}
 function getPreferredArtifactKey(result) {
-  if (!result?.artifacts) {
+  const artifactKeys = getArtifactKeys(result);
+  if (artifactKeys.length === 0) {
     return void 0;
   }
-  if (result.preferred_artifact && result.artifacts[result.preferred_artifact]) {
+  if (result?.preferred_artifact && artifactKeys.includes(result.preferred_artifact)) {
     return result.preferred_artifact;
   }
-  return Object.keys(result.artifacts)[0];
+  return artifactKeys[0];
 }
 function getSecondaryArtifactKeys(result) {
   const preferred = getPreferredArtifactKey(result);
-  const artifactKeys = Object.keys(result?.artifacts ?? {});
+  const artifactKeys = getArtifactKeys(result);
   return SECONDARY_ORDER.filter(
     (key) => artifactKeys.includes(key) && key !== preferred
   );
 }
 function getSourceArtifactKeys(result) {
-  const artifactKeys = Object.keys(result?.artifacts ?? {});
+  const artifactKeys = getArtifactKeys(result);
   return SOURCE_ORDER.filter((key) => artifactKeys.includes(key));
 }
 function getDownloadLabel(artifactKey, language = "en") {
@@ -437,7 +510,7 @@ function getActionStatusText(kind, language = "en") {
 }
 function getUsageStatusText(usage, language = "en", errorMessage) {
   if (errorMessage?.trim()) {
-    return errorMessage.trim();
+    return redactSensitiveText(errorMessage.trim());
   }
   const wallet = usage?.wallet_balance_display?.trim() || (language === "zh" ? "\xA50.00" : "$0.00");
   const parse = Number.isFinite(usage?.parse_quota_remaining) ? Number(usage?.parse_quota_remaining) : 0;
@@ -507,12 +580,12 @@ function getResultWarningText(result, language = "en") {
   if (result.warning_code === "elsevier_abstract_only") {
     return language === "zh" ? "Elsevier \u4EC5\u8FD4\u56DE\u4E86\u6458\u8981\u3002\u8BF7\u786E\u8BA4\u4F60\u5F53\u524D\u662F\u5426\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u73AF\u5883\u3002" : "Elsevier only returned the abstract. Check whether this machine is on a campus or institutional network IP.";
   }
-  return result.warning_message ?? "";
+  return redactSensitiveText(result.warning_message ?? "");
 }
 function getTaskFailureText(task, fallback, language = "en") {
-  const message = task?.error_message?.trim() || fallback;
+  const message = redactSensitiveText(task?.error_message?.trim() || fallback);
   const reason = (task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
-  const actionHint = (task?.action_hint || task?.result?.action_hint || "").trim();
+  const actionHint = redactSensitiveText((task?.action_hint || task?.result?.action_hint || "").trim());
   const parts = [message];
   if (reason) {
     parts.push(language === "zh" ? `\u539F\u56E0\uFF1A${reason}` : `Reason: ${reason}`);
@@ -530,13 +603,24 @@ function getTaskFailureText(task, fallback, language = "en") {
   }
   return parts.join(" ");
 }
+function getDownloadFailureText(error, fallback, language = "en") {
+  const message = redactSensitiveText(
+    error instanceof Error ? error.message : String(error || "")
+  ).trim();
+  if (!message) {
+    return fallback;
+  }
+  return language === "zh" ? `${fallback} \u8BE6\u60C5\uFF1A${message}` : `${fallback} Detail: ${message}`;
+}
 function getTranslationAttemptSummary(attempts, language = "en") {
   const items = (attempts ?? []).map((attempt) => {
     const provider = String(attempt?.provider || "provider").trim();
     const reason = String(attempt?.reason_code || attempt?.provider_error_code || "failed").trim();
     const statusCode = attempt?.provider_status_code;
-    const status = typeof statusCode === "number" ? ` ${statusCode}` : "";
-    return `${provider}: ${reason}${status}`;
+    const status = typeof statusCode === "number" ? String(statusCode) : String(attempt?.status || "").trim();
+    const message = redactSensitiveText(String(attempt?.message || "").trim());
+    const details = [status, message].filter(Boolean).join(" ");
+    return `${provider}: ${reason}${details ? ` ${details}` : ""}`;
   }).filter(Boolean);
   if (!items.length) {
     return "";
@@ -549,33 +633,6 @@ function firstTaskNextCommand(task) {
 function firstNextCommand(commands) {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
   return normalizeCliHandoffCommand(command);
-}
-function normalizeCliHandoffCommand(command) {
-  const trimmed = String(command || "").trim();
-  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
-    return trimmed;
-  }
-  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
-  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
-  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
-  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --timeout 300 --json`;
-}
-function buildCliParseCommand(input) {
-  const normalized = String(input || "").trim();
-  if (!normalized) {
-    return "";
-  }
-  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
-    return "";
-  }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
-}
-function shellQuote(value) {
-  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 // src/popup/index.ts
@@ -829,8 +886,8 @@ async function saveArtifact(taskId, artifactKey, preferredFilename) {
   try {
     const artifact = await client.downloadArtifact(taskId, artifactKey, preferredFilename);
     triggerBlobDownload(artifact.blob, artifact.filename);
-  } catch {
-    setResult(getCurrentCopy().downloadFailed);
+  } catch (error) {
+    setResult(getDownloadFailureText(error, getCurrentCopy().downloadFailed, uiLanguage));
   }
 }
 function applyLanguage() {
@@ -944,7 +1001,7 @@ function appendActionButton(container, taskId, artifactKey, preferredFilename) {
 function renderArtifacts(task) {
   const preferredKey = getPreferredArtifactKey(task.result);
   clearSecondaryDownloads();
-  if (!preferredKey || !task.result?.artifacts) {
+  if (!preferredKey) {
     if (artifactActionsEl) artifactActionsEl.hidden = true;
     return;
   }
@@ -953,7 +1010,7 @@ function renderArtifacts(task) {
     downloadButton.hidden = false;
     downloadButton.textContent = getDownloadLabel(preferredKey, uiLanguage);
     downloadButton.onclick = () => {
-      void saveArtifact(task.task_id, preferredKey, task.result?.artifacts?.[preferredKey]?.filename);
+      void saveArtifact(task.task_id, preferredKey, getArtifactFilename(task.result, preferredKey));
     };
   }
   getSecondaryArtifactKeys(task.result).forEach((artifactKey) => {
@@ -961,7 +1018,7 @@ function renderArtifacts(task) {
       secondaryDownloadsEl,
       task.task_id,
       artifactKey,
-      task.result?.artifacts?.[artifactKey]?.filename
+      getArtifactFilename(task.result, artifactKey)
     );
   });
   const sourceArtifactKeys = getSourceArtifactKeys(task.result);
@@ -974,7 +1031,7 @@ function renderArtifacts(task) {
         sourceDownloadsEl,
         task.task_id,
         artifactKey,
-        task.result?.artifacts?.[artifactKey]?.filename
+        getArtifactFilename(task.result, artifactKey)
       );
     });
   }
@@ -1298,6 +1355,7 @@ async function submitLocalFile(file, artifactKind) {
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().localFileParseFailed);
+    setCliHandoff(file.name, buildCliFileParseCommand(file.name, artifactKind));
     return;
   }
   await writePopupState({

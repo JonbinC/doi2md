@@ -4,6 +4,8 @@ import argparse
 import importlib.util
 import json
 import os
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,7 @@ from .projects import (
     update_paper_submission,
     update_task,
 )
+from .redact import redact_sensitive_payload, redact_sensitive_text
 from .workflow import parse_trace_from_route, status_trace, upload_trace
 
 ACADEMIC_OPTIONS = [
@@ -87,6 +90,22 @@ def build_parser() -> argparse.ArgumentParser:
     login.add_argument("--api-key", default="")
     login.add_argument("--no-browser", action="store_true", help="Print the loopback web-login URL instead of opening a browser.")
     login.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the browser login callback.")
+
+    smoke = _cmd(sub, "smoke", "Run a deploy-ready CLI smoke test against Mdtero APIs.", cmd_smoke)
+    smoke.add_argument("--api-base", help="Override the Mdtero API base URL for this smoke run.")
+    smoke.add_argument("--workdir", type=Path, help="Project directory for smoke state and downloads. Defaults to a temporary directory.")
+    smoke.add_argument("--doi", default="10.48550/arXiv.1706.03762", help="DOI or URL to parse during smoke.")
+    smoke.add_argument("--query", default="retrieval augmented generation scientific papers", help="Discovery query to run during smoke.")
+    smoke.add_argument("--limit", type=int, default=3, help="Discovery result limit.")
+    smoke.add_argument("--question", default="What are the paper's main contribution and method?", help="RAG question for the parsed paper.")
+    smoke.add_argument("--project-id", help="Use an existing server project id for RAG instead of creating one.")
+    smoke.add_argument("--translate-to", default="zh-CN", help="Target language for the translation smoke step.")
+    smoke.add_argument("--skip-discovery", action="store_true")
+    smoke.add_argument("--skip-download", action="store_true")
+    smoke.add_argument("--skip-translate", action="store_true")
+    smoke.add_argument("--skip-rag", action="store_true")
+    _add_wait_options(smoke)
+    smoke.add_argument("--json", action="store_true")
 
     config = sub.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command")
@@ -243,6 +262,186 @@ def _cmd(subparsers: Any, name: str, help_text: str, func: Any) -> argparse.Argu
 def _add_wait_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=float, default=DEFAULT_WAIT_TIMEOUT_SECONDS, help="Seconds to wait for a task to finish when --wait is set.")
     parser.add_argument("--interval", type=float, default=DEFAULT_WAIT_INTERVAL_SECONDS, help="Seconds between task polls when --wait is set.")
+
+
+def cmd_smoke(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    if getattr(args, "api_base", None):
+        cfg.api_base_url = str(args.api_base).rstrip("/")
+    workdir = (args.workdir or Path(tempfile.mkdtemp(prefix="mdtero-smoke-"))).expanduser().resolve()
+    workdir.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {
+        "status": "running",
+        "command": "smoke",
+        "api_base_url": cfg.api_base_url,
+        "workdir": str(workdir),
+        "doi": args.doi,
+        "query": args.query,
+        "steps": [],
+        "task_ids": [],
+        "translation_task_ids": [],
+        "downloaded_paths": [],
+        "translated_paths": [],
+        "server_project_id": str(args.project_id or "").strip() or None,
+        "next_commands": [
+            "mdtero doctor --json",
+            f"mdtero parse {args.doi} --trace --wait --timeout {int(args.timeout)} --json",
+            f"mdtero translate <task-id> --to {args.translate_to} --json",
+            "mdtero rag status --json",
+        ],
+    }
+
+    if not cfg.is_authenticated:
+        payload.update(
+            {
+                "status": "not_ready",
+                "reason_code": "auth_missing",
+                "action_hint": "Configure Mdtero auth before running production smoke. Use browser OAuth with `mdtero login` or headless API-key login with `mdtero login --api-key <key>`.",
+                "next_commands": ["mdtero login", "mdtero login --api-key <key>", "mdtero doctor --json"],
+            }
+        )
+        _print_smoke_result(payload, json_output=args.json)
+        return 1
+
+    init_project(workdir, name="mdtero-smoke")
+    client = MdteroClient(config=cfg, timeout=max(float(args.timeout or DEFAULT_WAIT_TIMEOUT_SECONDS), 1.0))
+    terminal_failures = 0
+    parse_task: dict[str, Any] | None = None
+
+    if args.skip_discovery:
+        _smoke_add_step(payload, "discover", "skipped", reason_code="skipped")
+    else:
+        try:
+            discovery = client.discover(args.query, limit=max(int(args.limit or 1), 1))
+            items = discovery.get("items") if isinstance(discovery.get("items"), list) else []
+            _smoke_add_step(payload, "discover", "succeeded", source=discovery.get("source"), items_count=len(items), result=discovery)
+        except Exception as exc:
+            terminal_failures += 1
+            _smoke_add_step(payload, "discover", "failed", **_smoke_exception_payload(exc, default_reason="discovery_failed"))
+
+    try:
+        route, submission, acquisition = client.parse_with_route(args.doi)
+        _enrich_parse_submission(submission)
+        task_id = str(submission.get("task_id") or "").strip()
+        if not task_id:
+            raise RuntimeError("parse_task_id_missing")
+        payload["task_ids"].append(task_id)
+        add_paper(workdir, paper_from_submission(args.doi, submission, source="smoke"))
+        parse_task = _wait_for_task(client, task_id, args=args)
+        _enrich_task_status(parse_task)
+        if parse_task.get("status") != "timeout":
+            update_task(workdir, parse_task)
+        _merge_waited_task_into_submission(submission, parse_task)
+        parse_status = "succeeded" if parse_task.get("status") == "succeeded" else "failed"
+        if parse_status != "succeeded":
+            terminal_failures += 1
+        _smoke_add_step(
+            payload,
+            "parse",
+            parse_status,
+            task_id=task_id,
+            route_kind=route.get("route_kind"),
+            acquisition_mode=route.get("acquisition_mode"),
+            client_acquisition=acquisition,
+            selected_provider=submission.get("selected_provider"),
+            parser_strategy=submission.get("parser_strategy"),
+            reason_code=submission.get("reason_code") or submission.get("error_code"),
+            result=submission,
+        )
+    except Exception as exc:
+        terminal_failures += 1
+        _smoke_add_step(payload, "parse", "failed", **_smoke_exception_payload(exc, default_reason="parse_failed"))
+
+    if args.skip_download:
+        _smoke_add_step(payload, "download", "skipped", reason_code="skipped")
+    elif parse_task and parse_task.get("status") == "succeeded":
+        task_id = str(parse_task.get("task_id") or payload["task_ids"][-1])
+        artifact = str(parse_task.get("preferred_artifact") or _preferred_parse_artifact(parse_task) or "paper_md")
+        try:
+            path = client.download(task_id, artifact, workdir / "downloads")
+            payload["downloaded_paths"].append(str(path))
+            _smoke_add_step(payload, "download", "succeeded", task_id=task_id, artifact=artifact, path=str(path))
+        except Exception as exc:
+            terminal_failures += 1
+            _smoke_add_step(payload, "download", "failed", task_id=task_id, artifact=artifact, **_smoke_exception_payload(exc, default_reason="download_failed"))
+    else:
+        _smoke_add_step(payload, "download", "skipped", reason_code="parse_not_succeeded")
+
+    if args.skip_translate:
+        _smoke_add_step(payload, "translate", "skipped", reason_code="skipped")
+    elif parse_task and parse_task.get("status") == "succeeded":
+        task_id = str(parse_task.get("task_id") or payload["task_ids"][-1])
+        try:
+            translation = client.translate_task(task_id, target_language=args.translate_to)
+            _enrich_translate_submission(translation)
+            translation_task_id = str(translation.get("task_id") or "").strip()
+            if not translation_task_id:
+                raise RuntimeError("translation_task_id_missing")
+            payload["translation_task_ids"].append(translation_task_id)
+            final_translation = _wait_for_task(client, translation_task_id, args=args)
+            _enrich_task_status(final_translation)
+            translation["final_task"] = final_translation
+            translation_status = "succeeded" if final_translation.get("status") == "succeeded" else "failed"
+            translated_path = None
+            if translation_status == "succeeded":
+                translated_path = client.download(translation_task_id, "translated_md", workdir / "translations")
+                payload["translated_paths"].append(str(translated_path))
+            else:
+                terminal_failures += 1
+            _smoke_add_step(
+                payload,
+                "translate",
+                translation_status,
+                source_task_id=task_id,
+                task_id=translation_task_id,
+                target_language=args.translate_to,
+                reason_code=final_translation.get("reason_code") or final_translation.get("error_code") or translation.get("reason_code"),
+                path=str(translated_path) if translated_path else None,
+                result=translation,
+            )
+        except Exception as exc:
+            terminal_failures += 1
+            _smoke_add_step(payload, "translate", "failed", task_id=task_id, target_language=args.translate_to, **_smoke_exception_payload(exc, default_reason="translate_failed"))
+    else:
+        _smoke_add_step(payload, "translate", "skipped", reason_code="parse_not_succeeded")
+
+    if args.skip_rag:
+        _smoke_add_step(payload, "rag", "skipped", reason_code="skipped")
+    elif parse_task and parse_task.get("status") == "succeeded":
+        try:
+            state = load_project(workdir)
+            project_id, bootstrap = _ensure_server_project_for_rag(client, workdir, state, getattr(args, "project_id", None))
+            payload["server_project_id"] = project_id
+            ingest = _import_succeeded_tasks_to_server_project(client, load_project(workdir), project_id)
+            if ingest["failures"]:
+                raise RuntimeError("server_project_import_failed")
+            build = client.rag_build(project_id)
+            rag_status = _wait_for_rag_ready(client, project_id, args=args)
+            query = _normalize_rag_query_payload(client.rag_query(project_id, args.question), project_id=project_id, question=args.question)
+            _smoke_add_step(
+                payload,
+                "rag",
+                "succeeded",
+                server_project_id=project_id,
+                bootstrap=bootstrap,
+                ingest=ingest,
+                build=build,
+                rag_status=rag_status,
+                query=query,
+                reason_code=query.get("reason_code") or rag_status.get("reason_code"),
+            )
+        except Exception as exc:
+            terminal_failures += 1
+            _smoke_add_step(payload, "rag", "failed", server_project_id=payload.get("server_project_id"), **_smoke_exception_payload(exc, default_reason="rag_failed"))
+    else:
+        _smoke_add_step(payload, "rag", "skipped", reason_code="parse_not_succeeded")
+
+    payload["status"] = "succeeded" if terminal_failures == 0 else "failed"
+    payload["failed_count"] = terminal_failures
+    payload["reason_code"] = "smoke_succeeded" if terminal_failures == 0 else "smoke_failed"
+    payload["action_hint"] = "Smoke completed." if terminal_failures == 0 else "Inspect failed steps and rerun after fixing the reported backend or client path."
+    _print_smoke_result(payload, json_output=args.json)
+    return 0 if terminal_failures == 0 else 1
 
 
 def cmd_setup(_args: argparse.Namespace) -> int:
@@ -1041,7 +1240,7 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
         "failures": failures,
     }
     if args.json:
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
     else:
         table = Table("Input", "Task", "Document", "Status")
         for item in results:
@@ -1257,6 +1456,11 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
     root = Path.cwd()
     state = load_project(root)
     client = MdteroClient()
+    local_ready_count = _local_ready_for_rag_count(state)
+    if local_ready_count == 0:
+        payload = _rag_no_succeeded_tasks_payload(state, command="build")
+        _print_rag_command_failure(payload, json_output=_args.json)
+        return 1
     try:
         project_id, bootstrap = _ensure_server_project_for_rag(client, root, state, getattr(_args, "project_id", None))
     except Exception as exc:
@@ -1289,7 +1493,7 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
     result.setdefault("server_project_id", project_id)
     result.setdefault("bootstrap", bootstrap)
     result.setdefault("ingest", ingest)
-    _print_result(result, json_output=_args.json)
+    _print_result(redact_sensitive_payload(result), json_output=_args.json)
     return 0
 
 
@@ -1299,6 +1503,10 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
         client = MdteroClient()
         root = Path.cwd()
         state = load_project(root)
+        if _local_ready_for_rag_count(state) == 0:
+            payload = _rag_no_succeeded_tasks_payload(state, command="query", question=args.question)
+            _print_rag_command_failure(payload, json_output=args.json)
+            return 1
         try:
             project_id, bootstrap_meta = _ensure_server_project_for_rag(client, root, state, getattr(args, "project_id", None))
         except Exception as exc:
@@ -1357,6 +1565,137 @@ def _rag_query_bootstrap_not_ready(project_id: str, question: str, bootstrap: di
     }
 
 
+def _local_ready_for_rag_count(state: Any) -> int:
+    return sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+
+
+def _rag_recovery_commands() -> list[str]:
+    return [
+        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
+
+
+def _smoke_add_step(payload: dict[str, Any], name: str, status: str, **fields: Any) -> dict[str, Any]:
+    step = {
+        "name": name,
+        "status": status,
+        "duration_ms": fields.pop("duration_ms", None),
+    }
+    step.update({key: value for key, value in fields.items() if value not in (None, "", [], {})})
+    payload.setdefault("steps", []).append(redact_sensitive_payload(step))
+    return step
+
+
+def _smoke_exception_payload(exc: Exception, *, default_reason: str) -> dict[str, Any]:
+    detail = _http_error_detail(exc)
+    reason_code = str(detail.get("reason_code") or detail.get("error_code") or default_reason)
+    status_code = _exception_status_code(exc)
+    if status_code in {401, 403} or reason_code in {"authentication_required", "missing_or_invalid_credentials"}:
+        reason_code = "authentication_required" if status_code != 403 else "forbidden"
+    action_hint = str(detail.get("action_hint") or _smoke_action_hint(reason_code))
+    payload = {
+        "reason_code": reason_code,
+        "error_code": reason_code,
+        "error_type": exc.__class__.__name__,
+        "http_status": status_code,
+        "message": str(detail.get("message") or exc),
+        "action_hint": action_hint,
+        "next_commands": _detail_next_commands(detail) or _smoke_failure_next_commands(reason_code),
+    }
+    return redact_sensitive_payload(payload)
+
+
+def _smoke_action_hint(reason_code: str) -> str:
+    if reason_code in {"auth_missing", "authentication_required", "unauthorized", "forbidden"}:
+        return "Production auth failed. Configure a valid Mdtero API key, verify with `mdtero doctor --json`, then rerun smoke."
+    if reason_code in {"rag_index_not_built", "project_has_no_chunks", "server_project_import_failed"}:
+        return "Check server RAG with `mdtero rag status --json`, then rerun `mdtero smoke --json`."
+    if reason_code.startswith("translation_provider") or reason_code in {"translate_failed", "translation_task_id_missing"}:
+        return "Check backend translation provider diagnostics, quota, and API keys, then rerun `mdtero smoke --json`."
+    if reason_code in {"task_wait_timeout", "rag_wait_timeout"}:
+        return "The backend is still processing. Rerun smoke with a larger --timeout, or poll the task/RAG status directly."
+    return "Inspect this smoke step and rerun after fixing the reported backend or client path."
+
+
+def _smoke_failure_next_commands(reason_code: str) -> list[str]:
+    if reason_code in {"auth_missing", "authentication_required", "unauthorized", "forbidden"}:
+        return ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
+    if reason_code in {"rag_index_not_built", "project_has_no_chunks", "server_project_import_failed", "rag_failed"}:
+        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    if reason_code in {"parse_failed", "task_wait_timeout"}:
+        return ["mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 600 --json", "mdtero status <task-id> --json"]
+    if reason_code.startswith("translation_provider") or reason_code in {"translate_failed", "translation_task_id_missing"}:
+        return ["mdtero status <translation-task-id> --json", "mdtero translate <task-id> --to zh-CN --json", "mdtero smoke --skip-translate --json"]
+    return ["mdtero doctor --json", "mdtero smoke --json"]
+
+
+def _wait_for_rag_ready(client: MdteroClient, project_id: str, *, args: argparse.Namespace) -> dict[str, Any]:
+    interval = max(0.5, float(getattr(args, "interval", DEFAULT_WAIT_INTERVAL_SECONDS) or DEFAULT_WAIT_INTERVAL_SECONDS))
+    timeout = max(0.5, float(getattr(args, "timeout", DEFAULT_WAIT_TIMEOUT_SECONDS) or DEFAULT_WAIT_TIMEOUT_SECONDS))
+    deadline = time.monotonic() + timeout
+    last_status: dict[str, Any] = {}
+    while True:
+        last_status = client.rag_status(project_id)
+        status = str(last_status.get("status") or "").lower()
+        reason_code = str(last_status.get("reason_code") or "").lower()
+        if status in {"ready", "succeeded", "indexed"} or reason_code in {"indexed", "rag_index_ready", "rag_ready"}:
+            return last_status
+        if status in {"failed", "cancelled", "error"}:
+            return last_status
+        if time.monotonic() >= deadline:
+            last_status.setdefault("status", "timeout")
+            last_status.setdefault("reason_code", "rag_wait_timeout")
+            last_status.setdefault("action_hint", "RAG build did not become ready within the local wait timeout. Poll again later with `mdtero rag status --json`.")
+            last_status.setdefault("next_commands", ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"])
+            return last_status
+        time.sleep(interval)
+
+
+def _print_smoke_result(payload: dict[str, Any], *, json_output: bool) -> None:
+    payload = redact_sensitive_payload(payload)
+    if json_output:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    console = Console()
+    console.print(f"Smoke: {payload.get('status')} ({payload.get('reason_code')})")
+    console.print(f"Workdir: {payload.get('workdir')}")
+    table = Table("Step", "Status", "Reason")
+    for step in payload.get("steps") or []:
+        table.add_row(str(step.get("name") or ""), str(step.get("status") or ""), str(step.get("reason_code") or step.get("error_code") or ""))
+    console.print(table)
+    action_hint = str(payload.get("action_hint") or "").strip()
+    if action_hint:
+        console.print(f"Hint: {action_hint}")
+    next_commands = [str(command).strip() for command in payload.get("next_commands") or [] if str(command).strip()]
+    if next_commands:
+        console.print("Next:")
+        for command in next_commands:
+            console.print(f"  {command}")
+
+
+def _rag_no_succeeded_tasks_payload(state: Any, *, command: str, question: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "not_ready",
+        "command": f"rag_{command}",
+        "reason_code": "no_succeeded_tasks",
+        "error_code": "rag_precondition_failed",
+        "server_project_id": state.server_project_id,
+        "project": state.name,
+        "local_ready_for_ingest_count": 0,
+        "local_paper_count": len(state.papers),
+        "action_hint": "Parse at least one paper successfully before building or querying server-side Voyage RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project.",
+        "next_commands": _rag_recovery_commands(),
+    }
+    if question is not None:
+        payload["question"] = question
+        payload["answer"] = None
+    return payload
+
+
 def cmd_rag_status(args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
     indexed = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.artifact)
@@ -1382,6 +1721,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 "action_hint": "Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `mdtero project ingest --json` and `mdtero rag status --json`.",
                 "next_commands": next_commands,
             }
+            payload = redact_sensitive_payload(payload)
             if args.json:
                 print(json.dumps(payload, indent=2, ensure_ascii=False))
             else:
@@ -1398,14 +1738,14 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         result.setdefault("local_ready_for_ingest_count", indexed)
         result.setdefault("local_paper_count", len(state.papers))
         if args.json:
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            print(json.dumps(redact_sensitive_payload(result), indent=2, ensure_ascii=False))
             return 0
         console.print(
             f"Project {state.name}: server RAG {result.get('status')} ({result.get('reason_code')}); "
             f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunk(s) embedded."
         )
         console.print(f"Server project: {project_id}; provider: {result.get('selected_provider')}; model: {summary.get('embedding_model') or 'unknown'}")
-        action_hint = str(result.get("action_hint") or "").strip()
+        action_hint = redact_sensitive_text(result.get("action_hint")).strip()
         if action_hint:
             console.print(f"Hint: {action_hint}")
         next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
@@ -1662,7 +2002,7 @@ def _project_ingest_failure(project_id: str, paper: PaperRecord, exc: Exception)
 def _rag_command_failure(command: str, project_id: str, exc: Exception) -> dict[str, Any]:
     detail = _http_error_detail(exc)
     reason_code = str(detail.get("reason_code") or "server_rag_command_failed")
-    action_hint = str(detail.get("action_hint") or _rag_action_hint(command, reason_code))
+    action_hint = _public_rag_action_hint(command, reason_code, detail.get("action_hint"))
     next_commands = _detail_next_commands(detail) or _rag_failure_next_commands(command, reason_code)
     return {
         "status": "failed",
@@ -1698,6 +2038,19 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
     }
 
 
+def _public_rag_action_hint(command: str, reason_code: str, server_hint: object | None = None) -> str:
+    if reason_code == "voyage_not_configured":
+        return (
+            "Server-side Voyage RAG is not available for this Mdtero deployment yet. "
+            "This is a Mdtero backend operations issue, not a user-side API key setup step; "
+            "rerun `mdtero rag status --json` after the backend RAG service is configured."
+        )
+    hint = redact_sensitive_text(server_hint).strip()
+    if hint:
+        return hint
+    return _rag_action_hint(command, reason_code)
+
+
 def _detail_next_commands(detail: dict[str, Any]) -> list[str]:
     return [str(command).strip() for command in detail.get("next_commands") or [] if str(command).strip()]
 
@@ -1707,8 +2060,8 @@ def _http_error_detail(exc: Exception) -> dict[str, Any]:
         detail = exc.payload.get("detail") if isinstance(exc.payload, dict) else None
         if isinstance(detail, dict):
             nested = detail.get("detail") if isinstance(detail.get("detail"), dict) else detail
-            return nested if isinstance(nested, dict) else detail
-        return exc.payload if isinstance(exc.payload, dict) else {}
+            return redact_sensitive_payload(nested if isinstance(nested, dict) else detail)
+        return redact_sensitive_payload(exc.payload) if isinstance(exc.payload, dict) else {}
     if not isinstance(exc, httpx.HTTPStatusError):
         return {}
     try:
@@ -1716,7 +2069,7 @@ def _http_error_detail(exc: Exception) -> dict[str, Any]:
     except ValueError:
         return {}
     detail = payload.get("detail") if isinstance(payload, dict) else None
-    return detail if isinstance(detail, dict) else {}
+    return redact_sensitive_payload(detail) if isinstance(detail, dict) else {}
 
 
 def _exception_status_code(exc: Exception) -> int | None:
@@ -1730,7 +2083,7 @@ def _exception_status_code(exc: Exception) -> int | None:
 
 def _rag_action_hint(command: str, reason_code: str) -> str:
     if reason_code == "voyage_not_configured":
-        return "Server Voyage RAG is not configured. Configure VOYAGE_API_KEY on the backend, then rerun `mdtero rag build --json`."
+        return _public_rag_action_hint(command, reason_code)
     if reason_code == "rag_index_not_built":
         return "Build this server project RAG index before querying."
     if reason_code == "project_has_no_chunks":
@@ -1755,6 +2108,7 @@ def _rag_failure_next_commands(command: str, reason_code: str) -> list[str]:
 
 
 def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) -> None:
+    payload = redact_sensitive_payload(payload)
     if json_output:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
@@ -1769,6 +2123,7 @@ def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) ->
 
 
 def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> None:
+    payload = redact_sensitive_payload(payload)
     if json_output:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
@@ -1818,7 +2173,7 @@ def _normalize_rag_query_payload(payload: dict[str, Any], *, project_id: str, qu
         "next_commands",
         ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
     )
-    return payload
+    return redact_sensitive_payload(payload)
 
 
 def _extract_rag_answer(matches: list[Any]) -> str | None:
@@ -2031,7 +2386,7 @@ def _print_next_steps(console: Console) -> None:
             [
                 "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
                 "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json",
-                "mdtero parse --file paper.pdf --wait --timeout 300 --json",
+                "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
                 "mdtero parse --batch ./papers --wait --timeout 300 --json",
                 "mdtero project parse --wait --timeout 300 --json",
                 "mdtero project refresh --wait --timeout 300 --json",
@@ -2066,6 +2421,7 @@ def _print_next_steps(console: Console) -> None:
 
 
 def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
+    payload = redact_sensitive_payload(payload)
     if json_output:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
@@ -2086,7 +2442,7 @@ def _print_translation_attempts(payload: dict[str, Any], console: Console) -> No
         attempts = payload["result"].get("translation_attempts")
     if not isinstance(attempts, list) or not attempts:
         return
-    table = Table("Provider", "Reason", "Status")
+    table = Table("Provider", "Reason", "Status", "Message")
     for attempt in attempts:
         if not isinstance(attempt, dict):
             continue
@@ -2096,9 +2452,10 @@ def _print_translation_attempts(payload: dict[str, Any], console: Console) -> No
         elif attempt.get("status"):
             status = str(attempt.get("status"))
         table.add_row(
-            str(attempt.get("provider") or "provider"),
-            str(attempt.get("reason_code") or attempt.get("provider_error_code") or "failed"),
+            redact_sensitive_text(attempt.get("provider") or "provider"),
+            redact_sensitive_text(attempt.get("reason_code") or attempt.get("provider_error_code") or "failed"),
             status,
+            redact_sensitive_text(attempt.get("message") or ""),
         )
     console.print(table)
 

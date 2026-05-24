@@ -1,0 +1,81 @@
+name: Public CLI and Extension CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-client:
+    name: Python CLI Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run secret guard
+        run: python scripts/ci/secret_guard.py
+
+      - name: Run Python tests
+        run: uv run pytest tests_py -q
+
+      - name: Compile package sources
+        run: python -m compileall -q src/mdtero
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Smoke installed wheel
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/mdtero-wheel-smoke
+          /tmp/mdtero-wheel-smoke/bin/pip install dist/mdtero-*.whl
+          /tmp/mdtero-wheel-smoke/bin/mdtero --version
+
+  extension:
+    name: Browser Extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Audit extension dependencies
+        working-directory: extension
+        run: npm audit --audit-level=moderate
+
+      - name: Run extension tests
+        working-directory: extension
+        run: npm test -- --run
+
+      - name: Build extension
+        working-directory: extension
+        run: npm run build
+
+      - name: Smoke extension dist
+        run: python3 scripts/ci/extension_dist_smoke.py

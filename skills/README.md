@@ -1,15 +1,15 @@
 # Skills
 
-This directory is for public agent-skill and install surfaces.
+This directory keeps the public Mdtero agent skill source.
 
-Current migrated content:
+The maintained skill is `mdtero/SKILL.md`. It is mirrored into
+`src/mdtero/skills/mdtero/SKILL.md` and installed into Codex, Claude Code,
+Gemini CLI, Hermes, and OpenCode by the Python command:
 
-- `claude_code/`: Claude Code-facing install guidance
-- `codex/`: Codex-facing install guidance
-- `gemini_cli/`: Gemini CLI-facing install guidance
-- `hermes/`: Hermes Agent-facing install guidance
+```bash
+mdtero agent install --target <target>
+```
 
-Long-term rule:
-
-- public skill setup docs live here
-- backend-private workflow notes do not
+Per-agent `INSTALL.md` copies are retired. Agent-specific behavior belongs in
+`src/mdtero/agent.py`; user-facing setup belongs in `README.md`,
+`install/README.md`, and the packaged `SKILL.md`.

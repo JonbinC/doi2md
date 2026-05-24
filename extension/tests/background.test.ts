@@ -3,7 +3,7 @@ import { createFileParseMessage } from "../src/lib/runtime";
 
 const createParseTask = vi.fn();
 const createUploadedParseTask = vi.fn();
-const createParseFulltextV2Task = vi.fn();
+const createRawUploadTask = vi.fn();
 const createTranslateTask = vi.fn();
 const getTask = vi.fn();
 const fetchRoutePlan = vi.fn();
@@ -14,7 +14,7 @@ vi.mock("../src/lib/api", () => ({
   createApiClient: vi.fn(() => ({
     createParseTask,
     createUploadedParseTask,
-    createParseFulltextV2Task,
+    createRawUploadTask,
     createTranslateTask,
     getTask
   })),
@@ -54,7 +54,7 @@ describe("extension background routing", () => {
     writeSettings.mockResolvedValue(undefined);
     createParseTask.mockResolvedValue({ task_id: "task-generic", status: "queued" });
     createUploadedParseTask.mockResolvedValue({ task_id: "task-legacy", status: "queued" });
-    createParseFulltextV2Task.mockResolvedValue({ task_id: "task-v2", status: "queued" });
+    createRawUploadTask.mockResolvedValue({ task_id: "task-v2", status: "queued" });
     createTranslateTask.mockResolvedValue({ task_id: "task-translate", status: "queued" });
     getTask.mockResolvedValue({ task_id: "task-1", status: "queued" });
     fetchRoutePlan.mockReset();
@@ -118,7 +118,7 @@ describe("extension background routing", () => {
 
     expect(handled).toBe(false);
     expect(createParseTask).not.toHaveBeenCalled();
-    expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(createRawUploadTask).not.toHaveBeenCalled();
     expect(createUploadedParseTask).not.toHaveBeenCalled();
     expect(sendResponse).not.toHaveBeenCalled();
   });
@@ -146,7 +146,7 @@ describe("extension background routing", () => {
           sourceInput: "demo.pdf"
         })
       );
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+      expect(createRawUploadTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-legacy", status: "queued" }
@@ -183,7 +183,7 @@ describe("extension background routing", () => {
           sourceInput: "demo.epub"
         })
       );
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+      expect(createRawUploadTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-legacy", status: "queued" }
@@ -191,18 +191,49 @@ describe("extension background routing", () => {
     });
   });
 
-  it("executes SSOT helper-source routes through raw fulltext upload", async () => {
+  it("returns a CLI file handoff when local upload submission fails", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    createUploadedParseTask.mockRejectedValueOnce(new Error("upload timed out"));
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.file.request",
+        file: new File(["pdf"], "My Paper's Draft.pdf", { type: "application/pdf" }),
+        filename: "My Paper's Draft.pdf",
+        mediaType: "application/pdf",
+        artifactKind: "pdf"
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: false,
+        error: "upload timed out",
+        nextCommand: "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 300 --json"
+      });
+    });
+  });
+
+  it("executes SSOT source-first routes through raw artifact upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.1000/demo",
       top_connector: "wiley_tdm",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "browser_extension",
-      requires_helper: true,
+      requires_browser_capture: true,
       allows_current_tab: true,
-      action_sequence: ["fetch_helper_source"],
+      action_sequence: ["fetch_browser_source"],
       acceptance_rules: {},
       fail_closed: true,
       user_message: "Open the article page and retry.",
@@ -256,9 +287,9 @@ describe("extension background routing", () => {
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request",
       });
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
+      expect(createRawUploadTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          fulltextFile: expect.any(Blob),
+          rawFile: expect.any(Blob),
           filename: "paper.html",
           sourceInput: "10.1000/demo"
         })
@@ -269,7 +300,7 @@ describe("extension background routing", () => {
       });
     });
 
-    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+    const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
     await expect(rawArtifact.text()).resolves.toContain("Captured paper");
   });
 
@@ -282,7 +313,7 @@ describe("extension background routing", () => {
       top_connector: "server_parse",
       route_kind: "server",
       acquisition_mode: "server_parse",
-      requires_helper: false,
+      requires_browser_capture: false,
       allows_current_tab: false,
       action_sequence: ["server_parse"],
       acceptance_rules: {},
@@ -309,7 +340,7 @@ describe("extension background routing", () => {
 
     await vi.waitFor(() => {
       expect(createParseTask).toHaveBeenCalledWith({ input: "10.1000/demo" });
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+      expect(createRawUploadTask).not.toHaveBeenCalled();
       expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
@@ -318,7 +349,7 @@ describe("extension background routing", () => {
     });
   });
 
-  it("executes SSOT EPUB routes through browser download and raw fulltext upload", async () => {
+  it("executes SSOT EPUB routes through browser download and raw artifact upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     fetchRoutePlan.mockResolvedValue({
@@ -327,7 +358,7 @@ describe("extension background routing", () => {
       top_connector: "taylor_francis_oa_epub",
       route_kind: "epub_first",
       acquisition_mode: "browser_extension",
-      requires_helper: true,
+      requires_browser_capture: true,
       allows_current_tab: true,
       action_sequence: ["fetch_epub_asset"],
       acceptance_rules: {},
@@ -377,15 +408,15 @@ describe("extension background routing", () => {
         type: "mdtero.download_epub.request",
         artifactUrl: "https://www.tandfonline.com/doi/epub/10.1080/26395940.2021.1947159?needAccess=true"
       });
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
+      expect(createRawUploadTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          fulltextFile: expect.any(Blob),
+          rawFile: expect.any(Blob),
           filename: "paper.epub",
           sourceDoi: "10.1080/26395940.2021.1947159",
           sourceInput: "10.1080/26395940.2021.1947159"
         })
       );
-      const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+      const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
       expect(rawArtifact.type).toBe("application/epub+zip");
       const text = new TextDecoder().decode(new Uint8Array(await rawArtifact.arrayBuffer()));
       expect(text).toContain("PK");
@@ -404,11 +435,11 @@ describe("extension background routing", () => {
       input_kind: "doi",
       input_value: "10.1000/demo",
       top_connector: "wiley_tdm",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "browser_extension",
-      requires_helper: true,
+      requires_browser_capture: true,
       allows_current_tab: true,
-      action_sequence: ["fetch_helper_source"],
+      action_sequence: ["fetch_browser_source"],
       acceptance_rules: {},
       fail_closed: true,
       user_message: "Open the article page and retry.",
@@ -431,7 +462,7 @@ describe("extension background routing", () => {
     );
 
     await vi.waitFor(() => {
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+      expect(createRawUploadTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "This source requires browser capture. Open the article page and retry.",
@@ -440,16 +471,16 @@ describe("extension background routing", () => {
     });
   });
 
-  it("executes SSOT OA repository routes through direct HTML fetch and raw fulltext upload", async () => {
+  it("executes SSOT OA repository routes through direct HTML fetch and raw artifact upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.9999/demo-open",
       top_connector: "best_oa_location_html",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "native_source_adapter",
-      requires_helper: false,
+      requires_browser_capture: false,
       allows_current_tab: false,
       action_sequence: ["fetch_oa_repository"],
       acceptance_rules: {},
@@ -492,15 +523,15 @@ describe("extension background routing", () => {
       await vi.waitFor(async () => {
         expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
         expect(globalThis.fetch).toHaveBeenCalledWith("https://example.org/articles/demo-open", { credentials: "include" });
-        expect(createParseFulltextV2Task).toHaveBeenCalledWith(
+        expect(createRawUploadTask).toHaveBeenCalledWith(
           expect.objectContaining({
-            fulltextFile: expect.any(Blob),
+            rawFile: expect.any(Blob),
             filename: "paper.html",
             sourceDoi: "10.9999/demo-open",
             sourceInput: "10.9999/demo-open"
           })
         );
-        const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+        const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
         const text = await rawArtifact.text();
         expect(text).toContain("OA Demo");
         expect(sendResponse).toHaveBeenCalledWith({
@@ -520,9 +551,9 @@ describe("extension background routing", () => {
       input_kind: "doi",
       input_value: "10.9999/demo-open",
       top_connector: "best_oa_location_html",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "native_source_adapter",
-      requires_helper: false,
+      requires_browser_capture: false,
       allows_current_tab: true,
       action_sequence: ["capture_current_tab_html", "fetch_oa_repository"],
       acceptance_rules: {},
@@ -585,15 +616,15 @@ describe("extension background routing", () => {
           })
         );
         expect(globalThis.fetch).not.toHaveBeenCalled();
-        expect(createParseFulltextV2Task).toHaveBeenCalledWith(
+        expect(createRawUploadTask).toHaveBeenCalledWith(
           expect.objectContaining({
-            fulltextFile: expect.any(Blob),
+            rawFile: expect.any(Blob),
             filename: "paper.html",
             sourceDoi: "10.9999/demo-open",
             sourceInput: "10.9999/demo-open"
           })
         );
-        const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
+        const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
         const text = await rawArtifact.text();
         expect(text).toContain("Browser DOM Demo");
         expect(sendResponse).toHaveBeenCalledWith({
@@ -613,9 +644,9 @@ describe("extension background routing", () => {
       input_kind: "url",
       input_value: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
       top_connector: "springer_openaccess_api",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "browser_extension",
-      requires_helper: true,
+      requires_browser_capture: true,
       allows_current_tab: true,
       action_sequence: ["capture_current_tab_html"],
       acceptance_rules: {},
@@ -664,9 +695,9 @@ describe("extension background routing", () => {
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request",
       });
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
+      expect(createRawUploadTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          fulltextFile: expect.any(Blob),
+          rawFile: expect.any(Blob),
           filename: "paper.xml",
           sourceInput: "https://link.springer.com/article/10.1007/s12011-024-04385-0"
         })
@@ -685,9 +716,9 @@ describe("extension background routing", () => {
       input_kind: "url",
       input_value: "https://example.com/paper",
       top_connector: "browser_capture",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "browser_extension",
-      requires_helper: true,
+      requires_browser_capture: true,
       allows_current_tab: true,
       action_sequence: ["capture_current_tab_html"],
       acceptance_rules: {},
@@ -741,9 +772,9 @@ describe("extension background routing", () => {
       input_kind: "url",
       input_value: "https://example.com/paper",
       top_connector: "browser_capture",
-      route_kind: "html_helper_first",
+      route_kind: "browser_capture_first",
       acquisition_mode: "browser_extension",
-      requires_helper: true,
+      requires_browser_capture: true,
       allows_current_tab: true,
       action_sequence: ["capture_current_tab_html"],
       acceptance_rules: {},

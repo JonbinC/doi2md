@@ -17,6 +17,11 @@ dependencies = [
   "textual>=0.80",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8",
+]
+
 [project.urls]
 Homepage = "https://mdtero.com"
 Repository = "https://github.com/JonbinC/doi2md"

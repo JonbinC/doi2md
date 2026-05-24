@@ -205,7 +205,7 @@ describe("createApiClient", () => {
     expect(route.upload_entrypoint).toBe("/api/v1/tasks/upload");
   });
 
-  it("uploads fulltext payloads through the v1 upload route", async () => {
+  it("uploads raw artifact payloads through the v1 upload route", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async () => new Response(JSON.stringify({ task_id: "task-v2", status: "queued" }), { status: 200 }));
 
@@ -216,8 +216,8 @@ describe("createApiClient", () => {
       })
     );
 
-    await client.createParseFulltextV2Task({
-      fulltextFile: new Blob(["<html></html>"], { type: "text/html" }),
+    await client.createRawUploadTask({
+      rawFile: new Blob(["<html></html>"], { type: "text/html" }),
       filename: "paper.html",
       sourceInput: "https://example.org/paper"
     });
@@ -258,6 +258,41 @@ describe("createApiClient", () => {
     ).rejects.toThrow("Elsevier and ScienceDirect inputs must be acquired locally first.");
   });
 
+  it("redacts signed URLs and tokens from backend error detail", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({
+        detail: {
+          message: "MinerU failed at https://mineru.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok",
+          reason_code: "mineru_urlapi_timeout",
+          action_hint: "Retry with Bearer voyage-secret-token or api_key=raw-key"
+        }
+      }), {
+        status: 503,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      })
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.toThrow(
+      /MinerU failed at \[redacted-url\]/
+    );
+    await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.toThrow(
+      /Bearer \[redacted\]/
+    );
+    await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.not.toThrow(
+      /Signature=sig|security-token=tok|voyage-secret-token|raw-key/
+    );
+  });
+
   it("surfaces structured backend reason codes, action hints, and next commands", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(
@@ -287,7 +322,7 @@ describe("createApiClient", () => {
     );
 
     await expect(client.downloadArtifact("task-123", "paper_md")).rejects.toThrow(
-      "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --wait --timeout 300 --json"
+      "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
     );
   });
 

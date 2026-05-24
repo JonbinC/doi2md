@@ -7,9 +7,9 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "jsdom": "^26.1.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.8.0",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.7"
   },
   "scripts": {
     "build": "node esbuild.config.mjs",

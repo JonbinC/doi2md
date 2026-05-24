@@ -102,6 +102,8 @@ describe("extension manifest", () => {
     expect(optionsSource).not.toContain("mdtero.com/account");
     expect(optionsSource).toContain("Open website OAuth");
     expect(optionsSource).toContain("trusted auth bridge");
+    expect(optionsSource).toContain("Connection guide");
+    expect(optionsSource).toContain("Website OAuth is connected");
     expect(optionsSource).toContain("browser capture, upload, translation, and download settings");
     expect(optionsSource).toContain("Browser capture reuses the active tab");
     expect(optionsSource).not.toContain("publisher API");

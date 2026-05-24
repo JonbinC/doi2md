@@ -18,7 +18,7 @@ Protocol and browser acquisition layer for the public extension. These files tra
 
 - Treat this subtree as adapters/protocol code, not canonical backend policy.
 - Preserve backend route-plan semantics; extension executes plans, it does not invent fallback ordering truth.
-- Captured HTML/XML/EPUB/PDF should upload as raw fulltext artifacts through `/api/v1/tasks/upload`; avoid adding local helper or native messaging detours.
+- Captured HTML/XML/EPUB/PDF should upload as raw artifacts through `/api/v1/tasks/upload`; avoid adding local helper or native messaging detours.
 - Keep page-capture classifiers conservative around login/challenge/PDF-shell detection.
 
 ## ANTI-PATTERNS

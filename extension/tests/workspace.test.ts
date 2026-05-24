@@ -52,6 +52,9 @@ describe("workspace", () => {
     expect(optionsHtml).not.toContain('id="mdtero-options-ink"');
     expect(optionsHtml).toContain('id="open-account"');
     expect(optionsHtml).toContain('id="website-auth-note"');
+    expect(optionsHtml).toContain('id="connection-guide-card"');
+    expect(optionsHtml).toContain('id="connection-guide-list"');
+    expect(optionsHtml).toContain('id="setup-step-auth"');
     expect(optionsHtml).toContain('Parse / Upload');
     expect(optionsHtml).toContain('Translate');
     expect(optionsHtml).not.toContain('id="password-input"');
@@ -132,6 +135,7 @@ describe("workspace", () => {
     expect(styles).toContain(".panel-popup { width: 380px; max-width: 100vw; }");
     expect(styles).toContain(".panel-popup .shell { max-height: min(600px, 100vh); overflow-y: auto; }");
     expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(styles).toContain(".guide-item { display: grid; grid-template-columns: auto minmax(0, 1fr);");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
     expect(styles).toContain("button { min-height: 40px;");
     expect(styles).toContain(".cli-handoff code { min-width: 0; overflow: auto;");

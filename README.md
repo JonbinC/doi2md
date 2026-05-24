@@ -80,7 +80,7 @@ mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json
-mdtero parse --file paper.pdf --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
 mdtero parse --batch ./papers --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --json
@@ -98,6 +98,7 @@ mdtero tui
 Validated in the current alpha:
 
 - API-key login, `mdtero doctor`, `mdtero doctor --json`, and local config; JSON diagnostics include safe auth/dependency/academic/Zotero/project/RAG summaries plus `next_commands` without echoing secrets
+- deploy smoke with `mdtero smoke --json`; it creates an isolated project, runs discovery, arXiv/DOI parse with task polling, artifact download, server-side Voyage RAG build/status/query, and returns step-level `reason_code`, `action_hint`, task ids, paths, and server project id for agents
 - optional academic-key setup through either the interactive `mdtero config academic` flow or headless flags such as `--semantic-scholar-key <key> --json`; JSON output reports configured keys without echoing secrets
 - DOI/arXiv parse with task polling and Markdown/bundle download
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
@@ -107,8 +108,11 @@ Validated in the current alpha:
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests from parse task ids or local Markdown files
 - server-side Voyage RAG build/query; query JSON returns extractive `answer`, stable `citations`, raw `matches`, LlamaIndex-style `source_nodes`, an `evidence_pack.context_markdown`, `reason_code`, and `next_commands` for agents
-- local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, recommended next commands, and a `rag_query(question)` tool that can bootstrap server RAG before querying
+- local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, recommended next commands, and a `rag_query(question)` tool that can bootstrap server RAG before querying; `mdtero mcp briefing --json` also works in a directory before `project init` and returns initialization commands instead of a traceback
+- TUI dashboard command palette for copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands, with current next commands highlighted for workstation or local-agent handoff
+- Extension-to-CLI handoff for publisher challenge pages, campus-network/session-bound access, and browser-saved files: use `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json` so `client_acquisition`, raw upload, status polling, `reason_code`, and `action_hint` stay visible to the local agent
 - MCP and agent-facing recommended commands prefer `--json` on doctor, parse, refresh, ingest, RAG, and download steps so local agents can parse results without scraping terminal tables
+- agent-facing JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents; keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible, but do not use agent prompts as long-term secret storage
 - agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
 Known boundaries:
@@ -121,7 +125,7 @@ Known boundaries:
 
 Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local `mdtero config academic` configuration. The Python client owns local project state, BibTeX/Zotero import, TUI, MCP context, and agent skill installation. The backend owns parsing, MinerU PDF processing, OpenAlex fallback discovery, LLM translation, task artifacts, and server-side RAG.
 
-The browser extension stays a browser surface. It does not ship Python dependencies such as `curl_cffi`, `pyzotero`, or `fastmcp`; it only handles browser-context capture and user-selected file upload/download.
+The browser extension stays a browser surface. It does not ship Python dependencies such as `curl_cffi`, `pyzotero`, or `fastmcp`; it only handles browser-context capture and user-selected file upload/download. When a publisher challenge, campus network, or logged-in browser session blocks automatic capture, hand the DOI, URL, or saved PDF/EPUB/XML/HTML file to the Python CLI. That path keeps route planning, `curl_cffi` acquisition, raw artifact upload, task polling, and structured failure fields visible to local agents.
 
 ## Repo Map
 
@@ -154,7 +158,7 @@ mdtero doctor --json
 
 ```bash
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse --file paper.pdf --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project init --name literature-review
@@ -174,3 +178,6 @@ mdtero mcp serve
 
 当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 自动绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations`、`matches`、`source_nodes` 和 `evidence_pack.context_markdown`，方便 agent 直接引用证据并保留来源。MCP 的首选入口是 `agent_briefing`，会一次返回账户状态、项目健康、可下载成果、失败项、RAG 状态、agent skill 安装状态和下一步命令；MCP `rag_query(question)` 工具也会在需要时创建/绑定 server project、导入成功任务并触发 build，然后再查询。agent skill 安装由 Python CLI 负责，不依赖 npm。
 `mdtero doctor --json` 是给本地 agent 和上线 smoke 用的结构化入口，会返回认证、依赖、学术 key 是否配置、Zotero、项目队列、server project/RAG readiness 和下一步命令，但不会输出任何 secret。
+`mdtero smoke --json` 是上线后复测入口，会在临时项目里跑 discovery、DOI/arXiv 解析、下载、服务端 Voyage RAG build/status/query，并输出每一步的 `reason_code`、`action_hint`、task id、下载路径和 server project id。
+CLI JSON 和 MCP payload 会在交给本地 agent 前清理带签名的 MinerU/OSS URL、Bearer/API-key header、Mdtero API key 和常见 token query 参数；`reason_code`、`action_hint`、`next_commands` 和证据字段仍会保留，方便 agent 继续执行。
+当浏览器扩展遇到 publisher challenge、校园网/机构登录态或只能由用户保存文件的场景时，把 DOI、URL 或已保存的 PDF/EPUB/XML/HTML 交给 Python CLI 继续：`mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` 或 `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`。这样 `client_acquisition`、raw upload、状态轮询、`reason_code` 和 `action_hint` 仍然对本地 agent 可见。

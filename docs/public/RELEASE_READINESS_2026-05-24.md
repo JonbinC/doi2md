@@ -1,0 +1,35 @@
+# Release Readiness - 2026-05-24
+
+This matrix records what is proven by the current worktree and what still needs post-deploy smoke. It is intentionally stricter than a changelog: a row is marked ready only when there is current test, build, or live-smoke evidence.
+
+## Proven Ready
+
+| Area | Evidence |
+| --- | --- |
+| Public Python/uv CLI as the main runtime | `pyproject.toml` exposes `mdtero`; public release gate passed with `196 passed`; install docs use `uv tool install git+https://github.com/JonbinC/doi2md.git` and exclude npm runtime commands. |
+| Setup, doctor, academic keys, and agent-safe diagnostics | CLI contract tests cover setup/doctor/config flows; docs require `mdtero doctor --json`; redaction tests cover Mdtero keys, bearer headers, signed URLs, and token query params. |
+| DOI/URL parse, raw upload, status, download, project mode | Public CLI contract tests cover parse/status/download/project flows; live production smoke completed arXiv parse, project refresh, and artifact download. |
+| PDF upload through MinerU URL API | Production smoke completed PDF upload with `provider=mineru_precision`, `url_fetch_used=true`, `mineru_configured=true`, and Markdown download. |
+| Discovery | Production smoke completed server OpenAlex discovery; CLI contract covers local Semantic Scholar when configured and OpenAlex fallback otherwise. |
+| Zotero import and conservative sync | Public CLI tests cover pyzotero mock import/sync; docs state sync writes Mdtero notes/tags only and does not rewrite bibliographic metadata. |
+| Server-side Voyage RAG | Production smoke completed server project bootstrap, task import, Voyage build, status, and query with `embedding_model=voyage-4`; CLI/MCP tests cover not-ready and ready paths. |
+| FastMCP and agent skill handoff | Public CLI tests cover MCP briefing/tools and Python-based agent install; docs and skills no longer require npm for agent skill installation. |
+| Browser extension scoped to v1 product | Extension release gate passed with `143 passed`; build passed; extension dist smoke passed; manifest/workspace tests assert no native messaging, no publisher key storage, no old helper UI, v1 task/upload/translate/download paths, and CLI handoff for DOI/URL plus failed local PDF/EPUB uploads. |
+| Website/dashboard docs and UI | Nextmdtero release gate passed with `99 passed`; build passed; docs build passed; 11 production route artifacts verified; dashboard tests cover API-key copy dialog, install prompts, RAG/MCP workflow, redaction, extension handoff, and deploy route smoke tooling. |
+| Backend `/api/v1` and script cleanup | Backend release gate passed with `241 passed`; script layout tests limit active scripts; old browser bridge, helper runtime, parser-v2 shadow/benchmark scripts, Cloud Run E2E helpers, Wiley TDM one-off probes, and one-off export/demo scripts are removed from runnable locations. `/api/v1/route` and `/api/v1/extension/route` expose `requires_browser_capture` instead of the retired `requires_helper` helper flag. |
+
+## Requires Post-Deploy Smoke
+
+| Area | Required check |
+| --- | --- |
+| Deployed website routes | Current production smoke against `https://mdtero.com` fails only on `/docs/install.html` because the live page is missing the latest `evidence_pack.context_markdown` marker while local source/build include it. Deploy the latest `nextmdtero`, then rerun `npm run smoke:routes -- --base-url https://mdtero.com --json`; for another deployment target use `npm run smoke:routes -- --base-url <production-url> --json`. |
+| Browser extension interactive flow | Load the built MV3 extension in Chrome/Edge and smoke website OAuth token bridge, current-page parse, PDF/EPUB upload, task polling, translate, and artifact download. Unit tests and dist smoke cover the packaged contract, but browser UI behavior still needs a real browser. |
+| Translation provider health | Previous production smoke created a translation task but providers failed with auth/rate-limit reasons. Current production `GET /diagnostics/translation/providers` returns `404`, so deploy the current backend diagnostics router first. The updated backend deploy workflow now treats this route as current only when it returns `401` without credentials, which prevents stale backend builds from passing deploy smoke. Operators still need at least one healthy provider before calling translation launch-ready. |
+| Deployment and production smoke | After pushing and deploying backend/site/public artifacts, rerun `mdtero smoke --json --timeout 600 --interval 2` with a fresh valid API key and record task ids/results. The workspace test key currently returns `401 missing or invalid credentials` on `/me/usage`, so it cannot prove the live parse/RAG/translate path. |
+
+## Not Public Product Scope
+
+- npm runtime CLI and per-agent npm installers.
+- Native browser bridge, native host, and helper-bundle upload workflows.
+- Public GROBID engine selection. Uploaded PDFs use the backend MinerU-first path; GROBID remains internal compatibility only.
+- Backend-local copies of the public CLI/TUI/Zotero/RAG/MCP client runtime.
