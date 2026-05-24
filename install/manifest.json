@@ -79,8 +79,7 @@
       "pythonRuntimeSourceOfTruth": "cli.runtimeInstallCommand",
       "agentSkillInstallSourceOfTruth": "targets[*].skillInstallCommand except openclaw",
       "openclawInstallSourceOfTruth": "targets[target=openclaw]",
-      "desktopSourceOfTruth": "mdtero-public/desktop/releases/installer-manifest.json",
-      "desktopPublicationMode": "deferred public preview archive with GitHub Release asset download fallback; not part of the current extension-and-CLI launchability proof"
+      "desktopPublicationMode": "retired from the current public install contract; the active launch path is CLI plus browser extension"
     },
     "current": {
       "cli": {
@@ -98,20 +97,6 @@
           "hermes",
           "opencode"
         ]
-      },
-      "desktop": {
-        "version": "0.1.0-preview.1",
-        "channel": "public-preview",
-        "installerManifestPath": "desktop/releases/installer-manifest.json",
-        "publicArtifactTypes": [
-          "mac-universal-dmg",
-          "win-x64-exe"
-        ],
-        "downloadPaths": [
-          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-mac-universal.dmg",
-          "https://github.com/JonbinC/doi2md/releases/download/desktop-v0.1.0-preview.1/Mdtero-0.1.0-preview.1-win-x64.exe"
-        ],
-        "autoUpdate": false
       }
     }
   }
