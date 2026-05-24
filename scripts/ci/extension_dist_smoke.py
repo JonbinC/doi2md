@@ -47,6 +47,7 @@ POPUP_REQUIRED_MARKERS = (
     "Download",
     "local-file-input",
     "copy-cli-handoff",
+    "mdtero parse",
     "/api/v1/tasks/translate",
     "/api/v1/tasks/upload",
     "/download/",
