@@ -238,7 +238,7 @@ describe("createApiClient", () => {
   it("surfaces backend detail messages for failed requests", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ detail: "Elsevier and ScienceDirect inputs must be acquired locally first." }), {
+      new Response(JSON.stringify({ detail: "This publisher source must be acquired with browser capture or local CLI credentials first." }), {
         status: 400,
         headers: {
           "Content-Type": "application/json"
@@ -255,7 +255,7 @@ describe("createApiClient", () => {
 
     await expect(
       client.createParseTask({ input: "10.1016/j.energy.2026.140192" })
-    ).rejects.toThrow("Elsevier and ScienceDirect inputs must be acquired locally first.");
+    ).rejects.toThrow("This publisher source must be acquired with browser capture or local CLI credentials first.");
   });
 
   it("redacts signed URLs and tokens from backend error detail", async () => {

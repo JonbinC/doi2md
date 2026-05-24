@@ -4842,6 +4842,7 @@ def test_extension_contract_prefers_browser_source_over_retired_helper_action():
     assert "html_helper_first" not in ssot_tests
     assert "requiresHelper" not in ssot_tests
     assert "RETIRED_PUBLISHER_ACTIONS" not in action_executor
+    assert "elsevier_article_retrieval_api" not in action_executor
     assert "fetch_elsevier_xml" not in action_executor
     assert "fetch_wiley_tdm_pdf" not in action_executor
     assert "fetch_springer_pdf" not in action_executor

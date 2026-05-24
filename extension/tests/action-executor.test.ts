@@ -26,7 +26,7 @@ describe("executeAction", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not keep stale Elsevier API action compatibility in the extension runtime", async () => {
+  it("does not keep stale publisher API action compatibility in the extension runtime", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const chromeStub = {
@@ -35,7 +35,7 @@ describe("executeAction", () => {
           ok: true,
           capture: {
             ok: true,
-            html: "<html><article>Captured Elsevier page</article></html>",
+            html: "<html><article>Captured publisher page</article></html>",
             payloadName: "paper.html",
           },
         }),

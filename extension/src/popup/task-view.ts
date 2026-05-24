@@ -5,7 +5,6 @@ import {
   buildCliParseCommand,
   normalizeCliHandoffCommand
 } from "../lib/cli-handoff";
-import { requiresElsevierLocalAcquire } from "../lib/elsevier";
 import { redactSensitiveText } from "../lib/redact";
 import { isSupportedPaperPage } from "../lib/supported-page";
 
@@ -235,12 +234,6 @@ export function getPreflightHintText(
       : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";
   }
 
-  if (input && requiresElsevierLocalAcquire(input)) {
-    return language === "zh"
-      ? "当前输入命中了 Elsevier / ScienceDirect。扩展不保存出版社密钥；若需要机构全文，请确认当前浏览器已能打开原文，或用 CLI 配置学术 key 后重试。"
-      : "This input maps to Elsevier / ScienceDirect. The extension does not store publisher keys; for licensed full text, confirm this browser can already open the article or configure academic keys in the CLI.";
-  }
-
   if (!livePageSupported) {
     return "";
   }
@@ -302,10 +295,10 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
   if (!result) {
     return "";
   }
-  if (result.warning_code === "elsevier_abstract_only") {
+  if (result.warning_code === "publisher_abstract_only" || result.warning_code === "elsevier_abstract_only") {
     return language === "zh"
-      ? "Elsevier 仅返回了摘要。请确认你当前是否处于校园网或机构 IP 环境。"
-      : "Elsevier only returned the abstract. Check whether this machine is on a campus or institutional network IP.";
+      ? "当前来源仅返回摘要。请确认浏览器已登录机构资源、处于校园网/机构 IP，或改为上传 PDF/XML/EPUB。"
+      : "The source only returned an abstract. Confirm your browser has institutional access, use a campus/IP session, or upload the PDF/XML/EPUB directly.";
   }
   return redactSensitiveText(result.warning_message ?? "");
 }
