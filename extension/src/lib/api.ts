@@ -295,16 +295,15 @@ export function createRouterSSOTClient(
 }
 
 /**
- * Legacy compatibility: Check if route requires local helper.
- * New code should use Router SSOT via fetchRoutePlan().
+ * Compatibility helper for route plans that still include the backend
+ * requires_helper field.
  */
 export function routeRequiresLocalHandoff(routePlan: ExtensionRouteResponse): boolean {
   return routePlan.requires_helper;
 }
 
 /**
- * Legacy compatibility: Check if current tab capture is allowed.
- * New code should use Router SSOT via fetchRoutePlan().
+ * Compatibility helper for route plans that allow extension current-tab capture.
  */
 export function routeAllowsCurrentTabCapture(routePlan: ExtensionRouteResponse): boolean {
   return routePlan.allows_current_tab;

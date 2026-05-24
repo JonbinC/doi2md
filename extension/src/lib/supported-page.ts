@@ -1,4 +1,4 @@
-const BRIDGE_SUPPORTED_URL_PATTERNS = [
+const SUPPORTED_PAPER_URL_PATTERNS = [
   "arxiv.org",
   "dl.acm.org",
   "ieeexplore.ieee.org",
@@ -15,7 +15,7 @@ const BRIDGE_SUPPORTED_URL_PATTERNS = [
   "tandfonline.com"
 ];
 
-export function isBridgeSupportedPage(url: string) {
+export function isSupportedPaperPage(url: string) {
   const normalized = String(url || "").trim().toLowerCase();
-  return BRIDGE_SUPPORTED_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
+  return SUPPORTED_PAPER_URL_PATTERNS.some((pattern) => normalized.includes(pattern));
 }

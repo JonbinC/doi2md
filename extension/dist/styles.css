@@ -3,11 +3,11 @@
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   --background: #fcf7f1;
   --foreground: #2f1a12;
-  --card: #fffdf9;
+  --card: #fffaf4;
   --card-foreground: #2f1a12;
   --primary: #6d3920;
   --primary-foreground: #fff8f2;
-  --secondary: #f6e6d5;
+  --secondary: #f7efe6;
   --secondary-foreground: #50291a;
   --muted: #f4ece3;
   --muted-foreground: #7a5a49;
@@ -16,13 +16,17 @@
   --border: rgba(109, 57, 32, 0.16);
   --border-strong: rgba(109, 57, 32, 0.28);
   --input-background: #f8f1e9;
+  --surface: rgba(255, 253, 249, 0.88);
+  --surface-muted: rgba(244, 236, 227, 0.58);
+  --ring: rgba(109, 57, 32, 0.24);
   --success: #0f766e;
   --danger: #b91c1c;
-  --shadow: 0 18px 60px rgba(109, 57, 32, 0.08);
-  --shadow-soft: 0 10px 34px rgba(109, 57, 32, 0.06);
+  --warning: #b45309;
+  --shadow: 0 20px 70px rgba(51, 39, 27, 0.11);
+  --shadow-soft: 0 12px 38px rgba(51, 39, 27, 0.07);
   --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
 }
 
 * {
@@ -32,7 +36,9 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top left, rgba(226, 183, 146, 0.22), transparent 32%), linear-gradient(180deg, #fffdf9, var(--background));
+  background:
+    radial-gradient(circle at top, rgba(226, 183, 146, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(252, 247, 241, 0.96));
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
@@ -54,7 +60,7 @@ body {
 .shell {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
   padding: 14px;
 }
 
@@ -70,14 +76,16 @@ body {
 
 .hero,
 .card {
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
 }
 
 .hero {
-  background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(246, 230, 213, 0.55));
+  background:
+    linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 250, 244, 0.88)),
+    linear-gradient(135deg, rgba(109, 57, 32, 0.06), transparent 52%);
   box-shadow: var(--shadow);
 }
 
@@ -107,18 +115,18 @@ body {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
   color: var(--primary-foreground);
 }
 
 .brand-mark svg {
   display: block;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(109, 57, 32, 0.14);
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  box-shadow: 0 10px 22px rgba(51, 39, 27, 0.12);
 }
 
 h1,
@@ -129,7 +137,7 @@ p {
 
 h1 {
   font-size: 19px;
-  font-weight: 650;
+  font-weight: 680;
   line-height: 1.2;
   letter-spacing: 0;
 }
@@ -170,7 +178,7 @@ summary,
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(244, 236, 227, 0.78);
+  background: var(--surface-muted);
 }
 
 .account-bar > div {
@@ -199,7 +207,7 @@ summary,
   padding: 6px 7px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: rgba(246, 230, 213, 0.82);
+  background: rgba(255, 253, 249, 0.72);
   color: var(--secondary-foreground);
   font-size: 11px;
   font-weight: 650;
@@ -222,10 +230,10 @@ summary,
 .meta-pill {
   flex: 0 0 auto;
   padding: 5px 9px;
-  border: 1px solid rgba(109, 57, 32, 0.18);
+  border: 1px solid rgba(15, 118, 110, 0.2);
   border-radius: 999px;
-  background: rgba(226, 183, 146, 0.38);
-  color: var(--accent-foreground);
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--success);
   font-size: 11px;
   font-weight: 650;
   line-height: 1.2;
@@ -249,7 +257,7 @@ summary,
   padding: 5px 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(246, 230, 213, 0.82);
+  background: rgba(255, 253, 249, 0.72);
   color: var(--secondary-foreground);
   font-size: 12px;
   font-weight: 650;
@@ -304,7 +312,7 @@ summary,
 .recent-item {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: rgba(244, 236, 227, 0.72);
+  background: var(--surface-muted);
 }
 
 .support-group,
@@ -356,7 +364,7 @@ select {
   padding: 10px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--input-background);
+  background: rgba(248, 241, 233, 0.82);
   color: var(--foreground);
 }
 
@@ -375,7 +383,7 @@ select {
 input:focus,
 select:focus,
 button:focus-visible {
-  outline: 2px solid rgba(109, 57, 32, 0.24);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -411,6 +419,7 @@ button:disabled {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
+  box-shadow: 0 10px 24px rgba(109, 57, 32, 0.14);
 }
 
 .primary-button:hover {
@@ -419,13 +428,13 @@ button:disabled {
 
 .secondary-button {
   border-color: var(--border);
-  background: var(--secondary);
+  background: rgba(255, 253, 249, 0.82);
   color: var(--secondary-foreground);
 }
 
 .secondary-button:hover {
   border-color: var(--border-strong);
-  background: #efe2d4;
+  background: var(--secondary);
 }
 
 .ghost-chip {
@@ -434,7 +443,7 @@ button:disabled {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(255, 253, 249, 0.9);
+  background: rgba(255, 253, 249, 0.82);
   color: var(--secondary-foreground);
   font-size: 12px;
   font-weight: 650;
@@ -448,7 +457,7 @@ button:disabled {
 }
 
 .result-line {
-  color: var(--accent-foreground);
+  color: var(--primary);
   font-weight: 550;
 }
 
@@ -461,7 +470,7 @@ button:disabled {
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(244, 236, 227, 0.72);
+  background: rgba(47, 26, 18, 0.04);
 }
 
 .cli-handoff[hidden] {

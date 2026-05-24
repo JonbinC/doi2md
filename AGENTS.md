@@ -20,7 +20,7 @@ mdtero-public/
 | Task | Location | Notes |
 |---|---|---|
 | Extension runtime | `extension` | Source, tests, manifest, build output. |
-| Extension protocol helpers | `extension/src/lib` | Route execution, helper bundle, page capture, runtime messages. |
+| Extension protocol helpers | `extension/src/lib` | Route execution, browser capture, raw upload, runtime messages. |
 | Public install contract | `install/manifest.json` | Mirrored with site manifest; audited by tests. |
 | Public shared contracts | `shared/src` | Mirror/subset for public clients. |
 
@@ -34,7 +34,7 @@ mdtero-public/
 ## ANTI-PATTERNS
 
 - Do not put private backend implementation, dashboard product code, or secret-bearing ops scripts here.
-- Do not let archive/MCP legacy content become active behavior.
+- Do not let archive/MCP legacy content or retired helper-bundle probes become active behavior.
 - Do not let public shared contracts drift from frontend/backend truth.
 - Do not treat GitHub Releases or public mirror repo as independent release truth.
 
