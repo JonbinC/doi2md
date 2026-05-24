@@ -5,21 +5,6 @@ export interface ParsePageContext {
 
 export type LocalFileArtifactKind = "pdf" | "epub";
 
-export function createParseMessage(input: string, pageContext?: ParsePageContext) {
-  const message: {
-    type: "mdtero.parse.request";
-    input: string;
-    pageContext?: ParsePageContext;
-  } = {
-    type: "mdtero.parse.request" as const,
-    input
-  };
-  if (pageContext) {
-    message.pageContext = pageContext;
-  }
-  return message;
-}
-
 export function createSsotParseMessage(input: string, pageContext?: ParsePageContext) {
   const message: {
     type: "mdtero.parse.ssot.request";

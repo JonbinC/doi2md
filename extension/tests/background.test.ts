@@ -9,9 +9,6 @@ const getTask = vi.fn();
 const fetchRoutePlan = vi.fn();
 const readSettings = vi.fn();
 const writeSettings = vi.fn();
-const requiresElsevierLocalAcquire = vi.fn();
-const buildElsevierLocalAcquireGuidance = vi.fn(() => "Use local acquisition.");
-const normalizeSpringerInput = vi.fn();
 
 vi.mock("../src/lib/api", () => ({
   createApiClient: vi.fn(() => ({
@@ -29,15 +26,6 @@ vi.mock("../src/lib/api", () => ({
 vi.mock("../src/lib/storage", () => ({
   readSettings,
   writeSettings
-}));
-
-vi.mock("../src/lib/elsevier", () => ({
-  requiresElsevierLocalAcquire,
-  buildElsevierLocalAcquireGuidance
-}));
-
-vi.mock("../src/lib/springer", () => ({
-  normalizeSpringerInput,
 }));
 
 function createChromeStub() {
@@ -58,7 +46,7 @@ function createChromeStub() {
   };
 }
 
-describe("extension background Elsevier routing", () => {
+describe("extension background routing", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -70,7 +58,6 @@ describe("extension background Elsevier routing", () => {
     createTranslateTask.mockResolvedValue({ task_id: "task-translate", status: "queued" });
     getTask.mockResolvedValue({ task_id: "task-1", status: "queued" });
     fetchRoutePlan.mockReset();
-    normalizeSpringerInput.mockReturnValue(null);
   });
 
   it("persists website OAuth tokens from the trusted auth bridge", async () => {
@@ -110,11 +97,9 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("does not accept direct Elsevier API keys in extension parse messages", async () => {
+  it("does not expose the retired pre-SSOT parse message", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(true);
-    buildElsevierLocalAcquireGuidance.mockReturnValue("Use CLI academic keys or upload the PDF/XML.");
 
     await import("../src/background");
 
@@ -122,175 +107,25 @@ describe("extension background Elsevier routing", () => {
     const sendResponse = vi.fn();
 
     expect(listener).toBeTypeOf("function");
-    listener?.(
+    const handled = listener?.(
       {
         type: "mdtero.parse.request",
         input: "10.1016/j.energy.2026.140192",
-        elsevierApiKey: "elsevier-key"
       },
       {},
       sendResponse
     );
 
-    await vi.waitFor(() => {
-      expect(createParseFulltextV2Task).not.toHaveBeenCalled();
-      expect(createUploadedParseTask).not.toHaveBeenCalled();
-      expect(sendResponse).toHaveBeenCalledWith({
-        ok: false,
-        error: "Use CLI academic keys or upload the PDF/XML."
-      });
-    });
-  });
-
-  it("routes current-tab browser capture through raw fulltext upload before falling back to direct parse", async () => {
-    const chromeStub = createChromeStub();
-    vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
-    chromeStub.tabs.sendMessage.mockResolvedValue({
-      ok: true,
-      capture: {
-        ok: true,
-        html: "<html><body><article><h1>Captured paper</h1></article></body></html>",
-        payloadName: "paper.html",
-        sourceUrl: "https://example.com/paper",
-        pageTitle: "Captured paper"
-      }
-    });
-
-    await import("../src/background");
-
-    const listener = chromeStub.__messageListeners[0];
-    const sendResponse = vi.fn();
-
-    expect(listener).toBeTypeOf("function");
-    listener?.(
-      {
-        type: "mdtero.parse.request",
-        input: "https://example.com/paper",
-        pageContext: {
-          tabId: 42,
-          tabUrl: "https://example.com/paper"
-        }
-      },
-      {},
-      sendResponse
-    );
-
-    await vi.waitFor(() => {
-      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
-        type: "mdtero.capture_current_tab.request"
-      });
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fulltextFile: expect.any(Blob),
-          filename: "paper.html",
-          sourceInput: "https://example.com/paper"
-        })
-      );
-      expect(createParseTask).not.toHaveBeenCalled();
-      expect(sendResponse).toHaveBeenCalledWith({
-        ok: true,
-        result: { task_id: "task-v2", status: "queued" }
-      });
-    });
-
-    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
-    expect(rawArtifact.type).toBe("text/html");
-    await expect(rawArtifact.text()).resolves.toContain("Captured paper");
-  });
-
-  it("skips current-tab raw upload for arxiv abs inputs and falls back to native parse", async () => {
-    const chromeStub = createChromeStub();
-    vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
-
-    await import("../src/background");
-
-    const listener = chromeStub.__messageListeners[0];
-    const sendResponse = vi.fn();
-
-    listener?.(
-      {
-        type: "mdtero.parse.request",
-        input: "https://arxiv.org/abs/2507.01903",
-        pageContext: {
-          tabId: 42,
-          tabUrl: "https://arxiv.org/abs/2507.01903"
-        }
-      },
-      {},
-      sendResponse
-    );
-
-    await vi.waitFor(() => {
-      expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
-      expect(createParseTask).toHaveBeenCalledWith({ input: "https://arxiv.org/abs/2507.01903" });
-      expect(sendResponse).toHaveBeenCalledWith({
-        ok: true,
-        result: { task_id: "task-generic", status: "queued" }
-      });
-    });
-  });
-
-  it("captures current-tab arxiv html pages through raw fulltext upload", async () => {
-    const chromeStub = createChromeStub();
-    vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
-    chromeStub.tabs.sendMessage.mockResolvedValue({
-      ok: true,
-      capture: {
-        ok: true,
-        html: "<html><body><article class='ltx_document'><section class='ltx_abstract'></section><section class='ltx_section'></section></article></body></html>",
-        payloadName: "paper.html",
-        sourceUrl: "https://arxiv.org/html/2401.00001",
-        pageTitle: "arXiv HTML Demo"
-      }
-    });
-
-    await import("../src/background");
-
-    const listener = chromeStub.__messageListeners[0];
-    const sendResponse = vi.fn();
-
-    listener?.(
-      {
-        type: "mdtero.parse.request",
-        input: "https://arxiv.org/html/2401.00001",
-        pageContext: {
-          tabId: 42,
-          tabUrl: "https://arxiv.org/html/2401.00001"
-        }
-      },
-      {},
-      sendResponse
-    );
-
-    await vi.waitFor(() => {
-      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
-        type: "mdtero.capture_current_tab.request"
-      });
-      expect(createParseFulltextV2Task).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fulltextFile: expect.any(Blob),
-          filename: "paper.html",
-          sourceInput: "https://arxiv.org/html/2401.00001"
-        })
-      );
-      expect(createParseTask).not.toHaveBeenCalled();
-      expect(sendResponse).toHaveBeenCalledWith({
-        ok: true,
-        result: { task_id: "task-v2", status: "queued" }
-      });
-    });
-
-    const rawArtifact = createParseFulltextV2Task.mock.calls[0]?.[0]?.fulltextFile as Blob;
-    await expect(rawArtifact.text()).resolves.toContain("ltx_document");
+    expect(handled).toBe(false);
+    expect(createParseTask).not.toHaveBeenCalled();
+    expect(createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(createUploadedParseTask).not.toHaveBeenCalled();
+    expect(sendResponse).not.toHaveBeenCalled();
   });
 
   it("routes local PDF uploads through the v1 upload endpoint", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
 
     await import("../src/background");
 
@@ -322,7 +157,6 @@ describe("extension background Elsevier routing", () => {
   it("routes local EPUB uploads through the v1 upload endpoint", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
 
     await import("../src/background");
 
@@ -360,7 +194,6 @@ describe("extension background Elsevier routing", () => {
   it("executes SSOT helper-source routes through raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.1000/demo",
@@ -443,7 +276,6 @@ describe("extension background Elsevier routing", () => {
   it("uses v1 server parse when the route planner is unavailable", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "unknown",
       input_value: "",
@@ -489,7 +321,6 @@ describe("extension background Elsevier routing", () => {
   it("executes SSOT EPUB routes through browser download and raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.1080/26395940.2021.1947159",
@@ -569,7 +400,6 @@ describe("extension background Elsevier routing", () => {
   it("returns browser-capture guidance when an SSOT page route cannot use the current tab", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.1000/demo",
@@ -613,7 +443,6 @@ describe("extension background Elsevier routing", () => {
   it("executes SSOT OA repository routes through direct HTML fetch and raw fulltext upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.9999/demo-open",
@@ -687,7 +516,6 @@ describe("extension background Elsevier routing", () => {
   it("prefers current-tab capture before OA repository fetch when SSOT enables it", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
     fetchRoutePlan.mockResolvedValue({
       input_kind: "doi",
       input_value: "10.9999/demo-open",
@@ -778,11 +606,24 @@ describe("extension background Elsevier routing", () => {
     }
   });
 
-  it("prefers current-tab XML over HTML capture when the page context returns structured XML", async () => {
+  it("prefers current-tab XML over HTML capture when SSOT capture returns structured XML", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
-    normalizeSpringerInput.mockReturnValue("10.1007/s12011-024-04385-0");
+    fetchRoutePlan.mockResolvedValue({
+      input_kind: "url",
+      input_value: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
+      top_connector: "springer_openaccess_api",
+      route_kind: "html_helper_first",
+      acquisition_mode: "browser_extension",
+      requires_helper: true,
+      allows_current_tab: true,
+      action_sequence: ["capture_current_tab_html"],
+      acceptance_rules: {},
+      fail_closed: true,
+      user_message: "Capture the current Springer page.",
+      matched_connectors: ["springer_openaccess_api"],
+      acquisition_candidates: []
+    });
     chromeStub.tabs.sendMessage.mockResolvedValue({
       ok: true,
       xml: {
@@ -807,11 +648,12 @@ describe("extension background Elsevier routing", () => {
 
     listener?.(
       {
-        type: "mdtero.parse.request",
+        type: "mdtero.parse.ssot.request",
         input: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
         pageContext: {
           tabId: 42,
-          tabUrl: "https://link.springer.com/article/10.1007/s12011-024-04385-0"
+          tabUrl: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
+          tabTitle: "Captured paper"
         }
       },
       {},
@@ -826,7 +668,7 @@ describe("extension background Elsevier routing", () => {
         expect.objectContaining({
           fulltextFile: expect.any(Blob),
           filename: "paper.xml",
-          sourceDoi: "10.1007/s12011-024-04385-0"
+          sourceInput: "https://link.springer.com/article/10.1007/s12011-024-04385-0"
         })
       );
       expect(sendResponse).toHaveBeenCalledWith({
@@ -836,10 +678,24 @@ describe("extension background Elsevier routing", () => {
     });
   });
 
-  it("returns actionable sign-in guidance when the live page is still behind institutional access", async () => {
+  it("returns actionable sign-in guidance when SSOT capture sees institutional access", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
+    fetchRoutePlan.mockResolvedValue({
+      input_kind: "url",
+      input_value: "https://example.com/paper",
+      top_connector: "browser_capture",
+      route_kind: "html_helper_first",
+      acquisition_mode: "browser_extension",
+      requires_helper: true,
+      allows_current_tab: true,
+      action_sequence: ["capture_current_tab_html"],
+      acceptance_rules: {},
+      fail_closed: true,
+      user_message: "Capture the current page.",
+      matched_connectors: ["browser_capture"],
+      acquisition_candidates: []
+    });
     chromeStub.tabs.sendMessage.mockResolvedValue({
       ok: true,
       capture: {
@@ -856,11 +712,12 @@ describe("extension background Elsevier routing", () => {
 
     listener?.(
       {
-        type: "mdtero.parse.request",
+        type: "mdtero.parse.ssot.request",
         input: "https://example.com/paper",
         pageContext: {
           tabId: 42,
-          tabUrl: "https://example.com/paper"
+          tabUrl: "https://example.com/paper",
+          tabTitle: "Paper"
         }
       },
       {},
@@ -871,15 +728,30 @@ describe("extension background Elsevier routing", () => {
       expect(createParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
-        error: "This page still requires institutional or account sign-in. Open the article in your browser, finish login, then retry capture."
+        error: "Page loaded but still requires user sign-in or institutional access.",
+        nextCommand: "mdtero parse https://example.com/paper --trace --wait --timeout 300 --json"
       });
     });
   });
 
-  it("returns actionable full-text guidance when the live page is only a PDF or download shell", async () => {
+  it("returns actionable full-text guidance when SSOT capture sees only a shell page", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
-    requiresElsevierLocalAcquire.mockReturnValue(false);
+    fetchRoutePlan.mockResolvedValue({
+      input_kind: "url",
+      input_value: "https://example.com/paper",
+      top_connector: "browser_capture",
+      route_kind: "html_helper_first",
+      acquisition_mode: "browser_extension",
+      requires_helper: true,
+      allows_current_tab: true,
+      action_sequence: ["capture_current_tab_html"],
+      acceptance_rules: {},
+      fail_closed: true,
+      user_message: "Capture the current page.",
+      matched_connectors: ["browser_capture"],
+      acquisition_candidates: []
+    });
     chromeStub.tabs.sendMessage.mockResolvedValue({
       ok: true,
       capture: {
@@ -896,11 +768,12 @@ describe("extension background Elsevier routing", () => {
 
     listener?.(
       {
-        type: "mdtero.parse.request",
+        type: "mdtero.parse.ssot.request",
         input: "https://example.com/paper",
         pageContext: {
           tabId: 42,
-          tabUrl: "https://example.com/paper"
+          tabUrl: "https://example.com/paper",
+          tabTitle: "Paper"
         }
       },
       {},
@@ -911,7 +784,8 @@ describe("extension background Elsevier routing", () => {
       expect(createParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
-        error: "No article body was detected on the current page. Open the HTML full-text page instead of a PDF or download shell, then retry capture."
+        error: "Page loaded but no article body markers were detected.",
+        nextCommand: "mdtero parse https://example.com/paper --trace --wait --timeout 300 --json"
       });
     });
   });

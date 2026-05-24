@@ -1,8 +1,5 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
-import {
-  runBrowserFileParseRequest,
-  runBrowserParseRequest,
-} from "./lib/browser-parse";
+import { runBrowserFileParseRequest } from "./lib/file-upload";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
 import { readSettings, writeSettings } from "./lib/storage";
 
@@ -69,25 +66,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ ok: true, result });
     })
     .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
-
-  // Compatibility message used by older popup builds and tests. The shipping
-  // popup sends mdtero.parse.ssot.request, but this path still captures the
-  // current browser page before falling back to direct backend parsing.
-  if (message?.type === "mdtero.parse.request") {
-    (async () => {
-      const settings = await readSettings();
-      if (!settings.token) {
-        throw new Error("Sign in required before parsing or translating.");
-      }
-      return runBrowserParseRequest(client, {
-        input: message.input,
-        pageContext: message.pageContext,
-      });
-    })()
-      .then((result) => sendResponse({ ok: true, result }))
-      .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
 
