@@ -1,0 +1,85 @@
+name: Public CLI and Extension CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-client:
+    name: Python CLI Package
+    runs-on: linux-small
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run secret guard
+        run: python scripts/ci/secret_guard.py
+
+      - name: Run Python tests
+        run: uv run pytest tests_py -q
+
+      - name: Compile package sources
+        run: python -m compileall -q src/mdtero
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Smoke installed wheel
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/mdtero-wheel-smoke
+          /tmp/mdtero-wheel-smoke/bin/pip install dist/mdtero-*.whl
+          /tmp/mdtero-wheel-smoke/bin/mdtero --version
+
+  extension:
+    name: Browser Extension
+    runs-on: linux-small
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Audit extension dependencies
+        working-directory: extension
+        run: npm audit --audit-level=moderate
+
+      - name: Run extension tests
+        working-directory: extension
+        run: npm test -- --run
+
+      - name: Build extension
+        working-directory: extension
+        run: npm run build
+
+      - name: Smoke extension dist
+        run: python3 scripts/ci/extension_dist_smoke.py
