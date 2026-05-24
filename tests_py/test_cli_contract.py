@@ -3686,7 +3686,6 @@ def test_public_docs_do_not_advertise_npm_installer_runtime():
         repo_root / "README.md",
         repo_root / "install" / "README.md",
         repo_root / "docs" / "public" / "README.md",
-        repo_root / "helper" / "README.md",
     ]
     for path in docs:
         content = path.read_text(encoding="utf-8")

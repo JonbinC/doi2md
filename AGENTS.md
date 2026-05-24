@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-Public local-install/download surface: browser extension, public install manifest, local-file handoff assets, agent skill materials, and desktop preview mirrors.
+Public local-install/download surface: browser extension, public install manifest, local-file handoff assets, and agent skill materials.
 
 ## STRUCTURE
 
@@ -11,7 +11,6 @@ mdtero-public/
 ├── extension/  # public browser extension SSOT
 ├── shared/     # public contract subset used by extension/public code
 ├── install/    # canonical public install manifest and docs
-├── desktop/    # public desktop preview ledger mirror
 ├── skills/     # agent skill/install bundles
 └── docs/       # public product documentation notes
 ```
@@ -24,14 +23,12 @@ mdtero-public/
 | Extension protocol helpers | `extension/src/lib` | Route execution, helper bundle, page capture, runtime messages. |
 | Public install contract | `install/manifest.json` | Mirrored with site manifest; audited by tests. |
 | Public shared contracts | `shared/src` | Mirror/subset for public clients. |
-| Desktop preview ledger | `desktop/releases/installer-manifest.json` | Mirror of frontend desktop installer manifest. |
 
 ## CONVENTIONS
 
 - If users download, install, or run it locally, default here.
 - Website/dashboard/backend behavior is not owned here.
-- OpenClaw is separate from install-script agent-skill targets.
-- Public desktop is preview/testing unless docs/tests promote it.
+- OpenClaw is separate from install-script agent-skill targets and is not maintained in this public repo.
 - Generated `extension/dist` is output; source edits belong under `extension/src`.
 
 ## ANTI-PATTERNS
@@ -52,7 +49,6 @@ uv run --with pytest python -m pytest tests_py
 
 ## CHILD GUIDANCE
 
-- `desktop/AGENTS.md`: public desktop preview mirror.
 - `extension/AGENTS.md`: extension source/build/test surface.
 - `extension/src/lib/AGENTS.md`: extension protocol helpers.
 - `shared/AGENTS.md`: public shared contract subset.
