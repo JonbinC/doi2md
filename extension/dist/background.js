@@ -228,165 +228,13 @@ function createRouterSSOTClient(getSettings) {
   };
 }
 
-// src/lib/elsevier.ts
-var LOCAL_XML_DOI_PREFIXES = ["10.1016/"];
-var DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
-var PII_PATTERN = /^S[0-9A-Z]{16,}$/i;
-var SCIENCEDIRECT_PII_PATTERN = /sciencedirect\.com\/science\/article\/pii\/(S[0-9A-Z]{16,})/i;
-function usesLocalXmlAcquire(doi) {
-  const lowered = doi.toLowerCase();
-  return LOCAL_XML_DOI_PREFIXES.some((prefix) => lowered.startsWith(prefix));
-}
-function normalizeElsevierInput(input) {
-  const trimmed = input.trim();
-  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN);
-  if (doiUrlMatch && usesLocalXmlAcquire(doiUrlMatch[1])) {
-    return { kind: "doi", value: doiUrlMatch[1] };
-  }
-  if (usesLocalXmlAcquire(trimmed)) {
-    return { kind: "doi", value: trimmed };
-  }
-  const piiUrlMatch = trimmed.match(SCIENCEDIRECT_PII_PATTERN);
-  if (piiUrlMatch) {
-    return { kind: "pii", value: piiUrlMatch[1] };
-  }
-  if (PII_PATTERN.test(trimmed)) {
-    return { kind: "pii", value: trimmed };
-  }
-  return null;
-}
-function requiresElsevierLocalAcquire(input) {
-  return normalizeElsevierInput(input) !== null;
-}
-function buildElsevierLocalAcquireGuidance() {
-  return [
-    "This Elsevier or ScienceDirect paper needs licensed full-text acquisition before parsing.",
-    "Use the browser extension on an already-open full-text page, upload the PDF/XML manually, or run `mdtero config academic` and retry with the CLI.",
-    "If Elsevier only returns the abstract, check whether this machine is on a campus or institutional network IP."
-  ].join(" ");
-}
-
-// src/lib/springer.ts
-var DOI_PATTERN = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
-var DOI_URL_PATTERN2 = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
-var SPRINGER_HOST_PATTERN = /(link\.springer\.com|springer\.com|springernature\.com)/i;
-function normalizeSpringerInput(input, pageUrl) {
-  const trimmed = String(input || "").trim();
-  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN2);
-  if (doiUrlMatch) {
-    return doiUrlMatch[1];
-  }
-  if (SPRINGER_HOST_PATTERN.test(trimmed)) {
-    const doiMatch = trimmed.match(DOI_PATTERN);
-    if (doiMatch) {
-      return doiMatch[1];
-    }
-  }
-  if (/^10\.1007\//i.test(trimmed)) {
-    return trimmed;
-  }
-  if (SPRINGER_HOST_PATTERN.test(String(pageUrl || ""))) {
-    const doiMatch = trimmed.match(DOI_PATTERN);
-    if (doiMatch) {
-      return doiMatch[1];
-    }
-  }
-  return null;
-}
-
-// src/lib/browser-parse.ts
-async function runBrowserParseRequest(client2, message) {
-  if (requiresElsevierLocalAcquire(message.input)) {
-    throw new Error(buildElsevierLocalAcquireGuidance());
-  }
-  const currentTabRawUploadTask = await tryCreateCurrentTabRawUploadTask(client2, {
-    input: message.input,
-    pageContext: message.pageContext
-  });
-  if (currentTabRawUploadTask) {
-    return currentTabRawUploadTask;
-  }
-  return client2.createParseTask({ input: message.input });
-}
+// src/lib/file-upload.ts
 async function runBrowserFileParseRequest(client2, message) {
   const filename = String(message.filename || "").trim() || "paper.bin";
   return client2.createUploadedParseTask({
     paperFile: message.file,
     filename,
     sourceInput: filename
-  });
-}
-function inferSourceDoi(input) {
-  const trimmed = String(input || "").trim();
-  return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
-}
-function isArxivAbsReference(value) {
-  const lowered = String(value || "").trim().toLowerCase();
-  return lowered.includes("arxiv.org/abs/") || lowered.includes("arxiv:");
-}
-function shouldSkipArxivCurrentTabCapture(message) {
-  if (isArxivAbsReference(message.input)) {
-    return true;
-  }
-  return isArxivAbsReference(message.pageContext?.tabUrl);
-}
-function describeCurrentTabCaptureFailure(params) {
-  const failureCode = String(params.failureCode || "").trim().toLowerCase();
-  const failureMessage = String(params.failureMessage || "").trim();
-  if (failureCode === "login_required") {
-    return "This page still requires institutional or account sign-in. Open the article in your browser, finish login, then retry capture.";
-  }
-  if (failureCode === "challenge_page_detected") {
-    return "This page is still behind a browser challenge. Finish the verification in the page, wait for the article to load, then retry capture.";
-  }
-  if (failureCode === "article_body_missing") {
-    return "No article body was detected on the current page. Open the HTML full-text page instead of a PDF or download shell, then retry capture.";
-  }
-  if (failureCode === "content_script_unavailable") {
-    return "Browser page capture is not ready yet. Reload the paper page or reopen the extension, then try again.";
-  }
-  return failureMessage || "Browser page capture did not succeed on the current page.";
-}
-async function tryCreateCurrentTabRawUploadTask(client2, message) {
-  const tabId = message.pageContext?.tabId;
-  if (!tabId) {
-    return null;
-  }
-  if (shouldSkipArxivCurrentTabCapture(message)) {
-    return null;
-  }
-  const response = await chrome.tabs.sendMessage(tabId, {
-    type: "mdtero.capture_current_tab.request"
-  });
-  if (response?.xml?.ok && response.xml.payloadText) {
-    return client2.createParseFulltextV2Task({
-      fulltextFile: new Blob([response.xml.payloadText], { type: "application/xml" }),
-      filename: response.xml.payloadName || "paper.xml",
-      sourceDoi: inferSourceDoi(message.input) || normalizeSpringerInput(message.input, message.pageContext?.tabUrl) || void 0,
-      sourceInput: message.input
-    });
-  }
-  const capture = response?.capture;
-  if (!response?.ok) {
-    throw new Error(
-      describeCurrentTabCaptureFailure({
-        failureCode: "content_script_unavailable"
-      })
-    );
-  }
-  if (!capture?.ok || !capture.html) {
-    throw new Error(
-      describeCurrentTabCaptureFailure({
-        failureCode: capture?.failureCode,
-        failureMessage: capture?.failureMessage
-      })
-    );
-  }
-  return client2.createParseFulltextV2Task({
-    fulltextFile: new Blob([capture.html], { type: "text/html" }),
-    filename: capture.payloadName || "paper.html",
-    sourceDoi: inferSourceDoi(message.input),
-    sourceInput: message.input
   });
 }
 
@@ -490,6 +338,15 @@ async function fetchXmlArtifact(candidateUrls) {
   };
 }
 
+// src/lib/elsevier.ts
+function buildElsevierLocalAcquireGuidance() {
+  return [
+    "This Elsevier or ScienceDirect paper needs licensed full-text acquisition before parsing.",
+    "Use the browser extension on an already-open full-text page, upload the PDF/XML manually, or run `mdtero config academic` and retry with the CLI.",
+    "If Elsevier only returns the abstract, check whether this machine is on a campus or institutional network IP."
+  ].join(" ");
+}
+
 // src/lib/action-executor.ts
 var CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
 function cliParseCommand(input) {
@@ -553,7 +410,7 @@ async function executeCaptureCurrentTabHtml(context) {
         success: true,
         rawArtifact: new Blob([response.xml.payloadText], { type: "application/xml" }),
         filename: response.xml.payloadName || "paper.xml",
-        sourceDoi: inferSourceDoi2(context.input)
+        sourceDoi: inferSourceDoi(context.input)
       };
     }
     const capture = response?.capture;
@@ -571,7 +428,7 @@ async function executeCaptureCurrentTabHtml(context) {
       success: true,
       rawArtifact: new Blob([capture.html], { type: "text/html" }),
       filename: capture.payloadName || "paper.html",
-      sourceDoi: inferSourceDoi2(context.input)
+      sourceDoi: inferSourceDoi(context.input)
     };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -590,7 +447,7 @@ async function executeFetchStructuredXml(context, routePlan) {
               success: true,
               rawArtifact: new Blob([result.payloadText], { type: "application/xml" }),
               filename: result.payloadName,
-              sourceDoi: inferSourceDoi2(context.input)
+              sourceDoi: inferSourceDoi(context.input)
             };
           }
         } catch {
@@ -645,7 +502,7 @@ async function executeFetchEpubAsset(context, routePlan) {
       success: true,
       rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/epub+zip" }),
       filename: download.payloadName || "paper.epub",
-      sourceDoi: inferSourceDoi2(context.input)
+      sourceDoi: inferSourceDoi(context.input)
     };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -676,7 +533,7 @@ async function executeFetchOaRepository(context, routePlan) {
       success: true,
       rawArtifact: new Blob([html], { type: "text/html" }),
       filename: "paper.html",
-      sourceDoi: inferSourceDoi2(context.input)
+      sourceDoi: inferSourceDoi(context.input)
     };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -693,7 +550,7 @@ async function executeFetchHelperSource(context, routePlan) {
   }
   return executeCaptureCurrentTabHtml(context);
 }
-function inferSourceDoi2(input) {
+function inferSourceDoi(input) {
   const trimmed = String(input || "").trim();
   return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
 }
@@ -877,19 +734,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       sendResponse({ ok: true, result });
     }).catch((error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
-  if (message?.type === "mdtero.parse.request") {
-    (async () => {
-      const settings = await readSettings();
-      if (!settings.token) {
-        throw new Error("Sign in required before parsing or translating.");
-      }
-      return runBrowserParseRequest(client, {
-        input: message.input,
-        pageContext: message.pageContext
-      });
-    })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
   if (message?.type === "mdtero.parse.file.request") {

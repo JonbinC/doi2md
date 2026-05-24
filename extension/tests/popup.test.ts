@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   createFileParseMessage,
-  createParseMessage,
   createSsotParseMessage,
   createTranslateMessage
 } from "../src/lib/runtime";
@@ -24,31 +23,6 @@ import {
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
 } from "../src/popup/task-view";
-
-describe("createParseMessage", () => {
-  it("builds a parse message from detected DOI", () => {
-    expect(createParseMessage("10.1016/j.conbuildmat.2026.145877")).toEqual({
-      type: "mdtero.parse.request",
-      input: "10.1016/j.conbuildmat.2026.145877"
-    });
-  });
-
-  it("can include current-page context for browser capture", () => {
-    expect(
-      createParseMessage("https://example.com/paper", {
-        tabId: 42,
-        tabUrl: "https://example.com/paper"
-      })
-    ).toEqual({
-      type: "mdtero.parse.request",
-      input: "https://example.com/paper",
-      pageContext: {
-        tabId: 42,
-        tabUrl: "https://example.com/paper"
-      }
-    });
-  });
-});
 
 describe("createSsotParseMessage", () => {
   it("builds the popup parse message for backend SSOT route planning", () => {
