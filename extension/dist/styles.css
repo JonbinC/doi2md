@@ -278,26 +278,6 @@ summary,
   letter-spacing: 0;
 }
 
-.support-icon-elsevier {
-  color: #1d4ed8;
-}
-
-.support-icon-arxiv {
-  color: #be123c;
-}
-
-.support-icon-pmc {
-  color: #0f766e;
-}
-
-.support-icon-preprint {
-  color: #7c3aed;
-}
-
-.support-icon-plos {
-  color: #c2410c;
-}
-
 .support-stack,
 .capability-config-grid,
 .guide-list {

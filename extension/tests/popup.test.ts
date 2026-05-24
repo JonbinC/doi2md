@@ -308,23 +308,21 @@ describe("getBridgeStatusText", () => {
 });
 
 describe("getPreflightHintText", () => {
-  it("routes Elsevier guidance through website auth and browser access instead of retired settings", () => {
-    expect(
-      getPreflightHintText(
-        {
-          input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
-        },
-        "en"
-      )
-    ).toContain("Elsevier / ScienceDirect");
-    expect(
-      getPreflightHintText(
-        {
-          input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
-        },
-        "en"
-      )
-    ).toContain("does not store publisher keys");
+  it("keeps publisher-specific URL inputs on the generic browser-capture path", () => {
+    const hint = getPreflightHintText(
+      {
+        input: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
+        pageUrl: "https://www.sciencedirect.com/science/article/pii/S0016236124023456",
+        bridgeStatus: { state: "connected", runnerState: "idle" },
+      },
+      "en"
+    );
+
+    expect(hint).toContain("extension");
+    expect(hint).toContain("uploaded to Mdtero");
+    expect(hint).not.toContain("Elsevier");
+    expect(hint).not.toContain("ScienceDirect");
+    expect(hint).not.toContain("publisher keys");
   });
 
   it("warns when a supported live page is open but browser capture is unavailable", () => {
@@ -465,7 +463,28 @@ describe("getDownloadFailureText", () => {
 });
 
 describe("getResultWarningText", () => {
-  it("localizes the abstract-only Elsevier campus-network hint", () => {
+  it("localizes abstract-only publisher access hints", () => {
+    expect(
+      getResultWarningText(
+        {
+          warning_code: "publisher_abstract_only",
+          warning_message: "The source only returned an abstract."
+        },
+        "en"
+      )
+    ).toContain("institutional access");
+    expect(
+      getResultWarningText(
+        {
+          warning_code: "publisher_abstract_only",
+          warning_message: "The source only returned an abstract."
+        },
+        "zh"
+      )
+    ).toContain("校园网");
+  });
+
+  it("keeps legacy abstract-only warning codes generic while backend rollout catches up", () => {
     expect(
       getResultWarningText(
         {
@@ -474,16 +493,7 @@ describe("getResultWarningText", () => {
         },
         "en"
       )
-    ).toContain("campus or institutional network IP");
-    expect(
-      getResultWarningText(
-        {
-          warning_code: "elsevier_abstract_only",
-          warning_message: "Elsevier only returned the abstract."
-        },
-        "zh"
-      )
-    ).toContain("校园网");
+    ).not.toContain("Elsevier");
   });
 });
 

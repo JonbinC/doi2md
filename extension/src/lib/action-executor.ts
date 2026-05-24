@@ -287,7 +287,6 @@ function isStructuredXmlCandidate(candidate: AcquisitionCandidate): boolean {
     "medrxiv_jats_xml",
     "springer_openaccess_api",
     "springer_full_text_tdm",
-    "elsevier_article_retrieval_api",
   ].includes(connector);
 }
 

@@ -351,37 +351,6 @@ function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkd
   };
 }
 
-// src/lib/elsevier.ts
-var LOCAL_XML_DOI_PREFIXES = ["10.1016/"];
-var DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/.+)$/i;
-var PII_PATTERN = /^S[0-9A-Z]{16,}$/i;
-var SCIENCEDIRECT_PII_PATTERN = /sciencedirect\.com\/science\/article\/pii\/(S[0-9A-Z]{16,})/i;
-function usesLocalXmlAcquire(doi) {
-  const lowered = doi.toLowerCase();
-  return LOCAL_XML_DOI_PREFIXES.some((prefix) => lowered.startsWith(prefix));
-}
-function normalizeElsevierInput(input) {
-  const trimmed = input.trim();
-  const doiUrlMatch = trimmed.match(DOI_URL_PATTERN);
-  if (doiUrlMatch && usesLocalXmlAcquire(doiUrlMatch[1])) {
-    return { kind: "doi", value: doiUrlMatch[1] };
-  }
-  if (usesLocalXmlAcquire(trimmed)) {
-    return { kind: "doi", value: trimmed };
-  }
-  const piiUrlMatch = trimmed.match(SCIENCEDIRECT_PII_PATTERN);
-  if (piiUrlMatch) {
-    return { kind: "pii", value: piiUrlMatch[1] };
-  }
-  if (PII_PATTERN.test(trimmed)) {
-    return { kind: "pii", value: trimmed };
-  }
-  return null;
-}
-function requiresElsevierLocalAcquire(input) {
-  return normalizeElsevierInput(input) !== null;
-}
-
 // src/lib/supported-page.ts
 var SUPPORTED_PAPER_URL_PATTERNS = [
   "arxiv.org",
@@ -529,9 +498,6 @@ function getPreflightHintText(params, language = "en") {
   if (looksLikePdfShell) {
     return language === "zh" ? "\u5F53\u524D\u66F4\u50CF PDF/EPUB \u9875\u9762\u3002\u5EFA\u8BAE\u76F4\u63A5\u4E0A\u4F20 PDF/EPUB\uFF0C\u6216\u5148\u5207\u5230 HTML \u6B63\u6587\u9875\u3002" : "This looks like a PDF/EPUB page. Upload the PDF/EPUB directly or open the HTML full-text page first.";
   }
-  if (input && requiresElsevierLocalAcquire(input)) {
-    return language === "zh" ? "\u5F53\u524D\u8F93\u5165\u547D\u4E2D\u4E86 Elsevier / ScienceDirect\u3002\u6269\u5C55\u4E0D\u4FDD\u5B58\u51FA\u7248\u793E\u5BC6\u94A5\uFF1B\u82E5\u9700\u8981\u673A\u6784\u5168\u6587\uFF0C\u8BF7\u786E\u8BA4\u5F53\u524D\u6D4F\u89C8\u5668\u5DF2\u80FD\u6253\u5F00\u539F\u6587\uFF0C\u6216\u7528 CLI \u914D\u7F6E\u5B66\u672F key \u540E\u91CD\u8BD5\u3002" : "This input maps to Elsevier / ScienceDirect. The extension does not store publisher keys; for licensed full text, confirm this browser can already open the article or configure academic keys in the CLI.";
-  }
   if (!livePageSupported) {
     return "";
   }
@@ -577,8 +543,8 @@ function getResultWarningText(result, language = "en") {
   if (!result) {
     return "";
   }
-  if (result.warning_code === "elsevier_abstract_only") {
-    return language === "zh" ? "Elsevier \u4EC5\u8FD4\u56DE\u4E86\u6458\u8981\u3002\u8BF7\u786E\u8BA4\u4F60\u5F53\u524D\u662F\u5426\u5904\u4E8E\u6821\u56ED\u7F51\u6216\u673A\u6784 IP \u73AF\u5883\u3002" : "Elsevier only returned the abstract. Check whether this machine is on a campus or institutional network IP.";
+  if (result.warning_code === "publisher_abstract_only" || result.warning_code === "elsevier_abstract_only") {
+    return language === "zh" ? "\u5F53\u524D\u6765\u6E90\u4EC5\u8FD4\u56DE\u6458\u8981\u3002\u8BF7\u786E\u8BA4\u6D4F\u89C8\u5668\u5DF2\u767B\u5F55\u673A\u6784\u8D44\u6E90\u3001\u5904\u4E8E\u6821\u56ED\u7F51/\u673A\u6784 IP\uFF0C\u6216\u6539\u4E3A\u4E0A\u4F20 PDF/XML/EPUB\u3002" : "The source only returned an abstract. Confirm your browser has institutional access, use a campus/IP session, or upload the PDF/XML/EPUB directly.";
   }
   return redactSensitiveText(result.warning_message ?? "");
 }

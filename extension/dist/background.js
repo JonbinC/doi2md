@@ -587,8 +587,7 @@ function isStructuredXmlCandidate(candidate) {
     "biorxiv_jats_xml",
     "medrxiv_jats_xml",
     "springer_openaccess_api",
-    "springer_full_text_tdm",
-    "elsevier_article_retrieval_api"
+    "springer_full_text_tdm"
   ].includes(connector);
 }
 function pickEpubCandidate(routePlan) {
