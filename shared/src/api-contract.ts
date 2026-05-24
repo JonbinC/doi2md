@@ -17,8 +17,8 @@ export interface ParseTaskResponse {
   next_commands?: string[];
 }
 
-export interface ParseFulltextV2Request {
-  fulltextFile: Blob;
+export interface RawUploadTaskRequest {
+  rawFile: Blob;
   filename?: string;
   sourceDoi?: string;
   sourceInput?: string;
@@ -34,7 +34,7 @@ export type ActionType =
   | "fetch_remote_html"
   | "fetch_epub_asset"
   | "fetch_oa_repository"
-  | "fetch_helper_source"
+  | "fetch_browser_source"
   | "fallback_pdf_parse"
   | "server_parse";
 
@@ -65,7 +65,7 @@ export interface ExtensionRouteResponse {
   top_connector: string;
   route_kind: string;
   acquisition_mode: string;
-  requires_helper: boolean;
+  requires_browser_capture?: boolean;
   allows_current_tab: boolean;
   action_sequence: string[];
   acceptance_rules: Record<string, unknown>;
@@ -102,7 +102,6 @@ export interface ActionResult {
   error?: string;
   nextCommand?: string;
   requiresBrowserCapture?: boolean;
-  requiresHelper?: boolean;
   requiresUpload?: boolean;
 }
 
@@ -113,14 +112,21 @@ export interface TranslateTaskRequest {
 }
 
 export interface TaskArtifactDescriptor {
-  path: string;
-  filename: string;
-  media_type: string;
+  path?: string;
+  filename?: string;
+  media_type?: string;
+}
+
+export interface TaskDownloadArtifactDescriptor {
+  artifact: string;
+  filename?: string;
+  media_type?: string;
 }
 
 export interface TaskResult {
   preferred_artifact?: string;
   artifacts?: Record<string, TaskArtifactDescriptor>;
+  download_artifacts?: TaskDownloadArtifactDescriptor[];
   reason_code?: string | null;
   action_hint?: string | null;
   next_commands?: string[];

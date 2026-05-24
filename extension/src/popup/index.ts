@@ -26,6 +26,7 @@ import {
   type UiLanguage
 } from "../lib/storage";
 import {
+  getArtifactFilename,
   getActionStatusText,
   getDownloadLabel,
   getPreflightHintText,
@@ -34,8 +35,10 @@ import {
   getSavedResultSummary,
   getUsageStatusText,
   getTaskFailureText,
+  getDownloadFailureText,
   firstTaskNextCommand,
   buildCliParseCommand,
+  buildCliFileParseCommand,
   getCliHandoffNote,
   shouldShowCliHandoffForPreflight,
   getSecondaryArtifactKeys,
@@ -314,8 +317,8 @@ async function saveArtifact(taskId: string, artifactKey: string, preferredFilena
   try {
     const artifact = await client.downloadArtifact(taskId, artifactKey, preferredFilename);
     triggerBlobDownload(artifact.blob, artifact.filename);
-  } catch {
-    setResult(getCurrentCopy().downloadFailed);
+  } catch (error) {
+    setResult(getDownloadFailureText(error, getCurrentCopy().downloadFailed, uiLanguage));
   }
 }
 
@@ -419,7 +422,7 @@ function appendActionButton(
 function renderArtifacts(task: TaskRecord) {
   const preferredKey = getPreferredArtifactKey(task.result);
   clearSecondaryDownloads();
-  if (!preferredKey || !task.result?.artifacts) {
+  if (!preferredKey) {
     if (artifactActionsEl) artifactActionsEl.hidden = true;
     return;
   }
@@ -429,7 +432,7 @@ function renderArtifacts(task: TaskRecord) {
     downloadButton.hidden = false;
     downloadButton.textContent = getDownloadLabel(preferredKey, uiLanguage);
     downloadButton.onclick = () => {
-      void saveArtifact(task.task_id, preferredKey, task.result?.artifacts?.[preferredKey]?.filename);
+      void saveArtifact(task.task_id, preferredKey, getArtifactFilename(task.result, preferredKey));
     };
   }
 
@@ -438,7 +441,7 @@ function renderArtifacts(task: TaskRecord) {
       secondaryDownloadsEl,
       task.task_id,
       artifactKey,
-      task.result?.artifacts?.[artifactKey]?.filename
+      getArtifactFilename(task.result, artifactKey)
     );
   });
 
@@ -452,7 +455,7 @@ function renderArtifacts(task: TaskRecord) {
         sourceDownloadsEl,
         task.task_id,
         artifactKey,
-        task.result?.artifacts?.[artifactKey]?.filename
+        getArtifactFilename(task.result, artifactKey)
       );
     });
   }
@@ -820,6 +823,7 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
     isParsing = false;
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().localFileParseFailed);
+    setCliHandoff(file.name, buildCliFileParseCommand(file.name, artifactKind));
     return;
   }
 

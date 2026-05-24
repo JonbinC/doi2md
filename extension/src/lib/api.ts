@@ -1,12 +1,14 @@
 import type {
   ParseTaskRequest,
   ParseTaskResponse,
-  ParseFulltextV2Request,
+  RawUploadTaskRequest,
   TaskRecord,
   TranslateTaskRequest,
   ExtensionRouteRequest,
   ExtensionRouteResponse
 } from "@mdtero/shared";
+import { normalizeCliHandoffCommand } from "./cli-handoff";
+import { redactSensitiveText } from "./redact";
 
 export interface ApiClientSettings {
   apiBaseUrl: string;
@@ -84,13 +86,13 @@ function describeErrorPayload(payload: unknown): string {
   const reasonCode = firstString(record.reason_code, record.error_code);
   const actionHint = firstString(record.action_hint);
   const nextCommand = Array.isArray(record.next_commands)
-    ? record.next_commands.map((value) => String(value || "").trim()).find(Boolean)
+    ? normalizeCliHandoffCommand(record.next_commands.map((value) => String(value || "").trim()).find(Boolean))
     : "";
   if (message) parts.push(message);
   if (reasonCode) parts.push(`Reason: ${reasonCode}`);
   if (actionHint) parts.push(`Next: ${actionHint}`);
   if (nextCommand) parts.push(`Command: ${nextCommand}`);
-  return parts.join(" ");
+  return redactSensitiveText(parts.join(" "));
 }
 
 function firstString(...values: unknown[]): string {
@@ -179,9 +181,9 @@ export function createApiClient(
         body
       }, { requireAuth: true }).then((response) => response.json() as Promise<ParseTaskResponse>);
     },
-    createParseFulltextV2Task(payload: ParseFulltextV2Request) {
+    createRawUploadTask(payload: RawUploadTaskRequest) {
       const body = buildFulltextUploadBody({
-        file: payload.fulltextFile,
+        file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
@@ -255,7 +257,7 @@ export function createRouterSSOTClient(
         top_connector: "server_parse",
         route_kind: "server",
         acquisition_mode: "server_parse",
-        requires_helper: false,
+        requires_browser_capture: false,
         allows_current_tab: false,
         action_sequence: ["server_parse"],
         acceptance_rules: {},
@@ -294,17 +296,10 @@ export function createRouterSSOTClient(
   };
 }
 
-/**
- * Compatibility helper for route plans that still include the backend
- * requires_helper field.
- */
-export function routeRequiresLocalHandoff(routePlan: ExtensionRouteResponse): boolean {
-  return routePlan.requires_helper;
+export function routeRequiresBrowserCapture(routePlan: ExtensionRouteResponse): boolean {
+  return Boolean(routePlan.requires_browser_capture);
 }
 
-/**
- * Compatibility helper for route plans that allow extension current-tab capture.
- */
 export function routeAllowsCurrentTabCapture(routePlan: ExtensionRouteResponse): boolean {
   return routePlan.allows_current_tab;
 }

@@ -93,6 +93,9 @@ describe("extension options page", () => {
     expect(document.querySelector("#shadow-status")).toBeNull();
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(true);
     expect(document.querySelector("#open-account")?.textContent).toBe("Open website OAuth");
+    expect(document.querySelector("#connection-guide-title")?.textContent).toBe("Connection guide");
+    expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Open website OAuth");
+    expect(document.querySelector("#connection-guide-list")?.textContent).toContain("upload a local PDF/EPUB");
     expect(document.querySelector("#password-input")).toBeNull();
     expect(document.querySelector("#code-input")).toBeNull();
   });
@@ -116,6 +119,8 @@ describe("extension options page", () => {
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(false);
     expect(document.querySelector("#history-list")?.textContent).toContain("No parsing or translation history found yet.");
     expect(document.querySelector("#settings-subtitle")?.textContent).toContain("browser capture, upload, translation, and download settings");
+    expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Website OAuth is connected");
+    expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Open history below");
     expect(document.querySelector("#publisher-capability-groups")).toBeNull();
   });
 

@@ -299,7 +299,8 @@ summary,
 }
 
 .support-stack,
-.capability-config-grid {
+.capability-config-grid,
+.guide-list {
   display: grid;
   gap: 10px;
   margin-top: 10px;
@@ -308,6 +309,7 @@ summary,
 .support-group,
 .capability-config-card,
 .auth-website-panel,
+.guide-item,
 .history-item,
 .recent-item {
   border: 1px solid var(--border);
@@ -317,8 +319,29 @@ summary,
 
 .support-group,
 .capability-config-card,
-.auth-website-panel {
+.auth-website-panel,
+.guide-item {
   padding: 11px;
+}
+
+.guide-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.guide-index {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .support-group-title {

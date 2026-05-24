@@ -1,4 +1,5 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
+import { buildCliFileParseCommand } from "./lib/cli-handoff";
 import { runBrowserFileParseRequest } from "./lib/file-upload";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
 import { readSettings, writeSettings } from "./lib/storage";
@@ -85,7 +86,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       });
     })()
       .then((result) => sendResponse({ ok: true, result }))
-      .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+      .catch((error: Error) =>
+        sendResponse({
+          ok: false,
+          error: error.message,
+          nextCommand: buildFileParseCommand(message.filename, message.artifactKind),
+        })
+      );
     return true;
   }
 
@@ -130,4 +137,8 @@ function formatSsotFailure(result: {
     return result.error || "Upload the PDF/EPUB/XML/HTML file directly so Mdtero can parse it.";
   }
   return result.error || "Action sequence failed";
+}
+
+function buildFileParseCommand(filename?: string, artifactKind?: "pdf" | "epub") {
+  return buildCliFileParseCommand(filename, artifactKind);
 }

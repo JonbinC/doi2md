@@ -11,10 +11,12 @@ import {
   getDownloadLabel,
   getPreflightHintText,
   buildCliParseCommand,
+  buildCliFileParseCommand,
   getCliHandoffNote,
   normalizeCliHandoffCommand,
   shouldShowCliHandoffForPreflight,
   getUsageStatusText,
+  getArtifactFilename,
   getPreferredArtifactKey,
   getResultWarningText,
   getTaskFailureText,
@@ -22,6 +24,7 @@ import {
   firstTaskNextCommand,
   getTranslationAttemptSummary,
   getSavedResultSummary,
+  getDownloadFailureText,
   getSecondaryArtifactKeys,
   getSourceArtifactKeys
 } from "../src/popup/task-view";
@@ -103,6 +106,33 @@ describe("getPreferredArtifactKey", () => {
       })
     ).toBe("paper_md");
   });
+
+  it("uses v1 download_artifacts when legacy artifact descriptors are absent", () => {
+    expect(
+      getPreferredArtifactKey({
+        preferred_artifact: "paper_md",
+        download_artifacts: [
+          { artifact: "paper_md", filename: "zhou2025performance.md", media_type: "text/markdown" },
+          { artifact: "paper_bundle", filename: "zhou2025performance.zip", media_type: "application/zip" }
+        ]
+      })
+    ).toBe("paper_md");
+  });
+});
+
+describe("getArtifactFilename", () => {
+  it("falls back to v1 download_artifacts filenames", () => {
+    expect(
+      getArtifactFilename(
+        {
+          download_artifacts: [
+            { artifact: "paper_md", filename: "chen2026hydrate.md", media_type: "text/markdown" }
+          ]
+        },
+        "paper_md"
+      )
+    ).toBe("chen2026hydrate.md");
+  });
 });
 
 describe("getSecondaryArtifactKeys", () => {
@@ -160,6 +190,19 @@ describe("getSecondaryArtifactKeys", () => {
       })
     ).toEqual(["paper_md", "translated_md"]);
   });
+
+  it("keeps secondary actions from v1 download_artifacts", () => {
+    expect(
+      getSecondaryArtifactKeys({
+        preferred_artifact: "paper_md",
+        download_artifacts: [
+          { artifact: "paper_md", filename: "tang2026simulation.md" },
+          { artifact: "paper_bundle", filename: "tang2026simulation.zip" },
+          { artifact: "translated_md", filename: "tang2026simulation_CN.md" }
+        ]
+      })
+    ).toEqual(["paper_bundle", "translated_md"]);
+  });
 });
 
 describe("getSourceArtifactKeys", () => {
@@ -184,6 +227,17 @@ describe("getSourceArtifactKeys", () => {
             media_type: "application/xml"
           }
         }
+      })
+    ).toEqual(["paper_pdf", "paper_xml"]);
+  });
+
+  it("surfaces source files from v1 download_artifacts", () => {
+    expect(
+      getSourceArtifactKeys({
+        download_artifacts: [
+          { artifact: "paper_pdf", filename: "source.pdf" },
+          { artifact: "paper_xml", filename: "source.xml" }
+        ]
       })
     ).toEqual(["paper_pdf", "paper_xml"]);
   });
@@ -324,6 +378,40 @@ describe("getCliHandoffNote", () => {
     expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json", "en")).toContain("replace the path");
     expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json", "zh")).toContain("文件路径");
   });
+
+  it("redacts sensitive URLs and provider secrets from task failure text", () => {
+    const text = getTaskFailureText(
+      {
+        error_message:
+          "MinerU failed at https://mineru.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok",
+        error_code: "uploaded_pdf_v2_parse_failed",
+        reason_code: "mineru_urlapi_timeout",
+        action_hint: "Retry later; Bearer voyage-secret-token api_key=raw-key",
+        next_commands: ["mdtero parse --file paper.pdf --json"],
+        result: {
+          translation_attempts: [
+            {
+              provider: "codex",
+              reason_code: "translation_provider_auth_failed",
+              provider_status_code: 401,
+              message: "Bearer codex-secret-token failed"
+            }
+          ]
+        }
+      },
+      "failed",
+      "en"
+    );
+
+    expect(text).toContain("[redacted-url]");
+    expect(text).toContain("Bearer [redacted]");
+    expect(text).not.toContain("OSSAccessKeyId=abc");
+    expect(text).not.toContain("Signature=sig");
+    expect(text).not.toContain("security-token=tok");
+    expect(text).not.toContain("voyage-secret-token");
+    expect(text).not.toContain("codex-secret-token");
+    expect(text).not.toContain("raw-key");
+  });
 });
 
 describe("getSavedResultSummary", () => {
@@ -350,6 +438,29 @@ describe("getSavedResultSummary", () => {
         "zh"
       )
     ).toBe("已就绪：tang2026simulation.zip");
+  });
+});
+
+describe("getDownloadFailureText", () => {
+  it("surfaces backend download failure detail without leaking signed URLs", () => {
+    const text = getDownloadFailureText(
+      new Error(
+        "artifact not available. Reason: parser_failed Next: retry https://mineru.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok"
+      ),
+      "Download failed. Please try again.",
+      "en"
+    );
+
+    expect(text).toContain("Download failed. Please try again. Detail: artifact not available");
+    expect(text).toContain("Reason: parser_failed");
+    expect(text).toContain("[redacted-url]");
+    expect(text).not.toContain("OSSAccessKeyId=abc");
+    expect(text).not.toContain("Signature=sig");
+    expect(text).not.toContain("security-token=tok");
+  });
+
+  it("localizes empty download failures to the existing fallback", () => {
+    expect(getDownloadFailureText(null, "下载失败，请重试。", "zh")).toBe("下载失败，请重试。");
   });
 });
 
@@ -462,6 +573,39 @@ describe("getTaskFailureText", () => {
     ).toBe("服务端尝试：mimo: translation_provider_auth_failed 401");
   });
 
+  it("summarizes skipped translation provider configuration attempts", () => {
+    expect(
+      getTaskFailureText(
+        {
+          error_message: "No translation provider configured.",
+          error_code: "translation_provider_not_configured",
+          reason_code: "translation_provider_not_configured",
+          action_hint: "No server translation provider is configured. Operators need to configure provider keys before retrying.",
+          result: {
+            translation_attempts: [
+              {
+                provider: "mimo",
+                status: "skipped",
+                reason_code: "translation_provider_not_configured",
+                message: "missing MIMO_API_KEY"
+              },
+              {
+                provider: "codex",
+                status: "skipped",
+                reason_code: "translation_provider_not_configured",
+                message: "missing CODEX_API_KEY or OPENAI_API_KEY"
+              }
+            ]
+          }
+        },
+        "Translation failed. Please try again.",
+        "en"
+      )
+    ).toContain(
+      "Provider attempts: mimo: translation_provider_not_configured skipped missing MIMO_API_KEY; codex: translation_provider_not_configured skipped missing CODEX_API_KEY or OPENAI_API_KEY"
+    );
+  });
+
   it("selects the first non-empty next command for CLI handoff", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
     expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
@@ -504,5 +648,25 @@ describe("buildCliParseCommand", () => {
     );
     expect(buildCliParseCommand("paper.pdf")).toBe("");
     expect(buildCliParseCommand("")).toBe("");
+  });
+});
+
+describe("buildCliFileParseCommand", () => {
+  it("builds terminal handoff commands for failed local file uploads", () => {
+    expect(buildCliFileParseCommand("paper.pdf", "pdf")).toBe(
+      "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+    );
+    expect(buildCliFileParseCommand("paper.epub", "epub")).toBe(
+      "mdtero parse --file paper.epub --trace --wait --timeout 300 --json"
+    );
+  });
+
+  it("quotes shell-sensitive local filenames and uses stable placeholders", () => {
+    expect(buildCliFileParseCommand("My Paper's Draft.pdf", "pdf")).toBe(
+      "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 300 --json"
+    );
+    expect(buildCliFileParseCommand("", "epub")).toBe(
+      "mdtero parse --file paper.epub --trace --wait --timeout 300 --json"
+    );
   });
 });

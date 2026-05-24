@@ -1,3 +1,67 @@
+// src/lib/cli-handoff.ts
+function shellQuote(value) {
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+function normalizeCliHandoffCommand(command) {
+  const trimmed = String(command || "").trim();
+  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
+  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
+  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
+  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --timeout 300 --json`;
+}
+function buildCliParseCommand(input) {
+  const normalized = String(input || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
+    return "";
+  }
+  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
+}
+function buildCliFileParseCommand(filename, artifactKind) {
+  const normalized = String(filename || "").trim();
+  const extension = inferFileExtension(normalized, artifactKind);
+  const path = normalized || `paper.${extension}`;
+  return `mdtero parse --file ${shellQuote(path)} --trace --wait --timeout 300 --json`;
+}
+function inferFileExtension(filename, artifactKind) {
+  const normalized = String(filename || "").trim().toLowerCase();
+  if (normalized.endsWith(".epub") || artifactKind === "epub") {
+    return "epub";
+  }
+  if (normalized.endsWith(".html") || normalized.endsWith(".htm") || artifactKind === "html") {
+    return "html";
+  }
+  if (normalized.endsWith(".xml") || artifactKind === "xml") {
+    return "xml";
+  }
+  return "pdf";
+}
+
+// src/lib/redact.ts
+var SENSITIVE_QUERY_KEYS = "(api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
+function redactSensitiveText(value) {
+  const text = String(value ?? "");
+  if (!text) {
+    return "";
+  }
+  return text.replace(/\b(Bearer|ApiKey)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]").replace(/\b(mdtero|mdt)_(secret|live|test|key)_[A-Za-z0-9_-]+/gi, "[redacted-key]").replace(
+    new RegExp(`([?&]${SENSITIVE_QUERY_KEYS}=)[^&#\\s"'<>]+`, "gi"),
+    "$1[redacted]"
+  ).replace(
+    new RegExp(`\\b(${SENSITIVE_QUERY_KEYS})(\\s*[:=]\\s*)['"]?[^\\s&'",;]+`, "gi"),
+    "$1$2[redacted]"
+  ).replace(/https?:\/\/[^\s"'<>]*aliyuncs\.com[^\s"'<>]*/gi, "[redacted-url]").replace(/https?:\/\/[^\s"'<>]*oss-cn-[^\s"'<>]*/gi, "[redacted-url]");
+}
+
 // src/lib/api.ts
 function buildFulltextUploadBody(params) {
   const body = new FormData();
@@ -41,12 +105,12 @@ function describeErrorPayload(payload) {
   const message = firstString(record.error_message, record.message, record.detail);
   const reasonCode = firstString(record.reason_code, record.error_code);
   const actionHint = firstString(record.action_hint);
-  const nextCommand = Array.isArray(record.next_commands) ? record.next_commands.map((value) => String(value || "").trim()).find(Boolean) : "";
+  const nextCommand = Array.isArray(record.next_commands) ? normalizeCliHandoffCommand(record.next_commands.map((value) => String(value || "").trim()).find(Boolean)) : "";
   if (message) parts.push(message);
   if (reasonCode) parts.push(`Reason: ${reasonCode}`);
   if (actionHint) parts.push(`Next: ${actionHint}`);
   if (nextCommand) parts.push(`Command: ${nextCommand}`);
-  return parts.join(" ");
+  return redactSensitiveText(parts.join(" "));
 }
 function firstString(...values) {
   for (const value of values) {
@@ -127,9 +191,9 @@ function createApiClient(getSettings) {
         body
       }, { requireAuth: true }).then((response) => response.json());
     },
-    createParseFulltextV2Task(payload) {
+    createRawUploadTask(payload) {
       const body = buildFulltextUploadBody({
-        file: payload.fulltextFile,
+        file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
@@ -192,7 +256,7 @@ function createRouterSSOTClient(getSettings) {
         top_connector: "server_parse",
         route_kind: "server",
         acquisition_mode: "server_parse",
-        requires_helper: false,
+        requires_browser_capture: false,
         allows_current_tab: false,
         action_sequence: ["server_parse"],
         acceptance_rules: {},
@@ -349,22 +413,6 @@ function buildElsevierLocalAcquireGuidance() {
 
 // src/lib/action-executor.ts
 var CLI_ACADEMIC_KEY_HINT = "Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.";
-function cliParseCommand(input) {
-  const normalized = String(input || "").trim();
-  if (!normalized) {
-    return "";
-  }
-  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
-    return "";
-  }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
-}
-function shellQuote(value) {
-  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
 async function executeAction(action, context, routePlan) {
   switch (action) {
     case "capture_current_tab_html":
@@ -379,19 +427,19 @@ async function executeAction(action, context, routePlan) {
       return executeFetchWileyTdmPdf(context, routePlan);
     case "fetch_springer_pdf":
     case "fetch_remote_html":
-      return executeFetchHelperSource(context, routePlan);
+      return executeFetchBrowserSource(context, routePlan);
     case "fetch_epub_asset":
       return executeFetchEpubAsset(context, routePlan);
     case "fetch_oa_repository":
       return executeFetchOaRepository(context, routePlan);
-    case "fetch_helper_source":
-      return executeFetchHelperSource(context, routePlan);
+    case "fetch_browser_source":
+      return executeFetchBrowserSource(context, routePlan);
     case "fallback_pdf_parse":
       return {
         success: false,
         requiresUpload: true,
         error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
-        nextCommand: cliParseCommand(context.input)
+        nextCommand: buildCliParseCommand(context.input)
       };
     default:
       return { success: false, error: `Unknown action: ${action}` };
@@ -421,7 +469,7 @@ async function executeCaptureCurrentTabHtml(context) {
       return {
         success: false,
         error: capture?.failureMessage || "Page capture failed",
-        nextCommand: cliParseCommand(context.input)
+        nextCommand: buildCliParseCommand(context.input)
       };
     }
     return {
@@ -462,7 +510,7 @@ async function executeFetchElsevierXml(context, routePlan) {
     success: false,
     requiresUpload: true,
     error: routePlan.user_message || buildElsevierLocalAcquireGuidance(),
-    nextCommand: cliParseCommand(context.input)
+    nextCommand: buildCliParseCommand(context.input)
   };
 }
 async function executeFetchWileyTdmPdf(context, routePlan) {
@@ -470,7 +518,7 @@ async function executeFetchWileyTdmPdf(context, routePlan) {
     success: false,
     requiresUpload: true,
     error: routePlan.user_message || `Wiley TDM requires a user token. ${CLI_ACADEMIC_KEY_HINT}`,
-    nextCommand: cliParseCommand(context.input)
+    nextCommand: buildCliParseCommand(context.input)
   };
 }
 async function executeFetchEpubAsset(context, routePlan) {
@@ -478,7 +526,7 @@ async function executeFetchEpubAsset(context, routePlan) {
     return {
       success: false,
       error: routePlan.user_message || "Open the article page in the current tab and retry EPUB capture.",
-      nextCommand: cliParseCommand(context.input)
+      nextCommand: buildCliParseCommand(context.input)
     };
   }
   const candidate = pickEpubCandidate(routePlan);
@@ -495,7 +543,7 @@ async function executeFetchEpubAsset(context, routePlan) {
       return {
         success: false,
         error: download?.failureMessage || "Browser page context could not download the EPUB artifact.",
-        nextCommand: cliParseCommand(context.input)
+        nextCommand: buildCliParseCommand(context.input)
       };
     }
     return {
@@ -520,7 +568,7 @@ async function executeFetchOaRepository(context, routePlan) {
         success: false,
         requiresUpload: true,
         error: "OA source is PDF. Please download and upload manually.",
-        nextCommand: cliParseCommand(context.input)
+        nextCommand: buildCliParseCommand(context.input)
       };
     }
     const response = await fetch(oaUrl, { credentials: "include" });
@@ -539,13 +587,13 @@ async function executeFetchOaRepository(context, routePlan) {
     return { success: false, error: String(error) };
   }
 }
-async function executeFetchHelperSource(context, routePlan) {
+async function executeFetchBrowserSource(context, routePlan) {
   if (!context.tabId) {
     return {
       success: false,
       requiresUpload: true,
       error: "This source requires browser capture. Open the article page and retry.",
-      nextCommand: cliParseCommand(context.input)
+      nextCommand: buildCliParseCommand(context.input)
     };
   }
   return executeCaptureCurrentTabHtml(context);
@@ -620,8 +668,8 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
     if (result.success) {
       if (result.rawArtifact) {
         try {
-          const task = await parseClient.createParseFulltextV2Task({
-            fulltextFile: result.rawArtifact,
+          const task = await parseClient.createRawUploadTask({
+            rawFile: result.rawArtifact,
             filename: result.filename || "paper.fulltext",
             sourceDoi: result.sourceDoi,
             sourceInput: context.input
@@ -639,11 +687,10 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
       }
       continue;
     }
-    if (result.requiresBrowserCapture || result.requiresHelper || result.requiresUpload) {
+    if (result.requiresBrowserCapture || result.requiresUpload) {
       return {
         success: false,
-        requiresBrowserCapture: result.requiresBrowserCapture || result.requiresHelper,
-        requiresHelper: result.requiresHelper,
+        requiresBrowserCapture: result.requiresBrowserCapture,
         requiresUpload: result.requiresUpload,
         error: result.error,
         nextCommand: result.nextCommand
@@ -750,7 +797,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         filename: message.filename,
         artifactKind: message.artifactKind
       });
-    })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    })().then((result) => sendResponse({ ok: true, result })).catch(
+      (error) => sendResponse({
+        ok: false,
+        error: error.message,
+        nextCommand: buildFileParseCommand(message.filename, message.artifactKind)
+      })
+    );
     return true;
   }
   if (message?.type === "mdtero.task.get") {
@@ -781,5 +834,8 @@ function formatSsotFailure(result) {
     return result.error || "Upload the PDF/EPUB/XML/HTML file directly so Mdtero can parse it.";
   }
   return result.error || "Action sequence failed";
+}
+function buildFileParseCommand(filename, artifactKind) {
+  return buildCliFileParseCommand(filename, artifactKind);
 }
 //# sourceMappingURL=background.js.map

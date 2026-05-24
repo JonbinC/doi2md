@@ -1,3 +1,32 @@
+// src/lib/cli-handoff.ts
+function normalizeCliHandoffCommand(command) {
+  const trimmed = String(command || "").trim();
+  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
+  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
+  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
+  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
+  return `${withoutWait} --trace --wait --timeout 300 --json`;
+}
+
+// src/lib/redact.ts
+var SENSITIVE_QUERY_KEYS = "(api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
+function redactSensitiveText(value) {
+  const text = String(value ?? "");
+  if (!text) {
+    return "";
+  }
+  return text.replace(/\b(Bearer|ApiKey)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]").replace(/\b(mdtero|mdt)_(secret|live|test|key)_[A-Za-z0-9_-]+/gi, "[redacted-key]").replace(
+    new RegExp(`([?&]${SENSITIVE_QUERY_KEYS}=)[^&#\\s"'<>]+`, "gi"),
+    "$1[redacted]"
+  ).replace(
+    new RegExp(`\\b(${SENSITIVE_QUERY_KEYS})(\\s*[:=]\\s*)['"]?[^\\s&'",;]+`, "gi"),
+    "$1$2[redacted]"
+  ).replace(/https?:\/\/[^\s"'<>]*aliyuncs\.com[^\s"'<>]*/gi, "[redacted-url]").replace(/https?:\/\/[^\s"'<>]*oss-cn-[^\s"'<>]*/gi, "[redacted-url]");
+}
+
 // src/lib/api.ts
 function buildFulltextUploadBody(params) {
   const body = new FormData();
@@ -41,12 +70,12 @@ function describeErrorPayload(payload) {
   const message = firstString(record.error_message, record.message, record.detail);
   const reasonCode = firstString(record.reason_code, record.error_code);
   const actionHint = firstString(record.action_hint);
-  const nextCommand = Array.isArray(record.next_commands) ? record.next_commands.map((value) => String(value || "").trim()).find(Boolean) : "";
+  const nextCommand = Array.isArray(record.next_commands) ? normalizeCliHandoffCommand(record.next_commands.map((value) => String(value || "").trim()).find(Boolean)) : "";
   if (message) parts.push(message);
   if (reasonCode) parts.push(`Reason: ${reasonCode}`);
   if (actionHint) parts.push(`Next: ${actionHint}`);
   if (nextCommand) parts.push(`Command: ${nextCommand}`);
-  return parts.join(" ");
+  return redactSensitiveText(parts.join(" "));
 }
 function firstString(...values) {
   for (const value of values) {
@@ -127,9 +156,9 @@ function createApiClient(getSettings) {
         body
       }, { requireAuth: true }).then((response) => response.json());
     },
-    createParseFulltextV2Task(payload) {
+    createRawUploadTask(payload) {
       const body = buildFulltextUploadBody({
-        file: payload.fulltextFile,
+        file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
         sourceInput: payload.sourceInput
@@ -237,6 +266,23 @@ var COPY = {
     openAccount: "Open website OAuth",
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
+    guideTitle: "Connection guide",
+    setupStepAuth: "OAuth",
+    setupStepParse: "Parse / Upload",
+    setupStepTranslate: "Translate",
+    setupStepDownload: "Download",
+    guideSignedOut: [
+      "Open website OAuth and complete sign-in at mdtero.com/auth.",
+      "Return to this popup after the trusted auth bridge connects your account.",
+      "Parse the current paper page or upload a local PDF/EPUB from the popup.",
+      "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
+    ],
+    guideSignedIn: [
+      "Website OAuth is connected.",
+      "Use the popup to parse the current page, paste a DOI, or upload PDF/EPUB.",
+      "Translate parsed Markdown from the popup when a paper_md artifact is ready.",
+      "Open history below to download previous artifacts without spending quota."
+    ],
     uiLanguage: "Interface language",
     advanced: "Advanced",
     apiUrl: "API URL",
@@ -272,6 +318,23 @@ var COPY = {
     openAccount: "\u6253\u5F00\u7F51\u9875\u767B\u5F55",
     websiteAuthTitle: "\u5B98\u7F51\u767B\u5F55",
     websiteAuthNote: "\u6269\u5C55\u7EDF\u4E00\u6253\u5F00 mdtero.com/auth \u767B\u5F55\u3002\u8BF7\u5728\u5B98\u7F51\u5B8C\u6210\u767B\u5F55\uFF0C\u53D7\u4FE1\u4EFB auth bridge \u4F1A\u628A token \u4EA4\u56DE\u6269\u5C55\u3002",
+    guideTitle: "\u8FDE\u63A5\u5F15\u5BFC",
+    setupStepAuth: "\u7F51\u9875\u767B\u5F55",
+    setupStepParse: "\u89E3\u6790 / \u4E0A\u4F20",
+    setupStepTranslate: "\u7FFB\u8BD1",
+    setupStepDownload: "\u4E0B\u8F7D",
+    guideSignedOut: [
+      "\u6253\u5F00\u7F51\u9875\u767B\u5F55\uFF0C\u5E76\u5728 mdtero.com/auth \u5B8C\u6210\u6388\u6743\u3002",
+      "\u53D7\u4FE1\u4EFB auth bridge \u8FDE\u63A5\u8D26\u6237\u540E\uFF0C\u56DE\u5230\u6269\u5C55\u5F39\u7A97\u7EE7\u7EED\u3002",
+      "\u5728\u5F39\u7A97\u89E3\u6790\u5F53\u524D\u8BBA\u6587\u9875\u3001\u7C98\u8D34 DOI\uFF0C\u6216\u4E0A\u4F20\u672C\u5730 PDF/EPUB\u3002",
+      "\u4EFB\u52A1\u5B8C\u6210\u540E\u4E0B\u8F7D Markdown\u3001ZIP\u3001\u6E90\u6587\u4EF6\u6216\u8BD1\u6587\u3002"
+    ],
+    guideSignedIn: [
+      "\u7F51\u9875\u767B\u5F55\u5DF2\u8FDE\u63A5\u3002",
+      "\u5728\u5F39\u7A97\u89E3\u6790\u5F53\u524D\u9875\u9762\u3001\u7C98\u8D34 DOI\uFF0C\u6216\u4E0A\u4F20 PDF/EPUB\u3002",
+      "\u5F53 paper_md \u4EA7\u7269\u5C31\u7EEA\u540E\uFF0C\u53EF\u76F4\u63A5\u4ECE\u5F39\u7A97\u8BF7\u6C42\u7FFB\u8BD1\u3002",
+      "\u4E0B\u65B9\u5386\u53F2\u8BB0\u5F55\u53EF\u514D\u8D39\u4E0B\u8F7D\u5DF2\u751F\u6210\u4EA7\u7269\u3002"
+    ],
     uiLanguage: "\u754C\u9762\u8BED\u8A00",
     advanced: "\u9AD8\u7EA7\u8BBE\u7F6E",
     apiUrl: "API \u5730\u5740",
@@ -309,6 +372,12 @@ var saveButton = document.querySelector("#save-settings");
 var openAccountButton = document.querySelector("#open-account");
 var websiteAuthTitleEl = document.querySelector("#website-auth-title");
 var websiteAuthNoteEl = document.querySelector("#website-auth-note");
+var connectionGuideTitleEl = document.querySelector("#connection-guide-title");
+var connectionGuideListEl = document.querySelector("#connection-guide-list");
+var setupStepAuthEl = document.querySelector("#setup-step-auth");
+var setupStepParseEl = document.querySelector("#setup-step-parse");
+var setupStepTranslateEl = document.querySelector("#setup-step-translate");
+var setupStepDownloadEl = document.querySelector("#setup-step-download");
 var uiLanguageLabel = document.querySelector("#ui-language-label");
 var advancedSummary = document.querySelector("#advanced-summary");
 var apiBaseUrlLabel = document.querySelector("#api-base-url-label");
@@ -368,10 +437,43 @@ function applyLanguage() {
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
+  if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
+  setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
+  setStepText(setupStepParseEl, "2", copy.setupStepParse);
+  setStepText(setupStepTranslateEl, "3", copy.setupStepTranslate);
+  setStepText(setupStepDownloadEl, "4", copy.setupStepDownload);
   if (saveButton) saveButton.textContent = copy.save;
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+function setStepText(element, index, label) {
+  if (!element) return;
+  element.textContent = "";
+  const icon = document.createElement("span");
+  icon.className = "support-icon";
+  icon.textContent = index;
+  element.appendChild(icon);
+  element.append(label);
+}
+function renderConnectionGuide(isSignedIn) {
+  if (!connectionGuideListEl) return;
+  const copy = copyFor(uiLanguage);
+  const items = isSignedIn ? copy.guideSignedIn : copy.guideSignedOut;
+  connectionGuideListEl.textContent = "";
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "guide-item";
+    const icon = document.createElement("span");
+    icon.className = "guide-index";
+    icon.textContent = String(index + 1);
+    const text = document.createElement("p");
+    text.className = "meta-label";
+    text.textContent = item;
+    row.appendChild(icon);
+    row.appendChild(text);
+    connectionGuideListEl.appendChild(row);
+  });
 }
 async function refreshHistory() {
   if (!historyList) return;
@@ -449,6 +551,7 @@ async function refreshView() {
   if (accountStatus) {
     accountStatus.textContent = settings.email ? copyFor(uiLanguage).signedIn(settings.email) : copyFor(uiLanguage).notSignedIn;
   }
+  renderConnectionGuide(Boolean(settings.token));
   if (!settings.token) {
     if (usageStatus) {
       usageStatus.textContent = copyFor(uiLanguage).usagePending;

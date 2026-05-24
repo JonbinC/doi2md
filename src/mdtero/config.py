@@ -67,11 +67,13 @@ class MdteroConfig:
 
 def load_config(path: Path | None = None) -> MdteroConfig:
     target = path or config_path()
+    academic_env = _academic_keys_from_env()
     if not target.exists():
         return MdteroConfig(
             api_base_url=os.environ.get("MDTERO_API_URL", DEFAULT_API_BASE),
             site_base_url=os.environ.get("MDTERO_SITE_URL", DEFAULT_SITE_BASE),
             api_key=None,
+            academic=academic_env,
         )
     payload = json.loads(target.read_text(encoding="utf-8"))
     academic = payload.get("academic") or {}
@@ -82,9 +84,9 @@ def load_config(path: Path | None = None) -> MdteroConfig:
         api_key=payload.get("api_key") or None,
         default_project=payload.get("default_project") or None,
         academic=AcademicKeys(
-            elsevier_api_key=academic.get("elsevier_api_key") or None,
-            wiley_tdm_token=academic.get("wiley_tdm_token") or None,
-            semantic_scholar_api_key=academic.get("semantic_scholar_api_key") or None,
+            elsevier_api_key=academic.get("elsevier_api_key") or academic_env.elsevier_api_key or None,
+            wiley_tdm_token=academic.get("wiley_tdm_token") or academic_env.wiley_tdm_token or None,
+            semantic_scholar_api_key=academic.get("semantic_scholar_api_key") or academic_env.semantic_scholar_api_key or None,
         ),
         zotero=ZoteroConfig(
             library_id=zotero.get("library_id") or os.environ.get("ZOTERO_LIBRARY_ID") or None,
@@ -93,6 +95,19 @@ def load_config(path: Path | None = None) -> MdteroConfig:
         ),
     )
     return cfg
+
+
+def _academic_keys_from_env() -> AcademicKeys:
+    return AcademicKeys(
+        elsevier_api_key=os.environ.get("MDTERO_ELSEVIER_API_KEY") or os.environ.get("ELSEVIER_API_KEY") or None,
+        wiley_tdm_token=os.environ.get("MDTERO_WILEY_TDM_TOKEN") or os.environ.get("WILEY_TDM_TOKEN") or None,
+        semantic_scholar_api_key=(
+            os.environ.get("MDTERO_SEMANTIC_SCHOLAR_API_KEY")
+            or os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
+            or os.environ.get("S2_API_KEY")
+            or None
+        ),
+    )
 
 
 def save_config(config: MdteroConfig, path: Path | None = None) -> Path:

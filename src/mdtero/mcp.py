@@ -6,17 +6,70 @@ from typing import Any
 from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
-from .projects import bind_server_project, load_project, paper_to_document, project_documents
+from .projects import bind_server_project, load_project, paper_to_document, project_documents, project_path
+from .redact import redact_sensitive_payload, redact_sensitive_text
 
 
 def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
+    state = _load_project_or_none(root)
+    if state is None:
+        commands = build_agent_commands(root)
+        return {
+            "status": "not_initialized",
+            "reason_code": "project_not_initialized",
+            "name": root.resolve().name,
+            "root": str(root.resolve()),
+            "server_project_id": None,
+            "paper_count": 0,
+            "ready_for_ingest_count": 0,
+            "pending_count": 0,
+            "running_count": 0,
+            "failed_count": 0,
+            "papers": [],
+            "action_hint": "Run `mdtero project init --name <name>` before project, RAG, or MCP workflows.",
+            "next_commands": [
+                commands["commands"]["project_init_named"],
+                commands["commands"]["discover"],
+                commands["commands"]["project_add"],
+                commands["commands"]["parse_doi_or_url"],
+            ],
+            "next_actions": commands,
+        }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
     running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     failed = [paper for paper in state.papers if paper.status == "failed"]
-    return {
+    commands = build_agent_commands(root)
+    if failed:
+        status = "needs_attention"
+        reason_code = "project_has_failed_items"
+        action_hint = "Inspect failed items and rerun them with `mdtero project parse --include-failed --wait --timeout 300 --json` before building RAG."
+        next_commands = ["mdtero project parse --include-failed --wait --timeout 300 --json", commands["commands"]["refresh"]]
+    elif running:
+        status = "running"
+        reason_code = "project_has_running_tasks"
+        action_hint = "Wait for running tasks to finish before ingesting or querying RAG."
+        next_commands = [commands["commands"]["refresh"], commands["commands"]["rag_status"]]
+    elif pending:
+        status = "pending"
+        reason_code = "project_has_pending_items"
+        action_hint = "Submit pending papers, refresh task status, then build or query server-side Voyage RAG."
+        next_commands = [commands["commands"]["parse_pending"], commands["commands"]["refresh"], commands["commands"]["rag_build"]]
+    elif succeeded:
+        status = "ready"
+        reason_code = "project_ready_for_rag"
+        action_hint = "Project has succeeded parse tasks. Ingest/build/query server-side Voyage RAG or expose context through MCP."
+        next_commands = [commands["commands"].get("ingest_for_rag", "mdtero project ingest --json"), commands["commands"]["rag_build"], commands["commands"]["rag_query"], commands["commands"]["mcp_briefing"]]
+    else:
+        status = "empty"
+        reason_code = "project_empty"
+        action_hint = "Add a DOI, URL, BibTeX import, Zotero import, or local file before parsing."
+        next_commands = [commands["commands"]["discover"], commands["commands"]["project_add"], commands["commands"]["parse_doi_or_url"]]
+
+    return redact_sensitive_payload({
+        "status": status,
+        "reason_code": reason_code,
         "name": state.name,
         "server_project_id": state.server_project_id,
         "paper_count": len(state.papers),
@@ -25,32 +78,45 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
         "running_count": len(running),
         "failed_count": len(failed),
         "papers": [document.to_dict() for document in project_documents(root)],
-        "next_actions": build_agent_commands(root),
-    }
+        "action_hint": action_hint,
+        "next_commands": _dedupe_commands(next_commands),
+        "next_actions": commands,
+    })
 
 
 def build_paper_context(input_or_task_id: str, project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
+    state = _load_project_or_none(root)
+    if state is None:
+        return {
+            "error": "project_not_initialized",
+            "input_or_task_id": input_or_task_id,
+            "action_hint": "Run `mdtero project init --name <name>` before asking for paper context.",
+            "next_commands": ["mdtero project init --name <name>", "mdtero project add <doi-or-url> --json"],
+        }
     for paper in state.papers:
         if paper.input == input_or_task_id or paper.task_id == input_or_task_id:
             payload = paper_to_document(paper).to_dict()
             payload["recommended_commands"] = _paper_commands(paper)
-            return payload
+            return redact_sensitive_payload(payload)
     return {"error": "paper_not_found", "input_or_task_id": input_or_task_id}
 
 
 def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
+    state = _load_project_or_none(root)
+    project_name = state.name if state is not None else root.resolve().name
+    server_project_id = state.server_project_id if state is not None else None
     commands: dict[str, Any] = {
         "setup": "mdtero setup",
         "login_api_key": "mdtero setup --api-key <key>",
         "doctor": "mdtero doctor --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
         "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --timeout 300 --json",
+        "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "parse_batch": "mdtero parse --batch <directory> --wait --timeout 300 --json",
+        "extension_handoff_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "extension_handoff_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "project_init": "mdtero project init --name <name>",
         "project_add": "mdtero project add <doi-or-url> --json",
         "import_bib": "mdtero project import-bib <refs.bib> --json",
@@ -72,30 +138,55 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "create_server_project": "mdtero project create-server --json",
         "bind_server_project": "mdtero project link --server-project-id <id>",
     }
-    if state.server_project_id:
+    if state is None:
+        commands["project_init_named"] = "mdtero project init --name <name>"
+        commands["project_init_here"] = f"mdtero project init --name {_shell_safe_project_name(project_name)}"
+        workflow = [commands["doctor"], commands["project_init_named"], commands["discover"], commands["project_add"], commands["parse_doi_or_url"]]
+    elif state.server_project_id:
         commands["ingest_for_rag"] = "mdtero project ingest --json"
         recovery_commands["reingest_for_rag"] = "mdtero project ingest --json"
-    else:
-        commands["bootstrap_rag"] = "mdtero rag build --json"
-    return {
-        "project": state.name,
-        "server_project_id": state.server_project_id,
-        "commands": commands,
-        "recovery_commands": recovery_commands,
-        "workflow": [
+        workflow = [
             commands["doctor"],
             commands["parse_pending"],
             commands["refresh"],
-            commands["rag_build"] if not state.server_project_id else commands["ingest_for_rag"],
+            commands["ingest_for_rag"],
             commands["rag_status"],
             commands["rag_query"],
-        ],
+        ]
+    else:
+        commands["bootstrap_rag"] = "mdtero rag build --json"
+        workflow = [
+            commands["doctor"],
+            commands["parse_pending"],
+            commands["refresh"],
+            commands["rag_build"],
+            commands["rag_status"],
+            commands["rag_query"],
+        ]
+    return {
+        "project": project_name,
+        "server_project_id": server_project_id,
+        "commands": commands,
+        "recovery_commands": recovery_commands,
+        "workflow": workflow,
     }
 
 
 def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
+    state = _load_project_or_none(root)
+    if state is None:
+        commands = build_agent_commands(root)["commands"]
+        return {
+            "project": root.resolve().name,
+            "server_project_id": None,
+            "ready": False,
+            "ready_for_ingest_count": 0,
+            "reason_code": "project_not_initialized",
+            "action_hint": "Initialize a local Mdtero project before RAG.",
+            "commands": commands,
+            "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+        }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
     return {
         "project": state.name,
@@ -109,9 +200,20 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
 
 def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
-    local_ready = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    state = _load_project_or_none(root)
     commands = build_agent_commands(root)["commands"]
+    if state is None:
+        return {
+            "status": "not_ready",
+            "reason_code": "project_not_initialized",
+            "project": root.resolve().name,
+            "server_project_id": None,
+            "local_ready_for_ingest_count": 0,
+            "local_paper_count": 0,
+            "action_hint": "Run `mdtero project init --name <name>` before server-side Voyage RAG.",
+            "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+        }
+    local_ready = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
     if not state.server_project_id:
         return {
             "status": "not_ready",
@@ -127,7 +229,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     try:
         status = (fetcher or MdteroClient().rag_status)(state.server_project_id)
     except Exception as exc:
-        return {
+        return redact_sensitive_payload({
             "status": "unavailable",
             "reason_code": "server_rag_status_unavailable",
             "project": state.name,
@@ -136,7 +238,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_paper_count": len(state.papers),
             "error_type": exc.__class__.__name__,
             "next_commands": [commands["ingest_for_rag"], "mdtero rag status --json", commands["rag_build"]],
-        }
+        })
 
     summary = status.get("summary") if isinstance(status.get("summary"), dict) else {}
     server_status = str(status.get("status") or "unknown")
@@ -161,7 +263,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
         "chunk_count": summary.get("chunk_count", 0),
         "pending_embedding_count": summary.get("pending_embedding_count", 0),
     }
-    return status
+    return redact_sensitive_payload(status)
 
 
 def query_server_rag(
@@ -173,9 +275,20 @@ def query_server_rag(
     build_if_needed: bool = False,
 ) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
+    state = _load_project_or_none(root)
     cleaned_question = str(question or "").strip()
     commands = build_agent_commands(root)["commands"]
+    if state is None:
+        return {
+            "status": "not_ready",
+            "reason_code": "project_not_initialized",
+            "project": root.resolve().name,
+            "server_project_id": None,
+            "question": cleaned_question,
+            "answer": None,
+            "action_hint": "Initialize a local Mdtero project before querying server-side Voyage RAG.",
+            "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+        }
     if not cleaned_question:
         return {
             "status": "failed",
@@ -217,12 +330,15 @@ def query_server_rag(
             "question": cleaned_question,
             "answer": None,
             "error_type": exc.__class__.__name__,
-            "action_hint": str(detail.get("action_hint") or "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready."),
+            "action_hint": _public_rag_action_hint(
+                str(detail.get("reason_code") or "server_rag_query_failed"),
+                detail.get("action_hint"),
+            ),
             "next_commands": _rag_query_failure_next_commands(detail, commands),
         }
         if bootstrap is not None:
             payload["bootstrap"] = bootstrap
-        return payload
+        return redact_sensitive_payload(payload)
     if not isinstance(result, dict):
         result = {"answer": result}
     result = _normalize_rag_query_result_for_agents(
@@ -234,7 +350,7 @@ def query_server_rag(
     )
     if bootstrap is not None:
         result.setdefault("bootstrap", bootstrap)
-    return result
+    return redact_sensitive_payload(result)
 
 
 def _normalize_rag_query_result_for_agents(
@@ -261,7 +377,7 @@ def _normalize_rag_query_result_for_agents(
     payload.setdefault("evidence_pack", _rag_evidence_pack(question=question, source_nodes=source_nodes, citations=citations))
     payload.setdefault("action_hint", "RAG query completed. Review evidence_pack.context_markdown, source_nodes, citations, and matches before writing a final synthesis.")
     payload.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
-    return payload
+    return redact_sensitive_payload(payload)
 
 
 def _extract_rag_answer(matches: list[Any]) -> str | None:
@@ -355,25 +471,17 @@ def _rag_context_markdown(source_nodes: list[dict[str, Any]]) -> str:
 def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, commands: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
     project_id = str(state.server_project_id or "").strip()
-    if project_id and not succeeded:
-        return project_id, {
-            "created_server_project": False,
-            "bound_local_project": True,
-            "ingest": {"server_project_id": project_id, "imported_count": 0, "failed_count": 0, "items": [], "failures": []},
-            "build_skipped": True,
-            "reason_code": "server_project_already_bound",
-        }
-    if not project_id and not succeeded:
+    if not succeeded:
         return None, {
             "status": "not_ready",
             "reason_code": "no_succeeded_tasks",
             "project": state.name,
-            "server_project_id": state.server_project_id,
+            "server_project_id": project_id or state.server_project_id,
             "local_ready_for_ingest_count": 0,
             "local_paper_count": len(state.papers),
             "answer": None,
-            "action_hint": "Parse at least one project paper successfully before querying server-side Voyage RAG.",
-            "next_commands": [commands["parse_pending"], commands["refresh"], commands["rag_query"]],
+            "action_hint": "Parse at least one paper successfully before querying server-side Voyage RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project.",
+            "next_commands": _rag_recovery_commands(commands),
         }
 
     bootstrap: dict[str, Any] = {
@@ -437,7 +545,10 @@ def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, command
             "answer": None,
             "error_type": exc.__class__.__name__,
             "bootstrap": bootstrap,
-            "action_hint": str(detail.get("action_hint") or "Server RAG build failed. Check backend Voyage configuration and project import state."),
+            "action_hint": _public_rag_action_hint(
+                str(detail.get("reason_code") or "server_rag_build_failed"),
+                detail.get("action_hint"),
+            ),
             "next_commands": _rag_query_failure_next_commands(detail, commands),
         }
     return project_id, bootstrap
@@ -456,13 +567,36 @@ def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Except
     }
 
 
+def _rag_recovery_commands(commands: dict[str, Any]) -> list[str]:
+    return [
+        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        commands["parse_file"],
+        commands["extension_handoff_url"],
+        commands["refresh"],
+        commands["rag_query"],
+    ]
+
+
 def _rag_query_exception_detail(exc: Exception) -> dict[str, Any]:
     response = getattr(exc, "response", None)
     try:
         detail = response.json().get("detail") if response is not None else None
     except Exception:
         detail = None
-    return detail if isinstance(detail, dict) else {}
+    return redact_sensitive_payload(detail) if isinstance(detail, dict) else {}
+
+
+def _public_rag_action_hint(reason_code: str, server_hint: object | None = None) -> str:
+    if reason_code == "voyage_not_configured":
+        return (
+            "Server-side Voyage RAG is not available for this Mdtero deployment yet. "
+            "This is a Mdtero backend operations issue, not a user-side API key setup step; "
+            "rerun `mdtero rag status --json` after the backend RAG service is configured."
+        )
+    hint = redact_sensitive_text(server_hint).strip()
+    if hint:
+        return hint
+    return "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready."
 
 
 def _rag_query_failure_next_commands(detail: dict[str, Any], commands: dict[str, Any]) -> list[str]:
@@ -480,7 +614,7 @@ def build_agent_briefing(
     agent_root: Path | None = None,
 ) -> dict[str, Any]:
     root = project_root or Path.cwd()
-    state = load_project(root)
+    state = _load_project_or_none(root)
     config = config or load_config()
     commands = build_agent_commands(root)["commands"]
     server_rag = build_server_rag_status(root, fetcher=rag_status_fetcher)
@@ -489,15 +623,18 @@ def build_agent_briefing(
     installed_agents = [agent for agent in agent_status if agent.installed]
     pending_agent_installs = [agent for agent in agent_status if agent.detected and not agent.installed]
 
-    pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
-    running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
-    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
-    failed = [paper for paper in state.papers if paper.status == "failed"]
+    papers = state.papers if state is not None else []
+    pending = [paper for paper in papers if paper.status in {"pending", "created"} and not paper.task_id]
+    running = [paper for paper in papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
+    succeeded = [paper for paper in papers if paper.status == "succeeded" and paper.task_id]
+    failed = [paper for paper in papers if paper.status == "failed"]
 
     next_commands: list[str] = []
     if not config.is_authenticated:
         next_commands.extend([commands["login_api_key"], commands["doctor"]])
-    if not state.papers:
+    if state is None:
+        next_commands.extend([commands["project_init_named"], commands["discover"], commands["project_add"], commands["parse_doi_or_url"]])
+    elif not state.papers:
         next_commands.extend([
             "mdtero discover \"<topic>\" --interactive",
             "mdtero project add <doi-or-url> --json",
@@ -516,12 +653,14 @@ def build_agent_briefing(
     next_commands.extend(str(command) for command in server_rag.get("next_commands", []) if command)
     next_commands.extend([commands["mcp_briefing"], commands["serve_mcp"]])
 
-    return {
+    return redact_sensitive_payload({
         "project": {
-            "name": state.name,
+            "name": state.name if state is not None else root.resolve().name,
             "root": str(root.resolve()),
-            "server_project_id": state.server_project_id,
-            "paper_count": len(state.papers),
+            "initialized": state is not None,
+            "project_file": str(project_path(root)),
+            "server_project_id": state.server_project_id if state is not None else None,
+            "paper_count": len(papers),
         },
         "account": {
             "authenticated": config.is_authenticated,
@@ -580,7 +719,25 @@ def build_agent_briefing(
             "rag_query",
             "agent_commands",
         ],
-    }
+    })
+
+
+def _load_project_or_none(root: Path) -> Any | None:
+    try:
+        return load_project(root)
+    except FileNotFoundError:
+        return None
+
+
+def _shell_safe_project_name(name: str) -> str:
+    cleaned = str(name or "mdtero-project").strip() or "mdtero-project"
+    if _is_shell_safe_project_name(cleaned):
+        return cleaned
+    return "<name>"
+
+
+def _is_shell_safe_project_name(value: str) -> bool:
+    return all(char.isalnum() or char in {"-", "_", "."} for char in value)
 
 
 def _paper_commands(paper: Any) -> list[str]:
@@ -613,7 +770,7 @@ def _paper_agent_summary(paper: Any, *, include_download: bool) -> dict[str, Any
     }
     if include_download and paper.task_id:
         payload["download_command"] = f"mdtero download {paper.task_id} {paper.artifact or 'paper_md'} --output-dir ./mdtero-output --json"
-    return payload
+    return redact_sensitive_payload(payload)
 
 
 def _dedupe_commands(commands: list[str]) -> list[str]:

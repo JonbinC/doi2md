@@ -40,6 +40,14 @@ def build_dashboard_model(
     commands = build_agent_commands(root)["commands"]
     briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg, agent_root=agent_root)
     next_steps = _next_steps(cfg, project, rag, commands)
+    command_palette = _command_palette_payload(
+        cfg=cfg,
+        project=project,
+        rag=rag,
+        commands=commands,
+        next_steps=next_steps,
+    )
+    extension_handoff = _extension_handoff_payload(commands)
     handoff = {
         "ready_artifacts": briefing["ready_artifacts"],
         "blocked_items": briefing["blocked_items"],
@@ -109,7 +117,9 @@ def build_dashboard_model(
             "tools": briefing["mcp_tools"],
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
+        "extension_handoff": extension_handoff,
         "handoff": handoff,
+        "command_palette": command_palette,
         "commands": commands,
         "next_steps": next_steps,
         "operator_summary": _operator_summary(
@@ -129,7 +139,9 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
         _hero_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
-        Columns([_operator_panel(model), _shortcuts_panel(model)], equal=True, expand=True),
+        _command_palette_panel(model),
+        Columns([_operator_panel(model), _extension_handoff_panel(model)], equal=True, expand=True),
+        _shortcuts_panel(model),
         _handoff_panel(model),
         _next_steps_panel(model),
     )
@@ -381,6 +393,85 @@ def _shortcuts_payload(commands: dict[str, str]) -> list[dict[str, str]]:
     ]
 
 
+def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
+    return {
+        "browser_scope": [
+            "website OAuth login",
+            "current-page parse from an already-open article",
+            "PDF/EPUB upload",
+            "task polling, translation, and download",
+        ],
+        "cli_scope": [
+            "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources",
+            "raw artifact upload with --trace client_acquisition details",
+            "project queue/status/download/RAG/MCP commands for local agents",
+        ],
+        "handoff_triggers": [
+            "publisher challenge or JavaScript verification page",
+            "campus-network or logged-in browser state needs manual confirmation",
+            "extension capture cannot access the current tab or direct download URL",
+        ],
+        "commands": [
+            commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+            commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+            commands.get("doctor") or "mdtero doctor --json",
+        ],
+        "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
+    }
+
+
+def _command_palette_payload(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    commands: dict[str, str],
+    next_steps: list[str],
+) -> list[dict[str, Any]]:
+    next_step_set = set(next_steps)
+    rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
+    rows = [
+        {
+            "area": "Setup",
+            "use": "Authenticate this machine" if not cfg.is_authenticated else "Verify local runtime",
+            "command": commands.get("login_api_key") if not cfg.is_authenticated else commands.get("doctor"),
+        },
+        {"area": "Discover", "use": "Find papers and add selections", "command": commands.get("discover")},
+        {"area": "Parse", "use": "Single DOI or URL", "command": commands.get("parse_doi_or_url")},
+        {"area": "Parse", "use": "Single local PDF/EPUB/XML/HTML", "command": commands.get("parse_file")},
+        {"area": "Parse", "use": "Batch upload local files", "command": commands.get("parse_batch")},
+        {"area": "Extension", "use": "Handoff challenged page or saved file to CLI", "command": commands.get("extension_handoff_url")},
+        {"area": "Extension", "use": "Upload a browser-saved PDF/EPUB/XML/HTML", "command": commands.get("extension_handoff_file")},
+        {"area": "Project", "use": "Parse pending queue", "command": commands.get("parse_pending")},
+        {"area": "Project", "use": "Refresh task statuses", "command": commands.get("refresh")},
+        {"area": "Project", "use": "Download ready Markdown/ZIP", "command": commands.get("download_markdown")},
+        {"area": "Zotero", "use": "Import Zotero metadata", "command": commands.get("zotero_import")},
+        {"area": "Zotero", "use": "Sync Mdtero results back", "command": commands.get("zotero_sync")},
+        {"area": "RAG", "use": "Create/bind/import/build Voyage index", "command": rag_build_command},
+        {"area": "RAG", "use": "Check server RAG readiness", "command": commands.get("rag_status")},
+        {"area": "RAG", "use": "Ask grounded project question", "command": commands.get("rag_query")},
+        {"area": "MCP", "use": "One-shot agent context", "command": commands.get("mcp_briefing")},
+        {"area": "MCP", "use": "Serve FastMCP tools", "command": commands.get("serve_mcp")},
+        {"area": "Agents", "use": "Detect local workspaces", "command": commands.get("agent_detect")},
+        {"area": "Agents", "use": "Install selected skills", "command": commands.get("agent_install")},
+    ]
+    if not project.papers:
+        rows.insert(1, {"area": "Project", "use": "Initialize or rename project", "command": commands.get("project_init_named") or commands.get("project_init")})
+    if rag.get("ready_for_ingest_count", 0) > 0 or project.server_project_id:
+        rows.insert(11, {"area": "RAG", "use": "Import succeeded tasks", "command": commands.get("ingest_for_rag") or "mdtero project ingest --json"})
+
+    palette: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        command = str(row.get("command") or "").strip()
+        seen_key = (str(row.get("area") or ""), command)
+        if not command or seen_key in seen:
+            continue
+        seen.add(seen_key)
+        palette.append({**row, "command": command, "is_next": command in next_step_set})
+    return palette
+
+
 def _hero_panel(model: dict[str, Any]) -> Panel:
     health = model["health"]
     grid = Table.grid(expand=True)
@@ -493,11 +584,36 @@ def _operator_panel(model: dict[str, Any]) -> Panel:
     return Panel(table, title="Operator Summary", border_style="green")
 
 
+def _extension_handoff_panel(model: dict[str, Any]) -> Panel:
+    handoff = model["extension_handoff"]
+    table = Table("Mode", "Details", expand=True)
+    table.add_row("Extension", "; ".join(handoff["browser_scope"][:4]))
+    table.add_row("CLI", "; ".join(handoff["cli_scope"][:3]))
+    table.add_row("Switch when", "; ".join(handoff["handoff_triggers"][:3]))
+    table.add_row("URL command", str(handoff["commands"][0]))
+    table.add_row("File command", str(handoff["commands"][1]))
+    table.add_row("Agent fields", ", ".join(handoff["visible_fields"]))
+    return Panel(table, title="Extension to CLI", border_style="yellow")
+
+
 def _shortcuts_panel(model: dict[str, Any]) -> Panel:
     table = Table("Key", "Action", "Command", expand=True)
     for item in model.get("shortcuts") or []:
         table.add_row(str(item.get("key") or "-"), str(item.get("label") or "-"), str(item.get("command") or "-"))
     return Panel(table, title="Shortcuts", border_style="cyan")
+
+
+def _command_palette_panel(model: dict[str, Any]) -> Panel:
+    table = Table("Area", "Use", "Command", expand=True)
+    for item in model.get("command_palette") or []:
+        style = "bold yellow" if item.get("is_next") else ""
+        table.add_row(
+            str(item.get("area") or "-"),
+            str(item.get("use") or "-"),
+            str(item.get("command") or "-"),
+            style=style,
+        )
+    return Panel(table, title="Command Palette", border_style="white")
 
 
 def _brief_item_label(item: dict[str, Any]) -> str:

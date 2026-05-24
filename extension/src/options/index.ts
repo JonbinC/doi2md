@@ -28,6 +28,23 @@ const COPY = {
     openAccount: "Open website OAuth",
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
+    guideTitle: "Connection guide",
+    setupStepAuth: "OAuth",
+    setupStepParse: "Parse / Upload",
+    setupStepTranslate: "Translate",
+    setupStepDownload: "Download",
+    guideSignedOut: [
+      "Open website OAuth and complete sign-in at mdtero.com/auth.",
+      "Return to this popup after the trusted auth bridge connects your account.",
+      "Parse the current paper page or upload a local PDF/EPUB from the popup.",
+      "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
+    ],
+    guideSignedIn: [
+      "Website OAuth is connected.",
+      "Use the popup to parse the current page, paste a DOI, or upload PDF/EPUB.",
+      "Translate parsed Markdown from the popup when a paper_md artifact is ready.",
+      "Open history below to download previous artifacts without spending quota."
+    ],
     uiLanguage: "Interface language",
     advanced: "Advanced",
     apiUrl: "API URL",
@@ -64,6 +81,23 @@ const COPY = {
     openAccount: "打开网页登录",
     websiteAuthTitle: "官网登录",
     websiteAuthNote: "扩展统一打开 mdtero.com/auth 登录。请在官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
+    guideTitle: "连接引导",
+    setupStepAuth: "网页登录",
+    setupStepParse: "解析 / 上传",
+    setupStepTranslate: "翻译",
+    setupStepDownload: "下载",
+    guideSignedOut: [
+      "打开网页登录，并在 mdtero.com/auth 完成授权。",
+      "受信任 auth bridge 连接账户后，回到扩展弹窗继续。",
+      "在弹窗解析当前论文页、粘贴 DOI，或上传本地 PDF/EPUB。",
+      "任务完成后下载 Markdown、ZIP、源文件或译文。"
+    ],
+    guideSignedIn: [
+      "网页登录已连接。",
+      "在弹窗解析当前页面、粘贴 DOI，或上传 PDF/EPUB。",
+      "当 paper_md 产物就绪后，可直接从弹窗请求翻译。",
+      "下方历史记录可免费下载已生成产物。"
+    ],
     uiLanguage: "界面语言",
     advanced: "高级设置",
     apiUrl: "API 地址",
@@ -102,6 +136,12 @@ const saveButton = document.querySelector<HTMLButtonElement>("#save-settings");
 const openAccountButton = document.querySelector<HTMLButtonElement>("#open-account");
 const websiteAuthTitleEl = document.querySelector<HTMLHeadingElement>("#website-auth-title");
 const websiteAuthNoteEl = document.querySelector<HTMLParagraphElement>("#website-auth-note");
+const connectionGuideTitleEl = document.querySelector<HTMLHeadingElement>("#connection-guide-title");
+const connectionGuideListEl = document.querySelector<HTMLDivElement>("#connection-guide-list");
+const setupStepAuthEl = document.querySelector<HTMLSpanElement>("#setup-step-auth");
+const setupStepParseEl = document.querySelector<HTMLSpanElement>("#setup-step-parse");
+const setupStepTranslateEl = document.querySelector<HTMLSpanElement>("#setup-step-translate");
+const setupStepDownloadEl = document.querySelector<HTMLSpanElement>("#setup-step-download");
 const uiLanguageLabel = document.querySelector<HTMLLabelElement>("#ui-language-label");
 const advancedSummary = document.querySelector<HTMLElement>("#advanced-summary");
 const apiBaseUrlLabel = document.querySelector<HTMLLabelElement>("#api-base-url-label");
@@ -177,10 +217,45 @@ function applyLanguage() {
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
+  if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
+  setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
+  setStepText(setupStepParseEl, "2", copy.setupStepParse);
+  setStepText(setupStepTranslateEl, "3", copy.setupStepTranslate);
+  setStepText(setupStepDownloadEl, "4", copy.setupStepDownload);
   if (saveButton) saveButton.textContent = copy.save;
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+
+function setStepText(element: HTMLSpanElement | null, index: string, label: string) {
+  if (!element) return;
+  element.textContent = "";
+  const icon = document.createElement("span");
+  icon.className = "support-icon";
+  icon.textContent = index;
+  element.appendChild(icon);
+  element.append(label);
+}
+
+function renderConnectionGuide(isSignedIn: boolean) {
+  if (!connectionGuideListEl) return;
+  const copy = copyFor(uiLanguage);
+  const items = isSignedIn ? copy.guideSignedIn : copy.guideSignedOut;
+  connectionGuideListEl.textContent = "";
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "guide-item";
+    const icon = document.createElement("span");
+    icon.className = "guide-index";
+    icon.textContent = String(index + 1);
+    const text = document.createElement("p");
+    text.className = "meta-label";
+    text.textContent = item;
+    row.appendChild(icon);
+    row.appendChild(text);
+    connectionGuideListEl.appendChild(row);
+  });
 }
 
 async function refreshHistory() {
@@ -273,6 +348,7 @@ async function refreshView() {
       ? copyFor(uiLanguage).signedIn(settings.email)
       : copyFor(uiLanguage).notSignedIn;
   }
+  renderConnectionGuide(Boolean(settings.token));
 
   if (!settings.token) {
     if (usageStatus) {

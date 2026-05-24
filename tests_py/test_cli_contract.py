@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 import json
+import subprocess
 import tomllib
 import urllib.parse
 from pathlib import Path
@@ -13,7 +15,7 @@ from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
-from mdtero.client import DiscoveryError, MdteroClient, translation_source_path_from_task
+from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, serve_project_context
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -38,6 +40,15 @@ from mdtero.workflow import parse_trace_from_route, status_trace, upload_trace
 from mdtero.zotero import build_sync_note, paper_from_zotero_item, sync_project_to_zotero
 
 
+def load_python_script(path: Path):
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def mock_doctor_remote_auth_ok(monkeypatch):
     from mdtero import cli
 
@@ -57,8 +68,43 @@ def mock_doctor_remote_auth_ok(monkeypatch):
 def test_parser_exposes_next_gen_command_contract():
     parser = build_parser()
     help_text = parser.format_help()
-    for command in ["setup", "doctor", "login", "config", "parse", "discover", "project", "parse-bib", "zotero", "translate", "rag", "mcp", "agent", "tui"]:
+    for command in ["setup", "doctor", "login", "smoke", "config", "parse", "discover", "project", "parse-bib", "zotero", "translate", "rag", "mcp", "agent", "tui"]:
         assert command in help_text
+
+
+def test_smoke_parser_accepts_deploy_ready_options():
+    parser = build_parser()
+
+    args = parser.parse_args([
+        "smoke",
+        "--api-base",
+        "https://staging.example.test",
+        "--workdir",
+        "/tmp/mdtero-smoke",
+        "--doi",
+        "10.48550/arXiv.1706.03762",
+        "--query",
+        "rag papers",
+        "--question",
+        "What is indexed?",
+        "--translate-to",
+        "zh-CN",
+        "--timeout",
+        "5",
+        "--interval",
+        "0.5",
+        "--skip-download",
+        "--json",
+    ])
+
+    assert args.command == "smoke"
+    assert args.api_base == "https://staging.example.test"
+    assert args.workdir == Path("/tmp/mdtero-smoke")
+    assert args.timeout == 5
+    assert args.interval == 0.5
+    assert args.translate_to == "zh-CN"
+    assert args.skip_download is True
+    assert args.json is True
 
 
 def test_setup_accepts_headless_api_key_argument():
@@ -76,6 +122,356 @@ def test_login_accepts_web_login_flags():
 
     assert args.no_browser is True
     assert args.timeout == 12
+
+
+def test_smoke_reports_missing_auth_without_network(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.delenv("MDTERO_API_KEY", raising=False)
+
+    def should_not_touch_network(*args, **kwargs):  # pragma: no cover - failure guard
+        raise AssertionError("smoke should not create a client without auth")
+
+    monkeypatch.setattr(MdteroClient, "discover", should_not_touch_network)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": None,
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": False,
+            "skip_download": False,
+            "skip_translate": False,
+            "skip_rag": False,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "auth_missing"
+    assert payload["next_commands"] == ["mdtero login", "mdtero login --api-key <key>", "mdtero doctor --json"]
+    assert payload["steps"] == []
+
+
+def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_test"))
+    calls = []
+
+    def fake_discover(self, query, *, limit=10):
+        calls.append(("discover", query, limit))
+        return {"source": "openalex_server", "items": [{"title": "RAG Paper", "doi": "10.1000/rag"}]}
+
+    def fake_parse_with_route(self, input_value):
+        calls.append(("parse", input_value))
+        return (
+            {"route_kind": "source_first", "acquisition_mode": "native_source_adapter"},
+            {"task_id": "task-1", "status": "queued", "selected_provider": "arxiv_native"},
+            None,
+        )
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        calls.append(("wait", task_id, interval, timeout))
+        return {
+            "task_id": task_id,
+            "status": "succeeded",
+            "result": {
+                "preferred_artifact": "paper_md",
+                "download_artifacts": [{"artifact": "paper_md", "filename": "paper.md"}],
+                "quality": {"provider": "arxiv_native", "parser_strategy": "html_arxiv"},
+            },
+        }
+
+    def fake_download(self, task_id, artifact, output_dir):
+        calls.append(("download", task_id, artifact, output_dir.name))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / ("paper_CN.md" if artifact == "translated_md" else "paper.md")
+        path.write_text("# Paper\n", encoding="utf-8")
+        return path
+
+    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
+        calls.append(("translate", task_id, target_language, artifact))
+        return {"task_id": "translate-1", "status": "queued"}
+
+    def fake_create_project(self, name, *, description=None):
+        calls.append(("create_project", name, description))
+        return {"id": 42, "name": name}
+
+    def fake_import_task(self, project_id, task_id):
+        calls.append(("import", project_id, task_id))
+        return {"document_id": "doc-1", "import_status": "imported"}
+
+    def fake_rag_build(self, project_id):
+        calls.append(("rag_build", project_id))
+        return {"status": "queued", "reason_code": "rag_build_queued"}
+
+    def fake_rag_status(self, project_id):
+        calls.append(("rag_status", project_id))
+        return {"status": "ready", "reason_code": "indexed", "summary": {"embedded_count": 1, "chunk_count": 1}}
+
+    def fake_rag_query(self, project_id, question):
+        calls.append(("rag_query", project_id, question))
+        return {"answer": "Ready.", "matches": [{"document_id": "doc-1", "snippet": "Ready evidence."}]}
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create_project)
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import_task)
+    monkeypatch.setattr(MdteroClient, "rag_build", fake_rag_build)
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_rag_status)
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_rag_query)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": "https://api.mdtero.test",
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": False,
+            "skip_download": False,
+            "skip_translate": False,
+            "skip_rag": False,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path / "smoke")
+
+    assert payload["status"] == "succeeded"
+    assert payload["reason_code"] == "smoke_succeeded"
+    assert payload["api_base_url"] == "https://api.mdtero.test"
+    assert payload["task_ids"] == ["task-1"]
+    assert payload["translation_task_ids"] == ["translate-1"]
+    assert payload["server_project_id"] == "42"
+    assert [step["name"] for step in payload["steps"]] == ["discover", "parse", "download", "translate", "rag"]
+    assert payload["steps"][1]["selected_provider"] == "arxiv_native"
+    assert payload["steps"][3]["target_language"] == "zh-CN"
+    assert payload["steps"][4]["query"]["answer"] == "Ready."
+    assert payload["downloaded_paths"][0].endswith("paper.md")
+    assert payload["translated_paths"][0].endswith("paper_CN.md")
+    assert state.server_project_id == "42"
+    assert calls == [
+        ("discover", "rag papers", 3),
+        ("parse", "10.48550/arXiv.1706.03762"),
+        ("wait", "task-1", 0.5, 5.0),
+        ("download", "task-1", "paper_md", "downloads"),
+        ("translate", "task-1", "zh-CN", "paper_md"),
+        ("wait", "translate-1", 0.5, 5.0),
+        ("download", "translate-1", "translated_md", "translations"),
+        ("create_project", "mdtero-smoke", "Mdtero local project: mdtero-smoke"),
+        ("import", "42", "task-1"),
+        ("rag_build", "42"),
+        ("rag_status", "42"),
+        ("rag_query", "42", "What is indexed?"),
+    ]
+
+
+def test_smoke_can_skip_discovery_download_and_rag(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_test"))
+
+    def fake_parse_with_route(self, input_value):
+        return ({"route_kind": "server"}, {"task_id": "task-1", "status": "queued"}, None)
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        return {"task_id": task_id, "status": "succeeded", "result": {"preferred_artifact": "paper_md"}}
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": None,
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": True,
+            "skip_download": True,
+            "skip_translate": True,
+            "skip_rag": True,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "succeeded"
+    assert [step["status"] for step in payload["steps"]] == ["skipped", "succeeded", "skipped", "skipped", "skipped"]
+    assert [step["reason_code"] for step in payload["steps"] if step["status"] == "skipped"] == ["skipped", "skipped", "skipped", "skipped"]
+
+
+def test_smoke_classifies_live_401_as_authentication_required(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_invalid"))
+
+    def fake_parse_with_route(self, input_value):
+        raise MdteroApiError(
+            {
+                "status": "failed",
+                "error_code": "authentication_required",
+                "reason_code": "authentication_required",
+                "status_code": 401,
+                "method": "POST",
+                "path": "/api/v1/route",
+                "detail": {"detail": "missing or invalid credentials"},
+            }
+        )
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": "https://api.mdtero.test",
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": True,
+            "skip_download": True,
+            "skip_translate": True,
+            "skip_rag": True,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+    parse_step = next(step for step in payload["steps"] if step["name"] == "parse")
+
+    assert parse_step["reason_code"] == "authentication_required"
+    assert parse_step["error_code"] == "authentication_required"
+    assert parse_step["http_status"] == 401
+    assert parse_step["next_commands"] == [
+        "mdtero setup --api-key <key>",
+        "mdtero doctor --json",
+        "mdtero smoke --json --timeout 600 --interval 2",
+    ]
+    assert "Production auth failed" in parse_step["action_hint"]
+
+
+def test_smoke_surfaces_translation_provider_failures(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_test"))
+
+    def fake_parse_with_route(self, input_value):
+        return ({"route_kind": "source_first"}, {"task_id": "task-1", "status": "queued"}, None)
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        if task_id == "task-1":
+            return {
+                "task_id": "task-1",
+                "status": "succeeded",
+                "result": {"preferred_artifact": "paper_md", "artifacts": {"paper_md": {"path": "/server/task-1/paper.md"}}},
+            }
+        return {
+            "task_id": "translate-1",
+            "status": "failed",
+            "task_kind": "translate",
+            "reason_code": "translation_provider_chain_failed",
+            "error_code": "translation_provider_chain_failed",
+            "result": {
+                "reason_code": "translation_provider_chain_failed",
+                "translation_attempts": [
+                    {"provider": "codex", "reason_code": "translation_provider_auth_failed", "provider_status_code": 401}
+                ],
+            },
+        }
+
+    def fake_download(self, task_id, artifact, output_dir):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / "paper.md"
+        path.write_text("# Paper\n", encoding="utf-8")
+        return path
+
+    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
+        return {"task_id": "translate-1", "status": "queued"}
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": None,
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": True,
+            "skip_download": False,
+            "skip_translate": False,
+            "skip_rag": True,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+    translate_step = next(step for step in payload["steps"] if step["name"] == "translate")
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "smoke_failed"
+    assert translate_step["status"] == "failed"
+    assert translate_step["reason_code"] == "translation_provider_chain_failed"
+    assert translate_step["result"]["final_task"]["translation_attempts"][0]["reason_code"] == "translation_provider_auth_failed"
 
 
 def test_wait_commands_accept_timeout_and_interval_flags():
@@ -552,7 +948,7 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3" in output
     assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json" in output
     assert "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json" in compact_output
-    assert "mdtero parse --file paper.pdf --wait --timeout 300 --json" in output
+    assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in output
     assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in output
     assert "mdtero config zotero" in output
     assert "mdtero zotero import --limit 20" in output
@@ -703,6 +1099,43 @@ def test_config_keeps_environment_api_key_as_runtime_override(monkeypatch, tmp_p
     assert cfg.effective_api_key == "mdt_live_env"
     assert cfg.api_key_source == "MDTERO_API_KEY"
     assert cfg.is_authenticated is True
+
+
+def test_config_reads_headless_academic_keys_from_environment(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_ELSEVIER_API_KEY", "elsevier-env")
+    monkeypatch.setenv("MDTERO_WILEY_TDM_TOKEN", "wiley-env")
+    monkeypatch.setenv("MDTERO_SEMANTIC_SCHOLAR_API_KEY", "s2-env")
+
+    cfg = load_config()
+
+    assert cfg.academic.elsevier_api_key == "elsevier-env"
+    assert cfg.academic.wiley_tdm_token == "wiley-env"
+    assert cfg.academic.semantic_scholar_api_key == "s2-env"
+    assert cfg.has_semantic_scholar_key is True
+
+
+def test_saved_academic_keys_take_precedence_over_environment(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_ELSEVIER_API_KEY", "elsevier-env")
+    monkeypatch.setenv("MDTERO_WILEY_TDM_TOKEN", "wiley-env")
+    monkeypatch.setenv("MDTERO_SEMANTIC_SCHOLAR_API_KEY", "s2-env")
+    path = tmp_path / "config.json"
+    save_config(
+        MdteroConfig(
+            academic=AcademicKeys(
+                elsevier_api_key="elsevier-saved",
+                wiley_tdm_token="wiley-saved",
+                semantic_scholar_api_key="s2-saved",
+            )
+        ),
+        path,
+    )
+
+    cfg = load_config(path)
+
+    assert cfg.academic.elsevier_api_key == "elsevier-saved"
+    assert cfg.academic.wiley_tdm_token == "wiley-saved"
+    assert cfg.academic.semantic_scholar_api_key == "s2-saved"
 
 
 def test_client_keeps_task_submission_on_v1_when_route_is_not_deployed(monkeypatch):
@@ -1001,7 +1434,7 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
 
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
     route = {
-        "route_kind": "html_helper_first",
+        "route_kind": "browser_capture_first",
         "acquisition_mode": "native_source_adapter",
         "requires_raw_upload": False,
         "action_sequence": ["fetch_remote_html"],
@@ -1562,6 +1995,58 @@ def test_status_json_promotes_translation_provider_attempts(monkeypatch, tmp_pat
     assert paper.translation_attempts == attempts
 
 
+def test_status_json_promotes_skipped_translation_provider_configuration_attempts(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="translation-not-configured-demo")
+    add_paper(tmp_path, PaperRecord(input="translate-input", task_id="task-translate", status="running"))
+
+    attempts = [
+        {
+            "provider": "mimo",
+            "status": "skipped",
+            "reason_code": "translation_provider_not_configured",
+            "message": "missing MIMO_API_KEY",
+        },
+        {
+            "provider": "codex",
+            "status": "skipped",
+            "reason_code": "translation_provider_not_configured",
+            "message": "missing CODEX_API_KEY or OPENAI_API_KEY",
+        },
+    ]
+
+    def fake_task(self, task_id):
+        assert task_id == "task-translate"
+        return {
+            "task_id": "task-translate",
+            "task_kind": "translate",
+            "status": "failed",
+            "stage": "failed",
+            "error_code": "translation_provider_not_configured",
+            "reason_code": "translation_provider_not_configured",
+            "action_hint": "No server translation provider is configured.",
+            "result": {
+                "reason_code": "translation_provider_not_configured",
+                "translation_attempts": attempts,
+                "provider_plan": attempts,
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-translate", "wait": False, "json": True, "trace": False})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["reason_code"] == "translation_provider_not_configured"
+    assert payload["translation_attempts"] == attempts
+    assert payload["action_hint"] == "No server translation provider is configured."
+    paper = load_project(tmp_path).papers[0]
+    assert paper.reason_code == "translation_provider_not_configured"
+    assert paper.translation_attempts == attempts
+
+
 def test_project_load_tolerates_legacy_and_future_paper_fields(tmp_path: Path):
     project_dir = tmp_path / ".mdtero"
     project_dir.mkdir()
@@ -1614,6 +2099,50 @@ def test_status_text_prints_translation_provider_attempt_table(monkeypatch, tmp_
     assert "translation_provider_auth_failed" in output
     assert "local_legacy" in output
     assert "translation_provider_rate_limited" in output
+
+
+def test_status_text_prints_skipped_translation_provider_attempt_messages(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="translation-status-text-demo")
+
+    def fake_task(self, task_id):
+        return {
+            "task_id": task_id,
+            "task_kind": "translate",
+            "status": "failed",
+            "reason_code": "translation_provider_not_configured",
+            "result": {
+                "translation_attempts": [
+                    {
+                        "provider": "mimo",
+                        "status": "skipped",
+                        "reason_code": "translation_provider_not_configured",
+                        "message": "missing MIMO_API_KEY",
+                    },
+                    {
+                        "provider": "codex",
+                        "status": "skipped",
+                        "reason_code": "translation_provider_not_configured",
+                        "message": "missing CODEX_API_KEY or OPENAI_API_KEY",
+                    },
+                ]
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-translate", "wait": False, "json": False, "trace": False})()) == 0
+    output = capsys.readouterr().out
+
+    assert "mimo" in output
+    assert "codex" in output
+    assert "skipped" in output
+    assert "translation_provider_not_configured" in output
+    assert "missing MIMO_API_KEY" in output
+    assert "missing CODEX_API_KEY or" in output
+    assert "OPENAI_API_KEY" in output
 
 
 def test_status_wait_timeout_returns_structured_payload_without_updating_project(monkeypatch, tmp_path: Path, capsys):
@@ -2206,11 +2735,20 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     rag = build_rag_context(tmp_path)
     paper = build_paper_context("task-done", tmp_path)
 
+    assert status["status"] == "pending"
+    assert status["reason_code"] == "project_has_pending_items"
     assert status["server_project_id"] == "42"
     assert status["ready_for_ingest_count"] == 1
     assert status["pending_count"] == 1
+    assert "Submit pending papers" in status["action_hint"]
+    assert status["next_commands"] == [
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+    ]
+    assert status["next_actions"]["commands"]["mcp_briefing"] == "mdtero mcp briefing --json"
     assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
-    assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --wait --timeout 300 --json"
+    assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
     assert commands["commands"]["parse_batch"] == "mdtero parse --batch <directory> --wait --timeout 300 --json"
     assert commands["commands"]["doctor"] == "mdtero doctor --json"
     assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
@@ -2234,6 +2772,22 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert rag["ready"] is True
     assert rag["reason_code"] == "ready"
     assert "mdtero project ingest --json" in paper["recommended_commands"]
+
+
+def test_mcp_project_status_guides_uninitialized_agent_workflows(tmp_path: Path):
+    status = build_project_status(tmp_path)
+
+    assert status["status"] == "not_initialized"
+    assert status["reason_code"] == "project_not_initialized"
+    assert status["server_project_id"] is None
+    assert status["next_commands"] == [
+        "mdtero project init --name <name>",
+        "mdtero discover \"<topic>\" --interactive",
+        "mdtero project add <doi-or-url> --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+    ]
+    assert status["next_actions"]["commands"]["project_init_named"] == "mdtero project init --name <name>"
+    assert "project, RAG, or MCP workflows" in status["action_hint"]
 
 
 def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_path: Path):
@@ -2306,6 +2860,61 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     ]
     assert "agent_briefing" in briefing["mcp_tools"]
     assert "rag_query" in briefing["mcp_tools"]
+
+
+def test_mcp_agent_briefing_redacts_signed_urls_and_tokens(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    init_project(tmp_path, name="agent-demo")
+    add_paper(
+        tmp_path,
+        PaperRecord(
+            input="10.1000/leak",
+            task_id="task-leak",
+            status="failed",
+            reason_code="uploaded_pdf_v2_parse_failed",
+            action_hint="Retry without https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token and Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
+            translation_attempts=[{"provider": "codex", "message": "api_key=mdtero_secret_abc token=secret"}],
+        ),
+    )
+
+    briefing = build_agent_briefing(tmp_path)
+    text = json.dumps(briefing)
+
+    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "mdt_live_secret_token" not in text
+    assert "mdtero_secret_abc" not in text
+    assert "Signature=secret" not in text
+    assert "[redacted-url]" in text
+    assert "[redacted-key]" in text
+
+
+def test_mcp_server_rag_status_redacts_backend_signed_urls_and_tokens(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_fetcher(_project_id):
+        return {
+            "status": "failed",
+            "reason_code": "server_rag_status_failed",
+            "action_hint": "Inspect https://mineru.oss-cn-shanghai.aliyuncs.com/status.json?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
+            "summary": {
+                "chunk_count": 1,
+                "embedded_count": 0,
+                "pending_embedding_count": 1,
+                "last_error": "api_key=mdtero_secret_abc token=secret",
+            },
+        }
+
+    status = build_server_rag_status(tmp_path, fetcher=fake_fetcher)
+    text = json.dumps(status)
+
+    assert status["server_project_id"] == "42"
+    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "mdt_live_secret_token" not in text
+    assert "mdtero_secret_abc" not in text
+    assert "Signature=secret" not in text
+    assert "[redacted-url]" in text
+    assert "[redacted-key]" in text
 
 
 def test_mcp_briefing_command_prints_agent_context_without_starting_server(monkeypatch, tmp_path: Path, capsys):
@@ -2451,6 +3060,20 @@ def test_mcp_rag_query_guides_unlinked_projects(tmp_path: Path):
     assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
 
 
+def test_mcp_rag_query_requires_non_empty_question(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    payload = query_server_rag("   ", tmp_path, build_if_needed=True)
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "rag_question_required"
+    assert payload["project"] == "agent-demo"
+    assert payload["server_project_id"] == "42"
+    assert payload["answer"] is None
+    assert payload["next_commands"] == ["mdtero rag query \"<question>\" --build-if-needed --json"]
+
+
 def test_mcp_rag_query_build_if_needed_bootstraps_unlinked_project(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
@@ -2502,7 +3125,34 @@ def test_mcp_rag_query_build_if_needed_guides_projects_without_succeeded_tasks(t
     assert payload["answer"] is None
     assert payload["local_ready_for_ingest_count"] == 0
     assert payload["next_commands"] == [
-        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
+    assert "arXiv smoke DOI" in payload["action_hint"]
+
+
+def test_mcp_rag_query_build_if_needed_guides_bound_projects_without_succeeded_tasks(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+
+    def should_not_query(_project_id, _question):  # pragma: no cover - failure guard
+        raise AssertionError("RAG query should not run before a project has succeeded parse tasks")
+
+    payload = query_server_rag("What is indexed?", tmp_path, query_fn=should_not_query, build_if_needed=True)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "no_succeeded_tasks"
+    assert payload["server_project_id"] == "42"
+    assert payload["answer"] is None
+    assert payload["local_ready_for_ingest_count"] == 0
+    assert payload["next_commands"] == [
+        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
     ]
@@ -2548,8 +3198,79 @@ def test_mcp_rag_query_preserves_backend_action_hint_and_next_commands(tmp_path:
 
     assert payload["status"] == "failed"
     assert payload["reason_code"] == "voyage_not_configured"
-    assert payload["action_hint"] == "Configure VOYAGE_API_KEY on the backend before querying."
+    assert "Server-side Voyage RAG is not available" in payload["action_hint"]
+    assert "backend operations issue" in payload["action_hint"]
+    assert "VOYAGE_API_KEY" not in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json"]
+
+
+def test_rag_query_failure_json_redacts_signed_urls_and_tokens(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(self, project_id, question):
+        request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
+        response = httpx.Response(
+            503,
+            request=request,
+            json={
+                "detail": {
+                    "error_code": "server_rag_failed",
+                    "reason_code": "server_rag_query_failed",
+                    "action_hint": "Failed at https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
+                    "next_commands": ["mdtero rag status --json # api_key=mdtero_secret_abc"],
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "demo", "json": True})()) == 1
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+
+    assert payload["reason_code"] == "server_rag_query_failed"
+    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in output
+    assert "mdt_live_secret_token" not in output
+    assert "mdtero_secret_abc" not in output
+    assert "Signature=secret" not in output
+    assert "[redacted-url]" in output
+    assert "[redacted-key]" in output
+
+
+def test_mcp_rag_query_redacts_backend_signed_urls_and_tokens(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+
+    def fake_query(_project_id, _question):
+        request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
+        response = httpx.Response(
+            503,
+            request=request,
+            json={
+                "detail": {
+                    "reason_code": "server_rag_query_failed",
+                    "action_hint": "Fetch failed for https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with ApiKey mdt_live_secret_token; standalone mdtero_secret_abc.",
+                    "next_commands": ["mdtero rag status --json # token=mdtero_secret_abc"],
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
+
+    payload = query_server_rag("Ready?", tmp_path, query_fn=fake_query)
+    text = json.dumps(payload)
+
+    assert payload["status"] == "failed"
+    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "mdt_live_secret_token" not in text
+    assert "mdtero_secret_abc" not in text
+    assert "Signature=secret" not in text
+    assert "[redacted-url]" in text
+    assert "[redacted-key]" in text
 
 
 def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
@@ -2571,6 +3292,52 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
     assert "mdtero rag build --json" in briefing["recommended_next_commands"]
+
+
+def test_mcp_agent_briefing_guides_uninitialized_directories(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.delenv("MDTERO_API_KEY", raising=False)
+
+    briefing = build_agent_briefing(tmp_path)
+
+    assert briefing["project"]["initialized"] is False
+    assert briefing["project"]["name"] == tmp_path.name
+    assert briefing["project"]["paper_count"] == 0
+    assert briefing["health"]["rag_reason_code"] == "project_not_initialized"
+    assert briefing["rag"]["reason_code"] == "project_not_initialized"
+    assert briefing["recommended_next_commands"][:6] == [
+        "mdtero setup --api-key <key>",
+        "mdtero doctor --json",
+        "mdtero project init --name <name>",
+        "mdtero discover \"<topic>\" --interactive",
+        "mdtero project add <doi-or-url> --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+    ]
+
+
+def test_mcp_project_status_guides_uninitialized_directories(tmp_path: Path):
+    status = build_project_status(tmp_path)
+    commands = build_agent_commands(tmp_path)
+    rag = build_rag_context(tmp_path)
+    query = query_server_rag("What is indexed?", tmp_path, build_if_needed=True)
+
+    assert status["status"] == "not_initialized"
+    assert status["reason_code"] == "project_not_initialized"
+    assert status["papers"] == []
+    assert status["next_actions"]["commands"]["project_init_named"] == "mdtero project init --name <name>"
+    assert commands["workflow"] == [
+        "mdtero doctor --json",
+        "mdtero project init --name <name>",
+        "mdtero discover \"<topic>\" --interactive",
+        "mdtero project add <doi-or-url> --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+    ]
+    assert rag["reason_code"] == "project_not_initialized"
+    assert rag["next_commands"][0] == "mdtero project init --name <name>"
+    assert query["status"] == "not_ready"
+    assert query["reason_code"] == "project_not_initialized"
+    assert query["answer"] is None
+    assert query["next_commands"][0] == "mdtero project init --name <name>"
 
 
 def test_mcp_rag_context_prompts_rag_build_when_unlinked(tmp_path: Path):
@@ -2665,6 +3432,11 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["rag"]["reason_code"] == "server_project_not_linked"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert "agent_briefing" in model["mcp"]["tools"]
+    assert model["extension_handoff"]["commands"][0] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
+    assert model["extension_handoff"]["commands"][1] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
+    assert "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources" in model["extension_handoff"]["cli_scope"]
+    assert "publisher challenge or JavaScript verification page" in model["extension_handoff"]["handoff_triggers"]
+    assert model["extension_handoff"]["visible_fields"] == ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"]
     assert model["agents"]["detect_command"] == "mdtero agent detect --json"
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
@@ -2672,6 +3444,15 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["next_steps"][:2] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
     assert model["operator_summary"][0] == {"area": "Account", "state": "missing", "detail": "run mdtero setup"}
     assert [item["key"] for item in model["shortcuts"]] == ["r", "d", "p", "g", "m", "q"]
+    assert model["command_palette"][0] == {
+        "area": "Setup",
+        "use": "Authenticate this machine",
+        "command": "mdtero setup --api-key <key>",
+        "is_next": True,
+    }
+    assert any(item["command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" for item in model["command_palette"])
+    assert any(item["area"] == "Extension" and item["use"] == "Handoff challenged page or saved file to CLI" for item in model["command_palette"])
+    assert any(item["area"] == "Extension" and item["use"] == "Upload a browser-saved PDF/EPUB/XML/HTML" for item in model["command_palette"])
 
 
 def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: Path):
@@ -2713,6 +3494,14 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["mcp"]["serve_command"] == "mdtero mcp serve"
     assert model["mcp"]["briefing_command"] == "mdtero mcp briefing --json"
     assert "mdtero rag build --json" in model["mcp"]["recommended_next_commands"]
+    palette_commands = [item["command"] for item in model["command_palette"]]
+    assert "mdtero project ingest --json" in palette_commands
+    assert "mdtero rag query \"<question>\" --build-if-needed --json" in palette_commands
+    assert "mdtero mcp briefing --json" in palette_commands
+    assert "mdtero mcp serve" in palette_commands
+    assert "mdtero zotero sync --json" in palette_commands
+    assert "mdtero agent install --interactive" in palette_commands
+    assert any(item["command"] == "mdtero rag build --json" and item["is_next"] for item in model["command_palette"])
     assert model["handoff"]["ready_artifacts"][0]["download_command"] == "mdtero download task-done paper_md --output-dir ./mdtero-output --json"
     assert model["handoff"]["recommended_next_commands"][0] == "mdtero project download --output-dir ./mdtero-output --json"
     assert model["zotero"]["configured"] is True
@@ -2731,7 +3520,12 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Agent Handoff" in output
     assert "Agent skills" in output
     assert "Operator Summary" in output
+    assert "Extension to CLI" in output
+    assert "client_acquisition" in output
+    assert "publisher challenge" in output
     assert "Shortcuts" in output
+    assert "Command Palette" in output
+    assert "Create/bind/import/build Voyage index" in output
     assert "r" in output
     assert "refresh" in output
     assert rendered is not None
@@ -2870,6 +3664,62 @@ def test_rag_project_id_helper_points_unlinked_projects_to_bootstrap_build(monke
     assert "create, bind, import, and build" in message
 
 
+def test_rag_build_guides_empty_projects_before_creating_server_project(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+
+    def should_not_create_project(self, name, *, description=None):  # pragma: no cover - failure guard
+        raise AssertionError("server project should not be created before a project has succeeded parse tasks")
+
+    monkeypatch.setattr(MdteroClient, "create_project", should_not_create_project)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "not_ready"
+    assert payload["command"] == "rag_build"
+    assert payload["reason_code"] == "no_succeeded_tasks"
+    assert payload["server_project_id"] is None
+    assert payload["local_ready_for_ingest_count"] == 0
+    assert "Parse at least one paper successfully" in payload["action_hint"]
+    assert "arXiv smoke DOI" in payload["action_hint"]
+    assert payload["next_commands"] == [
+        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
+
+
+def test_rag_query_build_if_needed_guides_empty_projects_before_creating_server_project(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+
+    def should_not_create_project(self, name, *, description=None):  # pragma: no cover - failure guard
+        raise AssertionError("server project should not be created before a project has succeeded parse tasks")
+
+    monkeypatch.setattr(MdteroClient, "create_project", should_not_create_project)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "What is indexed?", "build_if_needed": True, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "not_ready"
+    assert payload["command"] == "rag_query"
+    assert payload["reason_code"] == "no_succeeded_tasks"
+    assert payload["question"] == "What is indexed?"
+    assert payload["answer"] is None
+    assert payload["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
+    assert payload["next_commands"][1] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
+    assert payload["next_commands"][2] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
+
+
 def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -2989,6 +3839,7 @@ def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp
 
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
 
     def fake_build(self, project_id):
         assert project_id == "42"
@@ -3006,6 +3857,12 @@ def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp
         )
         raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
 
+    def fake_import(self, project_id, task_id):
+        assert project_id == "42"
+        assert task_id == "task-done"
+        return {"document_id": "doc-1", "import_status": "imported"}
+
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
     monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
     monkeypatch.chdir(tmp_path)
 
@@ -3019,7 +3876,9 @@ def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp
     assert payload["server_project_id"] == "42"
     assert payload["http_status"] == 503
     assert payload["error_type"] == "HTTPStatusError"
-    assert "VOYAGE_API_KEY" in payload["action_hint"]
+    assert "Server-side Voyage RAG is not available" in payload["action_hint"]
+    assert "backend operations issue" in payload["action_hint"]
+    assert "VOYAGE_API_KEY" not in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json"]
 
 
@@ -3085,7 +3944,9 @@ def test_rag_query_failure_preserves_backend_next_commands(monkeypatch, tmp_path
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["reason_code"] == "voyage_not_configured"
-    assert payload["action_hint"] == "Server RAG is not configured in production."
+    assert "Server-side Voyage RAG is not available" in payload["action_hint"]
+    assert "backend operations issue" in payload["action_hint"]
+    assert "VOYAGE_API_KEY" not in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json"]
 
 
@@ -3282,6 +4143,7 @@ def test_rag_build_bootstrap_failure_preserves_backend_next_commands(monkeypatch
     from mdtero import cli
 
     init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
 
     def fake_create(self, name, *, description=None):
         request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects")
@@ -3578,7 +4440,7 @@ def test_workflow_trace_marks_completed_client_acquisition():
     trace = parse_trace_from_route(
         "10.1000/demo",
         {
-            "route_kind": "html_helper_first",
+            "route_kind": "browser_capture_first",
             "acquisition_mode": "native_source_adapter",
             "requires_raw_upload": False,
             "action_sequence": ["fetch_remote_html"],
@@ -3711,6 +4573,171 @@ def test_public_docs_do_not_advertise_npm_installer_runtime():
         assert "mdtero-install" not in content
         assert "npx mdtero" not in content
         assert "npm install -g" not in content
+        assert "npm is legacy" not in content
+        assert "legacy compatibility only" not in content
+
+
+def test_public_repo_has_no_root_npm_or_per_agent_install_runtime():
+    repo_root = Path(__file__).resolve().parents[1]
+
+    assert not (repo_root / "package.json").exists()
+    assert not (repo_root / "package-lock.json").exists()
+    assert not (repo_root / "npm-shrinkwrap.json").exists()
+
+    retired_install_docs = sorted((repo_root / "skills").glob("*/INSTALL.md"))
+    assert retired_install_docs == []
+
+    install_script = (repo_root / "install.sh").read_text(encoding="utf-8")
+    assert "uv tool install git+https://github.com/JonbinC/doi2md.git" in install_script
+    assert "mdtero agent install --target" in install_script
+    assert "npm" not in install_script.lower()
+    assert "npx" not in install_script.lower()
+
+
+def test_public_script_surface_is_ci_only():
+    repo_root = Path(__file__).resolve().parents[1]
+    expected = {
+        "scripts/ci/extension_dist_smoke.py",
+        "scripts/ci/release_gate.sh",
+        "scripts/ci/secret_guard.py",
+    }
+    actual = {
+        path.relative_to(repo_root).as_posix()
+        for path in (repo_root / "scripts").rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+    assert actual == expected
+
+    forbidden_names = {
+        "mdtero-install",
+        "install-mdtero-agent",
+        "native-host",
+        "browser-bridge",
+        "helper-bundle",
+    }
+    install_surface = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [repo_root / "install.sh", repo_root / "install" / "README.md", repo_root / "install" / "manifest.json"]
+    ).lower()
+    for forbidden in forbidden_names:
+        assert forbidden not in install_surface
+
+
+def test_public_github_ci_matches_release_gate_for_extension_quality():
+    repo_root = Path(__file__).resolve().parents[1]
+    workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "node-version: 22" in workflow
+    assert "npm ci" in workflow
+    assert "npm audit --audit-level=moderate" in workflow
+    assert "npm test -- --run" in workflow
+    assert "npm run build" in workflow
+    assert "python3 scripts/ci/extension_dist_smoke.py" in workflow
+
+
+def test_public_generated_dependency_and_package_artifacts_are_not_source():
+    repo_root = Path(__file__).resolve().parents[1]
+
+    ignored = (repo_root / ".gitignore").read_text(encoding="utf-8")
+    for marker in ["dist/", "extension/node_modules/", "extension/.vite/", "extension/.vitest/"]:
+        assert marker in ignored
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "dist", "node_modules", "extension/node_modules", "extension/.vite", "extension/.vitest"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert tracked == []
+
+    # The checked-in MV3 bundle is intentionally kept as the browser-extension release artifact.
+    assert (repo_root / "extension" / "dist" / "manifest.json").exists()
+
+
+def test_extension_dist_smoke_script_covers_shipping_mv3_bundle(tmp_path: Path):
+    repo_root = Path(__file__).resolve().parents[1]
+    run_smoke = load_python_script(repo_root / "scripts" / "ci" / "extension_dist_smoke.py").run_smoke
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    for relative in [
+        "background.js",
+        "content.js",
+        "popup.html",
+        "popup.js",
+        "options.html",
+        "options.js",
+        "styles.css",
+        "assets/icon-16.png",
+        "assets/icon-32.png",
+        "assets/icon-48.png",
+        "assets/icon-128.png",
+    ]:
+        path = dist / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    (dist / "manifest.json").write_text(json.dumps({
+        "manifest_version": 3,
+        "permissions": ["storage", "downloads", "tabs"],
+        "host_permissions": ["https://api.mdtero.com/*"],
+        "background": {"service_worker": "background.js"},
+        "action": {"default_popup": "popup.html"},
+        "options_page": "options.html",
+        "content_scripts": [{"matches": ["https://mdtero.com/*"], "js": ["content.js"]}],
+    }), encoding="utf-8")
+    (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff", encoding="utf-8")
+    (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
+    (dist / "options.html").write_text("Website sign-in Connection guide Website OAuth is connected", encoding="utf-8")
+    (dist / "options.js").write_text("browser capture, upload, translation, and download settings", encoding="utf-8")
+
+    payload = run_smoke(dist)
+
+    assert payload["status"] == "succeeded"
+    assert payload["reason_code"] == "extension_dist_smoke_succeeded"
+
+
+def test_extension_dist_smoke_rejects_retired_helper_and_native_runtime(tmp_path: Path):
+    repo_root = Path(__file__).resolve().parents[1]
+    run_smoke = load_python_script(repo_root / "scripts" / "ci" / "extension_dist_smoke.py").run_smoke
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "manifest.json").write_text(json.dumps({
+        "manifest_version": 3,
+        "permissions": ["storage", "downloads", "tabs", "nativeMessaging"],
+        "background": {"service_worker": "background.js"},
+        "action": {"default_popup": "popup.html"},
+        "options_page": "options.html",
+        "content_scripts": [],
+    }), encoding="utf-8")
+    (dist / "background.js").write_text("connectNative fetch_helper_source", encoding="utf-8")
+
+    payload = run_smoke(dist)
+
+    assert payload["status"] == "failed"
+    reason_codes = {failure["reason_code"] for failure in payload["failures"]}
+    assert "extension_native_messaging_present" in reason_codes
+    assert "extension_forbidden_marker_present" in reason_codes
+    assert "extension_dist_file_missing" in reason_codes
+
+
+def test_extension_contract_prefers_browser_source_over_retired_helper_action():
+    repo_root = Path(__file__).resolve().parents[1]
+    shared_contract = (repo_root / "shared" / "src" / "api-contract.ts").read_text(encoding="utf-8")
+    ssot_tests = (repo_root / "extension" / "tests" / "ssot-route.test.ts").read_text(encoding="utf-8")
+    background_tests = (repo_root / "extension" / "tests" / "background.test.ts").read_text(encoding="utf-8")
+
+    assert '"fetch_browser_source"' in shared_contract
+    assert '"fetch_helper_source"' not in shared_contract
+    assert "requiresBrowserCapture?: boolean" in shared_contract
+    assert "requiresHelper?: boolean" not in shared_contract
+    assert 'action_sequence: ["fetch_browser_source"]' in ssot_tests
+    assert 'action_sequence: ["fetch_browser_source"]' in background_tests
+    assert 'fetch_helper_source' not in ssot_tests
+    assert "html_helper_first" not in ssot_tests
+    assert "requiresHelper" not in ssot_tests
 
 
 def test_public_docs_describe_rag_answer_citation_contract():
@@ -3726,6 +4753,99 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "matches" in combined
     assert "source_nodes" in combined
     assert "evidence_pack.context_markdown" in combined
+    assert "next_commands" in combined
+
+
+def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
+    repo_root = Path(__file__).resolve().parents[1]
+    report = (repo_root / "docs" / "public" / "PRODUCTION_SMOKE_2026-05-24.md").read_text(encoding="utf-8")
+
+    assert "Latest ArXiv + Voyage RAG Re-Smoke" in report
+    assert "route_kind=source_first" in report
+    assert "provider_id=arxiv" in report
+    assert "server project `13`" in report
+    assert "embedding_model=voyage-4" in report
+    assert "chunk_count=39" in report
+    assert "embedded_count=39" in report
+    assert "reason_code=rag_query_succeeded" in report
+    assert "citation_count=5" in report
+    assert "match_count=5" in report
+    assert "196 passed" in report
+    assert "143 passed" in report
+    assert "241 passed" in report
+    assert "99 passed" in report
+    assert "npm run smoke:routes -- --base-url <production-url> --json" in report
+
+
+def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
+    repo_root = Path(__file__).resolve().parents[1]
+    readiness = (repo_root / "docs" / "public" / "RELEASE_READINESS_2026-05-24.md").read_text(encoding="utf-8")
+
+    assert "## Proven Ready" in readiness
+    assert "## Requires Post-Deploy Smoke" in readiness
+    assert "Public Python/uv CLI as the main runtime" in readiness
+    assert "PDF upload through MinerU URL API" in readiness
+    assert "Server-side Voyage RAG" in readiness
+    assert "Browser extension scoped to v1 product" in readiness
+    assert "extension dist smoke passed" in readiness
+    assert "Translation provider health" in readiness
+    assert "Browser extension interactive flow" in readiness
+    assert "npm run smoke:routes -- --base-url <production-url> --json" in readiness
+    assert "npm runtime CLI" in readiness
+    assert "Native browser bridge" in readiness
+    assert "Public GROBID engine selection" in readiness
+
+
+def test_public_docs_describe_agent_safe_redaction_boundary():
+    repo_root = Path(__file__).resolve().parents[1]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [
+            repo_root / "README.md",
+            repo_root / "install" / "README.md",
+            repo_root / "docs" / "public" / "README.md",
+            repo_root / "skills" / "mdtero" / "SKILL.md",
+            repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
+        ]
+    )
+
+    assert "agent-facing CLI JSON and MCP payloads sanitize signed MinerU/OSS URLs" in combined
+    assert "bearer/API-key headers" in combined
+    assert "Mdtero API keys" in combined
+    assert "common token query parameters" in combined
+    assert "reason_code" in combined
+    assert "action_hint" in combined
+    assert "next_commands" in combined
+    assert "do not ask users to paste long-lived secrets into prompts" in combined
+    assert "面向 agent 的 CLI JSON 和 MCP payload" in combined
+    assert "signed MinerU/OSS URL" in combined
+    assert "常见 token query 参数" in combined
+
+
+def test_public_docs_and_skill_describe_extension_cli_handoff_contract():
+    repo_root = Path(__file__).resolve().parents[1]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [
+            repo_root / "README.md",
+            repo_root / "install" / "README.md",
+            repo_root / "docs" / "public" / "README.md",
+            repo_root / "skills" / "mdtero" / "SKILL.md",
+            repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
+        ]
+    )
+
+    assert "Extension-to-CLI handoff" in combined
+    assert "扩展到 CLI 的交接" in combined
+    assert "publisher challenge" in combined
+    assert "campus-network/session-bound access" in combined
+    assert "校园网/登录态" in combined
+    assert "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json" in combined
+    assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in combined
+    assert "client_acquisition" in combined
+    assert "raw upload" in combined
+    assert "reason_code" in combined
+    assert "action_hint" in combined
     assert "next_commands" in combined
 
 
@@ -3764,7 +4884,7 @@ def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():
 
     for path in docs:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse --file paper.pdf --wait --timeout 300 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --wait --timeout 300 --json" in content or "mdtero parse --file <path> --wait --timeout 300 --json" in content
+        assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 300 --json" in content or "mdtero parse --file <path> --trace --wait --timeout 300 --json" in content
     for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
         content = path.read_text(encoding="utf-8")
         assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in content
@@ -3807,28 +4927,20 @@ def test_packaged_skill_template_is_available_to_python_installer():
     assert "mdtero doctor --json" in skill
 
 
-def test_legacy_agent_install_docs_use_json_friendly_cli_examples():
+def test_retired_per_agent_install_docs_are_removed():
     repo_root = Path(__file__).resolve().parents[1]
-    docs = [
+    retired_docs = [
         repo_root / "skills" / "codex" / "INSTALL.md",
         repo_root / "skills" / "claude_code" / "INSTALL.md",
         repo_root / "skills" / "gemini_cli" / "INSTALL.md",
         repo_root / "skills" / "hermes" / "INSTALL.md",
     ]
-    for path in docs:
-        content = path.read_text(encoding="utf-8")
-        assert "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json" in content
-        assert "mdtero status <task-id> --wait --timeout 300 --json" in content
-        assert "mdtero parse --file <path> --wait --timeout 300 --json" in content
-        assert "mdtero translate <parse-task-id> --to zh-CN --json" in content
-        assert "mdtero rag build --json" in content
-        assert "mdtero rag status --json" in content
-        assert "mdtero rag query \"<question>\" --build-if-needed --json" in content
-        assert "mdtero mcp briefing --json" in content
-        assert "mdtero mcp serve" in content
-        assert "mdtero parse <doi-or-url>\n" not in content
-        assert "mdtero parse --file <path> --json" not in content
-        assert "mdtero translate <parse-task-id> zh" not in content
+    for path in retired_docs:
+        assert not path.exists(), str(path)
+
+    skills_readme = (repo_root / "skills" / "README.md").read_text(encoding="utf-8")
+    assert "Per-agent `INSTALL.md` copies are retired" in skills_readme
+    assert "mdtero agent install --target <target>" in skills_readme
 
 
 def test_source_and_packaged_agent_skill_templates_stay_in_sync():

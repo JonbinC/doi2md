@@ -1,31 +1,53 @@
 import type { TaskResult } from "@mdtero/shared";
 import type { PopupState, UiLanguage } from "../lib/storage";
+import {
+  buildCliFileParseCommand,
+  buildCliParseCommand,
+  normalizeCliHandoffCommand
+} from "../lib/cli-handoff";
 import { requiresElsevierLocalAcquire } from "../lib/elsevier";
+import { redactSensitiveText } from "../lib/redact";
 import { isSupportedPaperPage } from "../lib/supported-page";
 
 const SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"] as const;
 const SOURCE_ORDER = ["paper_pdf", "paper_xml"] as const;
 
+function getArtifactKeys(result?: TaskResult | null): string[] {
+  const keyed = Object.keys(result?.artifacts ?? {});
+  const listed = (result?.download_artifacts ?? [])
+    .map((artifact) => String(artifact.artifact || "").trim())
+    .filter((artifact) => artifact.length > 0);
+  return Array.from(new Set([...keyed, ...listed]));
+}
+
+export function getArtifactFilename(result: TaskResult | null | undefined, artifactKey: string): string | undefined {
+  return (
+    result?.artifacts?.[artifactKey]?.filename ||
+    result?.download_artifacts?.find((artifact) => artifact.artifact === artifactKey)?.filename
+  );
+}
+
 export function getPreferredArtifactKey(result?: TaskResult | null): string | undefined {
-  if (!result?.artifacts) {
+  const artifactKeys = getArtifactKeys(result);
+  if (artifactKeys.length === 0) {
     return undefined;
   }
-  if (result.preferred_artifact && result.artifacts[result.preferred_artifact]) {
+  if (result?.preferred_artifact && artifactKeys.includes(result.preferred_artifact)) {
     return result.preferred_artifact;
   }
-  return Object.keys(result.artifacts)[0];
+  return artifactKeys[0];
 }
 
 export function getSecondaryArtifactKeys(result?: TaskResult | null): string[] {
   const preferred = getPreferredArtifactKey(result);
-  const artifactKeys = Object.keys(result?.artifacts ?? {});
+  const artifactKeys = getArtifactKeys(result);
   return SECONDARY_ORDER.filter(
     (key) => artifactKeys.includes(key) && key !== preferred
   );
 }
 
 export function getSourceArtifactKeys(result?: TaskResult | null): string[] {
-  const artifactKeys = Object.keys(result?.artifacts ?? {});
+  const artifactKeys = getArtifactKeys(result);
   return SOURCE_ORDER.filter((key) => artifactKeys.includes(key));
 }
 
@@ -124,7 +146,7 @@ export function getUsageStatusText(
   errorMessage?: string | null
 ): string {
   if (errorMessage?.trim()) {
-    return errorMessage.trim();
+    return redactSensitiveText(errorMessage.trim());
   }
   const wallet = usage?.wallet_balance_display?.trim() || (language === "zh" ? "¥0.00" : "$0.00");
   const parse = Number.isFinite(usage?.parse_quota_remaining) ? Number(usage?.parse_quota_remaining) : 0;
@@ -285,7 +307,7 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
       ? "Elsevier 仅返回了摘要。请确认你当前是否处于校园网或机构 IP 环境。"
       : "Elsevier only returned the abstract. Check whether this machine is on a campus or institutional network IP.";
   }
-  return result.warning_message ?? "";
+  return redactSensitiveText(result.warning_message ?? "");
 }
 
 export function getTaskFailureText(
@@ -298,9 +320,9 @@ export function getTaskFailureText(
   fallback: string,
   language: UiLanguage = "en"
 ): string {
-  const message = task?.error_message?.trim() || fallback;
+  const message = redactSensitiveText(task?.error_message?.trim() || fallback);
   const reason = (task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
-  const actionHint = (task?.action_hint || task?.result?.action_hint || "").trim();
+  const actionHint = redactSensitiveText((task?.action_hint || task?.result?.action_hint || "").trim());
   const parts = [message];
   if (reason) {
     parts.push(language === "zh" ? `原因：${reason}` : `Reason: ${reason}`);
@@ -319,6 +341,20 @@ export function getTaskFailureText(
   return parts.join(" ");
 }
 
+export function getDownloadFailureText(
+  error: unknown,
+  fallback: string,
+  language: UiLanguage = "en"
+): string {
+  const message = redactSensitiveText(
+    error instanceof Error ? error.message : String(error || "")
+  ).trim();
+  if (!message) {
+    return fallback;
+  }
+  return language === "zh" ? `${fallback} 详情：${message}` : `${fallback} Detail: ${message}`;
+}
+
 export function getTranslationAttemptSummary(
   attempts: TaskResult["translation_attempts"] | null | undefined,
   language: UiLanguage = "en"
@@ -328,8 +364,10 @@ export function getTranslationAttemptSummary(
       const provider = String(attempt?.provider || "provider").trim();
       const reason = String(attempt?.reason_code || attempt?.provider_error_code || "failed").trim();
       const statusCode = attempt?.provider_status_code;
-      const status = typeof statusCode === "number" ? ` ${statusCode}` : "";
-      return `${provider}: ${reason}${status}`;
+      const status = typeof statusCode === "number" ? String(statusCode) : String(attempt?.status || "").trim();
+      const message = redactSensitiveText(String(attempt?.message || "").trim());
+      const details = [status, message].filter(Boolean).join(" ");
+      return `${provider}: ${reason}${details ? ` ${details}` : ""}`;
     })
     .filter(Boolean);
   if (!items.length) {
@@ -354,32 +392,4 @@ export function firstNextCommand(commands?: string[] | null): string {
   return normalizeCliHandoffCommand(command);
 }
 
-export function normalizeCliHandoffCommand(command?: string | null): string {
-  const trimmed = String(command || "").trim();
-  if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
-    return trimmed;
-  }
-  const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
-  const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
-  const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
-  const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --timeout 300 --json`;
-}
-
-export function buildCliParseCommand(input?: string | null): string {
-  const normalized = String(input || "").trim();
-  if (!normalized) {
-    return "";
-  }
-  if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
-    return "";
-  }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
-}
-
-function shellQuote(value: string): string {
-  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
+export { buildCliFileParseCommand, buildCliParseCommand, normalizeCliHandoffCommand };

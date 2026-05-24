@@ -23,8 +23,8 @@ export interface RouteClientLike {
 
 export interface ParseClientLike {
   createParseTask(payload: { input: string }): Promise<ParseTaskResponse>;
-  createParseFulltextV2Task(payload: {
-    fulltextFile: Blob;
+  createRawUploadTask(payload: {
+    rawFile: Blob;
     filename?: string;
     sourceDoi?: string;
     sourceInput?: string;
@@ -54,7 +54,6 @@ export async function executeSsotActionSequence(
   error?: string;
   nextCommand?: string;
   requiresBrowserCapture?: boolean;
-  requiresHelper?: boolean;
   requiresUpload?: boolean;
 }> {
   if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
@@ -82,8 +81,8 @@ export async function executeSsotActionSequence(
     if (result.success) {
       if (result.rawArtifact) {
         try {
-          const task = await parseClient.createParseFulltextV2Task({
-            fulltextFile: result.rawArtifact,
+          const task = await parseClient.createRawUploadTask({
+            rawFile: result.rawArtifact,
             filename: result.filename || "paper.fulltext",
             sourceDoi: result.sourceDoi,
             sourceInput: context.input,
@@ -104,11 +103,10 @@ export async function executeSsotActionSequence(
       continue;
     }
 
-    if (result.requiresBrowserCapture || result.requiresHelper || result.requiresUpload) {
+    if (result.requiresBrowserCapture || result.requiresUpload) {
       return {
         success: false,
-        requiresBrowserCapture: result.requiresBrowserCapture || result.requiresHelper,
-        requiresHelper: result.requiresHelper,
+        requiresBrowserCapture: result.requiresBrowserCapture,
         requiresUpload: result.requiresUpload,
         error: result.error,
         nextCommand: result.nextCommand,

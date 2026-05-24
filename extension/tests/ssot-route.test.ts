@@ -12,11 +12,11 @@ function buildRoutePlan(overrides: Partial<ExtensionRouteResponse> = {}): Extens
     input_kind: "doi",
     input_value: "10.1000/demo",
     top_connector: "wiley_tdm",
-    route_kind: "html_helper_first",
+    route_kind: "browser_capture_first",
     acquisition_mode: "browser_extension",
-    requires_helper: true,
+    requires_browser_capture: true,
     allows_current_tab: true,
-    action_sequence: ["fetch_helper_source"],
+    action_sequence: ["fetch_browser_source"],
     acceptance_rules: {},
     fail_closed: true,
     matched_connectors: ["wiley_tdm"],
@@ -47,7 +47,7 @@ describe("ssot-route", () => {
     });
   });
 
-  it("submits raw fulltext artifacts returned by action execution", async () => {
+  it("submits raw artifacts returned by action execution", async () => {
     const rawArtifact = new Blob(["demo"], { type: "text/html" });
     executeAction.mockResolvedValue({
       success: true,
@@ -63,7 +63,7 @@ describe("ssot-route", () => {
     };
     const parseClient = {
       createParseTask: vi.fn(),
-      createParseFulltextV2Task: vi.fn().mockResolvedValue(task),
+      createRawUploadTask: vi.fn().mockResolvedValue(task),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -75,7 +75,7 @@ describe("ssot-route", () => {
     });
 
     expect(executeAction).toHaveBeenCalledWith(
-      "fetch_helper_source",
+      "fetch_browser_source",
       expect.objectContaining({
         input: "10.1000/demo",
         tabId: 7,
@@ -84,8 +84,8 @@ describe("ssot-route", () => {
         top_connector: "wiley_tdm",
       }),
     );
-    expect(parseClient.createParseFulltextV2Task).toHaveBeenCalledWith({
-      fulltextFile: rawArtifact,
+    expect(parseClient.createRawUploadTask).toHaveBeenCalledWith({
+      rawFile: rawArtifact,
       filename: "paper.html",
       sourceDoi: "10.1000/demo",
       sourceInput: "10.1000/demo",
@@ -105,7 +105,7 @@ describe("ssot-route", () => {
 
     const parseClient = {
       createParseTask: vi.fn(),
-      createParseFulltextV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
+      createRawUploadTask: vi.fn().mockRejectedValue(new Error("submit failed")),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -132,7 +132,7 @@ describe("ssot-route", () => {
 
     const parseClient = {
       createParseTask: vi.fn(),
-      createParseFulltextV2Task: vi.fn().mockRejectedValue(new Error("submit failed")),
+      createRawUploadTask: vi.fn().mockRejectedValue(new Error("submit failed")),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -140,7 +140,7 @@ describe("ssot-route", () => {
       parseClient,
       buildRoutePlan({
         fail_closed: false,
-        action_sequence: ["fetch_helper_source", "native_arxiv_parse"],
+        action_sequence: ["fetch_browser_source", "native_arxiv_parse"],
       }),
       { input: "10.1000/demo" },
     );
@@ -152,7 +152,7 @@ describe("ssot-route", () => {
     });
   });
 
-  it("propagates requires-upload and requires-helper failures without extra submission", async () => {
+  it("propagates requires-upload and browser-capture failures without extra submission", async () => {
     executeAction.mockResolvedValue({
       success: false,
       requiresUpload: true,
@@ -162,7 +162,7 @@ describe("ssot-route", () => {
 
     const parseClient = {
       createParseTask: vi.fn(),
-      createParseFulltextV2Task: vi.fn(),
+      createRawUploadTask: vi.fn(),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -170,28 +170,27 @@ describe("ssot-route", () => {
       input: "10.1000/demo",
     });
 
-    expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(parseClient.createRawUploadTask).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: false,
       requiresBrowserCapture: undefined,
-      requiresHelper: undefined,
       requiresUpload: true,
       error: "PDF upload required",
       nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
   });
 
-  it("normalizes legacy helper failures to browser-capture failures for the extension UI", async () => {
+  it("normalizes local raw acquisition failures to browser-capture failures for the extension UI", async () => {
     executeAction.mockResolvedValue({
       success: false,
-      requiresHelper: true,
+      requiresBrowserCapture: true,
       error: "Open the article page and retry browser capture.",
       nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
     });
 
     const parseClient = {
       createParseTask: vi.fn(),
-      createParseFulltextV2Task: vi.fn(),
+      createRawUploadTask: vi.fn(),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -199,11 +198,10 @@ describe("ssot-route", () => {
       input: "10.1000/demo",
     });
 
-    expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(parseClient.createRawUploadTask).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: false,
       requiresBrowserCapture: true,
-      requiresHelper: true,
       requiresUpload: undefined,
       error: "Open the article page and retry browser capture.",
       nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
@@ -214,7 +212,7 @@ describe("ssot-route", () => {
     const task = { task_id: "task-server", status: "queued" };
     const parseClient = {
       createParseTask: vi.fn().mockResolvedValue(task),
-      createParseFulltextV2Task: vi.fn(),
+      createRawUploadTask: vi.fn(),
     };
 
     const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
@@ -224,7 +222,7 @@ describe("ssot-route", () => {
         top_connector: "server_parse",
         route_kind: "server",
         acquisition_mode: "server_parse",
-        requires_helper: false,
+        requires_browser_capture: false,
         allows_current_tab: false,
         action_sequence: ["server_parse"],
         route_planner_fallback: true,
@@ -234,7 +232,7 @@ describe("ssot-route", () => {
 
     expect(executeAction).not.toHaveBeenCalled();
     expect(parseClient.createParseTask).toHaveBeenCalledWith({ input: "10.1000/demo" });
-    expect(parseClient.createParseFulltextV2Task).not.toHaveBeenCalled();
+    expect(parseClient.createRawUploadTask).not.toHaveBeenCalled();
     expect(result).toEqual({ success: true, taskId: "task-server", task });
   });
 });
