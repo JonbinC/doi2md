@@ -112,6 +112,15 @@ def build_dashboard_model(
         "handoff": handoff,
         "commands": commands,
         "next_steps": next_steps,
+        "operator_summary": _operator_summary(
+            cfg=cfg,
+            project=project,
+            rag=rag,
+            handoff=handoff,
+            detected_agents=detected_agents,
+            installed_agents=installed_agents,
+        ),
+        "shortcuts": _shortcuts_payload(commands),
     }
 
 
@@ -120,22 +129,54 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
         _hero_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
+        Columns([_operator_panel(model), _shortcuts_panel(model)], equal=True, expand=True),
         _handoff_panel(model),
         _next_steps_panel(model),
     )
 
 
 class MdteroTui(App):
+    BINDINGS = [
+        ("r", "refresh_dashboard", "Refresh"),
+        ("d", "doctor", "Doctor"),
+        ("p", "parse_pending", "Parse"),
+        ("g", "rag_status", "RAG"),
+        ("m", "mcp_briefing", "MCP"),
+        ("q", "quit", "Quit"),
+    ]
+
     CSS = """
     Screen { background: #fcf7f1; color: #2f1a12; }
     #dashboard { padding: 1 2; }
     """
 
+    def __init__(self, *, project_root: Path | None = None) -> None:
+        super().__init__()
+        self.project_root = project_root or Path.cwd()
+
+    def _build_renderable(self) -> Group:
+        return render_dashboard_text(build_dashboard_model(project_root=self.project_root))
+
     def compose(self) -> ComposeResult:
-        model = build_dashboard_model(project_root=Path.cwd())
         yield Header(show_clock=True)
-        yield Static(render_dashboard_text(model), id="dashboard")
+        yield Static(self._build_renderable(), id="dashboard")
         yield Footer()
+
+    def action_refresh_dashboard(self) -> None:
+        self.query_one("#dashboard", Static).update(self._build_renderable())
+        self.notify("Dashboard refreshed")
+
+    def action_doctor(self) -> None:
+        self.notify("mdtero doctor --json")
+
+    def action_parse_pending(self) -> None:
+        self.notify("mdtero project parse --wait --timeout 300 --json")
+
+    def action_rag_status(self) -> None:
+        self.notify("mdtero rag status --json")
+
+    def action_mcp_briefing(self) -> None:
+        self.notify("mdtero mcp briefing --json")
 
 
 def _project_payload(
@@ -277,6 +318,69 @@ def _health_payload(
     }
 
 
+def _operator_summary(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    handoff: dict[str, Any],
+    detected_agents: list[Any],
+    installed_agents: list[Any],
+) -> list[dict[str, str]]:
+    ready_artifacts = handoff.get("ready_artifacts") or []
+    blocked_items = handoff.get("blocked_items") or []
+    active_items = handoff.get("active_items") or []
+    rows: list[dict[str, str]] = []
+
+    rows.append(
+        {
+            "area": "Account",
+            "state": "ready" if cfg.is_authenticated else "missing",
+            "detail": cfg.api_key_source if cfg.is_authenticated else "run mdtero setup",
+        }
+    )
+    rows.append(
+        {
+            "area": "Project",
+            "state": "ready" if project.papers else "empty",
+            "detail": f"{len(project.papers)} paper(s), {len(active_items)} active, {len(blocked_items)} blocked",
+        }
+    )
+    rows.append(
+        {
+            "area": "Artifacts",
+            "state": "ready" if ready_artifacts else "none",
+            "detail": f"{len(ready_artifacts)} downloadable result(s)",
+        }
+    )
+    rows.append(
+        {
+            "area": "RAG",
+            "state": str(rag.get("server_status") or rag.get("reason_code") or "local"),
+            "detail": f"{rag.get('ready_for_ingest_count', 0)} local result(s) ready for ingest",
+        }
+    )
+    rows.append(
+        {
+            "area": "Agents",
+            "state": "ready" if detected_agents and len(installed_agents) == len(detected_agents) else "setup",
+            "detail": f"{len(installed_agents)}/{len(detected_agents)} detected skill(s) installed",
+        }
+    )
+    return rows
+
+
+def _shortcuts_payload(commands: dict[str, str]) -> list[dict[str, str]]:
+    return [
+        {"key": "r", "label": "refresh", "action": "refresh_dashboard", "command": "reload dashboard state"},
+        {"key": "d", "label": "doctor", "action": "doctor", "command": "mdtero doctor --json"},
+        {"key": "p", "label": "parse", "action": "parse_pending", "command": commands.get("parse_pending", "mdtero project parse --wait --timeout 300 --json")},
+        {"key": "g", "label": "rag", "action": "rag_status", "command": commands.get("rag_status", "mdtero rag status --json")},
+        {"key": "m", "label": "mcp", "action": "mcp_briefing", "command": commands.get("mcp_briefing", "mdtero mcp briefing --json")},
+        {"key": "q", "label": "quit", "action": "quit", "command": "close TUI"},
+    ]
+
+
 def _hero_panel(model: dict[str, Any]) -> Panel:
     health = model["health"]
     grid = Table.grid(expand=True)
@@ -380,6 +484,20 @@ def _handoff_panel(model: dict[str, Any]) -> Panel:
     if commands:
         table.add_row("agent", "Follow agent_briefing next_commands", str(commands[0]))
     return Panel(table, title="Agent Handoff", border_style="blue")
+
+
+def _operator_panel(model: dict[str, Any]) -> Panel:
+    table = Table("Area", "State", "Detail", expand=True)
+    for item in model.get("operator_summary") or []:
+        table.add_row(str(item.get("area") or "-"), str(item.get("state") or "-"), str(item.get("detail") or "-"))
+    return Panel(table, title="Operator Summary", border_style="green")
+
+
+def _shortcuts_panel(model: dict[str, Any]) -> Panel:
+    table = Table("Key", "Action", "Command", expand=True)
+    for item in model.get("shortcuts") or []:
+        table.add_row(str(item.get("key") or "-"), str(item.get("label") or "-"), str(item.get("command") or "-"))
+    return Panel(table, title="Shortcuts", border_style="cyan")
 
 
 def _brief_item_label(item: dict[str, Any]) -> str:

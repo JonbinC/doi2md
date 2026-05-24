@@ -17,7 +17,7 @@ from mdtero.client import DiscoveryError, MdteroClient, translation_source_path_
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, serve_project_context
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
-from mdtero.tui import build_dashboard_model, render_dashboard_text
+from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
     PaperRecord,
     add_paper,
@@ -2670,6 +2670,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["handoff"]["active_items"] == []
     assert model["next_steps"][:2] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+    assert model["operator_summary"][0] == {"area": "Account", "state": "missing", "detail": "run mdtero setup"}
+    assert [item["key"] for item in model["shortcuts"]] == ["r", "d", "p", "g", "m", "q"]
 
 
 def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: Path):
@@ -2728,7 +2730,22 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Results ready" in output
     assert "Agent Handoff" in output
     assert "Agent skills" in output
+    assert "Operator Summary" in output
+    assert "Shortcuts" in output
+    assert "r" in output
+    assert "refresh" in output
     assert rendered is not None
+
+
+def test_tui_app_exposes_operator_shortcuts():
+    bindings = set(MdteroTui.BINDINGS)
+
+    assert ("r", "refresh_dashboard", "Refresh") in bindings
+    assert ("d", "doctor", "Doctor") in bindings
+    assert ("p", "parse_pending", "Parse") in bindings
+    assert ("g", "rag_status", "RAG") in bindings
+    assert ("m", "mcp_briefing", "MCP") in bindings
+    assert ("q", "quit", "Quit") in bindings
 
 
 def test_tui_dashboard_model_reports_installed_agent_skills(tmp_path: Path):
