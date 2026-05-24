@@ -7,7 +7,7 @@ describe("executeAction", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps Wiley TDM keys out of the extension and points users to CLI or upload", async () => {
+  it("rejects retired publisher PDF/API actions instead of direct keyed fetches", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -21,30 +21,80 @@ describe("executeAction", () => {
 
     expect(result).toEqual({
       success: false,
-      requiresUpload: true,
-      error: "Wiley TDM requires a user token. Configure academic source keys with `mdtero config academic` in the Python CLI, use the extension on an already-open full-text page, or upload the PDF/XML/EPUB file directly.",
-      nextCommand: "mdtero parse 10.1002/demo --trace --wait --timeout 300 --json",
+      error: "Unknown action: fetch_wiley_tdm_pdf",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("keeps Elsevier API keys out of the extension route executor", async () => {
+  it("does not keep stale Elsevier API action compatibility in the extension runtime", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    const chromeStub = {
+      tabs: {
+        sendMessage: vi.fn().mockResolvedValue({
+          ok: true,
+          capture: {
+            ok: true,
+            html: "<html><article>Captured Elsevier page</article></html>",
+            payloadName: "paper.html",
+          },
+        }),
+      },
+    };
+    vi.stubGlobal("chrome", chromeStub);
 
     const result = await executeAction(
       "fetch_elsevier_xml",
       {
         input: "10.1016/j.energy.2026.140192",
+        tabId: 12,
       },
       {}
     );
 
-    expect(result.success).toBe(false);
-    expect(result.requiresUpload).toBe(true);
-    expect(result.error).toContain("mdtero config academic");
-    expect(result.nextCommand).toBe("mdtero parse 10.1016/j.energy.2026.140192 --trace --wait --timeout 300 --json");
+    expect(result).toEqual({ success: false, error: "Unknown action: fetch_elsevier_xml" });
+    expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("downloads EPUB assets through the active browser action", async () => {
+    const chromeStub = {
+      tabs: {
+        sendMessage: vi.fn().mockResolvedValue({
+          ok: true,
+          download: {
+            ok: true,
+            payloadBase64: "UEsDBGJlbW8tZXB1Yg==",
+            payloadName: "paper.epub",
+          },
+        }),
+      },
+    };
+    vi.stubGlobal("chrome", chromeStub);
+
+    const result = await executeAction(
+      "fetch_epub_asset",
+      {
+        input: "10.1080/26395940.2021.1947159",
+        tabId: 42,
+      },
+      {
+        top_connector: "taylor_francis_oa_epub",
+        acquisition_candidates: [
+          {
+            connector: "taylor_francis_oa_epub",
+            epub_url: "https://www.tandfonline.com/doi/epub/10.1080/26395940.2021.1947159?needAccess=true",
+          },
+        ],
+      }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.epub");
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: "mdtero.download_epub.request",
+      artifactUrl: "https://www.tandfonline.com/doi/epub/10.1080/26395940.2021.1947159?needAccess=true",
+    });
   });
 
   it("quotes shell-sensitive URL handoff commands when browser capture fails", async () => {
