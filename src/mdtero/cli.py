@@ -523,9 +523,11 @@ def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds:
 def cmd_doctor(_args: argparse.Namespace) -> int:
     cfg = load_config()
     remote_auth = _doctor_remote_auth(cfg)
-    rows = _doctor_rows(cfg, Path.cwd(), remote_auth=remote_auth)
+    root = Path.cwd()
+    server_rag_status = _doctor_server_rag_status(cfg, root, remote_auth=remote_auth)
+    rows = _doctor_rows(cfg, root, remote_auth=remote_auth, server_rag_status=server_rag_status)
     if getattr(_args, "json", False):
-        payload = _doctor_payload(cfg, Path.cwd(), rows, remote_auth=remote_auth)
+        payload = _doctor_payload(cfg, root, rows, remote_auth=remote_auth, server_rag_status=server_rag_status)
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0 if payload["status"] == "ok" else 1
     console = Console()
@@ -536,7 +538,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     return 0 if cfg.is_authenticated and remote_auth.get("status") != "failed" else 1
 
 
-def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
+def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
     api_key_status = "ok" if cfg.is_authenticated else "missing"
     api_key_detail = cfg.api_key_source
@@ -556,11 +558,11 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
     current_project = project_path(root)
     rows.append(("Project", "ok" if current_project.exists() else "not initialized", str(current_project)))
     if current_project.exists():
-        rows.extend(_doctor_project_rows(root))
+        rows.extend(_doctor_project_rows(root, server_rag_status=server_rag_status))
     return rows
 
 
-def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None) -> dict[str, Any]:
+def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None) -> dict[str, Any]:
     row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
     status = "ok" if cfg.is_authenticated else "missing_auth"
@@ -590,7 +592,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "library_id": cfg.zotero.library_id,
             "library_type": cfg.zotero.library_type,
         },
-        "project": _doctor_project_payload(root),
+        "project": _doctor_project_payload(root, server_rag_status=server_rag_status),
         "next_commands": _doctor_auth_next_commands(cfg, remote_auth),
     }
     project_next = payload["project"].get("next_commands") if isinstance(payload.get("project"), dict) else None
@@ -626,6 +628,34 @@ def _doctor_remote_auth(cfg: MdteroConfig) -> dict[str, Any]:
     }
 
 
+def _doctor_server_rag_status(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any]) -> dict[str, Any] | None:
+    if not cfg.is_authenticated or remote_auth.get("status") == "failed":
+        return None
+    try:
+        state = load_project(root)
+    except Exception:
+        return None
+    project_id = str(state.server_project_id or "").strip()
+    if not project_id:
+        return None
+    try:
+        status = MdteroClient(config=cfg, timeout=10.0).rag_status(project_id)
+    except (MdteroApiError, httpx.HTTPError) as exc:
+        return {
+            "status": "unavailable",
+            "reason_code": "server_rag_status_unavailable",
+            "server_project_id": project_id,
+            "error_type": exc.__class__.__name__,
+            "action_hint": "Server RAG status could not be fetched during doctor. Rerun `mdtero rag status --json` or check API connectivity.",
+            "next_commands": ["mdtero rag status --json"],
+        }
+    sanitized = redact_sensitive_payload(status)
+    if isinstance(sanitized, dict):
+        sanitized.setdefault("server_project_id", project_id)
+        return ensure_rag_contract(sanitized)
+    return None
+
+
 def _doctor_auth_next_commands(cfg: MdteroConfig, remote_auth: dict[str, Any]) -> list[str]:
     if not cfg.is_authenticated:
         return ["mdtero setup"]
@@ -641,7 +671,7 @@ def _doctor_row_status(rows: list[tuple[str, str, str]], check: str) -> dict[str
     return None
 
 
-def _doctor_project_payload(root: Path) -> dict[str, Any]:
+def _doctor_project_payload(root: Path, *, server_rag_status: dict[str, Any] | None = None) -> dict[str, Any]:
     target = project_path(root)
     if not target.exists():
         return {
@@ -664,7 +694,24 @@ def _doctor_project_payload(root: Path) -> dict[str, Any]:
     succeeded = sum(1 for paper in state.papers if paper.status == "succeeded")
     failed = sum(1 for paper in state.papers if paper.status == "failed")
     ready_for_ingest = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
-    if state.server_project_id and ready_for_ingest:
+    if server_rag_status:
+        readiness = server_rag_status.get("readiness") if isinstance(server_rag_status.get("readiness"), dict) else {}
+        ready_for_query = bool(readiness.get("ready_for_query"))
+        provider_blocked = bool(readiness.get("provider_blocked"))
+        needs_build = bool(readiness.get("needs_build"))
+        needs_ingest = bool(readiness.get("needs_ingest"))
+        if ready_for_query:
+            rag_status = "ready"
+        elif provider_blocked:
+            rag_status = "provider_blocked"
+        elif needs_build:
+            rag_status = "needs_build"
+        elif needs_ingest:
+            rag_status = "needs_ingest"
+        else:
+            rag_status = str(server_rag_status.get("status") or "check")
+        rag_next = [str(command) for command in server_rag_status.get("next_commands") or ["mdtero rag status --json"]]
+    elif state.server_project_id and ready_for_ingest:
         rag_next = ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
         rag_status = "check"
     elif state.server_project_id:
@@ -689,6 +736,7 @@ def _doctor_project_payload(root: Path) -> dict[str, Any]:
         "failed_count": failed,
         "ready_for_ingest_count": ready_for_ingest,
         "rag_status": rag_status,
+        "server_rag_status": server_rag_status,
         "next_commands": rag_next,
     }
 
@@ -705,7 +753,7 @@ def _dedupe_string_list(values: list[Any]) -> list[str]:
     return result
 
 
-def _doctor_project_rows(root: Path) -> list[tuple[str, str, str]]:
+def _doctor_project_rows(root: Path, *, server_rag_status: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
     try:
         state = load_project(root)
     except Exception as exc:
@@ -727,7 +775,23 @@ def _doctor_project_rows(root: Path) -> list[tuple[str, str, str]]:
             state.server_project_id or "run mdtero rag build --json",
         ),
     ]
-    if state.server_project_id and ready_for_ingest:
+    if server_rag_status:
+        reason_code = str(server_rag_status.get("reason_code") or "unknown")
+        readiness = server_rag_status.get("readiness") if isinstance(server_rag_status.get("readiness"), dict) else {}
+        agent_summary = server_rag_status.get("agent_summary") if isinstance(server_rag_status.get("agent_summary"), dict) else {}
+        if readiness.get("ready_for_query"):
+            rows.append(("RAG readiness", "ready", f"{reason_code}; query with mdtero rag query \"<question>\" --build-if-needed --json"))
+        elif readiness.get("provider_blocked"):
+            rows.append(("RAG readiness", "blocked", f"{reason_code}; {server_rag_status.get('action_hint') or 'check backend RAG provider'}"))
+        else:
+            next_step = str(readiness.get("next_step") or "inspect_status")
+            next_commands = server_rag_status.get("next_commands") if isinstance(server_rag_status.get("next_commands"), list) else ["mdtero rag status --json"]
+            rows.append(("RAG readiness", next_step, f"{reason_code}; next: {next_commands[0]}"))
+        provider = str(agent_summary.get("selected_provider") or server_rag_status.get("selected_provider") or "unknown")
+        provider_state = str(agent_summary.get("provider_state") or server_rag_status.get("provider_state") or "unknown")
+        embedding_model = str(agent_summary.get("embedding_model") or server_rag_status.get("embedding_model") or "unknown")
+        rows.append(("Server RAG provider", provider_state, f"{provider} / {embedding_model}"))
+    elif state.server_project_id and ready_for_ingest:
         rows.append(("RAG readiness", "check", "run mdtero project ingest --json, then mdtero rag status --json"))
     elif state.server_project_id:
         rows.append(("RAG readiness", "needs papers", "parse papers before mdtero project ingest --json"))
