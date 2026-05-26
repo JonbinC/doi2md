@@ -30,6 +30,10 @@ def build_rag_readiness(payload: dict[str, Any]) -> dict[str, Any]:
         "voyage_request_failed",
         "voyage_response_invalid",
     }
+    if ready_for_query:
+        needs_ingest = False
+        needs_build = False
+        provider_blocked = False
     if provider_blocked:
         next_step = "check_backend_rag_provider"
     elif ready_for_query:
@@ -73,8 +77,20 @@ def build_rag_agent_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "embedded_count": readiness.get("embedded_count", 0),
         "pending_embedding_count": readiness.get("pending_embedding_count", 0),
         "match_count": readiness.get("match_count", 0),
-        "next_commands": payload.get("next_commands", []),
+        "next_commands": _next_commands(payload),
     }
+
+
+def _next_commands(payload: dict[str, Any]) -> list[str]:
+    commands = payload.get("next_commands")
+    if isinstance(commands, list) and commands:
+        return [str(command) for command in commands]
+    return [
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+        "mdtero mcp briefing --json",
+        "mdtero mcp serve",
+    ]
 
 
 def _summary_int(summary: dict[str, Any], *keys: str) -> int:
