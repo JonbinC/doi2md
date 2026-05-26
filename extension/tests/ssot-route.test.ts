@@ -12,7 +12,7 @@ function buildRoutePlan(overrides: Partial<ExtensionRouteResponse> = {}): Extens
     input_kind: "doi",
     input_value: "10.1000/demo",
     top_connector: "wiley_tdm",
-    route_kind: "browser_capture_first",
+    route_kind: "browser_capture_required",
     acquisition_mode: "browser_extension",
     requires_browser_capture: true,
     allows_current_tab: true,
