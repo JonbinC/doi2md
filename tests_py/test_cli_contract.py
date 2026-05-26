@@ -1048,6 +1048,18 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
         "semantic_scholar_api_key": True,
     }
     assert payload["discover_source"] == "local_semantic_scholar"
+    assert payload["discover_behavior"] == {
+        "semantic_scholar": "local_first",
+        "fallback": "server_openalex",
+        "action_hint": "Semantic Scholar is configured; discovery tries the local Semantic Scholar API first and falls back to server OpenAlex when needed.",
+    }
+    assert "mdtero smoke --json" in payload["next_commands"]
+    assert "mdtero mcp briefing --json" in payload["next_commands"]
+    groups = {group["title"]: group["commands"] for group in payload["next_command_groups"]}
+    assert "One-shot launch smoke" in groups
+    assert "Browser extension handoff" in groups
+    assert "mdtero smoke --json" in groups["One-shot launch smoke"]
+    assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in groups["Browser extension handoff"]
     assert "https://dev.elsevier.com/apikey/manage" in payload["application_links"]["elsevier_api_key"]
     output = json.dumps(payload)
     assert "elsevier-secret" not in output
@@ -1065,6 +1077,9 @@ def test_config_academic_json_reports_server_openalex_when_s2_is_absent(monkeypa
     assert payload["status"] == "current"
     assert payload["configured"]["semantic_scholar_api_key"] is False
     assert payload["discover_source"] == "server_openalex"
+    assert payload["discover_behavior"]["semantic_scholar"] == "not_configured"
+    assert payload["discover_behavior"]["fallback"] == "server_openalex"
+    assert "server OpenAlex fallback" in payload["discover_behavior"]["action_hint"]
 
 
 def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
@@ -1078,6 +1093,10 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero doctor --json" in output
     assert "mdtero config academic --json" in output
     assert "mdtero agent detect --json" in output
+    assert "One-shot launch smoke" in output
+    assert "mdtero smoke --json" in output
+    assert "mdtero smoke --doi 10.48550/arXiv.1706.03762 --wait --timeout 300 --json" in output
+    assert "mdtero mcp briefing --json" in output
     assert "Start a local project" in output
     assert "mdtero project init --name literature-review" in output
     assert "mdtero discover \"graph neural networks\" --limit 5 --interactive" in output
@@ -1086,6 +1105,10 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json" in compact_output
     assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in output
     assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in output
+    assert "Browser extension handoff" in output
+    assert "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json" in output
+    assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in compact_output
+    assert "mdtero status <task-id> --wait --timeout 300 --json" in output
     assert "Translate completed Markdown" in output
     assert "mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json" in output
     assert "mdtero translate paper.md --to zh-CN --wait --timeout 600 --json" in output
