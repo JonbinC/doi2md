@@ -2,6 +2,15 @@ name: Public CLI and Extension CI
 
 on:
   workflow_dispatch:
+    inputs:
+      check_scope:
+        description: "Validation scope for the lightweight private runner."
+        required: false
+        default: "smoke"
+        type: choice
+        options:
+          - smoke
+          - full
 
 permissions:
   contents: read
@@ -11,8 +20,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  smoke:
+    name: Public smoke gate
+    runs-on: linux-small
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run secret guard
+        run: python scripts/ci/secret_guard.py
+
+      - name: Run lightweight public contract tests
+        run: >-
+          uv run pytest
+          tests_py/test_secret_guard.py
+          tests_py/test_cli_contract.py::test_public_script_surface_is_ci_only
+          tests_py/test_cli_contract.py::test_public_repo_has_no_root_npm_or_per_agent_install_runtime
+          tests_py/test_cli_contract.py::test_forgejo_phase_one_workflow_is_manual_lightweight_and_private
+          -q
+
   python-client:
     name: Python CLI Package
+    if: ${{ inputs.check_scope == 'full' }}
+    needs: [smoke]
     runs-on: linux-small
     steps:
       - name: Checkout
@@ -49,6 +89,8 @@ jobs:
 
   extension:
     name: Browser Extension
+    if: ${{ inputs.check_scope == 'full' }}
+    needs: [smoke]
     runs-on: linux-small
     steps:
       - name: Checkout

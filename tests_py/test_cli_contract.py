@@ -4735,6 +4735,30 @@ def test_public_github_ci_matches_release_gate_for_extension_quality():
     assert "python3 scripts/ci/extension_dist_smoke.py" in workflow
 
 
+def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
+    repo_root = Path(__file__).resolve().parents[1]
+    workflow = (repo_root / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    runbook = (repo_root / "PRIVATE_PLATFORM_PHASE_1.md").read_text(encoding="utf-8")
+
+    assert "workflow_dispatch:" in workflow
+    assert "check_scope:" in workflow
+    assert 'default: "smoke"' in workflow
+    assert "Public smoke gate" in workflow
+    assert "runs-on: linux-small" in workflow
+    assert "test_forgejo_phase_one_workflow_is_manual_lightweight_and_private" in workflow
+    assert "if: ${{ inputs.check_scope == 'full' }}" in workflow
+    assert "\n  push:" not in workflow
+    assert "\n  pull_request:" not in workflow
+    assert "INFISICAL_TOKEN=" not in workflow
+    assert "PAT=" not in workflow
+    assert "PERSONAL_ACCESS_TOKEN" not in workflow
+
+    assert "forgejo`: `http://100.97.234.105:3020/jianbin/doi2md.git`" in runbook
+    assert "Do not embed PATs, service tokens, or passwords" in runbook
+    assert "read them from Infisical at runtime through a service token or machine identity" in runbook
+    assert "Do not remove GitHub or PyPI/public release paths" in runbook
+
+
 def test_public_generated_dependency_and_package_artifacts_are_not_source():
     repo_root = Path(__file__).resolve().parents[1]
 
