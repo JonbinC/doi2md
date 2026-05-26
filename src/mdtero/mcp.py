@@ -610,8 +610,8 @@ def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Except
         "server_project_id": state.server_project_id,
         "answer": None,
         "error_type": exc.__class__.__name__,
-        "action_hint": "Create or link a server project before querying server-side Voyage RAG.",
-        "next_commands": ["mdtero project create-server --json", "mdtero project ingest --json", "mdtero rag status --json", commands["rag_query"]],
+        "action_hint": "Run `mdtero rag build --json` or retry with `mdtero rag query \"<question>\" --build-if-needed --json` so the CLI can create or bind the server project before querying server-side Voyage RAG.",
+        "next_commands": [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]],
     }
 
 

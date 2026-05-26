@@ -2170,8 +2170,8 @@ def _rag_action_hint(command: str, reason_code: str) -> str:
         return "Import succeeded parse tasks first with `mdtero project ingest --json`, then run `mdtero rag build --json`."
     if reason_code == "forbidden":
         return "Use credentials for the owner of this server project."
-    if reason_code == "project_not_found":
-        return "Check the server project id or run `mdtero project create-server --json`."
+    if reason_code in {"project_not_found", "invalid_project_id"}:
+        return "Run `mdtero rag build --json` or `mdtero rag query \"<question>\" --build-if-needed --json` from the local Mdtero project so the CLI can create or bind the correct server project."
     if command == "query":
         return "Check `mdtero rag status --json`, then run `mdtero rag build --json` if the project is not ready."
     return "Check `mdtero rag status --json`, fix the reported precondition, then retry."
@@ -2182,7 +2182,9 @@ def _rag_failure_next_commands(command: str, reason_code: str) -> list[str]:
         return ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
     if command == "query" and reason_code == "rag_index_not_built":
         return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
-    if reason_code in {"voyage_not_configured", "forbidden", "project_not_found"}:
+    if reason_code in {"project_not_found", "invalid_project_id"}:
+        return ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    if reason_code in {"voyage_not_configured", "forbidden"}:
         return ["mdtero rag status --json"]
     return ["mdtero rag status --json", "mdtero rag build --json"]
 
