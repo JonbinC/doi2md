@@ -36,6 +36,7 @@ from .projects import (
     update_paper_submission,
     update_task,
 )
+from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
 from .workflow import parse_trace_from_route, status_trace, upload_trace
 
@@ -2255,6 +2256,7 @@ def _normalize_rag_query_payload(payload: dict[str, Any], *, project_id: str, qu
         "next_commands",
         ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
     )
+    ensure_rag_contract(payload)
     return redact_sensitive_payload(payload)
 
 

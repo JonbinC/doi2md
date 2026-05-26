@@ -7,6 +7,7 @@ from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
 from .projects import bind_server_project, load_project, paper_to_document, project_documents, project_path
+from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
 
 
@@ -300,17 +301,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     status.setdefault("local_ready_for_ingest_count", local_ready)
     status.setdefault("local_paper_count", len(state.papers))
     status["next_commands"] = next_commands
-    status["agent_summary"] = {
-        "status": server_status,
-        "reason_code": reason_code,
-        "selected_provider": status.get("selected_provider"),
-        "provider_state": status.get("provider_state"),
-        "provider_configured": status.get("provider_configured", status.get("voyage_configured")),
-        "embedding_model": status.get("embedding_model") or summary.get("embedding_model"),
-        "embedded_count": summary.get("embedded_count", 0),
-        "chunk_count": summary.get("chunk_count", 0),
-        "pending_embedding_count": summary.get("pending_embedding_count", 0),
-    }
+    ensure_rag_contract(status)
     return redact_sensitive_payload(status)
 
 
@@ -425,6 +416,7 @@ def _normalize_rag_query_result_for_agents(
     payload.setdefault("evidence_pack", _rag_evidence_pack(question=question, source_nodes=source_nodes, citations=citations))
     payload.setdefault("action_hint", "RAG query completed. Review evidence_pack.context_markdown, source_nodes, citations, and matches before writing a final synthesis.")
     payload.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
+    ensure_rag_contract(payload)
     return redact_sensitive_payload(payload)
 
 
