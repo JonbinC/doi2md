@@ -59,7 +59,7 @@ The old npm installer runtime has been retired from this repository. Use the Pyt
 mdtero doctor
 mdtero discover "thermochemical energy storage" --limit 5
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
-mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3
+mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3 --json
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace

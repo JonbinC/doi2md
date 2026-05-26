@@ -1355,6 +1355,11 @@ def test_discover_interactive_enter_skips_project_add(monkeypatch, tmp_path: Pat
     state = load_project(tmp_path)
 
     assert payload["project_add"]["added_count"] == 0
+    assert payload["project_add"]["next_commands"] == [
+        "mdtero project status --json",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
+    ]
     assert state.papers == []
 
 
@@ -6574,6 +6579,24 @@ def test_public_docs_and_skill_describe_extension_cli_handoff_contract():
     assert "action_hint" in combined
     assert "download_artifacts" in combined
     assert "next_commands" in combined
+
+
+def test_public_docs_and_skills_use_agent_safe_discovery_add_json():
+    repo_root = Path(__file__).resolve().parents[1]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [
+            repo_root / "README.md",
+            repo_root / "install" / "README.md",
+            repo_root / "skills" / "mdtero" / "SKILL.md",
+            repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
+        ]
+    )
+
+    assert "mdtero discover \"<query>\" --limit 5 --add --select 1,3 --json" in combined
+    assert "mdtero discover \"thermochemical energy storage\" --limit 5 --add --select 1,3 --json" in combined
+    assert "mdtero discover \"<query>\" --limit 5 --add --select 1,3`" not in combined
+    assert "mdtero discover \"thermochemical energy storage\" --limit 5 --add --select 1,3\n" not in combined
 
 
 def test_packaged_skill_guides_agents_to_structured_rag_evidence():
