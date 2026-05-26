@@ -14,7 +14,7 @@ from rich.console import Console
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
-from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
+from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
@@ -115,6 +115,9 @@ def test_setup_accepts_headless_api_key_argument():
 
     assert args.api_key == "mdt_live_demo"
 
+    prompt_args = parser.parse_args(["setup", "--api-key"])
+    assert prompt_args.api_key == API_KEY_PROMPT_SENTINEL
+
 
 def test_login_accepts_web_login_flags():
     parser = build_parser()
@@ -123,6 +126,11 @@ def test_login_accepts_web_login_flags():
 
     assert args.no_browser is True
     assert args.timeout == 12
+
+    keyed = parser.parse_args(["login", "--api-key", "mdt_live_demo"])
+    assert keyed.api_key == "mdt_live_demo"
+    prompted = parser.parse_args(["login", "--api-key"])
+    assert prompted.api_key == API_KEY_PROMPT_SENTINEL
 
 
 def test_smoke_reports_missing_auth_without_network(monkeypatch, tmp_path: Path, capsys):
@@ -636,7 +644,7 @@ def test_login_command_saves_web_callback_key(monkeypatch, tmp_path: Path, capsy
 
     monkeypatch.setattr(cli, "run_web_login", fake_run_web_login)
 
-    assert cli.cmd_login(type("Args", (), {"api_key": "", "timeout": 7, "no_browser": False})()) == 0
+    assert cli.cmd_login(type("Args", (), {"api_key": None, "timeout": 7, "no_browser": False})()) == 0
     cfg = load_config()
 
     assert cfg.api_key == "mdt_live_saved"
@@ -657,7 +665,7 @@ def test_login_no_browser_explains_loopback_and_headless_api_key(monkeypatch, tm
 
     monkeypatch.setattr(cli, "run_web_login", fake_run_web_login)
 
-    assert cli.cmd_login(type("Args", (), {"api_key": "", "timeout": 7, "no_browser": True})()) == 0
+    assert cli.cmd_login(type("Args", (), {"api_key": None, "timeout": 7, "no_browser": True})()) == 0
     output = capsys.readouterr().out
 
     assert "loopback web-login URL" in output
@@ -672,6 +680,36 @@ def test_login_rejects_blank_api_key(monkeypatch, tmp_path: Path, capsys):
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
 
     assert cli.cmd_login(type("Args", (), {"api_key": "   ", "timeout": 7, "no_browser": False})()) == 2
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "API key cannot be empty" in output
+    assert cfg.api_key is None
+
+
+def test_login_prompts_for_api_key_when_flag_omits_value(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_prompted")
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("API-key login should not run browser OAuth")))
+
+    assert cli.cmd_login(type("Args", (), {"api_key": API_KEY_PROMPT_SENTINEL, "timeout": 7, "no_browser": False})()) == 0
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert cfg.api_key == "mdt_live_prompted"
+    assert "Saved API key" in output
+
+
+def test_login_rejects_blank_prompted_api_key(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "   ")
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("blank API-key login should not run browser OAuth")))
+
+    assert cli.cmd_login(type("Args", (), {"api_key": API_KEY_PROMPT_SENTINEL, "timeout": 7, "no_browser": False})()) == 2
     output = capsys.readouterr().out
     cfg = load_config()
 
@@ -2941,6 +2979,41 @@ def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Pa
     assert "Step 3: agent skill detection skipped for headless setup." in output
 
 
+def test_setup_prompts_for_api_key_when_flag_omits_value(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_prompted")
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    seen_skip_prompt: list[bool] = []
+    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: seen_skip_prompt.append(skip_prompt))
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup --api-key should not run browser OAuth")))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": API_KEY_PROMPT_SENTINEL})()) == 0
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert cfg.api_key == "mdt_live_prompted"
+    assert seen_skip_prompt == [True]
+    assert "Step 1: saved API-key login for this machine." in output
+
+
+def test_setup_rejects_blank_prompted_api_key_without_academic_prompt(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "   ")
+    monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: (_ for _ in ()).throw(AssertionError("setup should stop before academic config")))
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("blank setup --api-key should not run browser OAuth")))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": API_KEY_PROMPT_SENTINEL})()) == 2
+    output = capsys.readouterr().out
+    cfg = load_config()
+
+    assert "API key cannot be empty" in output
+    assert cfg.api_key is None
+
+
 def test_setup_rejects_blank_api_key_without_academic_prompt(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -2968,7 +3041,7 @@ def test_setup_uses_environment_api_key_without_prompting(monkeypatch, tmp_path:
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("environment-key setup should not scan agent workspaces")),
     )
 
-    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    assert cli.cmd_setup(type("Args", (), {"api_key": None})()) == 0
     output = capsys.readouterr().out
     cfg = load_config()
 
@@ -2997,7 +3070,7 @@ def test_setup_interactive_prefers_browser_oauth_login(monkeypatch, tmp_path: Pa
 
     monkeypatch.setattr(cli, "run_web_login", fake_run_web_login)
 
-    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    assert cli.cmd_setup(type("Args", (), {"api_key": None})()) == 0
     output = capsys.readouterr().out
     cfg = load_config()
 
@@ -3018,7 +3091,7 @@ def test_setup_interactive_api_key_is_explicit_headless_fallback(monkeypatch, tm
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_headless")
     monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("headless fallback should not run browser login")))
 
-    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    assert cli.cmd_setup(type("Args", (), {"api_key": None})()) == 0
     output = capsys.readouterr().out
     cfg = load_config()
 
@@ -3045,7 +3118,7 @@ def test_setup_interactive_installs_detected_agent_skills(monkeypatch, tmp_path:
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: next(prompts))
 
-    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    assert cli.cmd_setup(type("Args", (), {"api_key": None})()) == 0
     output = capsys.readouterr().out
 
     assert "Step 3: local agent workspaces." in output
@@ -3068,7 +3141,7 @@ def test_setup_interactive_skips_agent_install_when_user_declines(monkeypatch, t
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_demo")
 
-    assert cli.cmd_setup(type("Args", (), {"api_key": ""})()) == 0
+    assert cli.cmd_setup(type("Args", (), {"api_key": None})()) == 0
     output = capsys.readouterr().out
 
     assert "Skipped agent skill install." in output
