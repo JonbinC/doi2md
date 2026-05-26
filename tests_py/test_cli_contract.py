@@ -2984,7 +2984,8 @@ def test_setup_interactive_prefers_browser_oauth_login(monkeypatch, tmp_path: Pa
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
-    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: None)
+    seen_skip_prompt: list[bool] = []
+    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: seen_skip_prompt.append(skip_prompt))
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: True)
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("browser setup should not ask for an API key")))
 
@@ -3002,6 +3003,7 @@ def test_setup_interactive_prefers_browser_oauth_login(monkeypatch, tmp_path: Pa
 
     assert "Opening https://mdtero.com/auth for Mdtero web login" in output
     assert "Saved web login API key" in output
+    assert seen_skip_prompt == [False]
     assert cfg.api_key == "mdt_live_web"
 
 
@@ -3010,7 +3012,8 @@ def test_setup_interactive_api_key_is_explicit_headless_fallback(monkeypatch, tm
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
-    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: None)
+    seen_skip_prompt: list[bool] = []
+    monkeypatch.setattr(cli, "_configure_detected_agent_skills", lambda console, *, skip_prompt=False: seen_skip_prompt.append(skip_prompt))
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: False)
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_headless")
     monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("headless fallback should not run browser login")))
@@ -3020,6 +3023,8 @@ def test_setup_interactive_api_key_is_explicit_headless_fallback(monkeypatch, tm
     cfg = load_config()
 
     assert "Use API-key login for headless servers" in output
+    assert "Step 3: agent skill detection skipped for headless setup." not in output
+    assert seen_skip_prompt == [True]
     assert cfg.api_key == "mdt_live_headless"
 
 
@@ -3033,9 +3038,10 @@ def test_setup_interactive_installs_detected_agent_skills(monkeypatch, tmp_path:
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(config_dir))
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: WebLoginResult(api_key="mdt_live_web", prefix="mdt_live"))
 
-    confirms = iter([False, True])
-    prompts = iter(["mdt_live_demo", "1 4"])
+    confirms = iter([True, True])
+    prompts = iter(["1 4"])
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: next(prompts))
 
@@ -3056,8 +3062,9 @@ def test_setup_interactive_skips_agent_install_when_user_declines(monkeypatch, t
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr(cli, "_configure_academic", lambda cfg, console: None)
+    monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: WebLoginResult(api_key="mdt_live_web", prefix="mdt_live"))
 
-    confirms = iter([False, False])
+    confirms = iter([True, False])
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: "mdt_live_demo")
 

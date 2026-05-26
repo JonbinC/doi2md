@@ -477,6 +477,7 @@ def cmd_setup(_args: argparse.Namespace) -> int:
             if not cfg.api_key:
                 return 2
             save_config(cfg)
+            headless_auth = True
     _configure_academic(cfg, console)
     _configure_detected_agent_skills(console, skip_prompt=headless_auth)
     console.print("\n[bold green]Configuration complete.[/bold green]")
