@@ -621,7 +621,7 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
       return {
         success: false,
         error: String(error),
-        nextCommand: `mdtero parse ${JSON.stringify(context.input)} --trace --wait --timeout 300 --json`
+        nextCommand: buildCliParseCommand(context.input)
       };
     }
   }
@@ -645,7 +645,7 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
           return { success: true, taskId: task.task_id, task };
         } catch (error) {
           if (routePlan.fail_closed) {
-            return { success: false, error: String(error), nextCommand: result.nextCommand };
+            return { success: false, error: String(error), nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
           }
           continue;
         }
@@ -661,14 +661,14 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
         requiresBrowserCapture: result.requiresBrowserCapture,
         requiresUpload: result.requiresUpload,
         error: result.error,
-        nextCommand: result.nextCommand
+        nextCommand: result.nextCommand || buildCliParseCommand(context.input)
       };
     }
     if (routePlan.fail_closed) {
-      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand };
+      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
     }
   }
-  return { success: false, error: "No executable action succeeded" };
+  return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
 }
 
 // ../shared/src/api-contract.ts

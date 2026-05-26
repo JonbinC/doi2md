@@ -117,6 +117,35 @@ describe("ssot-route", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("submit failed");
+    expect(result.nextCommand).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
+  });
+
+  it("uses shell-safe CLI handoff when server-parse fallback submission fails", async () => {
+    const parseClient = {
+      createParseTask: vi.fn().mockRejectedValue(new Error("server parse unavailable")),
+      createRawUploadTask: vi.fn(),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(
+      parseClient,
+      buildRoutePlan({
+        top_connector: "server_parse",
+        route_kind: "server",
+        acquisition_mode: "server_parse",
+        requires_browser_capture: false,
+        allows_current_tab: false,
+        action_sequence: ["server_parse"],
+        route_planner_fallback: true,
+      }),
+      { input: "https://example.org/paper?q=a b's" },
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: "Error: server parse unavailable",
+      nextCommand: "mdtero parse 'https://example.org/paper?q=a b'\"'\"'s' --trace --wait --timeout 300 --json",
+    });
   });
 
   it("continues to the next action when raw artifact submission fails on a non-fail-closed route", async () => {
@@ -205,6 +234,29 @@ describe("ssot-route", () => {
       requiresUpload: undefined,
       error: "Open the article page and retry browser capture.",
       nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+    });
+  });
+
+  it("backfills CLI handoff when a fail-closed action returns no command", async () => {
+    executeAction.mockResolvedValue({
+      success: false,
+      error: "Capture failed without a next command",
+    });
+
+    const parseClient = {
+      createParseTask: vi.fn(),
+      createRawUploadTask: vi.fn(),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(parseClient, buildRoutePlan({ fail_closed: true }), {
+      input: "https://example.org/paper?q=a b",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "Capture failed without a next command",
+      nextCommand: "mdtero parse 'https://example.org/paper?q=a b' --trace --wait --timeout 300 --json",
     });
   });
 
