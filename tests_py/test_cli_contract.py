@@ -36,6 +36,7 @@ from mdtero.projects import (
     update_paper_submission,
     update_task,
 )
+from mdtero.rag_contract import ensure_rag_contract
 from mdtero.workflow import parse_trace_from_route, status_trace, upload_trace
 from mdtero.zotero import build_sync_note, paper_from_zotero_item, sync_project_to_zotero
 
@@ -3164,6 +3165,30 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
     assert payload["agent_summary"]["selected_provider"] == "voyage"
     assert "evidence_pack.context_markdown" in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
+
+
+def test_rag_contract_does_not_request_ingest_after_successful_query_without_summary():
+    payload = ensure_rag_contract({
+        "status": "succeeded",
+        "reason_code": "rag_query_succeeded",
+        "selected_provider": "voyage",
+        "provider_state": "configured",
+        "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
+    })
+
+    assert payload["readiness"]["ready_for_query"] is True
+    assert payload["readiness"]["needs_ingest"] is False
+    assert payload["readiness"]["needs_build"] is False
+    assert payload["readiness"]["provider_blocked"] is False
+    assert payload["readiness"]["next_step"] == "query"
+    assert payload["agent_summary"]["ready_for_query"] is True
+    assert payload["agent_summary"]["provider_configured"] is True
+    assert payload["agent_summary"]["next_commands"] == [
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+        "mdtero mcp briefing --json",
+        "mdtero mcp serve",
+    ]
 
 
 def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_path: Path):
