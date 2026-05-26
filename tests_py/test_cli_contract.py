@@ -482,7 +482,7 @@ def test_smoke_surfaces_translation_provider_failures(monkeypatch, tmp_path: Pat
             "action_hint": "Check backend translation provider diagnostics, quota, and API keys, then rerun `mdtero smoke --json`.",
             "next_commands": [
                 "mdtero status <translation-task-id> --json",
-                "mdtero translate <task-id> --to zh-CN --json",
+                "mdtero translate <task-id-or-paper.md> --to zh-CN --wait --timeout 600 --json",
                 "mdtero smoke --skip-translate --json",
             ],
             "task_id": "translate-1",
@@ -490,7 +490,7 @@ def test_smoke_surfaces_translation_provider_failures(monkeypatch, tmp_path: Pat
     ]
     assert payload["next_commands"][:3] == [
         "mdtero status <translation-task-id> --json",
-        "mdtero translate <task-id> --to zh-CN --json",
+        "mdtero translate <task-id-or-paper.md> --to zh-CN --wait --timeout 600 --json",
         "mdtero smoke --skip-translate --json",
     ]
     assert "Smoke failed at `translate` with `translation_provider_chain_failed`" in payload["action_hint"]
@@ -506,6 +506,7 @@ def test_wait_commands_accept_timeout_and_interval_flags():
     status_args = parser.parse_args(["status", "task-1", "--wait", "--timeout", "7", "--interval", "1.5"])
     project_parse_args = parser.parse_args(["project", "parse", "--wait", "--timeout", "9", "--interval", "2.5"])
     project_refresh_args = parser.parse_args(["project", "refresh", "--wait", "--timeout", "11", "--interval", "3.5"])
+    translate_args = parser.parse_args(["translate", "parse-1", "--wait", "--timeout", "13", "--interval", "4.5"])
 
     assert parse_args.timeout == 5
     assert parse_args.interval == 0.5
@@ -515,6 +516,8 @@ def test_wait_commands_accept_timeout_and_interval_flags():
     assert project_parse_args.interval == 2.5
     assert project_refresh_args.timeout == 11
     assert project_refresh_args.interval == 3.5
+    assert translate_args.timeout == 13
+    assert translate_args.interval == 4.5
 
 
 def test_rag_query_accepts_build_if_needed_flag():
@@ -1362,6 +1365,69 @@ def test_cmd_translate_accepts_task_id_and_outputs_json(monkeypatch, capsys):
     }
 
 
+def test_cmd_translate_wait_includes_final_task(monkeypatch, capsys):
+    from mdtero import cli
+
+    calls = []
+
+    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
+        calls.append(("translate", task_id, target_language, artifact))
+        return {"task_id": "translate-task", "status": "queued"}
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        calls.append(("wait", task_id, interval, timeout))
+        return {
+            "task_id": task_id,
+            "status": "succeeded",
+            "result": {"artifacts": {"translated_md": {"filename": "paper_CN.md"}}},
+        }
+
+    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+
+    args = type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "wait": True, "timeout": 13, "interval": 4.5, "json": True})()
+    assert cli.cmd_translate(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["task_id"] == "translate-task"
+    assert payload["final_task"]["status"] == "succeeded"
+    assert payload["final_task"]["preferred_artifact"] == "translated_md"
+    assert payload["final_task"]["next_commands"] == [
+        "mdtero download translate-task translated_md --output-dir ./mdtero-output --json"
+    ]
+    assert calls == [("translate", "parse-1", "zh-CN", "paper_md"), ("wait", "translate-task", 4.5, 13.0)]
+
+
+def test_cmd_translate_wait_returns_nonzero_for_failed_final_task(monkeypatch, capsys):
+    from mdtero import cli
+
+    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
+        return {"task_id": "translate-task", "status": "queued"}
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        return {
+            "task_id": task_id,
+            "status": "failed",
+            "error_code": "translation_provider_chain_failed",
+            "result": {
+                "reason_code": "translation_provider_chain_failed",
+                "action_hint": "All configured server translation providers failed.",
+                "translation_attempts": [{"provider": "mimo", "reason_code": "translation_provider_auth_failed"}],
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+
+    args = type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "wait": True, "timeout": 13, "interval": 4.5, "json": True})()
+    assert cli.cmd_translate(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["final_task"]["reason_code"] == "translation_provider_chain_failed"
+    assert payload["final_task"]["action_hint"] == "All configured server translation providers failed."
+    assert payload["final_task"]["translation_attempts"][0]["reason_code"] == "translation_provider_auth_failed"
+
+
 def test_cmd_translate_preserves_server_next_commands(monkeypatch, capsys, tmp_path):
     from mdtero import cli
 
@@ -1988,7 +2054,7 @@ def test_status_json_preserves_server_recovery_contract(monkeypatch, tmp_path: P
     server_next = [
         "mdtero status task-1 --json",
         "mdtero download task-1 paper_md --output-dir ./mdtero-output --json",
-        "mdtero translate task-1 --to zh-CN --json",
+        "mdtero translate task-1 --to zh-CN --wait --timeout 600 --json",
         "mdtero project ingest --json",
         "mdtero rag build --json",
     ]
@@ -2834,7 +2900,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert commands["commands"]["parse_batch"] == "mdtero parse --batch <directory> --wait --timeout 300 --json"
     assert commands["commands"]["doctor"] == "mdtero doctor --json"
     assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
-    assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --json"
+    assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json"
     assert commands["commands"]["zotero_import"] == "mdtero zotero import --json"
     assert commands["commands"]["agent_install"] == "mdtero agent install --interactive"
     assert commands["commands"]["ingest_for_rag"] == "mdtero project ingest --json"

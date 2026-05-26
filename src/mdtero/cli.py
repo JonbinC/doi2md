@@ -197,6 +197,8 @@ def build_parser() -> argparse.ArgumentParser:
     translate = _cmd(sub, "translate", "Request server-side translation.", cmd_translate)
     translate.add_argument("task_or_file")
     translate.add_argument("--to", default="zh-CN")
+    translate.add_argument("--wait", action="store_true", help="Wait for the translation task to finish and include final_task in the output.")
+    _add_wait_options(translate)
     translate.add_argument("--json", action="store_true")
 
     rag = sub.add_parser("rag")
@@ -287,7 +289,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         "next_commands": [
             "mdtero doctor --json",
             f"mdtero parse {args.doi} --trace --wait --timeout {int(args.timeout)} --json",
-            f"mdtero translate <task-id> --to {args.translate_to} --json",
+            f"mdtero translate <task-id-or-paper.md> --to {args.translate_to} --wait --timeout {int(args.timeout)} --json",
             "mdtero rag status --json",
         ],
     }
@@ -967,6 +969,7 @@ def _merge_waited_task_into_submission(result: dict[str, Any], task: dict[str, A
 
 def _preferred_parse_artifact(result: dict[str, Any]) -> str:
     nested = result.get("result") if isinstance(result.get("result"), dict) else {}
+    task_kind = str(result.get("task_kind") or nested.get("task_kind") if isinstance(nested, dict) else "").strip()
     candidates = [
         result.get("preferred_artifact"),
         nested.get("preferred_artifact") if isinstance(nested, dict) else None,
@@ -975,11 +978,17 @@ def _preferred_parse_artifact(result: dict[str, Any]) -> str:
     ]
     artifacts = nested.get("artifacts") if isinstance(nested, dict) and isinstance(nested.get("artifacts"), dict) else {}
     if isinstance(artifacts, dict):
-        candidates.extend(["paper_md" if "paper_md" in artifacts else None, "paper_bundle" if "paper_bundle" in artifacts else None])
+        candidates.extend([
+            "translated_md" if "translated_md" in artifacts else None,
+            "paper_md" if "paper_md" in artifacts else None,
+            "paper_bundle" if "paper_bundle" in artifacts else None,
+        ])
     for candidate in candidates:
         cleaned = str(candidate or "").strip()
         if cleaned:
             return cleaned
+    if task_kind == "translate":
+        return "translated_md"
     return "paper_md"
 
 
@@ -1388,7 +1397,15 @@ def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
     if status == "succeeded":
         defaults = [f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json"]
     elif status in {"failed", "cancelled"}:
-        defaults = [f"mdtero status {task_id} --json", "mdtero project parse --include-failed --wait --timeout 300 --json"]
+        is_translation = str(task.get("task_kind") or "").strip() == "translate" or bool(task.get("translation_attempts"))
+        defaults = [f"mdtero status {task_id} --json"]
+        if is_translation:
+            defaults.extend([
+                "mdtero translate <parse-task-id-or-paper.md> --to zh-CN --wait --timeout 600 --json",
+                "mdtero smoke --skip-translate --json",
+            ])
+        else:
+            defaults.append("mdtero project parse --include-failed --wait --timeout 300 --json")
     else:
         defaults = [f"mdtero status {task_id} --wait --timeout 300 --json"]
     for command in defaults:
@@ -1408,6 +1425,8 @@ def _promote_task_result_fields(task: dict[str, Any]) -> dict[str, Any]:
         "selected_provider": result.get("selected_provider") or quality.get("selected_pdf_provider") or quality.get("provider"),
         "parser_strategy": result.get("parser_strategy") or quality.get("parser_strategy"),
         "reason_code": result.get("reason_code"),
+        "action_hint": result.get("action_hint"),
+        "next_commands": result.get("next_commands"),
         "parse_outcome": parse_outcome,
         "download_artifacts": result.get("download_artifacts"),
         "translation_attempts": result.get("translation_attempts"),
@@ -1447,14 +1466,27 @@ def cmd_translate(args: argparse.Namespace) -> int:
                 "status": "failed",
                 "error_code": "translation_source_artifact_missing",
                 "task_id": args.task_or_file,
-                "action_hint": "The parse task does not expose a server-side paper_md path for translation. Run `mdtero status <task-id> --json`; if only a download artifact is available, download paper_md and run `mdtero translate <paper.md> --to zh-CN --json`.",
-                "next_commands": [f"mdtero status {args.task_or_file} --json", f"mdtero download {args.task_or_file} paper_md --output-dir ./mdtero-output --json"],
+                "action_hint": "The parse task does not expose a server-side paper_md path for translation. Run `mdtero status <task-id> --json`; if only a download artifact is available, download paper_md and run `mdtero translate <paper.md> --to zh-CN --wait --timeout 600 --json`.",
+                "next_commands": [
+                    f"mdtero status {args.task_or_file} --json",
+                    f"mdtero download {args.task_or_file} paper_md --output-dir ./mdtero-output --json",
+                    "mdtero translate <paper.md> --to zh-CN --wait --timeout 600 --json",
+                ],
             }
             _print_result(payload, json_output=args.json)
             return 1
         raise
     _enrich_translate_submission(result)
+    if getattr(args, "wait", False) and result.get("task_id"):
+        final_task = _wait_for_task(client, str(result["task_id"]), args=args)
+        _enrich_task_status(final_task)
+        result["final_task"] = final_task
     _print_result(result, json_output=args.json)
+    final_status = str((result.get("final_task") or {}).get("status") or "").lower()
+    if final_status == "timeout":
+        return 2
+    if final_status in {"failed", "cancelled"}:
+        return 1
     return 0
 
 
@@ -1776,7 +1808,11 @@ def _smoke_failure_next_commands(reason_code: str) -> list[str]:
     if reason_code in {"parse_failed", "task_wait_timeout"}:
         return ["mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 600 --json", "mdtero status <task-id> --json"]
     if reason_code.startswith("translation_provider") or reason_code in {"translate_failed", "translation_task_id_missing"}:
-        return ["mdtero status <translation-task-id> --json", "mdtero translate <task-id> --to zh-CN --json", "mdtero smoke --skip-translate --json"]
+        return [
+            "mdtero status <translation-task-id> --json",
+            "mdtero translate <task-id-or-paper.md> --to zh-CN --wait --timeout 600 --json",
+            "mdtero smoke --skip-translate --json",
+        ]
     return ["mdtero doctor --json", "mdtero smoke --json"]
 
 
