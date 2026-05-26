@@ -408,6 +408,8 @@ export interface CliHandoffPlan {
 const PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+  "mdtero project ingest --json",
+  "mdtero rag query \"<question>\" --build-if-needed --json",
   "mdtero mcp briefing --json",
 ];
 
@@ -419,19 +421,25 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
   }
   const statusCommands = commands.filter((command) => /^mdtero\s+status\b/.test(command));
   const downloadCommands = commands.filter((command) => /^mdtero\s+download\b/.test(command));
+  const ingestCommands = commands.filter((command) => command === "mdtero project ingest --json");
+  const ragQueryCommands = commands.filter((command) => /^mdtero\s+rag\s+query\b/.test(command));
   const mcpCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
   const otherCommands = commands.filter(
     (command) =>
       command !== primary &&
       !/^mdtero\s+status\b/.test(command) &&
       !/^mdtero\s+download\b/.test(command) &&
+      command !== "mdtero project ingest --json" &&
+      !/^mdtero\s+rag\s+query\b/.test(command) &&
       command !== "mdtero mcp briefing --json"
   );
   return normalizeCommandList([
     primary,
     ...(statusCommands.length ? statusCommands : [PARSE_HANDOFF_FOLLOWUPS[0]]),
     ...(downloadCommands.length ? downloadCommands : [PARSE_HANDOFF_FOLLOWUPS[1]]),
-    ...(mcpCommands.length ? mcpCommands : [PARSE_HANDOFF_FOLLOWUPS[2]]),
+    ...(ingestCommands.length ? ingestCommands : [PARSE_HANDOFF_FOLLOWUPS[2]]),
+    ...(ragQueryCommands.length ? ragQueryCommands : [PARSE_HANDOFF_FOLLOWUPS[3]]),
+    ...(mcpCommands.length ? mcpCommands : [PARSE_HANDOFF_FOLLOWUPS[4]]),
     ...otherCommands,
   ]);
 }

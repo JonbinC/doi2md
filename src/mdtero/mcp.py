@@ -1437,6 +1437,8 @@ def _extension_handoff_commands(commands: dict[str, Any]) -> list[str]:
         str(commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"),
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero project ingest --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
         str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
     ]
 

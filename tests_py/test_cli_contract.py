@@ -3502,6 +3502,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
             "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
             "mdtero status <task-id> --wait --timeout 300 --json",
             "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+            "mdtero project ingest --json",
+            "mdtero rag query \"<question>\" --build-if-needed --json",
             "mdtero mcp briefing --json",
         ],
         "primary_commands": [
@@ -3530,6 +3532,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero project ingest --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
     ]
     assert briefing["agents"]["detected_count"] == 1
@@ -4564,6 +4568,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["extension_handoff"]["commands"][2:] == [
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero project ingest --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
     ]
     assert model["extension_handoff"]["primary_commands"] == model["extension_handoff"]["commands"][:2]
@@ -6409,6 +6415,8 @@ def test_public_docs_and_skill_describe_extension_cli_handoff_contract():
     assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in combined
     assert "mdtero status <task-id> --wait --timeout 300 --json" in combined
     assert "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json" in combined
+    assert "mdtero project ingest --json" in combined
+    assert "mdtero rag query \"<question>\" --build-if-needed --json" in combined
     assert "mdtero mcp briefing --json" in combined
     assert "client_acquisition" in combined
     assert "raw upload" in combined
