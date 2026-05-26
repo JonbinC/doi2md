@@ -65,10 +65,15 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - Agent-facing recommended commands include `--json` where supported. Prefer those exact commands over human-readable variants when automating workflows.
 - `project_status`: current project name, server project id, paper statuses, and next actions
 - `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
+- `submit_parse(input_value, wait=False)`: submit a DOI/URL/file handoff through the same route-aware CLI path and update the local project record; use this when the agent should start work without asking the user to copy a terminal command
+- `task_status(task_id, wait=False)`: poll a parse or translation task, sync the local project state, and return `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, and `next_commands`
+- `request_translation(task_id_or_markdown_path, target_language="zh-CN", wait=False)`: request backend translation for a completed parse task or local Markdown file and return provider-attempt diagnostics when translation fails
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
 - `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
+
+Prefer MCP tools for multi-step agent work when `mdtero mcp serve` is already running. Prefer CLI commands when the user is reading along in a terminal, when a file path must be selected manually, or when browser-extension handoff copy should remain visible to the user.
 
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.
 
