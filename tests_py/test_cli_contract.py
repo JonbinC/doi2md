@@ -4874,6 +4874,7 @@ def test_public_script_surface_is_ci_only():
     repo_root = Path(__file__).resolve().parents[1]
     expected = {
         "scripts/ci/extension_dist_smoke.py",
+        "scripts/ci/private_platform_preflight.sh",
         "scripts/ci/release_gate.sh",
         "scripts/ci/secret_guard.py",
     }
@@ -4919,8 +4920,11 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
 
     assert "workflow_dispatch:" in workflow
     assert "check_scope:" in workflow
+    assert "platform_preflight:" in workflow
     assert 'default: "smoke"' in workflow
     assert "Public smoke gate" in workflow
+    assert "Optional private platform preflight" in workflow
+    assert "scripts/ci/private_platform_preflight.sh" in workflow
     assert "runs-on: linux-small" in workflow
     assert "timeout-minutes: 10" in workflow
     assert "timeout-minutes: 20" in workflow
@@ -4934,8 +4938,29 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
 
     assert "forgejo`: `http://100.97.234.105:3020/jianbin/doi2md.git`" in runbook
     assert "Do not embed PATs, service tokens, or passwords" in runbook
+    assert "platform_preflight=check" in runbook
+    assert "scripts/ci/private_platform_preflight.sh" in runbook
+    assert "does not read provider secrets, deploy, publish, or print credentials" in runbook
     assert "read them from Infisical at runtime through a service token or machine identity" in runbook
     assert "Do not remove GitHub or PyPI/public release paths" in runbook
+
+
+def test_public_private_platform_preflight_is_non_secret_and_non_deploying():
+    repo_root = Path(__file__).resolve().parents[1]
+    preflight = (repo_root / "scripts" / "ci" / "private_platform_preflight.sh").read_text(encoding="utf-8")
+
+    assert "MDTERO_FORGEJO_REMOTE:-forgejo" in preflight
+    assert "http://100.97.234.105:3020/*" in preflight
+    assert "embeds credentials; remove them" in preflight
+    assert "GIT_TERMINAL_PROMPT=0 git ls-remote --heads" in preflight
+    assert '"$python_bin" scripts/ci/secret_guard.py' in preflight
+    assert '"$python_bin" scripts/ci/extension_dist_smoke.py >/dev/null' in preflight
+    assert "status=ok" in preflight
+    assert "INFISICAL_TOKEN" not in preflight
+    assert "docker" not in preflight
+    assert "uv build" not in preflight
+    assert "twine" not in preflight
+    assert "set -x" not in preflight
 
 
 def test_public_generated_dependency_and_package_artifacts_are_not_source():

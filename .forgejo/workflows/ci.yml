@@ -11,6 +11,14 @@ on:
         options:
           - smoke
           - full
+      platform_preflight:
+        description: "Run private Forgejo/secret/dist preflight before tests."
+        required: false
+        default: "skip"
+        type: choice
+        options:
+          - skip
+          - check
 
 permissions:
   contents: read
@@ -37,6 +45,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Optional private platform preflight
+        if: ${{ inputs.platform_preflight == 'check' }}
+        run: scripts/ci/private_platform_preflight.sh
 
       - name: Run secret guard
         run: python scripts/ci/secret_guard.py
