@@ -1329,6 +1329,36 @@ def test_translation_source_path_from_task_prefers_paper_md_artifact_path():
     assert translation_source_path_from_task(task) == "/app/tasks/parse-1/paper.md"
 
 
+def test_translation_source_download_artifact_from_v1_download_artifacts():
+    from mdtero.client import translation_source_download_artifact_from_task
+
+    task = {
+        "result": {
+            "download_artifacts": [
+                {"artifact": "paper_bundle", "filename": "paper.zip"},
+                {"artifact": "paper_md", "filename": "paper.md", "media_type": "text/markdown"},
+            ]
+        }
+    }
+
+    assert translation_source_download_artifact_from_task(task) == {
+        "artifact": "paper_md",
+        "filename": "paper.md",
+        "media_type": "text/markdown",
+    }
+
+
+def test_translation_source_download_artifact_from_legacy_download_artifacts_dict():
+    from mdtero.client import translation_source_download_artifact_from_task
+
+    task = {"result": {"download_artifacts": {"paper_md": {"filename": "legacy.md"}}}}
+
+    assert translation_source_download_artifact_from_task(task) == {
+        "artifact": "paper_md",
+        "filename": "legacy.md",
+    }
+
+
 def test_translate_task_uses_parse_task_artifact_path(monkeypatch):
     calls = []
 
@@ -1347,6 +1377,49 @@ def test_translate_task_uses_parse_task_artifact_path(monkeypatch):
 
     assert result == {"task_id": "translate-task", "status": "queued"}
     assert calls == [("task", "parse-1"), ("translate", "/app/tasks/parse-1/paper.md", "zh-CN")]
+
+
+def test_translate_task_downloads_v1_markdown_artifact_when_server_path_is_absent(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        headers = {"content-disposition": 'attachment; filename="vaswani2017attention.md"'}
+        text = "# Attention Is All You Need\n\nTransformer text."
+
+        def raise_for_status(self):
+            calls.append(("raise_for_status",))
+
+    def fake_task(self, task_id):
+        calls.append(("task", task_id))
+        return {
+            "result": {
+                "download_artifacts": [
+                    {"artifact": "paper_md", "filename": "vaswani2017attention.md", "media_type": "text/markdown"}
+                ]
+            }
+        }
+
+    def fake_raw_request(self, method, path, **kwargs):
+        calls.append(("raw", method, path, kwargs))
+        return FakeResponse()
+
+    def fake_translate_text(self, markdown, *, filename="paper.md", target_language="zh-CN"):
+        calls.append(("translate_text", markdown, filename, target_language))
+        return {"task_id": "translate-task", "status": "queued"}
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "_raw_request", fake_raw_request)
+    monkeypatch.setattr(MdteroClient, "translate_text", fake_translate_text)
+
+    result = MdteroClient().translate_task("parse-1", target_language="zh-CN")
+
+    assert result == {"task_id": "translate-task", "status": "queued"}
+    assert calls == [
+        ("task", "parse-1"),
+        ("raw", "GET", "/api/v1/tasks/parse-1/download/paper_md", {}),
+        ("raise_for_status",),
+        ("translate_text", "# Attention Is All You Need\n\nTransformer text.", "vaswani2017attention.md", "zh-CN"),
+    ]
 
 
 def test_cmd_translate_accepts_task_id_and_outputs_json(monkeypatch, capsys):
