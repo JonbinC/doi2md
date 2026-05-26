@@ -6240,10 +6240,14 @@ def test_public_docs_and_skill_describe_extension_cli_handoff_contract():
     assert "校园网/登录态" in combined
     assert "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json" in combined
     assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in combined
+    assert "mdtero status <task-id> --wait --timeout 300 --json" in combined
+    assert "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json" in combined
+    assert "mdtero mcp briefing --json" in combined
     assert "client_acquisition" in combined
     assert "raw upload" in combined
     assert "reason_code" in combined
     assert "action_hint" in combined
+    assert "download_artifacts" in combined
     assert "next_commands" in combined
 
 
