@@ -36,6 +36,7 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
                 commands["commands"]["parse_doi_or_url"],
             ],
             "next_actions": commands,
+            "project_bridge": build_project_bridge(root),
         }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
@@ -82,6 +83,7 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
         "action_hint": action_hint,
         "next_commands": _dedupe_commands(next_commands),
         "next_actions": commands,
+        "project_bridge": build_project_bridge(root),
     })
 
 
@@ -119,6 +121,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "extension_handoff_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "extension_handoff_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "project_init": "mdtero project init --name <name>",
+        "project_status": "mdtero project status --json",
         "project_add": "mdtero project add <doi-or-url> --json",
         "import_bib": "mdtero project import-bib <refs.bib> --json",
         "parse_pending": "mdtero project parse --wait --timeout 300 --json",
@@ -174,6 +177,105 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    state = _load_project_or_none(root)
+    command_bundle = build_agent_commands(root)
+    commands = command_bundle["commands"]
+    bridge_commands = [
+        commands["doctor"],
+        commands["project_status"],
+        commands["rag_status"],
+        commands["rag_build"],
+        commands["rag_status"],
+        commands["mcp_briefing"],
+    ]
+    if state is None:
+        status = "not_initialized"
+        reason_code = "project_not_initialized"
+        action_hint = "Initialize a local Mdtero project before binding it to a backend RAG project."
+        next_commands = _dedupe_commands([
+            commands["doctor"],
+            commands["project_init_named"],
+            commands["project_status"],
+            commands["project_add"],
+            commands["parse_doi_or_url"],
+        ])
+        project_name = root.resolve().name
+        server_project_id = None
+        paper_count = 0
+        ready_for_ingest_count = 0
+    else:
+        succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+        pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
+        running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
+        failed = [paper for paper in state.papers if paper.status == "failed"]
+        project_name = state.name
+        server_project_id = state.server_project_id
+        paper_count = len(state.papers)
+        ready_for_ingest_count = len(succeeded)
+        if state.server_project_id:
+            status = "bound"
+            reason_code = "server_project_linked"
+            action_hint = "Local project is linked to a backend RAG project. Refresh/import/build, then brief the local agent."
+            next_commands = _dedupe_commands([
+                commands["project_status"],
+                commands.get("ingest_for_rag", "mdtero project ingest --json"),
+                commands["rag_status"],
+                commands["rag_build"],
+                commands["mcp_briefing"],
+            ])
+        elif succeeded:
+            status = "needs_server_binding"
+            reason_code = "server_project_not_linked"
+            action_hint = "Run `mdtero rag build --json` to create or reuse the backend project id, import completed artifacts, and save the binding locally."
+            next_commands = _dedupe_commands([commands["project_status"], commands["rag_build"], commands["rag_status"], commands["mcp_briefing"]])
+        elif running:
+            status = "waiting_for_parse"
+            reason_code = "project_has_running_tasks"
+            action_hint = "Wait for running parse tasks to finish before creating or binding the backend RAG project."
+            next_commands = _dedupe_commands([commands["project_status"], commands["refresh"], commands["rag_status"]])
+        elif pending:
+            status = "needs_parse"
+            reason_code = "project_has_pending_items"
+            action_hint = "Submit pending papers and refresh status before binding the backend RAG project."
+            next_commands = _dedupe_commands([commands["project_status"], commands["parse_pending"], commands["refresh"], commands["rag_build"]])
+        elif failed:
+            status = "needs_attention"
+            reason_code = "project_has_failed_items"
+            action_hint = "Fix failed parse items before building server-side Voyage RAG."
+            next_commands = _dedupe_commands([commands["project_status"], "mdtero project parse --include-failed --wait --timeout 300 --json", commands["refresh"]])
+        else:
+            status = "empty"
+            reason_code = "project_empty"
+            action_hint = "Add and parse at least one paper before binding a backend RAG project."
+            next_commands = _dedupe_commands([commands["project_status"], commands["project_add"], commands["parse_doi_or_url"], commands["rag_status"]])
+
+    return redact_sensitive_payload({
+        "status": status,
+        "reason_code": reason_code,
+        "local_project": {
+            "name": project_name,
+            "root": str(root.resolve()),
+            "project_file": str(project_path(root)),
+            "initialized": state is not None,
+            "paper_count": paper_count,
+            "ready_for_ingest_count": ready_for_ingest_count,
+        },
+        "server_project": {
+            "id": server_project_id,
+            "linked": bool(server_project_id),
+            "owned_by": "mdtero_backend",
+            "provider": "voyage",
+        },
+        "local_project_name_is_server_project_id": False,
+        "binding_source": "local_project_file" if server_project_id else None,
+        "action_hint": action_hint,
+        "bridge_commands": bridge_commands,
+        "next_commands": next_commands,
+    })
+
+
 def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = _load_project_or_none(root)
@@ -188,6 +290,7 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
             "action_hint": "Initialize a local Mdtero project before RAG.",
             "commands": commands,
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+            "project_bridge": build_project_bridge(root),
         }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
@@ -241,6 +344,7 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
         "action_hint": action_hint,
         "commands": commands,
         "next_commands": _dedupe_commands(next_commands),
+        "project_bridge": build_project_bridge(root),
     })
 
 
@@ -258,6 +362,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_paper_count": 0,
             "action_hint": "Run `mdtero project init --name <name>` before server-side Voyage RAG.",
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+            "project_bridge": build_project_bridge(root),
         }
     local_ready = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
     if not state.server_project_id:
@@ -270,6 +375,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_paper_count": len(state.papers),
             "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
             "next_commands": [commands["rag_build"], commands["parse_pending"], commands["refresh"]],
+            "project_bridge": build_project_bridge(root),
         }
 
     try:
@@ -284,6 +390,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_paper_count": len(state.papers),
             "error_type": exc.__class__.__name__,
             "next_commands": [commands["ingest_for_rag"], "mdtero rag status --json", commands["rag_build"]],
+            "project_bridge": build_project_bridge(root),
         })
 
     summary = status.get("summary") if isinstance(status.get("summary"), dict) else {}
@@ -313,6 +420,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     status["next_commands"] = _dedupe_commands(next_commands)
     status["action_hint"] = _server_rag_action_hint(status, commands)
     status["agent_summary"] = _server_rag_agent_summary(status)
+    status["project_bridge"] = build_project_bridge(root)
     ensure_rag_contract(status)
     return redact_sensitive_payload(status)
 
@@ -1089,6 +1197,7 @@ def build_agent_briefing(
             "action_hint": server_rag.get("action_hint"),
             "next_commands": server_rag.get("next_commands", []),
         },
+        "project_bridge": build_project_bridge(root),
         "agents": {
             "detected_count": len(detected_agents),
             "installed_count": len(installed_agents),
