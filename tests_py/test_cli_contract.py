@@ -4975,6 +4975,11 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "platform_preflight=check" in runbook
     assert "scripts/ci/private_platform_preflight.sh" in runbook
     assert "does not read provider secrets, deploy, publish, or print credentials" in runbook
+    assert "Manual smoke evidence" in runbook
+    assert "Workflow: `Public CLI and Extension CI`" in runbook
+    assert "Inputs: `check_scope=smoke`, `platform_preflight=check`" in runbook
+    assert "public_private_platform_preflight: status=ok" in runbook
+    assert "run the same workflow with `check_scope=full` after the smoke run passes" in runbook
     assert "read them from Infisical at runtime through a service token or machine identity" in runbook
     assert "Do not remove GitHub or PyPI/public release paths" in runbook
 
