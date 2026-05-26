@@ -5358,6 +5358,8 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert 'default: "smoke"' in workflow
     assert "Public smoke gate" in workflow
     assert "Optional private platform preflight" in workflow
+    assert "List required secret names" in workflow
+    assert "Forgejo secrets used by this workflow: none." in workflow
     assert "scripts/ci/private_platform_preflight.sh" in workflow
     assert "runs-on: linux-small" in workflow
     assert "timeout-minutes: 10" in workflow
@@ -5375,6 +5377,9 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "auth_smoke:" in production_smoke
     assert "smoke_scope:" in production_smoke
     assert "auth_smoke=skip" in production_smoke
+    assert "List required secret names" in production_smoke
+    assert "MDTERO_API_KEY: optional; required only when auth_smoke=check." in production_smoke
+    assert "Secret values are never printed by this workflow." in production_smoke
     assert "secrets.MDTERO_API_KEY" in production_smoke
     assert "auth_smoke=check requires Forgejo secret MDTERO_API_KEY" in production_smoke
     assert "uv run --project" in production_smoke
@@ -5393,6 +5398,7 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "forgejo`: `http://100.97.234.105:3020/jianbin/doi2md.git`" in runbook
     assert "Do not embed PATs, service tokens, or passwords" in runbook
     assert "platform_preflight=check" in runbook
+    assert "Each workflow lists the Forgejo secret names it may use, but must not print secret values." in runbook
     assert "scripts/ci/private_platform_preflight.sh" in runbook
     assert "does not read provider secrets, deploy, publish, or print credentials" in runbook
     assert "Actions API endpoint may return `404 page not found`" in runbook
@@ -5405,6 +5411,7 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "run the same workflow with `check_scope=full` after the smoke run passes" in runbook
     assert "Workflow: `Public Production Smoke`" in runbook
     assert "auth_smoke=check" in runbook
+    assert "Required secret name for authenticated smoke: `MDTERO_API_KEY`" in runbook
     assert "smoke_scope=core" in runbook
     assert "smoke_scope=full" in runbook
     assert "Missing `MDTERO_API_KEY` exits with code `78`" in runbook

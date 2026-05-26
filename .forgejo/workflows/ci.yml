@@ -46,6 +46,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: List required secret names
+        run: |
+          cat <<'MSG'
+          Forgejo secrets used by this workflow: none.
+          This smoke gate must stay non-secret and non-deploying.
+          MSG
+
       - name: Optional private platform preflight
         if: ${{ inputs.platform_preflight == 'check' }}
         run: scripts/ci/private_platform_preflight.sh

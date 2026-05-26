@@ -24,6 +24,7 @@ Forgejo Actions is manual-first during phase 1.
 - Default `check_scope=smoke` runs only lightweight public contract tests.
 - Use `check_scope=full` for the Python package build and browser-extension build/test path.
 - Use `platform_preflight=check` when an operator wants a non-deploying private-platform check for clean Forgejo remotes, secret scanning, extension tests, and the checked-in extension dist smoke.
+- Each workflow lists the Forgejo secret names it may use, but must not print secret values.
 - Do not add push/PR triggers until a manual Forgejo smoke has passed.
 - Keep runner labels narrow, currently `linux-small`.
 
@@ -66,6 +67,7 @@ The separate `Public Production Smoke` workflow is also manual-only. It exists f
 
 - Default inputs are `auth_smoke=skip` and `smoke_scope=core`, so a dry run proves the workflow wiring without needing secrets.
 - To run the live CLI path, configure Forgejo secret `MDTERO_API_KEY`, then dispatch with `auth_smoke=check`.
+- Required secret name for authenticated smoke: `MDTERO_API_KEY`.
 - Use `smoke_scope=core` for discovery, DOI parse, artifact download, and server-side Voyage RAG. Use `smoke_scope=full` only when translation provider health should be included in the release gate.
 - The job runs `mdtero smoke --api-base <api_base> --json --timeout 600 --interval 2` from a temporary directory through `uv run --project`, then removes the smoke directory.
 - Missing `MDTERO_API_KEY` exits with code `78`; it should be treated as missing operator setup, not a product regression.

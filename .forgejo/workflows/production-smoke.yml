@@ -51,6 +51,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: List required secret names
+        run: |
+          cat <<'MSG'
+          Forgejo secrets used by this workflow:
+          - MDTERO_API_KEY: optional; required only when auth_smoke=check.
+          Secret values are never printed by this workflow.
+          MSG
+
       - name: Run secret guard
         run: python scripts/ci/secret_guard.py
 
