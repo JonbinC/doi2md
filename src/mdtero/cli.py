@@ -66,6 +66,8 @@ ACADEMIC_OPTIONS = [
 
 DEFAULT_WAIT_TIMEOUT_SECONDS = 600.0
 DEFAULT_WAIT_INTERVAL_SECONDS = 2.0
+SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
+SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -868,18 +870,30 @@ def cmd_parse(args: argparse.Namespace) -> int:
     submissions: list[tuple[dict[str, Any], str, str]] = []
     traces = []
     if args.batch:
-        for path in sorted(args.batch.iterdir()):
-            if path.suffix.lower() in {".pdf", ".epub", ".html", ".htm", ".xml"}:
-                result = client.upload(path)
-                submissions.append((result, str(path), f"file:{path.suffix.lower().lstrip('.')}"))
-                traces.append(upload_trace(path, result).to_dict())
+        batch_files, failure = _validated_parse_batch_files(args.batch)
+        if failure:
+            _print_result(failure, json_output=args.json or args.trace)
+            return 2
+        for path in batch_files:
+            result = client.upload(path)
+            submissions.append((result, str(path), f"file:{path.suffix.lower().lstrip('.')}"))
+            traces.append(upload_trace(path, result).to_dict())
     elif args.file:
+        failure = _validated_parse_file_failure(args.file)
+        if failure:
+            _print_result(failure, json_output=args.json or args.trace)
+            return 2
         result = client.upload(args.file, source_input=args.input)
         submissions.append((result, args.input or str(args.file), f"file:{args.file.suffix.lower().lstrip('.')}"))
         traces.append(upload_trace(args.file, result).to_dict())
     else:
         if not args.input:
-            raise SystemExit("parse requires <doi-or-url>, --file, or --batch")
+            failure = _parse_input_failure(
+                "parse_input_missing",
+                action_hint="Provide one DOI/URL, one local PDF/EPUB/XML/HTML file, or a directory of supported files.",
+            )
+            _print_result(failure, json_output=args.json or args.trace)
+            return 2
         try:
             route, result, acquisition = client.parse_with_route(args.input)
         except AcquisitionError as exc:
@@ -936,6 +950,69 @@ def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
             next_commands.append(command)
     result["next_commands"] = next_commands
     return result
+
+
+def _validated_parse_batch_files(batch_path: Path) -> tuple[list[Path], dict[str, Any] | None]:
+    if not batch_path.exists():
+        return [], _parse_input_failure(
+            "batch_path_not_found",
+            path=batch_path,
+            action_hint="Create the directory or pass the correct path to a folder containing PDF, EPUB, XML, or HTML files.",
+        )
+    if not batch_path.is_dir():
+        return [], _parse_input_failure(
+            "batch_path_not_directory",
+            path=batch_path,
+            action_hint="Pass a directory to `--batch`, or use `--file` for a single PDF, EPUB, XML, or HTML file.",
+        )
+    files = [path for path in sorted(batch_path.iterdir()) if path.is_file() and path.suffix.lower() in SUPPORTED_PARSE_FILE_SUFFIXES]
+    if not files:
+        return [], _parse_input_failure(
+            "batch_no_supported_files",
+            path=batch_path,
+            action_hint="Add PDF, EPUB, XML, or HTML files to the batch directory, or parse one supported file with `--file`.",
+        )
+    return files, None
+
+
+def _validated_parse_file_failure(file_path: Path) -> dict[str, Any] | None:
+    if not file_path.exists():
+        return _parse_input_failure(
+            "file_path_not_found",
+            path=file_path,
+            action_hint="Pass an existing PDF, EPUB, XML, or HTML file path, or use a DOI/URL without `--file`.",
+        )
+    if not file_path.is_file():
+        return _parse_input_failure(
+            "file_path_not_file",
+            path=file_path,
+            action_hint="Pass a file to `--file`; for directories use `mdtero parse --batch <directory> --wait --timeout 300 --json`.",
+        )
+    if file_path.suffix.lower() not in SUPPORTED_PARSE_FILE_SUFFIXES:
+        return _parse_input_failure(
+            "file_type_not_supported",
+            path=file_path,
+            action_hint="Mdtero upload parse currently accepts PDF, EPUB, XML, HTML, or HTM files. Convert or export the source first, then retry.",
+        )
+    return None
+
+
+def _parse_input_failure(reason_code: str, *, path: Path | None = None, action_hint: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "failed",
+        "error_code": reason_code,
+        "reason_code": reason_code,
+        "action_hint": action_hint,
+        "supported_extensions": SUPPORTED_PARSE_FILE_EXTENSIONS,
+        "next_commands": [
+            "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+            "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+            "mdtero parse --batch <directory> --wait --timeout 300 --json",
+        ],
+    }
+    if path is not None:
+        payload["path"] = str(path)
+    return payload
 
 
 def _merge_waited_task_into_submission(result: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
