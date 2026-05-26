@@ -35,6 +35,8 @@ scripts/ci/private_platform_preflight.sh
 
 It does not read provider secrets, deploy, publish, or print credentials. It only verifies the private Forgejo remote, runs `scripts/ci/secret_guard.py`, and validates the checked-in MV3 extension bundle with `scripts/ci/extension_dist_smoke.py`.
 
+Current Forgejo exposes Actions through the web UI for this migration. The GitHub-compatible Actions API endpoint may return `404 page not found` for `/api/v1/repos/<owner>/<repo>/actions/workflows`, so do not treat that API probe as a CI failure. Trigger `workflow_dispatch` from Forgejo Web until a supported API or `tea` workflow command is configured.
+
 ## Manual smoke evidence
 
 Before treating Forgejo as the healthy private CI path, run this workflow from Forgejo Web:
@@ -50,6 +52,8 @@ A passing smoke run must show these non-secret steps in the job log:
 - `Run secret guard`
 - `Run lightweight public contract tests`
 - `public_private_platform_preflight: status=ok`
+
+Local smoke evidence from the current host already matches the non-deploying preflight path: `scripts/ci/private_platform_preflight.sh` completed with `public_private_platform_preflight: status=ok remote=forgejo extension_dist=ok`.
 
 For release-candidate validation, run the same workflow with `check_scope=full` after the smoke run passes. The full run is expected to build the Python package, smoke-install the wheel, run all Python tests, run the browser-extension test suite, build the MV3 bundle, and execute `scripts/ci/extension_dist_smoke.py`. Keep this full run manual until the lightweight runner has repeated green evidence.
 
