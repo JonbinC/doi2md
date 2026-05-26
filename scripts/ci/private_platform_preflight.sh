@@ -53,7 +53,8 @@ else
 fi
 
 "$python_bin" scripts/ci/secret_guard.py
+"$python_bin" scripts/ci/forgejo_workflow_policy.py
 npm --prefix extension test -- --run
 "$python_bin" scripts/ci/extension_dist_smoke.py >/dev/null
 
-printf 'public_private_platform_preflight: status=ok remote=%s extension_tests=ok extension_dist=ok\n' "$remote_name"
+printf 'public_private_platform_preflight: status=ok remote=%s forgejo_policy=ok extension_tests=ok extension_dist=ok\n' "$remote_name"
