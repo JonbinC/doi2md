@@ -61,6 +61,9 @@ const COPY = {
     workflowParse: "Parse / Upload",
     workflowTranslate: "Translate",
     workflowDownload: "Download",
+    workflowPending: "next",
+    workflowActive: "active",
+    workflowDone: "done",
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
@@ -118,6 +121,9 @@ const COPY = {
     workflowParse: "解析 / 上传",
     workflowTranslate: "翻译",
     workflowDownload: "下载",
+    workflowPending: "下一步",
+    workflowActive: "进行中",
+    workflowDone: "完成",
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "本地文件入口",
@@ -208,6 +214,10 @@ let currentInput: string | null = null;
 let uiLanguage: UiLanguage = "en";
 let isParsing = false;
 let isTranslating = false;
+let isSignedIn = false;
+let hasParsedArtifact = false;
+let hasTranslatedArtifact = false;
+let hasDownloadableArtifact = false;
 let detectedPageContext: { tabId: number; tabUrl?: string; detectedInput: string } | null = null;
 let currentBridgeStatus: { state?: string | null; runnerState?: string | null } | null = null;
 
@@ -223,6 +233,23 @@ function setResult(message: string) {
   if (resultEl) {
     resultEl.textContent = message;
   }
+}
+
+type WorkflowState = "pending" | "active" | "done";
+
+function setWorkflowStep(element: HTMLSpanElement | null, state: WorkflowState) {
+  if (!element) return;
+  element.dataset.state = state;
+  const copy = getCurrentCopy();
+  const label = state === "done" ? copy.workflowDone : state === "active" ? copy.workflowActive : copy.workflowPending;
+  element.setAttribute("aria-label", `${element.textContent || "Step"}: ${label}`);
+}
+
+function updateWorkflowState() {
+  setWorkflowStep(workflowAuthEl, isSignedIn ? "done" : "active");
+  setWorkflowStep(workflowParseEl, hasParsedArtifact ? "done" : isSignedIn ? "active" : "pending");
+  setWorkflowStep(workflowTranslateEl, hasTranslatedArtifact ? "done" : isTranslating || hasParsedArtifact ? "active" : "pending");
+  setWorkflowStep(workflowDownloadEl, hasDownloadableArtifact ? "done" : hasParsedArtifact || hasTranslatedArtifact ? "active" : "pending");
 }
 
 function setCliHandoff(input?: string | null, commandOverride?: string | null) {
@@ -366,6 +393,7 @@ function applyLanguage() {
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
+  updateWorkflowState();
   renderActionButtons();
 }
 
@@ -426,6 +454,14 @@ function renderArtifacts(task: TaskRecord) {
     if (artifactActionsEl) artifactActionsEl.hidden = true;
     return;
   }
+
+  hasDownloadableArtifact = true;
+  if (preferredKey === "translated_md") {
+    hasTranslatedArtifact = true;
+  } else {
+    hasParsedArtifact = true;
+  }
+  updateWorkflowState();
 
   if (artifactActionsEl) artifactActionsEl.hidden = false;
   if (downloadButton) {
@@ -582,6 +618,10 @@ async function hydrateSavedState(detectedInput: string) {
     setResult(summary);
   }
   lastParsedMarkdownPath = savedState.parseMarkdownPath ?? null;
+  hasParsedArtifact = Boolean(savedState.parseTaskId || savedState.parseMarkdownPath);
+  hasTranslatedArtifact = Boolean(savedState.translatedTaskId || savedState.translatedFilename);
+  hasDownloadableArtifact = hasParsedArtifact || hasTranslatedArtifact;
+  updateWorkflowState();
   renderActionButtons();
 }
 
@@ -607,6 +647,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
       });
     }
     renderActionButtons();
+    updateWorkflowState();
     return;
   }
 
@@ -635,6 +676,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
       });
     }
     renderActionButtons();
+    updateWorkflowState();
     return;
   }
 
@@ -645,6 +687,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     window.setTimeout(() => {
       void pollTask(taskId, kind);
     }, 1500);
+    updateWorkflowState();
     return;
   }
 
@@ -656,6 +699,8 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
 
   if (kind === "parse") {
     isParsing = false;
+    hasParsedArtifact = true;
+    hasDownloadableArtifact = true;
     const preferredArtifactKey = getPreferredArtifactKey(task.result);
     const filename = preferredArtifactKey
       ? task.result?.artifacts?.[preferredArtifactKey]?.filename
@@ -668,16 +713,20 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     }
   } else {
     isTranslating = false;
+    hasTranslatedArtifact = true;
+    hasDownloadableArtifact = true;
     const filename = task.result?.artifacts?.translated_md?.filename;
     if (filename) {
       setResult(getCurrentCopy().translateReady(filename));
     }
   }
   renderActionButtons();
+  updateWorkflowState();
 }
 
 async function refreshUsage() {
   const settings = await readSettings();
+  isSignedIn = Boolean(settings.token);
   if (connectionPillEl) {
     connectionPillEl.textContent = settings.token
       ? getCurrentCopy().connectionPillSignedIn
@@ -693,6 +742,7 @@ async function refreshUsage() {
     if (usageStatusEl) {
       usageStatusEl.textContent = getCurrentCopy().signInHint;
     }
+    updateWorkflowState();
     return;
   }
 
@@ -709,6 +759,7 @@ async function refreshUsage() {
       usageStatusEl.textContent = getUsageStatusText(null, uiLanguage, (error as Error).message);
     }
   }
+  updateWorkflowState();
 }
 
 async function refreshBridgeStatus() {
@@ -805,12 +856,14 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
   detectedPageContext = null;
   setLocalFileName(file.name);
   isParsing = true;
+  updateWorkflowState();
   renderActionButtons();
   setResult(getCurrentCopy().localFileParsing(file.name));
 
   const settings = await readSettings();
   if (!settings.token) {
     isParsing = false;
+    updateWorkflowState();
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
     await openMdteroAccount();
@@ -821,6 +874,7 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
 
   if (!response?.ok) {
     isParsing = false;
+    updateWorkflowState();
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().localFileParseFailed);
     setCliHandoff(file.name, buildCliFileParseCommand(file.name, artifactKind));
@@ -849,12 +903,14 @@ parseButton?.addEventListener("click", async () => {
 
   currentInput = input;
   isParsing = true;
+  updateWorkflowState();
   renderActionButtons();
   setResult(getActionStatusText("queued_parse", uiLanguage));
 
   const settings = await readSettings();
   if (!settings.token) {
     isParsing = false;
+    updateWorkflowState();
     renderActionButtons();
     setResult(getCurrentCopy().signInHint);
     await openMdteroAccount();
@@ -866,6 +922,7 @@ parseButton?.addEventListener("click", async () => {
   );
   if (!response?.ok) {
     isParsing = false;
+    updateWorkflowState();
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().parseFailed);
     setCliHandoff(input, response?.nextCommand);
@@ -901,6 +958,7 @@ translateButton?.addEventListener("click", async () => {
   );
   if (reconnectableTask) {
     isTranslating = true;
+    updateWorkflowState();
     renderActionButtons();
     setResult(getActionStatusText("running_translate", uiLanguage));
     void pollTask(reconnectableTask.taskId, "translate");
@@ -908,6 +966,7 @@ translateButton?.addEventListener("click", async () => {
   }
 
   isTranslating = true;
+  updateWorkflowState();
   renderActionButtons();
   setResult(getActionStatusText("queued_translate", uiLanguage));
   const response = await chrome.runtime.sendMessage(
@@ -919,6 +978,7 @@ translateButton?.addEventListener("click", async () => {
   );
   if (!response?.ok) {
     isTranslating = false;
+    updateWorkflowState();
     renderActionButtons();
     setResult(response?.error ?? getCurrentCopy().translationFailed);
     return;
