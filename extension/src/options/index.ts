@@ -177,6 +177,8 @@ const CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+  "mdtero project ingest --json",
+  "mdtero rag query \"<question>\" --build-if-needed --json",
   "mdtero mcp briefing --json",
 ].join("\n");
 
