@@ -455,6 +455,7 @@ def _mcp_tool_plan_payload(plan: list[Any]) -> list[dict[str, Any]]:
 
 
 def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
+    command_plan = _extension_handoff_commands(commands)
     return {
         "browser_scope": [
             "website OAuth login",
@@ -472,13 +473,20 @@ def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
             "campus-network or logged-in browser state needs manual confirmation",
             "extension capture cannot access the current tab or direct download URL",
         ],
-        "commands": [
-            commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-            commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
-            commands.get("doctor") or "mdtero doctor --json",
-        ],
+        "commands": command_plan,
+        "primary_commands": command_plan[:2],
         "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
     }
+
+
+def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
+    return [
+        commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero status <task-id> --wait --timeout 300 --json",
+        "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        commands.get("mcp_briefing") or "mdtero mcp briefing --json",
+    ]
 
 
 def _command_palette_payload(
@@ -693,6 +701,7 @@ def _extension_handoff_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Switch when", "; ".join(handoff["handoff_triggers"][:3]))
     table.add_row("URL command", str(handoff["commands"][0]))
     table.add_row("File command", str(handoff["commands"][1]))
+    table.add_row("Follow-up", "; ".join(str(command) for command in handoff["commands"][2:5]))
     table.add_row("Agent fields", ", ".join(handoff["visible_fields"]))
     return Panel(table, title="Extension to CLI", border_style="yellow")
 
