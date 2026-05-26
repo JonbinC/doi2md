@@ -469,6 +469,30 @@ def test_smoke_surfaces_translation_provider_failures(monkeypatch, tmp_path: Pat
 
     assert payload["status"] == "failed"
     assert payload["reason_code"] == "smoke_failed"
+    assert payload["primary_failure"] == {
+        "step": "translate",
+        "reason_code": "translation_provider_chain_failed",
+        "action_hint": "Check backend translation provider diagnostics, quota, and API keys, then rerun `mdtero smoke --json`.",
+    }
+    assert payload["failed_steps"] == [
+        {
+            "name": "translate",
+            "reason_code": "translation_provider_chain_failed",
+            "action_hint": "Check backend translation provider diagnostics, quota, and API keys, then rerun `mdtero smoke --json`.",
+            "next_commands": [
+                "mdtero status <translation-task-id> --json",
+                "mdtero translate <task-id> --to zh-CN --json",
+                "mdtero smoke --skip-translate --json",
+            ],
+            "task_id": "translate-1",
+        }
+    ]
+    assert payload["next_commands"][:3] == [
+        "mdtero status <translation-task-id> --json",
+        "mdtero translate <task-id> --to zh-CN --json",
+        "mdtero smoke --skip-translate --json",
+    ]
+    assert "Smoke failed at `translate` with `translation_provider_chain_failed`" in payload["action_hint"]
     assert translate_step["status"] == "failed"
     assert translate_step["reason_code"] == "translation_provider_chain_failed"
     assert translate_step["result"]["final_task"]["translation_attempts"][0]["reason_code"] == "translation_provider_auth_failed"
