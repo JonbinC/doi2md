@@ -326,7 +326,7 @@ def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] 
         "source": "openalex_server",
         "server_error": exc.__class__.__name__,
         "action_hint": "Check Mdtero API connectivity and whether server OpenAlex discovery is enabled.",
-        "next_commands": ["mdtero doctor --json", "mdtero setup --api-key", "mdtero discover \"<topic>\" --json"],
+        "next_commands": ["mdtero doctor --json", "mdtero setup --api-key --json", "mdtero discover \"<topic>\" --json"],
     }
     if local_failure:
         payload["local_semantic_scholar_error"] = local_failure["error_type"]
@@ -344,8 +344,8 @@ def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] 
         if response.status_code in {401, 403}:
             payload["error_code"] = "authentication_required" if response.status_code == 401 else "forbidden"
             payload["reason_code"] = "authentication_required" if response.status_code == 401 else "access_forbidden"
-            payload["action_hint"] = "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key` for headless environments, then rerun `mdtero doctor --json` before server OpenAlex discovery."
-            payload["next_commands"] = ["mdtero setup --api-key", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+            payload["action_hint"] = "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for headless environments, then rerun `mdtero doctor --json` before server OpenAlex discovery."
+            payload["next_commands"] = ["mdtero setup --api-key --json", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
     else:
         payload["detail"] = str(exc)
     return payload
@@ -382,8 +382,8 @@ def api_failure_payload(exc: httpx.HTTPStatusError, *, method: str, path: str) -
     if response.status_code in {401, 403}:
         error_code = "authentication_required" if response.status_code == 401 else "forbidden"
         reason_code = "authentication_required" if response.status_code == 401 else "access_forbidden"
-        action_hint = "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key` for headless environments, then rerun `mdtero doctor --json`."
-        next_commands = ["mdtero setup --api-key", "mdtero doctor --json"]
+        action_hint = "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for headless environments, then rerun `mdtero doctor --json`."
+        next_commands = ["mdtero setup --api-key --json", "mdtero doctor --json"]
     return {
         "status": "failed",
         "error_code": error_code,

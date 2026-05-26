@@ -108,7 +108,7 @@ The local checkout reports `mdtero 0.2.0a9`; `mdtero doctor --json` shows `curl_
 - `GET https://api.mdtero.com/me/usage` returned `401` with `missing or invalid credentials`.
 - `mdtero smoke --json --timeout 600 --interval 2` failed at discovery/parse because the same key was not accepted by production.
 
-The CLI smoke now classifies production `401` responses as `authentication_required` and returns `mdtero setup --api-key`, `mdtero doctor --json`, and `mdtero smoke --json --timeout 600 --interval 2` as recovery commands instead of mislabeling the run as a parser failure.
+The CLI smoke now classifies production `401` responses as `authentication_required` and returns `mdtero setup --api-key --json`, `mdtero doctor --json`, and `mdtero smoke --json --timeout 600 --interval 2` as recovery commands instead of mislabeling the run as a parser failure.
 
 ## Production Read-Only Recheck - 2026-05-26 UTC
 

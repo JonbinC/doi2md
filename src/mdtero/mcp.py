@@ -112,7 +112,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     server_project_id = state.server_project_id if state is not None else None
     commands: dict[str, Any] = {
         "setup": "mdtero setup",
-        "login_api_key": "mdtero setup --api-key",
+        "login_api_key": "mdtero setup --api-key --json",
         "doctor": "mdtero doctor --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
         "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
