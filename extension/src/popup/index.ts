@@ -36,6 +36,7 @@ import {
   getUsageStatusText,
   getTaskFailureText,
   buildTaskFailureCliHandoffPlan,
+  formatCliHandoffClipboard,
   getDownloadFailureText,
   buildCliParseCommand,
   buildCliFileParseCommand,
@@ -103,8 +104,8 @@ const COPY = {
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
     downloadFailed: "Download failed. Please try again.",
-    copyCliCommand: "Copy CLI command",
-    cliCommandCopied: "CLI command copied."
+    copyCliCommand: "Copy handoff",
+    cliCommandCopied: "CLI handoff copied."
   },
   zh: {
     title: "Mdtero",
@@ -163,8 +164,8 @@ const COPY = {
     noDoi: "未识别到 DOI，请手动粘贴。",
     noActiveTab: "当前没有可用标签页。",
     downloadFailed: "下载失败，请重试。",
-    copyCliCommand: "复制 CLI 命令",
-    cliCommandCopied: "CLI 命令已复制。"
+    copyCliCommand: "复制交接信息",
+    cliCommandCopied: "CLI 交接信息已复制。"
   }
 } satisfies Record<UiLanguage, Record<string, string | ((...args: any[]) => string)>>;
 
@@ -228,6 +229,7 @@ let hasTranslatedArtifact = false;
 let hasDownloadableArtifact = false;
 let detectedPageContext: { tabId: number; tabUrl?: string; detectedInput: string } | null = null;
 let currentBridgeStatus: { state?: string | null; runnerState?: string | null } | null = null;
+let currentCliHandoffCommands: string[] = [];
 
 function copyFor(language: UiLanguage) {
   return COPY[language];
@@ -269,7 +271,8 @@ function setCliHandoff(input?: string | null, commandOverride?: string | null, p
   cliHandoffEl.hidden = !command;
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
-  renderCliHandoffPlan(command ? [command, ...commands] : []);
+  currentCliHandoffCommands = command ? normalizeHandoffCommands([command, ...commands]) : [];
+  renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
 
@@ -296,7 +299,7 @@ async function copyCliHandoff() {
   if (!command) {
     return;
   }
-  await navigator.clipboard?.writeText(command);
+  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands));
   setResult(getCurrentCopy().cliCommandCopied);
 }
 

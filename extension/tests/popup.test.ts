@@ -22,6 +22,7 @@ import {
   getTaskFailureText,
   getTaskFailureCliHandoff,
   buildTaskFailureCliHandoffPlan,
+  formatCliHandoffClipboard,
   firstNextCommand,
   firstTaskNextCommand,
   getTranslationAttemptSummary,
@@ -685,6 +686,25 @@ describe("getTaskFailureText", () => {
       source: "backend_task",
       kind: "parse"
     });
+  });
+
+  it("formats multi-step CLI handoffs for local agents", () => {
+    expect(
+      formatCliHandoffClipboard("mdtero parse --file paper.pdf --json", [
+        "mdtero parse --file paper.pdf --json",
+        "mdtero status task-123 --wait --timeout 300 --json",
+        "mdtero mcp briefing --json"
+      ])
+    ).toBe([
+      "# Mdtero CLI handoff",
+      "",
+      "Run these commands in order:",
+      "1. mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+      "2. mdtero status task-123 --wait --timeout 300 --json",
+      "3. mdtero mcp briefing --json"
+    ].join("\n"));
+
+    expect(formatCliHandoffClipboard("mdtero rag status --json", [])).toBe("mdtero rag status --json");
   });
 
   it("reports the command source when falling back to result or parse input", () => {

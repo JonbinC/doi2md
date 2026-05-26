@@ -604,6 +604,18 @@ function firstNextCommand(commands) {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
   return normalizeCliHandoffCommand(command);
 }
+function formatCliHandoffClipboard(primaryCommand, planCommands) {
+  const commands = normalizeCommandList([primaryCommand, ...planCommands ?? []]);
+  if (commands.length <= 1) {
+    return commands[0] || "";
+  }
+  return [
+    "# Mdtero CLI handoff",
+    "",
+    "Run these commands in order:",
+    ...commands.map((command, index) => `${index + 1}. ${command}`)
+  ].join("\n");
+}
 function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
   const taskCommands = normalizeCommandList(task?.next_commands);
   if (taskCommands.length > 0) {
@@ -702,8 +714,8 @@ var COPY = {
     noDoi: "No DOI detected. Paste one manually.",
     noActiveTab: "No active tab available.",
     downloadFailed: "Download failed. Please try again.",
-    copyCliCommand: "Copy CLI command",
-    cliCommandCopied: "CLI command copied."
+    copyCliCommand: "Copy handoff",
+    cliCommandCopied: "CLI handoff copied."
   },
   zh: {
     title: "Mdtero",
@@ -761,8 +773,8 @@ var COPY = {
     noDoi: "\u672A\u8BC6\u522B\u5230 DOI\uFF0C\u8BF7\u624B\u52A8\u7C98\u8D34\u3002",
     noActiveTab: "\u5F53\u524D\u6CA1\u6709\u53EF\u7528\u6807\u7B7E\u9875\u3002",
     downloadFailed: "\u4E0B\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
-    copyCliCommand: "\u590D\u5236 CLI \u547D\u4EE4",
-    cliCommandCopied: "CLI \u547D\u4EE4\u5DF2\u590D\u5236\u3002"
+    copyCliCommand: "\u590D\u5236\u4EA4\u63A5\u4FE1\u606F",
+    cliCommandCopied: "CLI \u4EA4\u63A5\u4FE1\u606F\u5DF2\u590D\u5236\u3002"
   }
 };
 var titleEl = document.querySelector("#app-title");
@@ -817,6 +829,7 @@ var hasTranslatedArtifact = false;
 var hasDownloadableArtifact = false;
 var detectedPageContext = null;
 var currentBridgeStatus = null;
+var currentCliHandoffCommands = [];
 function copyFor(language) {
   return COPY[language];
 }
@@ -850,7 +863,8 @@ function setCliHandoff(input, commandOverride, planCommands) {
   cliHandoffEl.hidden = !command;
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
-  renderCliHandoffPlan(command ? [command, ...commands] : []);
+  currentCliHandoffCommands = command ? normalizeHandoffCommands([command, ...commands]) : [];
+  renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
 function normalizeHandoffCommands(commands) {
@@ -874,7 +888,7 @@ async function copyCliHandoff() {
   if (!command) {
     return;
   }
-  await navigator.clipboard?.writeText(command);
+  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands));
   setResult(getCurrentCopy().cliCommandCopied);
 }
 function setStatus(message) {
