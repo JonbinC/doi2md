@@ -109,3 +109,47 @@ The local checkout reports `mdtero 0.2.0a9`; `mdtero doctor --json` shows `curl_
 - `mdtero smoke --json --timeout 600 --interval 2` failed at discovery/parse because the same key was not accepted by production.
 
 The CLI smoke now classifies production `401` responses as `authentication_required` and returns `mdtero setup --api-key <key>`, `mdtero doctor --json`, and `mdtero smoke --json --timeout 600 --interval 2` as recovery commands instead of mislabeling the run as a parser failure.
+
+## Production Read-Only Recheck - 2026-05-26 UTC
+
+This recheck used only public/read-only probes and did not write secrets or task artifacts to the repository.
+
+### Backend Public Health
+
+Command:
+
+```bash
+python3 scripts/validation/backend_production_smoke.py --api-base https://api.mdtero.com --json
+```
+
+Result: succeeded with `reason_code=backend_production_smoke_succeeded` and `deployment_state=current`.
+
+- `GET https://api.mdtero.com/health` returned `200`.
+- `GET https://api.mdtero.com/client-config` returned `200` with `api_version` and `skills` keys.
+- `GET https://api.mdtero.com/diagnostics/translation/providers` returned `401`, which is the expected unauthenticated response for the current backend diagnostics router and confirms production is no longer serving the stale build that returned `404`.
+- Authenticated `/me/usage`, full CLI smoke, and translation provider health remain unproven on this host because no valid `MDTERO_API_KEY` is configured locally.
+
+### Website Routes
+
+Command:
+
+```bash
+pnpm run smoke:routes -- --base-url https://mdtero.com --json --retries 2 --retry-delay-ms 2000
+```
+
+Result: failed with `reason_code=site_route_smoke_failed` and `deployment_state=stale_or_wrong_build`. The app routes passed (`/`, `/auth`, `/dashboard`, `/install`, `/admin`), but both docs install pages returned HTTP 200 while missing `evidence_pack.context_markdown`:
+
+- `/docs/install.html`
+- `/docs/zh/install.html`
+
+This remains a deployed website freshness issue. Deploy the latest `nextmdtero` build, then rerun `pnpm run smoke:routes -- --base-url https://mdtero.com --json --retries 6 --retry-delay-ms 10000`.
+
+### Forgejo CI Policy Evidence
+
+The private platform preflights now execute a Forgejo workflow policy gate before their smoke tests:
+
+- Public: `public_private_platform_preflight: status=ok remote=forgejo forgejo_policy=ok extension_tests=ok extension_dist=ok`
+- Frontend: `frontend_private_platform_preflight: status=ok remote=forgejo forgejo_policy=ok route_contracts=ok`
+- Backend: `private_platform_preflight: status=ok remote=forgejo forgejo_policy=ok infisical=0`
+
+The policy gate requires `workflow_dispatch`, `runs-on: linux-small`, explicit secret-name listing, and no push/PR triggers in `.forgejo/workflows`.

@@ -5682,6 +5682,13 @@ def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
     assert "248 passed" in report
     assert "101 passed" in report
     assert "npm run smoke:routes -- --base-url <production-url> --json" in report
+    assert "Production Read-Only Recheck - 2026-05-26 UTC" in report
+    assert "backend_production_smoke_succeeded" in report
+    assert "deployment_state=current" in report
+    assert "returned `401`, which is the expected unauthenticated response" in report
+    assert "stale build that returned `404`" in report
+    assert "/docs/zh/install.html" in report
+    assert "forgejo_policy=ok" in report
 
 
 def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
@@ -5699,8 +5706,17 @@ def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
     assert "Server-side Voyage RAG" in proven_section
     assert "Browser extension scoped to v1 product" in proven_section
     assert "extension dist smoke passed" in proven_section
+    assert "Backend read-only production freshness" in proven_section
+    assert "Forgejo manual CI smoke policy" in proven_section
+    assert "unauthenticated `/diagnostics/translation/providers` returned the expected 401 instead of stale 404" in proven_section
+    assert "workflow_dispatch" in proven_section
     assert "Translation provider health" in post_deploy_section
     assert "Browser extension interactive flow" in post_deploy_section
+    assert "/docs/zh/install.html" in post_deploy_section
+    assert "The backend diagnostics route is now deployed" in post_deploy_section
+    assert "returns 401" in post_deploy_section
+    assert "authenticated diagnostics check or successful translation task" in post_deploy_section
+    assert "Current production `GET /diagnostics/translation/providers` returns `404`" not in post_deploy_section
     assert "npm run smoke:routes -- --base-url <production-url> --json" in post_deploy_section
 
     for retired_marker in [
