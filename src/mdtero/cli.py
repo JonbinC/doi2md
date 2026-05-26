@@ -438,8 +438,11 @@ def cmd_smoke(args: argparse.Namespace) -> int:
 
     payload["status"] = "succeeded" if terminal_failures == 0 else "failed"
     payload["failed_count"] = terminal_failures
-    payload["reason_code"] = "smoke_succeeded" if terminal_failures == 0 else "smoke_failed"
-    payload["action_hint"] = "Smoke completed." if terminal_failures == 0 else "Inspect failed steps and rerun after fixing the reported backend or client path."
+    if terminal_failures == 0:
+        payload["reason_code"] = "smoke_succeeded"
+        payload["action_hint"] = "Smoke completed."
+    else:
+        _enrich_smoke_failure_summary(payload)
     _print_smoke_result(payload, json_output=args.json)
     return 0 if terminal_failures == 0 else 1
 
@@ -1588,6 +1591,83 @@ def _smoke_add_step(payload: dict[str, Any], name: str, status: str, **fields: A
     step.update({key: value for key, value in fields.items() if value not in (None, "", [], {})})
     payload.setdefault("steps", []).append(redact_sensitive_payload(step))
     return step
+
+
+def _enrich_smoke_failure_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    failed_steps = [
+        step
+        for step in payload.get("steps") or []
+        if isinstance(step, dict) and str(step.get("status") or "").lower() == "failed"
+    ]
+    payload["reason_code"] = "smoke_failed"
+    payload["failed_steps"] = [_smoke_failed_step_summary(step) for step in failed_steps]
+    first_failed = failed_steps[0] if failed_steps else {}
+    first_name = str(first_failed.get("name") or "unknown")
+    first_reason = _smoke_step_reason_code(first_failed)
+    first_hint = _smoke_step_action_hint(first_failed, first_reason)
+    payload["primary_failure"] = {
+        "step": first_name,
+        "reason_code": first_reason,
+        "action_hint": first_hint,
+    }
+    payload["action_hint"] = (
+        f"Smoke failed at `{first_name}` with `{first_reason}`. "
+        f"{payload['primary_failure']['action_hint']}"
+    )
+    recovery_commands: list[str] = []
+    for step in failed_steps:
+        recovery_commands.extend(_smoke_step_next_commands(step))
+    if not recovery_commands:
+        recovery_commands = _smoke_failure_next_commands(first_reason)
+    payload["next_commands"] = _dedupe_string_list([*recovery_commands, *payload.get("next_commands", [])])
+    return payload
+
+
+def _smoke_failed_step_summary(step: dict[str, Any]) -> dict[str, Any]:
+    reason_code = _smoke_step_reason_code(step)
+    summary: dict[str, Any] = {
+        "name": step.get("name"),
+        "reason_code": reason_code,
+        "action_hint": _smoke_step_action_hint(step, reason_code),
+        "next_commands": _smoke_step_next_commands(step),
+    }
+    for key in ("task_id", "http_status", "server_project_id"):
+        if step.get(key) not in (None, "", [], {}):
+            summary[key] = step.get(key)
+    return summary
+
+
+def _smoke_step_reason_code(step: dict[str, Any]) -> str:
+    result = step.get("result") if isinstance(step.get("result"), dict) else {}
+    final_task = result.get("final_task") if isinstance(result.get("final_task"), dict) else {}
+    return str(
+        step.get("reason_code")
+        or step.get("error_code")
+        or final_task.get("reason_code")
+        or final_task.get("error_code")
+        or result.get("reason_code")
+        or result.get("error_code")
+        or "step_failed"
+    )
+
+
+def _smoke_step_action_hint(step: dict[str, Any], reason_code: str) -> str:
+    result = step.get("result") if isinstance(step.get("result"), dict) else {}
+    final_task = result.get("final_task") if isinstance(result.get("final_task"), dict) else {}
+    hint = str(step.get("action_hint") or final_task.get("action_hint") or result.get("action_hint") or "").strip()
+    return hint or _smoke_action_hint(reason_code)
+
+
+def _smoke_step_next_commands(step: dict[str, Any]) -> list[str]:
+    reason_code = _smoke_step_reason_code(step)
+    result = step.get("result") if isinstance(step.get("result"), dict) else {}
+    final_task = result.get("final_task") if isinstance(result.get("final_task"), dict) else {}
+    if reason_code.startswith("translation_provider"):
+        return _smoke_failure_next_commands(reason_code)
+    commands = _detail_next_commands(step) or _detail_next_commands(result)
+    if commands:
+        return commands
+    return _dedupe_string_list([*_smoke_failure_next_commands(reason_code), *_detail_next_commands(final_task)])
 
 
 def _smoke_exception_payload(exc: Exception, *, default_reason: str) -> dict[str, Any]:
