@@ -289,19 +289,30 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     summary = status.get("summary") if isinstance(status.get("summary"), dict) else {}
     server_status = str(status.get("status") or "unknown")
     reason_code = str(status.get("reason_code") or "unknown")
-    next_commands = ["mdtero rag status --json"]
-    if server_status == "ready" or reason_code == "indexed":
-        next_commands.extend([commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
-    elif local_ready > 0:
-        next_commands.extend([commands["ingest_for_rag"], commands["rag_build"], commands["rag_query"]])
-    else:
-        next_commands.extend([commands["parse_pending"], commands["refresh"], commands["ingest_for_rag"]])
-
     status.setdefault("project", state.name)
     status.setdefault("server_project_id", state.server_project_id)
     status.setdefault("local_ready_for_ingest_count", local_ready)
     status.setdefault("local_paper_count", len(state.papers))
-    status["next_commands"] = next_commands
+    ensure_rag_contract(status)
+
+    readiness = status.get("readiness") if isinstance(status.get("readiness"), dict) else {}
+    next_step = str(readiness.get("next_step") or "inspect_status")
+    if readiness.get("ready_for_query") or server_status == "ready" or reason_code == "indexed":
+        next_commands = ["mdtero rag status --json", commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]]
+    elif readiness.get("provider_blocked"):
+        next_commands = ["mdtero rag status --json"]
+    elif next_step == "build":
+        next_commands = [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]]
+    elif next_step == "ingest" and local_ready > 0:
+        next_commands = [commands["ingest_for_rag"], commands["rag_build"], "mdtero rag status --json"]
+    elif local_ready > 0:
+        next_commands = ["mdtero rag status --json", commands["ingest_for_rag"], commands["rag_build"], commands["rag_query"]]
+    else:
+        next_commands = ["mdtero rag status --json", commands["parse_pending"], commands["refresh"], commands["ingest_for_rag"]]
+
+    status["next_commands"] = _dedupe_commands(next_commands)
+    status["action_hint"] = _server_rag_action_hint(status, commands)
+    status["agent_summary"] = _server_rag_agent_summary(status)
     ensure_rag_contract(status)
     return redact_sensitive_payload(status)
 
@@ -1120,6 +1131,46 @@ def _load_project_or_none(root: Path) -> Any | None:
         return load_project(root)
     except FileNotFoundError:
         return None
+
+
+def _server_rag_action_hint(status: dict[str, Any], commands: dict[str, Any]) -> str:
+    server_hint = redact_sensitive_text(status.get("action_hint")).strip()
+    reason_code = str(status.get("reason_code") or "").strip()
+    readiness = status.get("readiness") if isinstance(status.get("readiness"), dict) else {}
+    if readiness.get("provider_blocked"):
+        return _public_rag_action_hint(reason_code or "server_rag_status_failed", server_hint)
+    if readiness.get("ready_for_query"):
+        return "Server-side Voyage RAG is ready. Query it with `mdtero rag query \"<question>\" --build-if-needed --json` or expose the project through MCP."
+    if readiness.get("needs_build") or readiness.get("next_step") == "build":
+        return server_hint or "Build or refresh the server-side Voyage index with `mdtero rag build --json`, then query the project."
+    if readiness.get("needs_ingest") or readiness.get("next_step") == "ingest":
+        return server_hint or "Import succeeded parse tasks with `mdtero project ingest --json`, then run `mdtero rag build --json`."
+    return server_hint or f"Check server-side Voyage RAG status, then run `{commands['rag_build']}` if the project is not query-ready."
+
+
+def _server_rag_agent_summary(status: dict[str, Any]) -> dict[str, Any]:
+    existing = status.get("agent_summary") if isinstance(status.get("agent_summary"), dict) else {}
+    readiness = status.get("readiness") if isinstance(status.get("readiness"), dict) else {}
+    summary = status.get("summary") if isinstance(status.get("summary"), dict) else {}
+    provider_blocked = bool(readiness.get("provider_blocked"))
+    return {
+        **existing,
+        "status": str(status.get("status") or existing.get("status") or "unknown"),
+        "reason_code": str(status.get("reason_code") or existing.get("reason_code") or "unknown"),
+        "selected_provider": status.get("selected_provider", existing.get("selected_provider")),
+        "provider_state": status.get("provider_state", existing.get("provider_state")),
+        "provider_configured": False if provider_blocked else bool(existing.get("provider_configured", status.get("provider_configured", readiness.get("ready_for_query") or readiness.get("needs_build") or readiness.get("needs_ingest")))),
+        "embedding_model": status.get("embedding_model") or summary.get("embedding_model") or existing.get("embedding_model"),
+        "ready_for_query": bool(readiness.get("ready_for_query")),
+        "readiness_status": readiness.get("readiness_status"),
+        "next_step": readiness.get("next_step"),
+        "document_count": readiness.get("document_count", existing.get("document_count", 0)),
+        "chunk_count": readiness.get("chunk_count", existing.get("chunk_count", 0)),
+        "embedded_count": readiness.get("embedded_count", existing.get("embedded_count", 0)),
+        "pending_embedding_count": readiness.get("pending_embedding_count", existing.get("pending_embedding_count", 0)),
+        "match_count": readiness.get("match_count", existing.get("match_count", 0)),
+        "next_commands": status.get("next_commands", existing.get("next_commands", [])),
+    }
 
 
 def _shell_safe_project_name(name: str) -> str:
