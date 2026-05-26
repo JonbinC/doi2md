@@ -118,6 +118,10 @@ def test_setup_accepts_headless_api_key_argument():
     prompt_args = parser.parse_args(["setup", "--api-key"])
     assert prompt_args.api_key == API_KEY_PROMPT_SENTINEL
 
+    json_args = parser.parse_args(["setup", "--api-key", "mdt_live_demo", "--json"])
+    assert json_args.api_key == "mdt_live_demo"
+    assert json_args.json is True
+
 
 def test_login_accepts_web_login_flags():
     parser = build_parser()
@@ -2996,6 +3000,73 @@ def test_setup_prompts_for_api_key_when_flag_omits_value(monkeypatch, tmp_path: 
     assert cfg.api_key == "mdt_live_prompted"
     assert seen_skip_prompt == [True]
     assert "Step 1: saved API-key login for this machine." in output
+
+
+def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(
+        "mdtero.agent.detect_target_status",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("headless setup --json should not scan agent workspaces")),
+    )
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": "mdt_live_json_secret", "json": True})()) == 0
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    cfg = load_config()
+
+    assert cfg.api_key == "mdt_live_json_secret"
+    assert "mdt_live_json_secret" not in output
+    assert payload["status"] == "configured"
+    assert payload["reason_code"] == "setup_configured"
+    assert payload["authenticated"] is True
+    assert payload["auth_mode"] == "api_key"
+    assert payload["headless"] is True
+    assert payload["agents"]["detection_skipped"] is True
+    assert payload["agents"]["next_commands"] == ["mdtero agent detect --json", "mdtero agent install --interactive"]
+    assert payload["academic"]["discover_source"] == "server_openalex"
+    assert payload["next_commands"][:2] == ["mdtero doctor --json", "mdtero config academic --json"]
+    assert any(group["title"] == "Server RAG and local agents" for group in payload["next_command_groups"])
+
+
+def test_setup_json_missing_auth_is_noninteractive(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup --json should not prompt")))
+    monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("setup --json should not prompt")))
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "missing_auth"
+    assert payload["reason_code"] == "auth_missing"
+    assert payload["authenticated"] is False
+    assert payload["next_commands"][0] == "mdtero doctor --json"
+    assert "mdtero setup --api-key --json" in payload["action_hint"]
+
+
+def test_setup_json_environment_api_key_reports_headless_without_saving(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env_json")
+    monkeypatch.setattr(
+        "mdtero.agent.detect_target_status",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("environment setup --json should not scan agent workspaces")),
+    )
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": None, "json": True})()) == 0
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    cfg = load_config()
+
+    assert cfg.api_key is None
+    assert "mdt_live_env_json" not in output
+    assert payload["auth_source"] == "MDTERO_API_KEY"
+    assert payload["headless"] is True
+    assert payload["agents"]["detection_skipped"] is True
 
 
 def test_setup_rejects_blank_prompted_api_key_without_academic_prompt(monkeypatch, tmp_path: Path, capsys):
@@ -6480,6 +6551,9 @@ def test_public_docs_describe_setup_agent_detection_and_headless_skip():
     assert "`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection" in combined
     assert "detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces" in combined
     assert "Headless setup with `mdtero setup --api-key` or `MDTERO_API_KEY`" in combined
+    assert "mdtero setup --api-key --json" in combined
+    assert "Do not put the API key value directly in shell history" in combined
+    assert "mdtero setup --api-key <key>" not in combined
     assert "skips agent detection" in combined
     assert "mdtero agent install --interactive" in combined
 
