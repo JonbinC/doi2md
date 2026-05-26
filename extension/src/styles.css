@@ -361,6 +361,38 @@ summary,
   margin-bottom: 0;
 }
 
+.handoff-guide-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.handoff-guide-header h2 {
+  margin-bottom: 4px;
+}
+
+.handoff-guide-command {
+  display: block;
+  margin-top: 10px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(47, 26, 18, 0.04);
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#cli-handoff-guide-boundary {
+  margin-top: 8px;
+}
+
 label {
   display: block;
   margin-bottom: 7px;

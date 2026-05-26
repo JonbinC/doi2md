@@ -96,8 +96,35 @@ describe("extension options page", () => {
     expect(document.querySelector("#connection-guide-title")?.textContent).toBe("Connection guide");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Open website OAuth");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("upload a local PDF/EPUB");
+    expect(document.querySelector("#cli-handoff-guide-title")?.textContent).toBe("Extension + CLI handoff");
+    expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("publisher challenge");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero doctor --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero parse <doi-or-url> --trace --wait --timeout 300 --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero status <task-id> --wait --timeout 300 --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero download <task-id> paper_md --output-dir ./mdtero-output --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp briefing --json");
+    expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("does not install Python dependencies");
+    expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("mdtero config academic");
     expect(document.querySelector("#password-input")).toBeNull();
     expect(document.querySelector("#code-input")).toBeNull();
+  });
+
+  it("copies the full CLI handoff guide from options", async () => {
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "unknown" } })) as any;
+
+    await loadOptionsModule();
+
+    (document.querySelector("#copy-cli-handoff-guide") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero doctor --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp briefing --json"));
+    });
+    expect(document.querySelector("#copy-cli-handoff-guide")?.textContent).toBe("CLI handoff copied.");
   });
 
   it("shows signed-in usage and empty history messaging when the account has no tasks", async () => {
@@ -121,6 +148,7 @@ describe("extension options page", () => {
     expect(document.querySelector("#settings-subtitle")?.textContent).toContain("browser capture, upload, translation, and download settings");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Website OAuth is connected");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Open history below");
+    expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("current-page parse");
     expect(document.querySelector("#publisher-capability-groups")).toBeNull();
   });
 
