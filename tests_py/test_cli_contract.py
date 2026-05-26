@@ -3620,7 +3620,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
 
     assert model["health"]["status"] == "needs_auth"
     assert model["health"]["headline"] == "Needs login"
-    assert model["health"]["primary_next_command"] == "mdtero setup --api-key <key>"
+    assert model["health"]["primary_next_command"] == "mdtero setup"
+    assert model["account"]["auth_hint"] == "mdtero setup"
     assert model["account"]["authenticated"] is False
     assert model["project"]["name"] == "tui-demo"
     assert model["rag"]["reason_code"] == "no_succeeded_tasks"
@@ -3636,15 +3637,23 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["handoff"]["active_items"] == []
-    assert model["next_steps"][:2] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+    assert model["next_steps"][:2] == ["mdtero setup", "mdtero doctor --json"]
+    assert "mdtero setup --api-key <key>" in model["next_steps"]
     assert model["operator_summary"][0] == {"area": "Account", "state": "missing", "detail": "run mdtero setup"}
     assert [item["key"] for item in model["shortcuts"]] == ["r", "d", "p", "g", "m", "q"]
     assert model["command_palette"][0] == {
         "area": "Setup",
-        "use": "Authenticate this machine",
-        "command": "mdtero setup --api-key <key>",
+        "use": "Authenticate this workstation with browser OAuth",
+        "command": "mdtero setup",
         "is_next": True,
     }
+    assert any(
+        item["area"] == "Setup"
+        and item["use"] == "Headless or remote shell fallback"
+        and item["command"] == "mdtero setup --api-key <key>"
+        and item["is_next"]
+        for item in model["command_palette"]
+    )
     assert any(item["command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" for item in model["command_palette"])
     assert any(item["area"] == "Extension" and item["use"] == "Handoff challenged page or saved file to CLI" for item in model["command_palette"])
     assert any(item["area"] == "Extension" and item["use"] == "Upload a browser-saved PDF/EPUB/XML/HTML" for item in model["command_palette"])
