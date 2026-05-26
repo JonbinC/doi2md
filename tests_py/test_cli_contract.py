@@ -5349,6 +5349,7 @@ def test_public_github_ci_matches_release_gate_for_extension_quality():
 def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     repo_root = Path(__file__).resolve().parents[1]
     workflow = (repo_root / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    production_smoke = (repo_root / ".forgejo" / "workflows" / "production-smoke.yml").read_text(encoding="utf-8")
     runbook = (repo_root / "PRIVATE_PLATFORM_PHASE_1.md").read_text(encoding="utf-8")
 
     assert "workflow_dispatch:" in workflow
@@ -5369,6 +5370,26 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "PAT=" not in workflow
     assert "PERSONAL_ACCESS_TOKEN" not in workflow
 
+    assert "name: Public Production Smoke" in production_smoke
+    assert "workflow_dispatch:" in production_smoke
+    assert "auth_smoke:" in production_smoke
+    assert "smoke_scope:" in production_smoke
+    assert "auth_smoke=skip" in production_smoke
+    assert "secrets.MDTERO_API_KEY" in production_smoke
+    assert "auth_smoke=check requires Forgejo secret MDTERO_API_KEY" in production_smoke
+    assert "uv run --project" in production_smoke
+    assert "mdtero smoke" in production_smoke
+    assert "--skip-translate" in production_smoke
+    assert "mktemp -d" in production_smoke
+    assert "rm -rf \"$smoke_root\"" in production_smoke
+    assert "runs-on: linux-small" in production_smoke
+    assert "timeout-minutes: 20" in production_smoke
+    assert "\n  push:" not in production_smoke
+    assert "\n  pull_request:" not in production_smoke
+    assert "INFISICAL_TOKEN=" not in production_smoke
+    assert "PAT=" not in production_smoke
+    assert "PERSONAL_ACCESS_TOKEN" not in production_smoke
+
     assert "forgejo`: `http://100.97.234.105:3020/jianbin/doi2md.git`" in runbook
     assert "Do not embed PATs, service tokens, or passwords" in runbook
     assert "platform_preflight=check" in runbook
@@ -5382,6 +5403,11 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "public_private_platform_preflight: status=ok" in runbook
     assert "public_private_platform_preflight: status=ok remote=forgejo extension_tests=ok extension_dist=ok" in runbook
     assert "run the same workflow with `check_scope=full` after the smoke run passes" in runbook
+    assert "Workflow: `Public Production Smoke`" in runbook
+    assert "auth_smoke=check" in runbook
+    assert "smoke_scope=core" in runbook
+    assert "smoke_scope=full" in runbook
+    assert "Missing `MDTERO_API_KEY` exits with code `78`" in runbook
     assert "read them from Infisical at runtime through a service token or machine identity" in runbook
     assert "Do not remove GitHub or PyPI/public release paths" in runbook
 

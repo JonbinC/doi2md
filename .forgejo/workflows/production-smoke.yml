@@ -1,0 +1,101 @@
+name: Public Production Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "Production API base URL to smoke."
+        required: false
+        default: "https://api.mdtero.com"
+        type: string
+      auth_smoke:
+        description: "Run authenticated mdtero smoke with Forgejo secret MDTERO_API_KEY."
+        required: false
+        default: "skip"
+        type: choice
+        options:
+          - skip
+          - check
+      smoke_scope:
+        description: "Core skips translation; full includes translation provider health."
+        required: false
+        default: "core"
+        type: choice
+        options:
+          - core
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-production-smoke-${{ inputs.api_base }}-${{ inputs.smoke_scope }}
+  cancel-in-progress: false
+
+jobs:
+  production-smoke:
+    name: Public CLI production smoke
+    runs-on: linux-small
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run secret guard
+        run: python scripts/ci/secret_guard.py
+
+      - name: Explain skipped auth smoke
+        if: ${{ inputs.auth_smoke == 'skip' }}
+        run: |
+          cat <<'MSG'
+          auth_smoke=skip: production smoke workflow is wired but did not run an authenticated mdtero smoke.
+
+          To validate the live CLI path, configure Forgejo secret MDTERO_API_KEY and rerun this workflow with:
+          - auth_smoke=check
+          - smoke_scope=core for discovery, parse, download, and Voyage RAG
+          - smoke_scope=full to include translation provider health
+          MSG
+
+      - name: Run authenticated public CLI production smoke
+        if: ${{ inputs.auth_smoke == 'check' }}
+        env:
+          MDTERO_API_KEY: ${{ secrets.MDTERO_API_KEY }}
+          MDTERO_API_BASE_URL: ${{ inputs.api_base }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MDTERO_API_KEY:-}" ]]; then
+            echo "auth_smoke=check requires Forgejo secret MDTERO_API_KEY." >&2
+            exit 78
+          fi
+
+          repo_root="$PWD"
+          smoke_root="$(mktemp -d)"
+          cleanup() {
+            rm -rf "$smoke_root"
+          }
+          trap cleanup EXIT
+
+          args=(
+            mdtero smoke
+            --api-base "$MDTERO_API_BASE_URL"
+            --workdir "$smoke_root/project"
+            --json
+            --timeout 600
+            --interval 2
+          )
+          if [[ "${{ inputs.smoke_scope }}" == "core" ]]; then
+            args+=(--skip-translate)
+          fi
+
+          cd "$smoke_root"
+          uv run --project "$repo_root" "${args[@]}"

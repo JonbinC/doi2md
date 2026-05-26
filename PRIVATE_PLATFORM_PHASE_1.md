@@ -57,6 +57,19 @@ Local smoke evidence from the current host already matches the non-deploying pre
 
 For release-candidate validation, run the same workflow with `check_scope=full` after the smoke run passes. The full run is expected to build the Python package, smoke-install the wheel, run all Python tests, run the browser-extension test suite, build the MV3 bundle, and execute `scripts/ci/extension_dist_smoke.py`. Keep this full run manual until the lightweight runner has repeated green evidence.
 
+## Production smoke workflow
+
+The separate `Public Production Smoke` workflow is also manual-only. It exists for operator-driven live validation after a backend/site deploy, not for every code push.
+
+- Workflow: `Public Production Smoke`
+- Branch: `main`
+
+- Default inputs are `auth_smoke=skip` and `smoke_scope=core`, so a dry run proves the workflow wiring without needing secrets.
+- To run the live CLI path, configure Forgejo secret `MDTERO_API_KEY`, then dispatch with `auth_smoke=check`.
+- Use `smoke_scope=core` for discovery, DOI parse, artifact download, and server-side Voyage RAG. Use `smoke_scope=full` only when translation provider health should be included in the release gate.
+- The job runs `mdtero smoke --api-base <api_base> --json --timeout 600 --interval 2` from a temporary directory through `uv run --project`, then removes the smoke directory.
+- Missing `MDTERO_API_KEY` exits with code `78`; it should be treated as missing operator setup, not a product regression.
+
 ## Secrets
 
 The public CLI and extension should not require production provider secrets in CI. If future private deploy or smoke jobs need credentials, read them from Infisical at runtime through a service token or machine identity. Do not commit generated env files, print secret values, or bake bootstrap/admin tokens into CI.
