@@ -3358,6 +3358,13 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "commands": [
             "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
             "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+            "mdtero status <task-id> --wait --timeout 300 --json",
+            "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+            "mdtero mcp briefing --json",
+        ],
+        "primary_commands": [
+            "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+            "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         ],
         "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
         "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
@@ -3379,6 +3386,9 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["handoff_protocol"][1]["commands"] == [
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero status <task-id> --wait --timeout 300 --json",
+        "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero mcp briefing --json",
     ]
     assert briefing["agents"]["detected_count"] == 1
     assert briefing["agents"]["installed_count"] == 0
@@ -4409,6 +4419,12 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     ]
     assert model["extension_handoff"]["commands"][0] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
     assert model["extension_handoff"]["commands"][1] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
+    assert model["extension_handoff"]["commands"][2:] == [
+        "mdtero status <task-id> --wait --timeout 300 --json",
+        "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero mcp briefing --json",
+    ]
+    assert model["extension_handoff"]["primary_commands"] == model["extension_handoff"]["commands"][:2]
     assert "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources" in model["extension_handoff"]["cli_scope"]
     assert "publisher challenge or JavaScript verification page" in model["extension_handoff"]["handoff_triggers"]
     assert model["extension_handoff"]["visible_fields"] == ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"]

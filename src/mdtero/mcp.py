@@ -1404,6 +1404,7 @@ def _build_mcp_tool_plan(
 
 
 def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:
+    command_plan = _extension_handoff_commands(commands)
     return {
         "purpose": "Use the browser extension for OAuth/session-aware page capture and the CLI/MCP tools for local files, campus-network fetches, status polling, downloads, translation, and RAG.",
         "browser_scope": [
@@ -1423,13 +1424,21 @@ def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:
             "extension capture cannot access the current tab or direct download URL",
             "server task returns reason_code/action_hint/next_commands for recovery",
         ],
-        "commands": [
-            commands.get("extension_handoff_url") or commands.get("parse_doi_or_url"),
-            commands.get("extension_handoff_file") or commands.get("parse_file"),
-        ],
+        "commands": command_plan,
+        "primary_commands": command_plan[:2],
         "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
         "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
     }
+
+
+def _extension_handoff_commands(commands: dict[str, Any]) -> list[str]:
+    return [
+        str(commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"),
+        str(commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"),
+        "mdtero status <task-id> --wait --timeout 300 --json",
+        "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
+    ]
 
 
 def _agent_handoff_protocol(commands: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1445,7 +1454,7 @@ def _agent_handoff_protocol(commands: dict[str, Any]) -> list[dict[str, Any]]:
             "step": "retry_source_capture",
             "use": "extension_or_cli",
             "when": "reason_code indicates publisher challenge, browser-only session, missing full text, or local acquisition failure.",
-            "commands": [commands.get("extension_handoff_url"), commands.get("extension_handoff_file")],
+            "commands": _extension_handoff_commands(commands),
             "success_signal": "client_acquisition is present or task status succeeds with paper_md/paper_bundle in download_artifacts.",
         },
         {
