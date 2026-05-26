@@ -4957,20 +4957,31 @@ def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
 def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
     repo_root = Path(__file__).resolve().parents[1]
     readiness = (repo_root / "docs" / "public" / "RELEASE_READINESS_2026-05-24.md").read_text(encoding="utf-8")
+    proven_section = readiness.split("## Requires Post-Deploy Smoke", 1)[0]
+    post_deploy_section = readiness.split("## Requires Post-Deploy Smoke", 1)[1].split("## Not Public Product Scope", 1)[0]
+    retired_scope_section = readiness.split("## Not Public Product Scope", 1)[1]
 
     assert "## Proven Ready" in readiness
     assert "## Requires Post-Deploy Smoke" in readiness
-    assert "Public Python/uv CLI as the main runtime" in readiness
-    assert "PDF upload through MinerU URL API" in readiness
-    assert "Server-side Voyage RAG" in readiness
-    assert "Browser extension scoped to v1 product" in readiness
-    assert "extension dist smoke passed" in readiness
-    assert "Translation provider health" in readiness
-    assert "Browser extension interactive flow" in readiness
-    assert "npm run smoke:routes -- --base-url <production-url> --json" in readiness
-    assert "npm runtime CLI" in readiness
-    assert "Native browser bridge" in readiness
-    assert "Public GROBID engine selection" in readiness
+    assert "## Not Public Product Scope" in readiness
+    assert "Public Python/uv CLI as the main runtime" in proven_section
+    assert "PDF upload through MinerU URL API" in proven_section
+    assert "Server-side Voyage RAG" in proven_section
+    assert "Browser extension scoped to v1 product" in proven_section
+    assert "extension dist smoke passed" in proven_section
+    assert "Translation provider health" in post_deploy_section
+    assert "Browser extension interactive flow" in post_deploy_section
+    assert "npm run smoke:routes -- --base-url <production-url> --json" in post_deploy_section
+
+    for retired_marker in [
+        "npm runtime CLI",
+        "Native browser bridge",
+        "Public GROBID engine selection",
+        "Backend-local copies of the public CLI/TUI/Zotero/RAG/MCP client runtime",
+    ]:
+        assert retired_marker in retired_scope_section
+        assert retired_marker not in proven_section
+        assert retired_marker not in post_deploy_section
 
 
 def test_public_docs_describe_agent_safe_redaction_boundary():
