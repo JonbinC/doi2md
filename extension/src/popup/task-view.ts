@@ -405,6 +405,19 @@ export interface CliHandoffPlan {
   kind: "parse" | "translate";
 }
 
+export function formatCliHandoffClipboard(primaryCommand: string, planCommands?: string[] | null): string {
+  const commands = normalizeCommandList([primaryCommand, ...(planCommands ?? [])]);
+  if (commands.length <= 1) {
+    return commands[0] || "";
+  }
+  return [
+    "# Mdtero CLI handoff",
+    "",
+    "Run these commands in order:",
+    ...commands.map((command, index) => `${index + 1}. ${command}`),
+  ].join("\n");
+}
+
 export function buildTaskFailureCliHandoffPlan(
   task:
     | (Pick<TaskRecord, "next_commands"> & {
