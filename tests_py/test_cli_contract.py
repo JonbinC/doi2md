@@ -3920,6 +3920,50 @@ def test_mcp_rag_query_build_if_needed_bootstraps_unlinked_project(tmp_path: Pat
     ]
 
 
+def test_mcp_rag_query_build_if_needed_reuses_matching_server_project(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    class FakeClient:
+        def list_projects(self):
+            calls.append(("list",))
+            return {"items": [{"id": 77, "name": "agent-demo", "rag_status": {"reason_code": "indexed"}}]}
+
+        def create_project(self, name, *, description=None):  # pragma: no cover - failure guard
+            raise AssertionError("matching server project should be reused")
+
+        def import_task_to_project(self, project_id, task_id):
+            calls.append(("import", project_id, task_id))
+            return {"document_id": "doc-1"}
+
+        def rag_build(self, project_id):
+            calls.append(("build", project_id))
+            return {"status": "ready", "reason_code": "indexed"}
+
+        def rag_query(self, project_id, question):
+            calls.append(("query", project_id, question))
+            return {"answer": "Reused answer.", "matches": []}
+
+    payload = query_server_rag("What is indexed?", tmp_path, client=FakeClient(), build_if_needed=True)
+    state = load_project(tmp_path)
+
+    assert payload["status"] == "succeeded"
+    assert payload["answer"] == "Reused answer."
+    assert payload["server_project_id"] == "77"
+    assert payload["bootstrap"]["created_server_project"] is False
+    assert payload["bootstrap"]["reused_server_project"] is True
+    assert payload["bootstrap"]["bound_local_project"] is True
+    assert payload["bootstrap"]["ingest"]["imported_count"] == 1
+    assert state.server_project_id == "77"
+    assert calls == [
+        ("list",),
+        ("import", "77", "task-done"),
+        ("build", "77"),
+        ("query", "77", "What is indexed?"),
+    ]
+
+
 def test_mcp_rag_query_build_if_needed_guides_projects_without_succeeded_tasks(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
