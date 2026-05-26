@@ -28,6 +28,11 @@ const COPY = {
     openAccount: "Open website OAuth",
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
+    cliHandoffGuideTitle: "Extension + CLI handoff",
+    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI.",
+    cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
+    copyCliHandoffGuide: "Copy handoff",
+    cliHandoffGuideCopied: "CLI handoff copied.",
     guideTitle: "Connection guide",
     setupStepAuth: "OAuth",
     setupStepParse: "Parse / Upload",
@@ -81,6 +86,11 @@ const COPY = {
     openAccount: "打开网页登录",
     websiteAuthTitle: "官网登录",
     websiteAuthNote: "扩展统一打开 mdtero.com/auth 登录。请在官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
+    cliHandoffGuideTitle: "扩展 + CLI 交接",
+    cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续。",
+    cliHandoffGuideBoundary: "扩展不安装 Python 依赖、不运行本地 helper，也不保存 Elsevier/Wiley/Semantic Scholar key；这些只留在本地 CLI 的 `mdtero config academic`。",
+    copyCliHandoffGuide: "复制交接",
+    cliHandoffGuideCopied: "CLI 交接已复制。",
     guideTitle: "连接引导",
     setupStepAuth: "网页登录",
     setupStepParse: "解析 / 上传",
@@ -136,6 +146,11 @@ const saveButton = document.querySelector<HTMLButtonElement>("#save-settings");
 const openAccountButton = document.querySelector<HTMLButtonElement>("#open-account");
 const websiteAuthTitleEl = document.querySelector<HTMLHeadingElement>("#website-auth-title");
 const websiteAuthNoteEl = document.querySelector<HTMLParagraphElement>("#website-auth-note");
+const cliHandoffGuideTitleEl = document.querySelector<HTMLHeadingElement>("#cli-handoff-guide-title");
+const cliHandoffGuideNoteEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-guide-note");
+const cliHandoffGuideBoundaryEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-guide-boundary");
+const cliHandoffGuideCommandEl = document.querySelector<HTMLElement>("#cli-handoff-guide-command");
+const copyCliHandoffGuideButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff-guide");
 const connectionGuideTitleEl = document.querySelector<HTMLHeadingElement>("#connection-guide-title");
 const connectionGuideListEl = document.querySelector<HTMLDivElement>("#connection-guide-list");
 const setupStepAuthEl = document.querySelector<HTMLSpanElement>("#setup-step-auth");
@@ -155,6 +170,15 @@ type HistoryTaskRecord = TaskRecord & { paper_input?: string };
 
 const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
+
+const CLI_HANDOFF_GUIDE_COMMAND = [
+  "mdtero doctor --json",
+  "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+  "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+  "mdtero status <task-id> --wait --timeout 300 --json",
+  "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+  "mdtero mcp briefing --json",
+].join("\n");
 
 function renderHistoryNotice(message: string, color?: string) {
   if (!historyList) return;
@@ -217,6 +241,11 @@ function applyLanguage() {
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
+  if (cliHandoffGuideTitleEl) cliHandoffGuideTitleEl.textContent = copy.cliHandoffGuideTitle;
+  if (cliHandoffGuideNoteEl) cliHandoffGuideNoteEl.textContent = copy.cliHandoffGuideNote;
+  if (cliHandoffGuideBoundaryEl) cliHandoffGuideBoundaryEl.textContent = copy.cliHandoffGuideBoundary;
+  if (cliHandoffGuideCommandEl) cliHandoffGuideCommandEl.textContent = CLI_HANDOFF_GUIDE_COMMAND;
+  if (copyCliHandoffGuideButton) copyCliHandoffGuideButton.textContent = copy.copyCliHandoffGuide;
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
   setStepText(setupStepParseEl, "2", copy.setupStepParse);
@@ -397,6 +426,11 @@ if (refreshHistoryBtn) {
 
 openAccountButton?.addEventListener("click", () => {
   void openMdteroAccount();
+});
+
+copyCliHandoffGuideButton?.addEventListener("click", async () => {
+  await navigator.clipboard?.writeText(CLI_HANDOFF_GUIDE_COMMAND);
+  copyCliHandoffGuideButton.textContent = copyFor(uiLanguage).cliHandoffGuideCopied;
 });
 
 saveButton?.addEventListener("click", async () => {

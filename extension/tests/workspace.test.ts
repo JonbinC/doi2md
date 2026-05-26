@@ -57,6 +57,9 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="website-auth-note"');
     expect(optionsHtml).toContain('id="connection-guide-card"');
     expect(optionsHtml).toContain('id="connection-guide-list"');
+    expect(optionsHtml).toContain('id="cli-handoff-guide-card"');
+    expect(optionsHtml).toContain('id="cli-handoff-guide-command"');
+    expect(optionsHtml).toContain('id="copy-cli-handoff-guide"');
     expect(optionsHtml).toContain('id="setup-step-auth"');
     expect(optionsHtml).toContain('Parse / Upload');
     expect(optionsHtml).toContain('Translate');
@@ -142,6 +145,8 @@ describe("workspace", () => {
     expect(styles).toContain('.workflow-strip span[data-state="done"]');
     expect(styles).toContain('.workflow-strip span[data-state="pending"]');
     expect(styles).toContain(".guide-item { display: grid; grid-template-columns: auto minmax(0, 1fr);");
+    expect(styles).toContain(".handoff-guide-header { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
+    expect(styles).toContain(".handoff-guide-command { display: block;");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
     expect(styles).toContain("button { min-height: 40px;");
     expect(styles).toContain(".cli-handoff code { min-width: 0; overflow: auto;");
