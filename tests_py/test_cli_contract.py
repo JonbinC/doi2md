@@ -5595,6 +5595,11 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "mdtero project ingest" in source_skill
     assert "server_rag_status" in source_skill
     assert "rag_query(question)" in source_skill
+    assert "submit_parse(input_value" in source_skill
+    assert "task_status(task_id" in source_skill
+    assert "request_translation(task_id_or_markdown_path" in source_skill
+    assert "provider-attempt diagnostics" in source_skill
+    assert "Prefer MCP tools for multi-step agent work" in source_skill
     assert "JSON responses include `next_commands`" in source_skill
     assert "preferred_artifact" in source_skill
     assert "evidence_pack.context_markdown" in source_skill
