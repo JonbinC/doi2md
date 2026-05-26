@@ -1301,7 +1301,7 @@ def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str)
 
 def _discovery_project_next_commands(added_count: int) -> list[str]:
     if added_count <= 0:
-        return ["mdtero project status --json", "mdtero discover \"<topic>\" --interactive"]
+        return ["mdtero project status --json", "mdtero discover \"<topic>\" --limit 5 --interactive", "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json"]
     return ["mdtero project parse --wait --timeout 300 --json", "mdtero project refresh --wait --timeout 300 --json", "mdtero project download --output-dir ./mdtero-output --json"]
 
 
