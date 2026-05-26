@@ -302,8 +302,8 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             {
                 "status": "not_ready",
                 "reason_code": "auth_missing",
-                "action_hint": "Configure Mdtero auth before running production smoke. Use browser OAuth with `mdtero login` or headless API-key login with `mdtero login --api-key <key>`.",
-                "next_commands": ["mdtero login", "mdtero login --api-key <key>", "mdtero doctor --json"],
+                "action_hint": "Configure Mdtero auth before running production smoke. Use browser OAuth with `mdtero login` or headless API-key login with `mdtero login --api-key`.",
+                "next_commands": ["mdtero login", "mdtero login --api-key", "mdtero doctor --json"],
             }
         )
         _print_smoke_result(payload, json_output=args.json)
@@ -518,7 +518,7 @@ def _normalize_api_key_arg(value: str, *, console: Console) -> str | None:
 def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds: float, no_browser: bool) -> None:
     if no_browser:
         console.print("Printing a loopback web-login URL instead of opening a browser.")
-        console.print("Use `mdtero setup --api-key <key>` for remote/headless servers where 127.0.0.1 cannot receive the browser callback.")
+        console.print("Use `mdtero setup --api-key` for remote/headless servers where 127.0.0.1 cannot receive the browser callback.")
         console.print("Open the URL below from a browser that can reach this machine's loopback callback. Waiting for the callback...")
         opener = lambda url: console.print(f"  {url}")
     else:
@@ -618,8 +618,8 @@ def _doctor_remote_auth(cfg: MdteroConfig) -> dict[str, Any]:
     if not cfg.is_authenticated:
         return {
             "status": "missing",
-            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key <key>` for headless environments.",
-            "next_commands": ["mdtero setup", "mdtero setup --api-key <key>"],
+            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key` for headless environments.",
+            "next_commands": ["mdtero setup", "mdtero setup --api-key"],
         }
     try:
         usage = MdteroClient(config=cfg, timeout=10.0).usage()
@@ -673,7 +673,7 @@ def _doctor_auth_next_commands(cfg: MdteroConfig, remote_auth: dict[str, Any]) -
     if not cfg.is_authenticated:
         return ["mdtero setup"]
     if remote_auth.get("status") == "failed":
-        return [str(command) for command in remote_auth.get("next_commands") or ["mdtero setup --api-key <key>", "mdtero doctor --json"]]
+        return [str(command) for command in remote_auth.get("next_commands") or ["mdtero setup --api-key", "mdtero doctor --json"]]
     return ["mdtero doctor --json"]
 
 
@@ -1897,7 +1897,7 @@ def _smoke_action_hint(reason_code: str) -> str:
 
 def _smoke_failure_next_commands(reason_code: str) -> list[str]:
     if reason_code in {"auth_missing", "authentication_required", "unauthorized", "forbidden"}:
-        return ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
+        return ["mdtero setup --api-key", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
     if reason_code in {"rag_index_not_built", "project_has_no_chunks", "server_project_import_failed", "rag_failed"}:
         return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     if reason_code in {"parse_failed", "task_wait_timeout"}:

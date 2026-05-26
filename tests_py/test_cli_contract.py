@@ -60,8 +60,8 @@ def mock_doctor_remote_auth_ok(monkeypatch):
         if cfg.is_authenticated
         else {
             "status": "missing",
-            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key <key>` for headless environments.",
-            "next_commands": ["mdtero setup", "mdtero setup --api-key <key>"],
+            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key` for headless environments.",
+            "next_commands": ["mdtero setup", "mdtero setup --api-key"],
         },
     )
 
@@ -171,7 +171,7 @@ def test_smoke_reports_missing_auth_without_network(monkeypatch, tmp_path: Path,
 
     assert payload["status"] == "not_ready"
     assert payload["reason_code"] == "auth_missing"
-    assert payload["next_commands"] == ["mdtero login", "mdtero login --api-key <key>", "mdtero doctor --json"]
+    assert payload["next_commands"] == ["mdtero login", "mdtero login --api-key", "mdtero doctor --json"]
     assert payload["steps"] == []
 
 
@@ -399,7 +399,7 @@ def test_smoke_classifies_live_401_as_authentication_required(monkeypatch, tmp_p
     assert parse_step["error_code"] == "authentication_required"
     assert parse_step["http_status"] == 401
     assert parse_step["next_commands"] == [
-        "mdtero setup --api-key <key>",
+        "mdtero setup --api-key",
         "mdtero doctor --json",
         "mdtero smoke --json --timeout 600 --interval 2",
     ]
@@ -421,8 +421,8 @@ def test_smoke_preserves_discovery_error_payload(monkeypatch, tmp_path: Path, ca
                 "status_code": 401,
                 "source": "openalex_server",
                 "message": "missing or invalid credentials",
-                "action_hint": "Run `mdtero setup --api-key <key>` and verify with `mdtero doctor --json` before server OpenAlex discovery.",
-                "next_commands": ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"],
+                "action_hint": "Run `mdtero setup --api-key` and verify with `mdtero doctor --json` before server OpenAlex discovery.",
+                "next_commands": ["mdtero setup --api-key", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"],
             }
         )
 
@@ -458,13 +458,13 @@ def test_smoke_preserves_discovery_error_payload(monkeypatch, tmp_path: Path, ca
     assert discover_step["error_code"] == "authentication_required"
     assert discover_step["http_status"] == 401
     assert discover_step["message"] == "missing or invalid credentials"
-    assert discover_step["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+    assert discover_step["next_commands"] == ["mdtero setup --api-key", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
     assert payload["primary_failure"] == {
         "step": "discover",
         "reason_code": "authentication_required",
-        "action_hint": "Run `mdtero setup --api-key <key>` and verify with `mdtero doctor --json` before server OpenAlex discovery.",
+        "action_hint": "Run `mdtero setup --api-key` and verify with `mdtero doctor --json` before server OpenAlex discovery.",
     }
-    assert payload["next_commands"][:2] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+    assert payload["next_commands"][:2] == ["mdtero setup --api-key", "mdtero doctor --json"]
 
 
 def test_smoke_surfaces_translation_provider_failures(monkeypatch, tmp_path: Path, capsys):
@@ -669,7 +669,7 @@ def test_login_no_browser_explains_loopback_and_headless_api_key(monkeypatch, tm
     output = capsys.readouterr().out
 
     assert "loopback web-login URL" in output
-    assert "mdtero setup --api-key <key>" in output
+    assert "mdtero setup --api-key" in output
     assert "127.0.0.1" in output
     assert "https://mdtero.com/auth?cli_callback=" in output
 
@@ -924,7 +924,7 @@ def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path,
             "error_code": "authentication_required",
             "reason_code": "authentication_required",
             "status_code": 401,
-            "next_commands": ["mdtero setup --api-key <key>", "mdtero doctor --json"],
+            "next_commands": ["mdtero setup --api-key", "mdtero doctor --json"],
         },
     )
 
@@ -935,7 +935,7 @@ def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path,
     assert payload["authenticated"] is False
     assert payload["remote_auth"]["status_code"] == 401
     assert payload["checks"][0] == {"check": "API key", "status": "invalid", "detail": "authentication_required"}
-    assert payload["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+    assert payload["next_commands"] == ["mdtero setup --api-key", "mdtero doctor --json"]
 
 
 def test_doctor_json_reports_missing_auth_and_project_init_next_steps(monkeypatch, tmp_path: Path, capsys):
@@ -1766,8 +1766,8 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
     assert payload["error_code"] == "authentication_required"
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
-    assert "mdtero setup --api-key <key>" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+    assert "mdtero setup --api-key" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero setup --api-key", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
 
 
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
@@ -2588,7 +2588,7 @@ def test_cmd_parse_auth_failure_returns_agent_json_without_traceback(monkeypatch
     assert payload["error_code"] == "authentication_required"
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
-    assert payload["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+    assert payload["next_commands"] == ["mdtero setup --api-key", "mdtero doctor --json"]
 
 
 def test_status_promotes_nested_provider_strategy_and_outcome(monkeypatch, tmp_path: Path, capsys):
@@ -4310,7 +4310,7 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
     assert briefing["health"]["pending_count"] == 0
     assert briefing["health"]["rag_reason_code"] == "server_project_not_linked"
     assert briefing["recommended_next_commands"][:5] == [
-        "mdtero setup --api-key <key>",
+        "mdtero setup --api-key",
         "mdtero doctor --json",
         "mdtero discover \"<topic>\" --interactive",
         "mdtero project add <doi-or-url> --json",
@@ -4331,7 +4331,7 @@ def test_mcp_agent_briefing_guides_uninitialized_directories(monkeypatch, tmp_pa
     assert briefing["health"]["rag_reason_code"] == "project_not_initialized"
     assert briefing["rag"]["reason_code"] == "project_not_initialized"
     assert briefing["recommended_next_commands"][:6] == [
-        "mdtero setup --api-key <key>",
+        "mdtero setup --api-key",
         "mdtero doctor --json",
         "mdtero project init --name <name>",
         "mdtero discover \"<topic>\" --interactive",
@@ -4578,13 +4578,13 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["launch_bundle"]["copy_hint"] == "Copy one group into a terminal or agent prompt; commands are ordered and JSON-first where possible."
     launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
     assert list(launch_groups) == ["Setup", "Parse", "Project", "RAG + MCP", "Extension handoff"]
-    assert launch_groups["Setup"]["commands"][:3] == ["mdtero doctor --json", "mdtero setup", "mdtero setup --api-key <key>"]
+    assert launch_groups["Setup"]["commands"][:3] == ["mdtero doctor --json", "mdtero setup", "mdtero setup --api-key"]
     assert "mdtero agent detect --json" in launch_groups["Setup"]["commands"]
     assert "mdtero agent install --interactive" in launch_groups["Setup"]["commands"]
     assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in launch_groups["Parse"]["commands"]
     assert "mdtero mcp briefing --json" in launch_groups["Extension handoff"]["commands"]
     assert model["next_steps"][:2] == ["mdtero setup", "mdtero doctor --json"]
-    assert "mdtero setup --api-key <key>" in model["next_steps"]
+    assert "mdtero setup --api-key" in model["next_steps"]
     assert model["operator_summary"][0] == {"area": "Account", "state": "missing", "detail": "run mdtero setup"}
     assert [item["key"] for item in model["shortcuts"]] == ["r", "d", "p", "g", "m", "q"]
     assert model["command_palette"][0] == {
@@ -4596,7 +4596,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert any(
         item["area"] == "Setup"
         and item["use"] == "Headless or remote shell fallback"
-        and item["command"] == "mdtero setup --api-key <key>"
+        and item["command"] == "mdtero setup --api-key"
         and item["is_next"]
         for item in model["command_palette"]
     )
@@ -4617,7 +4617,7 @@ def test_tui_dashboard_model_accepts_environment_api_key(monkeypatch, tmp_path: 
 
     assert model["account"]["authenticated"] is True
     assert model["account"]["auth_source"] == "MDTERO_API_KEY"
-    assert model["next_steps"][:2] != ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+    assert model["next_steps"][:2] != ["mdtero setup --api-key", "mdtero doctor --json"]
 
 
 def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path):
@@ -6471,7 +6471,7 @@ def test_public_docs_describe_setup_agent_detection_and_headless_skip():
 
     assert "`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection" in combined
     assert "detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces" in combined
-    assert "Headless setup with `mdtero setup --api-key <key>` or `MDTERO_API_KEY`" in combined
+    assert "Headless setup with `mdtero setup --api-key` or `MDTERO_API_KEY`" in combined
     assert "skips agent detection" in combined
     assert "mdtero agent install --interactive" in combined
 

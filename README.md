@@ -25,7 +25,7 @@ mdtero setup
 
 After the PyPI handoff, the stable install command will be `uv tool install mdtero`. Until then, use the GitHub install above so you get the tested `0.2.0a9` Python client instead of an unrelated package name collision.
 
-`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. When it finds existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, or `~/.opencode` directories, it can multi-select and install the Mdtero skill during onboarding. Headless setup with `mdtero setup --api-key <key>` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives.
+`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. When it finds existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, or `~/.opencode` directories, it can multi-select and install the Mdtero skill during onboarding. Headless setup with `mdtero setup --api-key` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives.
 
 For a one-command agent setup:
 
@@ -63,7 +63,7 @@ clawhub install mdtero
 mdtero doctor
 mdtero doctor --json
 mdtero login
-mdtero setup --api-key <key>
+mdtero setup --api-key
 mdtero config academic
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero project init --json
