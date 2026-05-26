@@ -390,16 +390,74 @@ export function getTaskFailureCliHandoff(
   input?: string | null,
   kind: "parse" | "translate" = "parse"
 ): string {
-  const nextCommand = firstTaskNextCommand(task);
-  if (nextCommand) {
-    return nextCommand;
-  }
-  return kind === "parse" ? buildCliParseCommand(input) : "";
+  return buildTaskFailureCliHandoffPlan(task, input, kind).primaryCommand;
 }
 
 export function firstNextCommand(commands?: string[] | null): string {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
   return normalizeCliHandoffCommand(command);
+}
+
+export interface CliHandoffPlan {
+  primaryCommand: string;
+  commands: string[];
+  source: "backend_task" | "backend_result" | "fallback_parse" | "none";
+  kind: "parse" | "translate";
+}
+
+export function buildTaskFailureCliHandoffPlan(
+  task:
+    | (Pick<TaskRecord, "next_commands"> & {
+        result?: Pick<TaskResult, "next_commands"> | null;
+      })
+    | null
+    | undefined,
+  input?: string | null,
+  kind: "parse" | "translate" = "parse"
+): CliHandoffPlan {
+  const taskCommands = normalizeCommandList(task?.next_commands);
+  if (taskCommands.length > 0) {
+    return {
+      primaryCommand: taskCommands[0],
+      commands: taskCommands,
+      source: "backend_task",
+      kind
+    };
+  }
+
+  const resultCommands = normalizeCommandList(task?.result?.next_commands);
+  if (resultCommands.length > 0) {
+    return {
+      primaryCommand: resultCommands[0],
+      commands: resultCommands,
+      source: "backend_result",
+      kind
+    };
+  }
+
+  const fallback = kind === "parse" ? buildCliParseCommand(input) : "";
+  if (fallback) {
+    return {
+      primaryCommand: fallback,
+      commands: [fallback],
+      source: "fallback_parse",
+      kind
+    };
+  }
+
+  return {
+    primaryCommand: "",
+    commands: [],
+    source: "none",
+    kind
+  };
+}
+
+function normalizeCommandList(commands?: string[] | null): string[] {
+  const normalized = (commands ?? [])
+    .map((value) => normalizeCliHandoffCommand(String(value || "").trim()))
+    .filter((value) => value.length > 0);
+  return Array.from(new Set(normalized));
 }
 
 export { buildCliFileParseCommand, buildCliParseCommand, normalizeCliHandoffCommand };

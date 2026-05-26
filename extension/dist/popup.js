@@ -274,10 +274,13 @@ function createFileParseMessage(file, artifactKind) {
   };
   return message;
 }
-function createTranslateMessage(sourceMarkdownPath, targetLanguage, mode) {
+function createTranslateMessage(sourceMarkdown, targetLanguage, mode) {
   return {
     type: "mdtero.translate.request",
-    sourceMarkdownPath,
+    sourceMarkdownPath: sourceMarkdown.path || void 0,
+    sourceTaskId: sourceMarkdown.taskId || void 0,
+    sourceArtifactKey: sourceMarkdown.artifactKey || void 0,
+    sourceFilename: sourceMarkdown.filename || void 0,
     targetLanguage,
     mode
   };
@@ -341,8 +344,9 @@ function getPendingPopupTask(state, detectedInput) {
     kind: state.pendingTaskKind
   };
 }
-function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkdownPath) {
-  if (!state || state.input !== detectedInput || state.pendingTaskKind !== "translate" || !state.pendingTaskId || state.parseMarkdownPath !== parseMarkdownPath) {
+function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkdownRef) {
+  const stateMarkdownRef = state?.parseMarkdownPath || state?.parseMarkdownTaskId;
+  if (!state || state.input !== detectedInput || state.pendingTaskKind !== "translate" || !state.pendingTaskId || stateMarkdownRef !== parseMarkdownRef) {
     return void 0;
   }
   return {
@@ -600,6 +604,45 @@ function firstNextCommand(commands) {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
   return normalizeCliHandoffCommand(command);
 }
+function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
+  const taskCommands = normalizeCommandList(task?.next_commands);
+  if (taskCommands.length > 0) {
+    return {
+      primaryCommand: taskCommands[0],
+      commands: taskCommands,
+      source: "backend_task",
+      kind
+    };
+  }
+  const resultCommands = normalizeCommandList(task?.result?.next_commands);
+  if (resultCommands.length > 0) {
+    return {
+      primaryCommand: resultCommands[0],
+      commands: resultCommands,
+      source: "backend_result",
+      kind
+    };
+  }
+  const fallback = kind === "parse" ? buildCliParseCommand(input) : "";
+  if (fallback) {
+    return {
+      primaryCommand: fallback,
+      commands: [fallback],
+      source: "fallback_parse",
+      kind
+    };
+  }
+  return {
+    primaryCommand: "",
+    commands: [],
+    source: "none",
+    kind
+  };
+}
+function normalizeCommandList(commands) {
+  const normalized = (commands ?? []).map((value) => normalizeCliHandoffCommand(String(value || "").trim())).filter((value) => value.length > 0);
+  return Array.from(new Set(normalized));
+}
 
 // src/popup/index.ts
 var COPY = {
@@ -752,6 +795,7 @@ var resultEl = document.querySelector("#result");
 var cliHandoffEl = document.querySelector("#cli-handoff");
 var cliHandoffNoteEl = document.querySelector("#cli-handoff-note");
 var cliHandoffCommandEl = document.querySelector("#cli-handoff-command");
+var cliHandoffPlanEl = document.querySelector("#cli-handoff-plan");
 var copyCliHandoffButton = document.querySelector("#copy-cli-handoff");
 var artifactActionsEl = document.querySelector("#artifact-actions");
 var downloadButton = document.querySelector("#download-link");
@@ -762,7 +806,7 @@ var sourceDownloadsEl = document.querySelector("#source-downloads");
 var recentTasksSummaryEl = document.querySelector("#recent-tasks-summary");
 var recentTaskListEl = document.querySelector("#recent-task-list");
 var client = createApiClient(readSettings);
-var lastParsedMarkdownPath = null;
+var lastParsedMarkdownSource = null;
 var currentInput = null;
 var uiLanguage = "en";
 var isParsing = false;
@@ -797,15 +841,33 @@ function updateWorkflowState() {
   setWorkflowStep(workflowTranslateEl, hasTranslatedArtifact ? "done" : isTranslating || hasParsedArtifact ? "active" : "pending");
   setWorkflowStep(workflowDownloadEl, hasDownloadableArtifact ? "done" : hasParsedArtifact || hasTranslatedArtifact ? "active" : "pending");
 }
-function setCliHandoff(input, commandOverride) {
-  const command = String(commandOverride || "").trim() || buildCliParseCommand(input);
+function setCliHandoff(input, commandOverride, planCommands) {
+  const commands = normalizeHandoffCommands(planCommands);
+  const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
   if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton || !cliHandoffNoteEl) {
     return;
   }
   cliHandoffEl.hidden = !command;
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
+  renderCliHandoffPlan(command ? [command, ...commands] : []);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
+}
+function normalizeHandoffCommands(commands) {
+  return Array.from(new Set((commands ?? []).map((value) => String(value || "").trim()).filter(Boolean)));
+}
+function renderCliHandoffPlan(commands) {
+  if (!cliHandoffPlanEl) {
+    return;
+  }
+  const unique = normalizeHandoffCommands(commands);
+  cliHandoffPlanEl.innerHTML = "";
+  cliHandoffPlanEl.hidden = unique.length <= 1;
+  unique.slice(1).forEach((command) => {
+    const item = document.createElement("li");
+    item.textContent = command;
+    cliHandoffPlanEl.appendChild(item);
+  });
 }
 async function copyCliHandoff() {
   const command = cliHandoffCommandEl?.textContent?.trim();
@@ -960,8 +1022,17 @@ function renderActionButtons() {
   }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
-    translateButton.disabled = isTranslating || !lastParsedMarkdownPath;
+    translateButton.disabled = isTranslating || !hasParsedMarkdownSource(lastParsedMarkdownSource);
   }
+}
+function hasParsedMarkdownSource(source) {
+  return Boolean(source?.path || source?.taskId && source?.artifactKey);
+}
+function parsedMarkdownRef(source) {
+  return String(source?.path || source?.taskId || "").trim();
+}
+function getArtifactDescriptor(result, artifactKey) {
+  return result?.artifacts?.[artifactKey] ?? result?.download_artifacts?.find((artifact) => artifact.artifact === artifactKey);
 }
 function clearSecondaryDownloads() {
   if (secondaryDownloadsEl) {
@@ -1034,20 +1105,25 @@ function renderArtifacts(task) {
   }
 }
 async function persistPopupState(task) {
-  if (!currentInput || !task.result?.artifacts) {
+  if (!currentInput || !task.result) {
     return;
   }
   const previous = await readPopupState();
   const preferredParseArtifact = task.result.preferred_artifact === "paper_bundle" ? "paper_bundle" : "paper_md";
-  const preferredParseDescriptor = task.result.artifacts[preferredParseArtifact];
+  const preferredParseDescriptor = getArtifactDescriptor(task.result, preferredParseArtifact);
+  const paperMarkdownDescriptor = getArtifactDescriptor(task.result, "paper_md");
+  const translatedDescriptor = getArtifactDescriptor(task.result, "translated_md");
   const nextState = {
     input: currentInput,
     parseTaskId: preferredParseDescriptor ? task.task_id : previous?.parseTaskId,
     parseArtifactKey: preferredParseDescriptor ? preferredParseArtifact : previous?.parseArtifactKey,
     parseFilename: preferredParseDescriptor?.filename ?? previous?.parseFilename,
-    parseMarkdownPath: task.result.artifacts.paper_md?.path ?? previous?.parseMarkdownPath,
-    translatedTaskId: task.result.artifacts.translated_md ? task.task_id : previous?.translatedTaskId,
-    translatedFilename: task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename,
+    parseMarkdownTaskId: paperMarkdownDescriptor ? task.task_id : previous?.parseMarkdownTaskId,
+    parseMarkdownArtifactKey: paperMarkdownDescriptor ? "paper_md" : previous?.parseMarkdownArtifactKey,
+    parseMarkdownFilename: paperMarkdownDescriptor?.filename ?? previous?.parseMarkdownFilename,
+    parseMarkdownPath: task.result.artifacts?.paper_md?.path ?? previous?.parseMarkdownPath,
+    translatedTaskId: translatedDescriptor ? task.task_id : previous?.translatedTaskId,
+    translatedFilename: translatedDescriptor?.filename ?? previous?.translatedFilename,
     pendingTaskId: void 0,
     pendingTaskKind: void 0
   };
@@ -1139,8 +1215,13 @@ async function hydrateSavedState(detectedInput) {
   if (summary) {
     setResult(summary);
   }
-  lastParsedMarkdownPath = savedState.parseMarkdownPath ?? null;
-  hasParsedArtifact = Boolean(savedState.parseTaskId || savedState.parseMarkdownPath);
+  lastParsedMarkdownSource = {
+    path: savedState.parseMarkdownPath,
+    taskId: savedState.parseMarkdownTaskId,
+    artifactKey: savedState.parseMarkdownArtifactKey,
+    filename: savedState.parseMarkdownFilename
+  };
+  hasParsedArtifact = Boolean(savedState.parseTaskId || hasParsedMarkdownSource(lastParsedMarkdownSource));
   hasTranslatedArtifact = Boolean(savedState.translatedTaskId || savedState.translatedFilename);
   hasDownloadableArtifact = hasParsedArtifact || hasTranslatedArtifact;
   updateWorkflowState();
@@ -1180,8 +1261,13 @@ async function pollTask(taskId, kind) {
         uiLanguage
       )
     );
+    const failureHandoffPlan = buildTaskFailureCliHandoffPlan(task, currentInput, kind);
+    if (failureHandoffPlan.primaryCommand) {
+      setCliHandoff(currentInput, failureHandoffPlan.primaryCommand, failureHandoffPlan.commands);
+    } else {
+      setCliHandoff(null);
+    }
     if (kind === "parse") {
-      setCliHandoff(currentInput, firstTaskNextCommand(task));
       isParsing = false;
     } else {
       isTranslating = false;
@@ -1209,7 +1295,15 @@ async function pollTask(taskId, kind) {
     updateWorkflowState();
     return;
   }
-  lastParsedMarkdownPath = task.result?.artifacts?.paper_md?.path ?? lastParsedMarkdownPath;
+  const paperMarkdownDescriptor = getArtifactDescriptor(task.result, "paper_md");
+  if (paperMarkdownDescriptor) {
+    lastParsedMarkdownSource = {
+      path: task.result?.artifacts?.paper_md?.path ?? lastParsedMarkdownSource?.path,
+      taskId: task.task_id,
+      artifactKey: "paper_md",
+      filename: paperMarkdownDescriptor.filename
+    };
+  }
   setCliHandoff(null);
   renderArtifacts(task);
   await persistPopupState(task);
@@ -1219,7 +1313,7 @@ async function pollTask(taskId, kind) {
     hasParsedArtifact = true;
     hasDownloadableArtifact = true;
     const preferredArtifactKey = getPreferredArtifactKey(task.result);
-    const filename = preferredArtifactKey ? task.result?.artifacts?.[preferredArtifactKey]?.filename : void 0;
+    const filename = preferredArtifactKey ? getArtifactDescriptor(task.result, preferredArtifactKey)?.filename : void 0;
     const warningText = getResultWarningText(task.result, uiLanguage);
     if (filename) {
       setResult([getCurrentCopy().parseReady(filename), warningText].filter(Boolean).join(" "));
@@ -1230,7 +1324,7 @@ async function pollTask(taskId, kind) {
     isTranslating = false;
     hasTranslatedArtifact = true;
     hasDownloadableArtifact = true;
-    const filename = task.result?.artifacts?.translated_md?.filename;
+    const filename = getArtifactDescriptor(task.result, "translated_md")?.filename;
     if (filename) {
       setResult(getCurrentCopy().translateReady(filename));
     }
@@ -1429,15 +1523,16 @@ translateButton?.addEventListener("click", async () => {
   if (isTranslating) {
     return;
   }
-  if (!lastParsedMarkdownPath) {
+  if (!hasParsedMarkdownSource(lastParsedMarkdownSource)) {
     setResult(getCurrentCopy().translateFirst);
     return;
   }
   const previous = await readPopupState();
+  const markdownRef = parsedMarkdownRef(lastParsedMarkdownSource);
   const reconnectableTask = getReconnectablePendingTranslationTask(
     previous,
     currentInput ?? "",
-    lastParsedMarkdownPath
+    markdownRef
   );
   if (reconnectableTask) {
     isTranslating = true;
@@ -1453,7 +1548,7 @@ translateButton?.addEventListener("click", async () => {
   setResult(getActionStatusText("queued_translate", uiLanguage));
   const response = await chrome.runtime.sendMessage(
     createTranslateMessage(
-      lastParsedMarkdownPath,
+      lastParsedMarkdownSource ?? {},
       translateLanguageEl?.value ?? "zh",
       "standard"
     )
@@ -1468,7 +1563,10 @@ translateButton?.addEventListener("click", async () => {
   await writePopupState({
     ...await readPopupState(),
     input: currentInput ?? "",
-    parseMarkdownPath: lastParsedMarkdownPath,
+    parseMarkdownPath: lastParsedMarkdownSource?.path || void 0,
+    parseMarkdownTaskId: lastParsedMarkdownSource?.taskId || void 0,
+    parseMarkdownArtifactKey: lastParsedMarkdownSource?.artifactKey || void 0,
+    parseMarkdownFilename: lastParsedMarkdownSource?.filename || void 0,
     pendingTaskId: response.result.task_id,
     pendingTaskKind: "translate"
   });

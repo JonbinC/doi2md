@@ -21,6 +21,7 @@ import {
   getResultWarningText,
   getTaskFailureText,
   getTaskFailureCliHandoff,
+  buildTaskFailureCliHandoffPlan,
   firstNextCommand,
   firstTaskNextCommand,
   getTranslationAttemptSummary,
@@ -657,6 +658,53 @@ describe("getTaskFailureText", () => {
         "translate"
       )
     ).toBe("mdtero translate task-123 --to zh-CN --wait --timeout 600 --json");
+  });
+
+  it("keeps a structured multi-step CLI handoff plan for agents and users", () => {
+    expect(
+      buildTaskFailureCliHandoffPlan(
+        {
+          next_commands: [
+            "mdtero parse --file paper.pdf --json",
+            "mdtero status task-123 --wait --timeout 300 --json",
+            "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+          ],
+          result: {
+            next_commands: ["mdtero doctor --json"]
+          }
+        },
+        "10.1000/demo",
+        "parse"
+      )
+    ).toEqual({
+      primaryCommand: "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+      commands: [
+        "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+        "mdtero status task-123 --wait --timeout 300 --json"
+      ],
+      source: "backend_task",
+      kind: "parse"
+    });
+  });
+
+  it("reports the command source when falling back to result or parse input", () => {
+    expect(
+      buildTaskFailureCliHandoffPlan(
+        {
+          next_commands: [],
+          result: { next_commands: ["mdtero rag status --json"] }
+        },
+        "10.1000/demo",
+        "translate"
+      ).source
+    ).toBe("backend_result");
+
+    expect(
+      buildTaskFailureCliHandoffPlan({ next_commands: [] }, "10.1000/demo", "parse")
+    ).toMatchObject({
+      source: "fallback_parse",
+      primaryCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json"
+    });
   });
 
   it("falls back to a traceable parse command only for parse failures", () => {

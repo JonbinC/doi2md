@@ -506,17 +506,18 @@ async function refreshHistory() {
       header.appendChild(inputDiv);
       header.appendChild(statusBadge);
       row.appendChild(header);
-      if (task.status === "succeeded" && task.result?.artifacts) {
+      const artifactEntries = task.result ? task.result.artifacts ? Object.entries(task.result.artifacts).map(([key, desc]) => [key, desc.filename]) : (task.result.download_artifacts ?? []).map((desc) => [desc.artifact, desc.filename]) : [];
+      if (task.status === "succeeded" && artifactEntries.length > 0) {
         const artifactsRow = document.createElement("div");
         artifactsRow.className = "history-actions";
-        for (const [key, desc] of Object.entries(task.result.artifacts)) {
+        for (const [key, filename] of artifactEntries) {
           const dlBtn = document.createElement("button");
           dlBtn.className = "ghost-chip history-download-button";
           dlBtn.textContent = formatArtifactActionLabel(key);
           dlBtn.addEventListener("click", async () => {
             try {
               dlBtn.textContent = uiLanguage === "zh" ? "\u4E0B\u8F7D\u4E2D..." : "Downloading...";
-              const result = await client.downloadArtifact(task.task_id, key, desc.filename);
+              const result = await client.downloadArtifact(task.task_id, key, filename);
               triggerBlobDownload(result.blob, result.filename);
               dlBtn.textContent = formatArtifactActionLabel(key);
             } catch (err) {
