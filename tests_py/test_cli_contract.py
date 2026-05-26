@@ -2865,6 +2865,50 @@ def test_client_can_create_server_project(monkeypatch):
     assert calls == [("POST", "/api/v1/projects", {"json": {"name": "demo", "description": "local project"}})]
 
 
+def test_project_create_server_reports_backend_gap_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+
+    def fake_create(self, name, *, description=None):
+        request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects")
+        response = httpx.Response(404, request=request, json={"detail": "Not Found"})
+        raise httpx.HTTPStatusError("not found", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_create_server(type("Args", (), {"name": None, "description": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "failed"
+    assert payload["command"] == "project_create_server"
+    assert payload["reason_code"] == "server_project_endpoint_missing"
+    assert payload["http_status"] == 404
+    assert payload["server_project_id"] is None
+    assert "backend /api/v1/projects endpoint" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero doctor --json", "mdtero project create-server --json", "mdtero rag build --json", "mdtero rag status --json"]
+
+
+def test_project_create_server_reports_missing_id_as_agent_json(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+
+    def fake_create(self, name, *, description=None):
+        return {"name": name}
+
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_create_server(type("Args", (), {"name": None, "description": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["reason_code"] == "server_project_id_missing"
+    assert payload["server_response"] == {"name": "local-demo"}
+    assert "did not include an id" in payload["action_hint"]
+
+
 def test_client_can_list_server_projects(monkeypatch):
     calls = []
 
@@ -3078,6 +3122,24 @@ def test_project_ingest_imports_succeeded_tasks_into_bound_server_project(monkey
     assert payload["imported_count"] == 1
     assert payload["items"][0]["result"]["document_id"] == 7
     assert payload["failed_count"] == 0
+
+
+def test_project_ingest_unlinked_project_returns_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_project_ingest(type("Args", (), {"project_id": None, "json": True})()) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "not_ready"
+    assert payload["command"] == "project_ingest"
+    assert payload["reason_code"] == "server_project_not_linked"
+    assert payload["local_ready_for_ingest_count"] == 1
+    assert payload["server_project_id"] is None
+    assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
 
 
 def test_project_ingest_reports_unavailable_server_import_without_traceback(monkeypatch, tmp_path: Path, capsys):

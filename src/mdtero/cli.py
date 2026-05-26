@@ -1271,10 +1271,17 @@ def cmd_project_create_server(args: argparse.Namespace) -> int:
     state = load_project(root)
     name = args.name or state.name
     client = MdteroClient()
-    result, reused = _find_or_create_server_project(client, name, description=args.description or f"Mdtero local project: {state.name}")
+    try:
+        result, reused = _find_or_create_server_project(client, name, description=args.description or f"Mdtero local project: {state.name}")
+    except Exception as exc:
+        payload = _project_create_server_failure(state, exc)
+        _print_project_create_server_failure(payload, json_output=args.json)
+        return 1
     server_project_id = str(result.get("id") or "").strip()
     if not server_project_id:
-        raise SystemExit("Server did not return a project id")
+        payload = _project_create_server_failure(state, RuntimeError("server_project_id_missing"), project=result)
+        _print_project_create_server_failure(payload, json_output=args.json)
+        return 1
     state = bind_server_project(root, server_project_id)
     payload = {"server_project_id": state.server_project_id, "project": result, "reused_server_project": reused}
     if args.json:
@@ -1383,7 +1390,9 @@ def cmd_project_download(args: argparse.Namespace) -> int:
 def cmd_project_ingest(args: argparse.Namespace) -> int:
     root = Path.cwd()
     state = load_project(root)
-    project_id = _server_project_id(args)
+    project_id = _server_project_id_or_report(args, command="project_ingest")
+    if project_id is None:
+        return 1
     client = MdteroClient()
     ingest = _import_succeeded_tasks_to_server_project(client, state, project_id)
     results = ingest["items"]
@@ -2235,6 +2244,54 @@ def _find_or_create_server_project(client: MdteroClient, name: str, *, descripti
     return client.create_project(normalized_name, description=description), False
 
 
+def _project_create_server_failure(state: Any, exc: Exception, *, project: dict[str, Any] | None = None) -> dict[str, Any]:
+    detail = _http_error_detail(exc)
+    status_code = _exception_status_code(exc)
+    raw_reason = detail.get("reason_code") or detail.get("error_code")
+    if raw_reason:
+        reason_code = str(raw_reason)
+    elif str(exc) == "server_project_id_missing":
+        reason_code = "server_project_id_missing"
+    elif status_code == 404:
+        reason_code = "server_project_endpoint_missing"
+    else:
+        reason_code = "server_project_create_failed"
+    if reason_code == "server_project_id_missing":
+        action_hint = "The backend project creation response did not include an id. Check the /api/v1/projects contract, then rerun `mdtero project create-server --json`."
+    elif status_code == 404:
+        action_hint = "The backend /api/v1/projects endpoint is not deployed yet. Deploy the backend project/RAG routes, then rerun `mdtero project create-server --json`."
+    else:
+        action_hint = str(detail.get("action_hint") or "Check Mdtero API connectivity, authentication, and project permissions, then rerun `mdtero project create-server --json`.")
+    payload: dict[str, Any] = {
+        "status": "failed",
+        "command": "project_create_server",
+        "reason_code": reason_code,
+        "error_code": str(detail.get("error_code") or "server_project_create_failed"),
+        "project": state.name,
+        "server_project_id": None,
+        "http_status": status_code,
+        "error_type": exc.__class__.__name__,
+        "action_hint": action_hint,
+        "next_commands": ["mdtero doctor --json", "mdtero project create-server --json", "mdtero rag build --json", "mdtero rag status --json"],
+    }
+    if project is not None:
+        payload["server_response"] = project
+    return redact_sensitive_payload(payload)
+
+
+def _print_project_create_server_failure(payload: dict[str, Any], *, json_output: bool) -> None:
+    payload = redact_sensitive_payload(payload)
+    if json_output:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    console = Console()
+    console.print(f"Server project create failed: {payload['reason_code']}")
+    console.print(f"Hint: {payload['action_hint']}")
+    console.print("Next:")
+    for command in payload.get("next_commands") or []:
+        console.print(f"  {command}")
+
+
 def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, project_id: str) -> dict[str, Any]:
     results = []
     failures = []
@@ -2607,7 +2664,7 @@ def _server_project_id_or_report(args: argparse.Namespace, *, command: str) -> s
 def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]:
     return {
         "status": "not_ready",
-        "command": f"rag_{command}",
+        "command": command if command.startswith("project_") else f"rag_{command}",
         "reason_code": "server_project_not_linked",
         "error_code": "rag_precondition_failed",
         "server_project_id": None,
