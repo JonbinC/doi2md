@@ -68,6 +68,7 @@ DEFAULT_WAIT_TIMEOUT_SECONDS = 600.0
 DEFAULT_WAIT_INTERVAL_SECONDS = 2.0
 SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
 SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
+API_KEY_PROMPT_SENTINEL = "__mdtero_prompt_for_api_key__"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,11 +87,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     setup = _cmd(sub, "setup", "Run the onboarding wizard.", cmd_setup)
-    setup.add_argument("--api-key", default="", help="Save an API key during setup for headless servers.")
+    setup.add_argument("--api-key", nargs="?", const=API_KEY_PROMPT_SENTINEL, default=None, help="Save an API key during setup for headless servers; omit the value to paste it securely.")
     doctor = _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
     doctor.add_argument("--json", action="store_true", help="Print a machine-readable safe diagnostic summary without echoing secrets.")
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
-    login.add_argument("--api-key", default="")
+    login.add_argument("--api-key", nargs="?", const=API_KEY_PROMPT_SENTINEL, default=None, help="Save an API key for headless login; omit the value to paste it securely.")
     login.add_argument("--no-browser", action="store_true", help="Print the loopback web-login URL instead of opening a browser.")
     login.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the browser login callback.")
 
@@ -457,9 +458,10 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     console.rule("[bold]Mdtero setup")
     cfg = load_config()
     headless_auth = False
-    if getattr(_args, "api_key", ""):
+    api_key_arg = getattr(_args, "api_key", None)
+    if api_key_arg is not None:
         headless_auth = True
-        cfg.api_key = _normalize_api_key_arg(str(_args.api_key), console=console)
+        cfg.api_key = _api_key_from_arg_or_prompt(api_key_arg, console=console)
         if not cfg.api_key:
             return 2
         save_config(cfg)
@@ -488,8 +490,8 @@ def cmd_setup(_args: argparse.Namespace) -> int:
 def cmd_login(args: argparse.Namespace) -> int:
     cfg = load_config()
     console = Console()
-    if args.api_key is not None and str(args.api_key) != "":
-        cfg.api_key = _normalize_api_key_arg(str(args.api_key), console=console)
+    if args.api_key is not None:
+        cfg.api_key = _api_key_from_arg_or_prompt(args.api_key, console=console)
         if not cfg.api_key:
             return 2
         path = save_config(cfg)
@@ -497,6 +499,12 @@ def cmd_login(args: argparse.Namespace) -> int:
         return 0
     _login_with_browser(cfg, console, timeout_seconds=args.timeout, no_browser=args.no_browser)
     return 0
+
+
+def _api_key_from_arg_or_prompt(value: str | None, *, console: Console) -> str | None:
+    if value == API_KEY_PROMPT_SENTINEL:
+        value = Prompt.ask("Paste Mdtero API key", password=True, console=console)
+    return _normalize_api_key_arg(str(value or ""), console=console)
 
 
 def _normalize_api_key_arg(value: str, *, console: Console) -> str | None:
