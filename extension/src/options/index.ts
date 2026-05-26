@@ -173,11 +173,18 @@ let uiLanguage: UiLanguage = "en";
 
 const CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero doctor --json",
+  "mdtero config academic",
+  "mdtero discover \"<topic>\" --limit 5 --interactive",
+  "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
   "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
   "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
   "mdtero project ingest --json",
+  "mdtero project parse --wait --timeout 300 --json",
+  "mdtero project refresh --wait --timeout 300 --json",
+  "mdtero rag build --json",
+  "mdtero rag status --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
   "mdtero mcp briefing --json",
 ].join("\n");
