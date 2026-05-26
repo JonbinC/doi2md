@@ -2651,18 +2651,33 @@ def _academic_config_summary(cfg: MdteroConfig, *, path: Path, saved: bool) -> d
         "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
         "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
     }
+    discover_source = "local_semantic_scholar" if configured["semantic_scholar_api_key"] else "server_openalex"
+    discover_hint = (
+        "Semantic Scholar is configured; discovery tries the local Semantic Scholar API first and falls back to server OpenAlex when needed."
+        if configured["semantic_scholar_api_key"]
+        else "Semantic Scholar is not configured; discovery uses the server OpenAlex fallback."
+    )
+    command_groups = _next_step_command_groups()
     return {
         "status": "saved" if saved else "current",
         "config_path": str(path),
         "configured": configured,
-        "discover_source": "local_semantic_scholar" if configured["semantic_scholar_api_key"] else "server_openalex",
+        "discover_source": discover_source,
+        "discover_behavior": {
+            "semantic_scholar": "local_first" if configured["semantic_scholar_api_key"] else "not_configured",
+            "fallback": "server_openalex",
+            "action_hint": discover_hint,
+        },
         "application_links": {
             str(option["field"]): option["url"] for option in ACADEMIC_OPTIONS
         },
         "next_commands": [
             "mdtero discover \"<topic>\" --limit 5 --json",
             "mdtero config academic --json",
+            "mdtero smoke --json",
+            "mdtero mcp briefing --json",
         ],
+        "next_command_groups": command_groups,
     }
 
 
@@ -2682,6 +2697,13 @@ def _parse_academic_selection(selection: str) -> set[str]:
 
 def _print_next_steps(console: Console) -> None:
     console.print("\n[bold]Next commands[/bold]")
+    for group in _next_step_command_groups():
+        console.print(f"\n[bold]{group['title']}[/bold]")
+        for command in group["commands"]:
+            console.print(f"  {command}")
+
+
+def _next_step_command_groups() -> list[dict[str, Any]]:
     sections = [
         (
             "Verify this workstation",
@@ -2689,6 +2711,14 @@ def _print_next_steps(console: Console) -> None:
                 "mdtero doctor --json",
                 "mdtero config academic --json",
                 "mdtero agent detect --json",
+            ],
+        ),
+        (
+            "One-shot launch smoke",
+            [
+                "mdtero smoke --json",
+                "mdtero smoke --doi 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+                "mdtero mcp briefing --json",
             ],
         ),
         (
@@ -2710,6 +2740,15 @@ def _print_next_steps(console: Console) -> None:
                 "mdtero project parse --wait --timeout 300 --json",
                 "mdtero project refresh --wait --timeout 300 --json",
                 "mdtero project download --output-dir ./mdtero-output --json",
+            ],
+        ),
+        (
+            "Browser extension handoff",
+            [
+                "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+                "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+                "mdtero status <task-id> --wait --timeout 300 --json",
+                "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
             ],
         ),
         (
@@ -2741,10 +2780,7 @@ def _print_next_steps(console: Console) -> None:
             ],
         ),
     ]
-    for title, commands in sections:
-        console.print(f"\n[bold]{title}[/bold]")
-        for command in commands:
-            console.print(f"  {command}")
+    return [{"title": title, "commands": commands} for title, commands in sections]
 
 
 def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
