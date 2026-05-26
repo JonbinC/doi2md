@@ -119,6 +119,7 @@ def build_dashboard_model(
             "primary_tool": "agent_briefing",
             "tools": briefing["mcp_tools"],
             "task_tools": _mcp_task_tools_payload(briefing["mcp_tools"]),
+            "tool_plan": _mcp_tool_plan_payload(briefing.get("mcp_tool_plan") or []),
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "extension_handoff": extension_handoff,
@@ -143,6 +144,7 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
         _hero_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
+        _mcp_tool_plan_panel(model),
         _command_palette_panel(model),
         Columns([_operator_panel(model), _extension_handoff_panel(model)], equal=True, expand=True),
         _shortcuts_panel(model),
@@ -432,6 +434,26 @@ def _mcp_task_tools_payload(tool_names: list[str]) -> list[dict[str, str]]:
     ]
 
 
+def _mcp_tool_plan_payload(plan: list[Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in plan:
+        if not isinstance(item, dict):
+            continue
+        failure_fields = item.get("failure_fields")
+        if not isinstance(failure_fields, list):
+            failure_fields = []
+        rows.append({
+            "step": str(item.get("step") or "-"),
+            "tool": str(item.get("tool") or "-"),
+            "when": str(item.get("when") or "-")[:140],
+            "arguments": item.get("arguments") if isinstance(item.get("arguments"), dict) else {},
+            "success_signal": str(item.get("success_signal") or "")[:140],
+            "failure_fields": [str(field) for field in failure_fields if str(field).strip()],
+            "next_commands": [str(command) for command in item.get("next_commands") or [] if str(command).strip()],
+        })
+    return rows
+
+
 def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
     return {
         "browser_scope": [
@@ -594,7 +616,28 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
     task_tools = mcp.get("task_tools") if isinstance(mcp.get("task_tools"), list) else []
     if task_tools:
         table.add_row("MCP tools", ", ".join(str(item.get("tool")) for item in task_tools))
+    tool_plan = mcp.get("tool_plan") if isinstance(mcp.get("tool_plan"), list) else []
+    if tool_plan:
+        table.add_row("MCP plan", f"{len(tool_plan)} steps from agent_briefing")
     return Panel(table, title="RAG & MCP", border_style="magenta")
+
+
+def _mcp_tool_plan_panel(model: dict[str, Any]) -> Panel:
+    mcp = model["mcp"]
+    plan = mcp.get("tool_plan") if isinstance(mcp.get("tool_plan"), list) else []
+    table = Table("Step", "Tool", "When", "Failure fields", expand=True)
+    if not plan:
+        table.add_row("brief", "agent_briefing", "Run mdtero mcp briefing --json to load the agent playbook", "reason_code, action_hint, next_commands")
+    for item in plan[:8]:
+        fields = item.get("failure_fields") if isinstance(item.get("failure_fields"), list) else []
+        field_text = ", ".join(str(field) for field in fields[:5])
+        table.add_row(
+            str(item.get("step") or "-"),
+            str(item.get("tool") or "-"),
+            str(item.get("when") or "-")[:100],
+            field_text or "-",
+        )
+    return Panel(table, title="MCP Tool Plan", border_style="magenta")
 
 
 def _integration_panel(model: dict[str, Any]) -> Panel:
