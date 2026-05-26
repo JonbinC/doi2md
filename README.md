@@ -83,12 +83,14 @@ mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json
 mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
 mdtero parse --batch ./papers --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
-mdtero download <task-id> paper_md --json
+mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
 mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json
 mdtero translate paper.md --to zh-CN --wait --timeout 600 --json
 mdtero rag status --json
 mdtero rag build --json
 mdtero rag query "What are the strongest findings?" --build-if-needed --json
+mdtero smoke --json --timeout 600 --interval 2
+mdtero mcp briefing --json
 mdtero mcp serve
 mdtero tui
 ```
@@ -110,7 +112,18 @@ Validated in the current alpha:
 - server-side Voyage RAG build/query; query JSON returns extractive `answer`, stable `citations`, raw `matches`, LlamaIndex-style `source_nodes`, an `evidence_pack.context_markdown`, `reason_code`, and `next_commands` for agents
 - local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, recommended next commands, and a structured `mcp_tool_plan` playbook that tells local agents when to call `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query`; `mdtero mcp briefing --json` also works in a directory before `project init` and returns initialization commands instead of a traceback
 - TUI dashboard command palette for copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands, with current next commands highlighted for workstation or local-agent handoff
-- Extension-to-CLI handoff for publisher challenge pages, campus-network/session-bound access, and browser-saved files: use `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json` so `client_acquisition`, raw upload, status polling, `reason_code`, and `action_hint` stay visible to the local agent
+- Extension-to-CLI handoff for publisher challenge pages, campus-network/session-bound access, and browser-saved files keeps a full recovery plan visible to the user and local agent:
+
+```bash
+mdtero doctor --json
+mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
+mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json
+mdtero status <task-id> --wait --timeout 300 --json
+mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
+mdtero mcp briefing --json
+```
+
+  This path preserves `client_acquisition`, raw upload, status polling, `reason_code`, `action_hint`, `download_artifacts`, and `next_commands` instead of hiding failures inside the browser extension.
 - MCP and agent-facing recommended commands prefer `--json` on doctor, parse, refresh, ingest, RAG, and download steps so local agents can parse results without scraping terminal tables
 - agent-facing JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents; keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible, but do not use agent prompts as long-term secret storage
 - agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
@@ -180,4 +193,15 @@ mdtero mcp serve
 `mdtero doctor --json` 是给本地 agent 和上线 smoke 用的结构化入口，会返回认证、依赖、学术 key 是否配置、Zotero、项目队列、server project/RAG readiness 和下一步命令，但不会输出任何 secret。
 `mdtero smoke --json` 是上线后复测入口，会在临时项目里跑 discovery、DOI/arXiv 解析、下载、服务端 Voyage RAG build/status/query，并输出每一步的 `reason_code`、`action_hint`、task id、下载路径和 server project id；失败时顶层还会返回 `primary_failure`、`failed_steps` 和可继续执行的 `next_commands`。
 CLI JSON 和 MCP payload 会在交给本地 agent 前清理带签名的 MinerU/OSS URL、Bearer/API-key header、Mdtero API key 和常见 token query 参数；`reason_code`、`action_hint`、`next_commands` 和证据字段仍会保留，方便 agent 继续执行。
-当浏览器扩展遇到 publisher challenge、校园网/机构登录态或只能由用户保存文件的场景时，把 DOI、URL 或已保存的 PDF/EPUB/XML/HTML 交给 Python CLI 继续：`mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` 或 `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`。这样 `client_acquisition`、raw upload、状态轮询、`reason_code` 和 `action_hint` 仍然对本地 agent 可见。
+当浏览器扩展遇到 publisher challenge、校园网/机构登录态或只能由用户保存文件的场景时，把 DOI、URL 或已保存的 PDF/EPUB/XML/HTML 交给 Python CLI 继续，并保留完整交接链路：
+
+```bash
+mdtero doctor --json
+mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
+mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json
+mdtero status <task-id> --wait --timeout 300 --json
+mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
+mdtero mcp briefing --json
+```
+
+这样 `client_acquisition`、raw upload、状态轮询、`reason_code`、`action_hint`、`download_artifacts` 和 `next_commands` 仍然对本地 agent 可见。
