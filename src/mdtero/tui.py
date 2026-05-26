@@ -17,6 +17,9 @@ from .config import MdteroConfig, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
 from .projects import ProjectState, ensure_project
 
+WORKSTATION_SETUP_COMMAND = "mdtero setup"
+HEADLESS_SETUP_COMMAND = "mdtero setup --api-key <key>"
+
 
 def build_dashboard_model(
     *,
@@ -69,7 +72,7 @@ def build_dashboard_model(
             "api_base_url": cfg.api_base_url,
             "authenticated": cfg.is_authenticated,
             "auth_source": cfg.api_key_source,
-            "auth_hint": "mdtero setup --api-key <key>" if not cfg.is_authenticated else "mdtero doctor --json",
+            "auth_hint": WORKSTATION_SETUP_COMMAND if not cfg.is_authenticated else "mdtero doctor --json",
         },
         "academic": {
             "elsevier": bool(cfg.academic.elsevier_api_key),
@@ -269,7 +272,7 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
     rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
     if not cfg.is_authenticated:
-        return ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+        return [WORKSTATION_SETUP_COMMAND, "mdtero doctor --json", HEADLESS_SETUP_COMMAND]
     if not project.papers:
         return ["mdtero project add 10.48550/arXiv.1706.03762 --json", commands["parse_pending"]]
     if project.papers and any(paper.status in {"pending", "created"} and not paper.task_id for paper in project.papers):
@@ -453,8 +456,8 @@ def _command_palette_payload(
     rows = [
         {
             "area": "Setup",
-            "use": "Authenticate this machine" if not cfg.is_authenticated else "Verify local runtime",
-            "command": commands.get("login_api_key") if not cfg.is_authenticated else commands.get("doctor"),
+            "use": "Authenticate this workstation with browser OAuth" if not cfg.is_authenticated else "Verify local runtime",
+            "command": commands.get("setup") if not cfg.is_authenticated else commands.get("doctor"),
         },
         {"area": "Discover", "use": "Find papers and add selections", "command": commands.get("discover")},
         {"area": "Parse", "use": "Single DOI or URL", "command": commands.get("parse_doi_or_url")},
@@ -475,6 +478,8 @@ def _command_palette_payload(
         {"area": "Agents", "use": "Detect local workspaces", "command": commands.get("agent_detect")},
         {"area": "Agents", "use": "Install selected skills", "command": commands.get("agent_install")},
     ]
+    if not cfg.is_authenticated:
+        rows.insert(1, {"area": "Setup", "use": "Headless or remote shell fallback", "command": commands.get("login_api_key") or HEADLESS_SETUP_COMMAND})
     if not project.papers:
         rows.insert(1, {"area": "Project", "use": "Initialize or rename project", "command": commands.get("project_init_named") or commands.get("project_init")})
     if rag.get("ready_for_ingest_count", 0) > 0 or project.server_project_id:
