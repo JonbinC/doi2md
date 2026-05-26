@@ -170,9 +170,28 @@ class MdteroClient:
     def translate_task(self, task_id: str, *, target_language: str = "zh-CN", artifact: str = "paper_md") -> dict[str, Any]:
         task = self.task(task_id)
         source_path = translation_source_path_from_task(task, artifact=artifact)
-        if not source_path:
+        if source_path:
+            return self.translate_server_path(source_path, target_language=target_language)
+
+        downloadable = translation_source_download_artifact_from_task(task, artifact=artifact)
+        if not downloadable:
             raise ValueError("translation_source_artifact_missing")
-        return self.translate_server_path(source_path, target_language=target_language)
+        artifact_key = str(downloadable.get("artifact") or artifact or "paper_md").strip() or "paper_md"
+        response = self._raw_request("GET", f"/api/v1/tasks/{task_id}/download/{artifact_key}")
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise ValueError("translation_source_artifact_missing") from exc
+            raise
+        markdown = response.text
+        if not markdown.strip():
+            raise ValueError("translation_source_artifact_empty")
+        filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact_key)
+        descriptor_filename = str(downloadable.get("filename") or "").strip()
+        if filename == f"{artifact_key}.bin" and descriptor_filename:
+            filename = descriptor_filename
+        return self.translate_text(markdown, filename=filename, target_language=target_language)
 
     def translate_server_path(self, source_markdown_path: str, *, target_language: str = "zh-CN") -> dict[str, Any]:
         return self._request(
@@ -394,6 +413,47 @@ def translation_source_path_from_task(task: dict[str, Any], *, artifact: str = "
         if path:
             return path
     return None
+
+
+def translation_source_download_artifact_from_task(task: dict[str, Any], *, artifact: str = "paper_md") -> dict[str, Any] | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    keys = _dedupe_artifact_keys([artifact, "paper_md"])
+
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    for key in keys:
+        if key in artifacts:
+            descriptor = artifacts.get(key)
+            payload = dict(descriptor) if isinstance(descriptor, dict) else {}
+            payload.setdefault("artifact", key)
+            return payload
+
+    download_artifacts = result.get("download_artifacts")
+    if isinstance(download_artifacts, list):
+        for item in download_artifacts:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("artifact") or "").strip()
+            if key in keys:
+                return dict(item)
+    elif isinstance(download_artifacts, dict):
+        for key in keys:
+            if key in download_artifacts:
+                descriptor = download_artifacts.get(key)
+                payload = dict(descriptor) if isinstance(descriptor, dict) else {}
+                payload.setdefault("artifact", key)
+                return payload
+    return None
+
+
+def _dedupe_artifact_keys(values: list[Any]) -> list[str]:
+    keys: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        key = str(value or "").strip()
+        if key and key not in seen:
+            keys.append(key)
+            seen.add(key)
+    return keys
 
 
 def _artifact_path(value: Any) -> str | None:
