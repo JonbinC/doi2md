@@ -88,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup = _cmd(sub, "setup", "Run the onboarding wizard.", cmd_setup)
     setup.add_argument("--api-key", nargs="?", const=API_KEY_PROMPT_SENTINEL, default=None, help="Save an API key during setup for headless servers; omit the value to paste it securely.")
+    setup.add_argument("--json", action="store_true", help="Print a non-interactive, secret-safe setup summary for agents/headless environments.")
     doctor = _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
     doctor.add_argument("--json", action="store_true", help="Print a machine-readable safe diagnostic summary without echoing secrets.")
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
@@ -454,7 +455,10 @@ def cmd_smoke(args: argparse.Namespace) -> int:
 
 
 def cmd_setup(_args: argparse.Namespace) -> int:
+    json_output = bool(getattr(_args, "json", False))
     console = Console()
+    if json_output:
+        return _cmd_setup_json(_args)
     console.rule("[bold]Mdtero setup")
     cfg = load_config()
     headless_auth = False
@@ -485,6 +489,93 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     console.print("\n[bold green]Configuration complete.[/bold green]")
     _print_next_steps(console)
     return 0
+
+
+def _cmd_setup_json(_args: argparse.Namespace) -> int:
+    cfg = load_config()
+    api_key_arg = getattr(_args, "api_key", None)
+    auth_mode = "existing"
+    saved_config = False
+    if api_key_arg is not None:
+        prompt_console = Console(stderr=True)
+        raw_key = api_key_arg
+        if api_key_arg == API_KEY_PROMPT_SENTINEL:
+            raw_key = Prompt.ask("Paste Mdtero API key", password=True, console=prompt_console)
+        key = _normalize_api_key_arg(str(raw_key or ""), console=prompt_console)
+        if not key:
+            payload = _setup_summary_payload(cfg, auth_mode="api_key", headless=True, saved_config=False)
+            payload.update({"status": "failed", "reason_code": "api_key_empty", "action_hint": "Rerun `mdtero setup --api-key --json` and paste a non-empty Mdtero API key."})
+            print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
+            return 2
+        cfg.api_key = key
+        save_config(cfg)
+        auth_mode = "api_key"
+        saved_config = True
+    elif not cfg.is_authenticated:
+        payload = _setup_summary_payload(cfg, auth_mode="missing", headless=False, saved_config=False)
+        payload.update({
+            "status": "missing_auth",
+            "reason_code": "auth_missing",
+            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for a headless/API-key setup.",
+        })
+        print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
+        return 1
+    headless = api_key_arg is not None or cfg.api_key_source == "MDTERO_API_KEY"
+    payload = _setup_summary_payload(cfg, auth_mode=auth_mode, headless=headless, saved_config=saved_config)
+    print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
+    return 0
+
+
+def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool, saved_config: bool) -> dict[str, Any]:
+    academic = _academic_config_summary(cfg, path=config_path(), saved=False)
+    agent_status: list[dict[str, Any]] = []
+    agent_detection_skipped = bool(headless)
+    if not agent_detection_skipped:
+        from .agent import detect_target_status
+
+        agent_status = [
+            {
+                "target": item.target,
+                "label": item.label,
+                "detected": item.detected,
+                "installed": item.installed,
+                "install_command": item.install_command,
+                "selection_index": item.selection_index,
+            }
+            for item in detect_target_status()
+        ]
+    configured_academic = academic["configured"]
+    return {
+        "status": "configured" if cfg.is_authenticated else "missing_auth",
+        "reason_code": "setup_configured" if cfg.is_authenticated else "auth_missing",
+        "config_path": str(config_path()),
+        "saved_config": saved_config,
+        "authenticated": cfg.is_authenticated,
+        "auth_source": cfg.api_key_source,
+        "auth_mode": auth_mode,
+        "headless": headless,
+        "academic": {
+            "configured": configured_academic,
+            "discover_source": academic["discover_source"],
+            "application_links": academic["application_links"],
+        },
+        "agents": {
+            "detection_skipped": agent_detection_skipped,
+            "status": agent_status,
+            "detected_count": sum(1 for item in agent_status if item["detected"]),
+            "installed_count": sum(1 for item in agent_status if item["installed"]),
+            "next_commands": ["mdtero agent detect --json", "mdtero agent install --interactive"],
+        },
+        "next_commands": [
+            "mdtero doctor --json",
+            "mdtero config academic --json",
+            "mdtero discover \"<topic>\" --limit 5 --json",
+            "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+            "mdtero rag query \"<question>\" --build-if-needed --json",
+            "mdtero mcp briefing --json",
+        ],
+        "next_command_groups": _next_step_command_groups(),
+    }
 
 
 def cmd_login(args: argparse.Namespace) -> int:
