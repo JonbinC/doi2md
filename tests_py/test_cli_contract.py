@@ -5380,7 +5380,7 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert "Workflow: `Public CLI and Extension CI`" in runbook
     assert "Inputs: `check_scope=smoke`, `platform_preflight=check`" in runbook
     assert "public_private_platform_preflight: status=ok" in runbook
-    assert "public_private_platform_preflight: status=ok remote=forgejo extension_dist=ok" in runbook
+    assert "public_private_platform_preflight: status=ok remote=forgejo extension_tests=ok extension_dist=ok" in runbook
     assert "run the same workflow with `check_scope=full` after the smoke run passes" in runbook
     assert "read them from Infisical at runtime through a service token or machine identity" in runbook
     assert "Do not remove GitHub or PyPI/public release paths" in runbook
@@ -5395,6 +5395,7 @@ def test_public_private_platform_preflight_is_non_secret_and_non_deploying():
     assert "embeds credentials; remove them" in preflight
     assert "GIT_TERMINAL_PROMPT=0 git ls-remote --heads" in preflight
     assert '"$python_bin" scripts/ci/secret_guard.py' in preflight
+    assert "npm --prefix extension test -- --run" in preflight
     assert '"$python_bin" scripts/ci/extension_dist_smoke.py >/dev/null' in preflight
     assert "status=ok" in preflight
     assert "INFISICAL_TOKEN" not in preflight
