@@ -3099,6 +3099,12 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
     assert payload["evidence_pack"]["question"] == "What does attention replace?"
     assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
     assert "grounded evidence" in payload["evidence_pack"]["agent_instruction"]
+    assert payload["readiness"]["ready_for_query"] is True
+    assert payload["readiness"]["provider_blocked"] is False
+    assert payload["readiness"]["next_step"] == "query"
+    assert payload["agent_summary"]["ready_for_query"] is True
+    assert payload["agent_summary"]["provider_configured"] is True
+    assert payload["agent_summary"]["selected_provider"] == "voyage"
     assert "evidence_pack.context_markdown" in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
@@ -3476,6 +3482,20 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
     status = build_server_rag_status(tmp_path, fetcher=fake_fetcher)
 
     assert status["server_project_id"] == "42"
+    assert status["readiness"] == {
+        "ready_for_query": True,
+        "can_build": True,
+        "needs_ingest": False,
+        "needs_build": False,
+        "provider_blocked": False,
+        "next_step": "query",
+        "blocker_reason_code": None,
+        "document_count": 0,
+        "chunk_count": 5,
+        "embedded_count": 5,
+        "pending_embedding_count": 0,
+        "match_count": 0,
+    }
     assert status["agent_summary"] == {
         "status": "ready",
         "reason_code": "indexed",
@@ -3483,9 +3503,14 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "provider_state": "configured",
         "provider_configured": True,
         "embedding_model": "voyage-test",
+        "ready_for_query": True,
+        "next_step": "query",
+        "document_count": 0,
         "embedded_count": 5,
         "chunk_count": 5,
         "pending_embedding_count": 0,
+        "match_count": 0,
+        "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
     }
     assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
@@ -4187,6 +4212,15 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     assert payload["evidence_pack"]["question"] == "What is the contribution?"
     assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
     assert "grounded evidence" in payload["evidence_pack"]["agent_instruction"]
+    assert payload["readiness"]["ready_for_query"] is True
+    assert payload["readiness"]["provider_blocked"] is False
+    assert payload["readiness"]["next_step"] == "query"
+    assert payload["agent_summary"]["status"] == "succeeded"
+    assert payload["agent_summary"]["reason_code"] == "ok"
+    assert payload["agent_summary"]["selected_provider"] == "voyage"
+    assert payload["agent_summary"]["provider_configured"] is True
+    assert payload["agent_summary"]["ready_for_query"] is True
+    assert payload["agent_summary"]["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
     assert payload["action_hint"] == "RAG query completed. Review the returned answer, citations, and matches."
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
