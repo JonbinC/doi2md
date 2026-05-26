@@ -619,6 +619,9 @@ var PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
   "mdtero project ingest --json",
+  "mdtero project refresh --wait --timeout 300 --json",
+  "mdtero rag build --json",
+  "mdtero rag status --json",
   'mdtero rag query "<question>" --build-if-needed --json',
   "mdtero mcp briefing --json"
 ];
@@ -631,18 +634,24 @@ function buildCliHandoffCommandPlan(primaryCommand, planCommands) {
   const statusCommands = commands.filter((command) => /^mdtero\s+status\b/.test(command));
   const downloadCommands = commands.filter((command) => /^mdtero\s+download\b/.test(command));
   const ingestCommands = commands.filter((command) => command === "mdtero project ingest --json");
+  const projectRefreshCommands = commands.filter((command) => command === "mdtero project refresh --wait --timeout 300 --json");
+  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --json");
+  const ragStatusCommands = commands.filter((command) => command === "mdtero rag status --json");
   const ragQueryCommands = commands.filter((command) => /^mdtero\s+rag\s+query\b/.test(command));
   const mcpCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
   const otherCommands = commands.filter(
-    (command) => command !== primary && !/^mdtero\s+status\b/.test(command) && !/^mdtero\s+download\b/.test(command) && command !== "mdtero project ingest --json" && !/^mdtero\s+rag\s+query\b/.test(command) && command !== "mdtero mcp briefing --json"
+    (command) => command !== primary && !/^mdtero\s+status\b/.test(command) && !/^mdtero\s+download\b/.test(command) && command !== "mdtero project ingest --json" && command !== "mdtero project refresh --wait --timeout 300 --json" && command !== "mdtero rag build --json" && command !== "mdtero rag status --json" && !/^mdtero\s+rag\s+query\b/.test(command) && command !== "mdtero mcp briefing --json"
   );
   return normalizeCommandList([
     primary,
     ...statusCommands.length ? statusCommands : [PARSE_HANDOFF_FOLLOWUPS[0]],
     ...downloadCommands.length ? downloadCommands : [PARSE_HANDOFF_FOLLOWUPS[1]],
     ...ingestCommands.length ? ingestCommands : [PARSE_HANDOFF_FOLLOWUPS[2]],
-    ...ragQueryCommands.length ? ragQueryCommands : [PARSE_HANDOFF_FOLLOWUPS[3]],
-    ...mcpCommands.length ? mcpCommands : [PARSE_HANDOFF_FOLLOWUPS[4]],
+    ...projectRefreshCommands.length ? projectRefreshCommands : [PARSE_HANDOFF_FOLLOWUPS[3]],
+    ...ragBuildCommands.length ? ragBuildCommands : [PARSE_HANDOFF_FOLLOWUPS[4]],
+    ...ragStatusCommands.length ? ragStatusCommands : [PARSE_HANDOFF_FOLLOWUPS[5]],
+    ...ragQueryCommands.length ? ragQueryCommands : [PARSE_HANDOFF_FOLLOWUPS[6]],
+    ...mcpCommands.length ? mcpCommands : [PARSE_HANDOFF_FOLLOWUPS[7]],
     ...otherCommands
   ]);
 }

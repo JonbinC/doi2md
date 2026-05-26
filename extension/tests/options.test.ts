@@ -99,11 +99,18 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-title")?.textContent).toBe("Extension + CLI handoff");
     expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("publisher challenge");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero doctor --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero config academic");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero discover \"<topic>\" --limit 5 --interactive");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero parse <doi-or-url> --trace --wait --timeout 300 --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero status <task-id> --wait --timeout 300 --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero download <task-id> paper_md --output-dir ./mdtero-output --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero project ingest --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero project parse --wait --timeout 300 --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero project refresh --wait --timeout 300 --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag build --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag status --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp briefing --json");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("does not install Python dependencies");
@@ -124,7 +131,12 @@ describe("extension options page", () => {
     (document.querySelector("#copy-cli-handoff-guide") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero doctor --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero config academic"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero project ingest --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero project refresh --wait --timeout 300 --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag build --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag status --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag query \"<question>\" --build-if-needed --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp briefing --json"));
     });

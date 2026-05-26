@@ -685,6 +685,9 @@ describe("getTaskFailureText", () => {
         "mdtero status task-123 --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json"
       ],
@@ -699,6 +702,9 @@ describe("getTaskFailureText", () => {
       "mdtero status <task-id> --wait --timeout 300 --json",
       "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
       "mdtero project ingest --json",
+      "mdtero project refresh --wait --timeout 300 --json",
+      "mdtero rag build --json",
+      "mdtero rag status --json",
       "mdtero rag query \"<question>\" --build-if-needed --json",
       "mdtero mcp briefing --json"
     ]);
@@ -721,8 +727,11 @@ describe("getTaskFailureText", () => {
       "2. mdtero status task-123 --wait --timeout 300 --json",
       "3. mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
       "4. mdtero project ingest --json",
-      "5. mdtero rag query \"<question>\" --build-if-needed --json",
-      "6. mdtero mcp briefing --json"
+      "5. mdtero project refresh --wait --timeout 300 --json",
+      "6. mdtero rag build --json",
+      "7. mdtero rag status --json",
+      "8. mdtero rag query \"<question>\" --build-if-needed --json",
+      "9. mdtero mcp briefing --json"
     ].join("\n"));
 
     expect(formatCliHandoffClipboard("mdtero rag status --json", [])).toBe("mdtero rag status --json");
@@ -750,6 +759,9 @@ describe("getTaskFailureText", () => {
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json"
       ]
