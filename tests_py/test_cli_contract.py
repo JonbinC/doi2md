@@ -2521,6 +2521,21 @@ def test_client_can_create_server_project(monkeypatch):
     assert calls == [("POST", "/api/v1/projects", {"json": {"name": "demo", "description": "local project"}})]
 
 
+def test_client_can_list_server_projects(monkeypatch):
+    calls = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"items": [{"id": 42, "name": "demo", "rag_status": {"reason_code": "indexed"}}]}
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient().list_projects()
+
+    assert result["items"][0]["id"] == 42
+    assert calls == [("GET", "/api/v1/projects", {})]
+
+
 def test_setup_headless_api_key_prints_login_step_once(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -4266,6 +4281,10 @@ def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch,
         calls.append(("create", name, description))
         return {"id": 42, "name": name}
 
+    def fake_list(self):
+        calls.append(("list",))
+        return {"items": []}
+
     def fake_import(self, project_id, task_id):
         calls.append(("import", project_id, task_id))
         return {"document_id": "doc-1", "import_status": "imported"}
@@ -4274,6 +4293,7 @@ def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch,
         calls.append(("build", project_id))
         return {"status": "queued", "reason_code": "rag_build_queued"}
 
+    monkeypatch.setattr(MdteroClient, "list_projects", fake_list)
     monkeypatch.setattr(MdteroClient, "create_project", fake_create)
     monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
     monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
@@ -4290,10 +4310,51 @@ def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch,
     assert payload["ingest"]["imported_count"] == 1
     assert state.server_project_id == "42"
     assert calls == [
+        ("list",),
         ("create", "local-demo", "Mdtero local project: local-demo"),
         ("import", "42", "task-done"),
         ("build", "42"),
     ]
+
+
+def test_rag_build_reuses_matching_server_project_before_creating(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    def fake_list(self):
+        calls.append(("list",))
+        return {"items": [{"id": 77, "name": "local-demo", "rag_status": {"reason_code": "indexed"}}]}
+
+    def fake_create(self, name, *, description=None):
+        raise AssertionError("matching server project should be reused")
+
+    def fake_import(self, project_id, task_id):
+        calls.append(("import", project_id, task_id))
+        return {"document_id": "doc-1", "import_status": "imported"}
+
+    def fake_build(self, project_id):
+        calls.append(("build", project_id))
+        return {"status": "ready", "reason_code": "indexed"}
+
+    monkeypatch.setattr(MdteroClient, "list_projects", fake_list)
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create)
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
+    monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
+
+    assert payload["server_project_id"] == "77"
+    assert payload["bootstrap"]["created_server_project"] is False
+    assert payload["bootstrap"]["reused_server_project"] is True
+    assert payload["ingest"]["imported_count"] == 1
+    assert state.server_project_id == "77"
+    assert calls == [("list",), ("import", "77", "task-done"), ("build", "77")]
 
 
 def test_rag_build_bootstrap_failure_preserves_backend_next_commands(monkeypatch, tmp_path: Path, capsys):

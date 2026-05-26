@@ -1120,16 +1120,18 @@ def cmd_project_create_server(args: argparse.Namespace) -> int:
     root = Path.cwd()
     state = load_project(root)
     name = args.name or state.name
-    result = MdteroClient().create_project(name, description=args.description or f"Mdtero local project: {state.name}")
+    client = MdteroClient()
+    result, reused = _find_or_create_server_project(client, name, description=args.description or f"Mdtero local project: {state.name}")
     server_project_id = str(result.get("id") or "").strip()
     if not server_project_id:
         raise SystemExit("Server did not return a project id")
     state = bind_server_project(root, server_project_id)
-    payload = {"server_project_id": state.server_project_id, "project": result}
+    payload = {"server_project_id": state.server_project_id, "project": result, "reused_server_project": reused}
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
-        Console().print(f"Created server project {state.server_project_id} for {state.name}")
+        verb = "Linked existing" if reused else "Created"
+        Console().print(f"{verb} server project {state.server_project_id} for {state.name}")
     return 0
 
 
@@ -2021,17 +2023,33 @@ def _ensure_server_project_for_rag(client: MdteroClient, root: Path, state: Any,
         return explicit_project_id, {"created_server_project": False, "bound_local_project": False, "used_explicit_project_id": True}
     if state.server_project_id:
         return state.server_project_id, {"created_server_project": False, "bound_local_project": True, "used_explicit_project_id": False}
-    result = client.create_project(state.name, description=f"Mdtero local project: {state.name}")
+    result, reused = _find_or_create_server_project(client, state.name, description=f"Mdtero local project: {state.name}")
     server_project_id = str(result.get("id") or "").strip()
     if not server_project_id:
         raise RuntimeError("server_project_id_missing")
     bind_server_project(root, server_project_id)
     return server_project_id, {
-        "created_server_project": True,
+        "created_server_project": not reused,
+        "reused_server_project": reused,
         "bound_local_project": True,
         "used_explicit_project_id": False,
         "project": result,
     }
+
+
+def _find_or_create_server_project(client: MdteroClient, name: str, *, description: str | None = None) -> tuple[dict[str, Any], bool]:
+    normalized_name = str(name or "").strip()
+    try:
+        list_projects = getattr(client, "list_projects")
+        projects = list_projects()
+    except (AttributeError, httpx.HTTPStatusError, httpx.RequestError, MdteroApiError):
+        projects = {}
+    items = projects.get("items") if isinstance(projects, dict) else []
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and str(item.get("name") or "").strip() == normalized_name and str(item.get("id") or "").strip():
+                return item, True
+    return client.create_project(normalized_name, description=description), False
 
 
 def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, project_id: str) -> dict[str, Any]:
