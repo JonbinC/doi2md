@@ -421,6 +421,7 @@ def _mcp_task_tools_payload(tool_names: list[str]) -> list[dict[str, str]]:
     labels = {
         "submit_parse": "Submit DOI/URL parse and optionally wait for completion",
         "task_status": "Poll task status and sync local project state",
+        "download_artifact": "Download preferred Markdown/ZIP/translation artifact for a task",
         "request_translation": "Translate parse task or Markdown with provider-attempt diagnostics",
         "rag_query": "Bootstrap/query server-side Voyage RAG with evidence pack",
     }
@@ -490,6 +491,7 @@ def _command_palette_payload(
         {"area": "RAG", "use": "Ask grounded project question", "command": commands.get("rag_query")},
         {"area": "MCP", "use": "Tool: submit_parse(input_value)", "command": "submit_parse"},
         {"area": "MCP", "use": "Tool: task_status(task_id)", "command": "task_status"},
+        {"area": "MCP", "use": "Tool: download_artifact(task_id)", "command": "download_artifact"},
         {"area": "MCP", "use": "Tool: request_translation(task_id_or_markdown_path)", "command": "request_translation"},
         {"area": "MCP", "use": "One-shot agent context", "command": commands.get("mcp_briefing")},
         {"area": "MCP", "use": "Serve FastMCP tools", "command": commands.get("serve_mcp")},
@@ -591,7 +593,7 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Agent briefing", mcp["primary_tool"])
     task_tools = mcp.get("task_tools") if isinstance(mcp.get("task_tools"), list) else []
     if task_tools:
-        table.add_row("MCP tools", ", ".join(str(item.get("tool")) for item in task_tools[:4]))
+        table.add_row("MCP tools", ", ".join(str(item.get("tool")) for item in task_tools))
     return Panel(table, title="RAG & MCP", border_style="magenta")
 
 

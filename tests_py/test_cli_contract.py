@@ -17,7 +17,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
+from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -3143,6 +3143,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert "agent_briefing" in briefing["mcp_tools"]
     assert "submit_parse" in briefing["mcp_tools"]
     assert "task_status" in briefing["mcp_tools"]
+    assert "download_artifact" in briefing["mcp_tools"]
     assert "request_translation" in briefing["mcp_tools"]
     assert "rag_query" in briefing["mcp_tools"]
 
@@ -3204,6 +3205,69 @@ def test_mcp_task_status_tool_promotes_reason_and_updates_project(tmp_path: Path
     assert payload["next_commands"] == ["mdtero status task-failed --json", "mdtero project parse --include-failed --wait --timeout 300 --json"]
     assert state.papers[0].status == "failed"
     assert state.papers[0].reason_code == "client_acquisition_challenge_page"
+
+
+def test_mcp_download_artifact_tool_selects_preferred_artifact_and_returns_next_commands(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    downloaded = tmp_path / "mdtero-output" / "paper.zip"
+    calls = []
+
+    class FakeClient:
+        def task(self, task_id):
+            calls.append(("task", task_id))
+            return {
+                "task_id": task_id,
+                "status": "succeeded",
+                "result": {
+                    "preferred_artifact": "paper_bundle",
+                    "download_artifacts": {"paper_bundle": {"filename": "paper.zip"}},
+                },
+            }
+
+        def download(self, task_id, artifact, output_dir):
+            calls.append(("download", task_id, artifact, output_dir))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            downloaded.write_bytes(b"zip")
+            return downloaded
+
+    payload = download_artifact_for_agent("task-done", tmp_path, client=FakeClient())
+
+    assert payload["status"] == "downloaded"
+    assert payload["reason_code"] == "artifact_downloaded"
+    assert payload["artifact"] == "paper_bundle"
+    assert payload["path"] == str(downloaded)
+    assert payload["task"]["preferred_artifact"] == "paper_bundle"
+    assert payload["next_commands"] == [
+        "mdtero status task-done --json",
+        "mdtero download <task-id> <artifact> --output-dir ./mdtero-output --json",
+        "mdtero project download --output-dir ./mdtero-output --json",
+        "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json",
+        "mdtero project ingest --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+        "mdtero mcp briefing --json",
+        "mdtero mcp serve",
+    ]
+    assert calls == [("task", "task-done"), ("download", "task-done", "paper_bundle", tmp_path / "mdtero-output")]
+
+
+def test_mcp_download_artifact_tool_reports_missing_artifact_without_traceback(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+
+    class FakeClient:
+        def download(self, task_id, artifact, output_dir):
+            raise FileNotFoundError("artifact paper_md is not available; token=secret")
+
+    payload = download_artifact_for_agent("task-done", tmp_path, artifact="paper_md", client=FakeClient())
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "artifact_not_available"
+    assert payload["task_id"] == "task-done"
+    assert payload["artifact"] == "paper_md"
+    assert "secret" not in payload["message"]
+    assert payload["next_commands"] == [
+        "mdtero status task-done --json",
+        "mdtero download task-done <artifact> --output-dir ./mdtero-output --json",
+    ]
 
 
 def test_mcp_request_translation_tool_waits_and_preserves_provider_attempts(tmp_path: Path):
@@ -3887,6 +3951,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["mcp"]["task_tools"] == [
         {"tool": "submit_parse", "purpose": "Submit DOI/URL parse and optionally wait for completion"},
         {"tool": "task_status", "purpose": "Poll task status and sync local project state"},
+        {"tool": "download_artifact", "purpose": "Download preferred Markdown/ZIP/translation artifact for a task"},
         {"tool": "request_translation", "purpose": "Translate parse task or Markdown with provider-attempt diagnostics"},
         {"tool": "rag_query", "purpose": "Bootstrap/query server-side Voyage RAG with evidence pack"},
     ]
@@ -3919,6 +3984,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert any(item["command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" for item in model["command_palette"])
     assert any(item["area"] == "MCP" and item["command"] == "submit_parse" for item in model["command_palette"])
     assert any(item["area"] == "MCP" and item["command"] == "task_status" for item in model["command_palette"])
+    assert any(item["area"] == "MCP" and item["command"] == "download_artifact" for item in model["command_palette"])
     assert any(item["area"] == "MCP" and item["command"] == "request_translation" for item in model["command_palette"])
     assert any(item["area"] == "Extension" and item["use"] == "Handoff challenged page or saved file to CLI" for item in model["command_palette"])
     assert any(item["area"] == "Extension" and item["use"] == "Upload a browser-saved PDF/EPUB/XML/HTML" for item in model["command_palette"])
@@ -4024,6 +4090,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "querying" in output
     assert "submit_parse" in output
     assert "task_status" in output
+    assert "download_artifact" in output
     assert "request_translation" in output
     assert "r" in output
     assert "refresh" in output
@@ -5665,6 +5732,7 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "rag_query(question)" in source_skill
     assert "submit_parse(input_value" in source_skill
     assert "task_status(task_id" in source_skill
+    assert "download_artifact(task_id" in source_skill
     assert "request_translation(task_id_or_markdown_path" in source_skill
     assert "provider-attempt diagnostics" in source_skill
     assert "Prefer MCP tools for multi-step agent work" in source_skill
