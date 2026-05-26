@@ -92,7 +92,7 @@ What is validated in the current alpha:
 - local project state, BibTeX import, de-duplication, project parse/refresh/download.
 - Zotero metadata import into the current Mdtero project, plus conservative note/tag sync for succeeded Zotero-origin parse tasks.
 - discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback. `--interactive` shows numbered results and lets a human multi-select papers into the local project queue; `--add --select 1,3` keeps the same flow scriptable.
-- server-side Voyage RAG query responses with extractive `answer`, stable `citations`, raw `matches`, `reason_code`, and `next_commands` for CLI and agent continuation. `mdtero mcp briefing --json` is safe to run before project initialization and will return `project_not_initialized` plus the exact `mdtero project init` next step.
+- server-side Voyage RAG query responses with extractive `answer`, stable `citations`, raw `matches`, `reason_code`, and `next_commands` for CLI and agent continuation. `mdtero mcp briefing --json` is safe to run before project initialization and will return `project_not_initialized` plus the exact `mdtero project init` next step. When a project exists, the briefing also returns `mcp_tool_plan`, a structured agent playbook for choosing `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query` with expected arguments and failure fields.
 - deploy smoke through `mdtero smoke --json`, which uses an isolated project directory and exercises discovery, DOI parse, task wait, artifact download, server-side Voyage RAG build/status/query, and agent-readable failure summaries.
 - TUI command palette with copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands; current next commands are highlighted for workstation or local-agent handoff.
 - agent-facing CLI JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents. They keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible so agents can continue without receiving raw secrets.
@@ -174,6 +174,6 @@ mdtero zotero sync --json
 mdtero mcp serve
 ```
 
-当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，TUI/MCP 会显示 agent skill 的 detected/installed/pending 状态，agent skill 安装走 Python CLI，不再依赖 npm。
+当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，TUI/MCP 会显示 agent skill 的 detected/installed/pending 状态，`mdtero mcp briefing --json` 会返回 `mcp_tool_plan`，指导本地 agent 按状态调用 `submit_parse`、`task_status`、`download_artifact`、`request_translation`、`server_rag_status` 或 `rag_query`。agent skill 安装走 Python CLI，不再依赖 npm。
 `mdtero smoke --json` 可用于上线后复测：它会创建独立项目目录，跑 discovery、DOI 解析、状态等待、下载、服务端 Voyage RAG build/status/query，并给本地 agent 返回结构化失败原因。
 CLI JSON 和 MCP payload 会在返回给本地 agent 前清理 signed MinerU/OSS URL、Bearer/API-key header、Mdtero API key 和常见 token query 参数，但保留 `reason_code`、`action_hint`、`next_commands` 和证据字段。

@@ -5761,6 +5761,37 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "failed_steps" in combined
 
 
+def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
+    repo_root = Path(__file__).resolve().parents[1]
+    combined_docs = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [repo_root / "README.md", repo_root / "install" / "README.md", repo_root / "docs" / "public" / "README.md"]
+    )
+    combined_skills = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]
+    )
+
+    for content in [combined_docs, combined_skills]:
+        assert "mcp_tool_plan" in content
+        assert "submit_parse" in content
+        assert "task_status" in content
+        assert "download_artifact" in content
+        assert "request_translation" in content
+        assert "server_rag_status" in content
+        assert "rag_query" in content
+        assert "failure_fields" in content
+        assert "reason_code" in content
+        assert "action_hint" in content
+        assert "next_commands" in content
+    assert "step" in combined_docs
+    assert "success_signal" in combined_docs
+    assert "本地 agent" in combined_docs
+    assert "Use the `mcp_tool_plan` steps" in combined_skills
+    assert "client_acquisition" in combined_skills
+    assert "readiness" in combined_skills
+
+
 def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
     repo_root = Path(__file__).resolve().parents[1]
     report = (repo_root / "docs" / "public" / "PRODUCTION_SMOKE_2026-05-24.md").read_text(encoding="utf-8")
@@ -5989,6 +6020,7 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "mdtero project ingest" in source_skill
     assert "server_rag_status" in source_skill
     assert "rag_query(question)" in source_skill
+    assert "mcp_tool_plan" in source_skill
     assert "submit_parse(input_value" in source_skill
     assert "task_status(task_id" in source_skill
     assert "download_artifact(task_id" in source_skill
