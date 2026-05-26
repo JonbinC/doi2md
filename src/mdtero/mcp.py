@@ -876,14 +876,14 @@ def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, command
     }
     if not project_id:
         try:
-            created = client.create_project(state.name, description=f"Mdtero local project: {state.name}")
+            created, reused = _find_or_create_server_project_for_mcp(client, state.name, description=f"Mdtero local project: {state.name}")
         except Exception as exc:
             return None, _bootstrap_failure_payload(state, commands, exc, reason_code="server_project_create_failed")
         project_id = str(created.get("id") or "").strip() if isinstance(created, dict) else ""
         if not project_id:
             return None, _bootstrap_failure_payload(state, commands, RuntimeError("server_project_id_missing"), reason_code="server_project_id_missing")
         bind_server_project(root, project_id)
-        bootstrap.update({"created_server_project": True, "bound_local_project": True, "project": created})
+        bootstrap.update({"created_server_project": not reused, "reused_server_project": reused, "bound_local_project": True, "project": created})
 
     items: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -937,6 +937,20 @@ def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, command
             "next_commands": _rag_query_failure_next_commands(detail, commands),
         }
     return project_id, bootstrap
+
+
+def _find_or_create_server_project_for_mcp(client: Any, name: str, *, description: str | None = None) -> tuple[dict[str, Any], bool]:
+    normalized_name = str(name or "").strip()
+    try:
+        projects = client.list_projects()
+    except Exception:
+        projects = {}
+    items = projects.get("items") if isinstance(projects, dict) else []
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and str(item.get("name") or "").strip() == normalized_name and str(item.get("id") or "").strip():
+                return item, True
+    return client.create_project(normalized_name, description=description), False
 
 
 def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Exception, *, reason_code: str) -> dict[str, Any]:
