@@ -3606,6 +3606,47 @@ def test_rag_contract_does_not_request_ingest_after_successful_query_without_sum
         "mdtero mcp briefing --json",
         "mdtero mcp serve",
     ]
+    plan_steps = {step["step"]: step for step in payload["agent_tool_plan"]}
+    assert "inspect_rag_status" in plan_steps
+    assert plan_steps["query_rag"]["tool"] == "rag_query"
+    assert plan_steps["handoff_to_local_agent"]["tool"] == "mcp_briefing"
+    assert "ingest_project_documents" not in plan_steps
+    assert "build_rag_index" not in plan_steps
+
+
+def test_rag_contract_agent_tool_plan_guides_build_when_index_is_missing():
+    payload = ensure_rag_contract({
+        "status": "not_ready",
+        "reason_code": "rag_index_not_built",
+        "selected_provider": "voyage",
+        "summary": {"chunk_count": 3, "embedded_count": 0, "pending_embedding_count": 3},
+        "next_commands": ["mdtero rag build --json", "mdtero rag status --json"],
+    })
+
+    plan_steps = {step["step"]: step for step in payload["agent_tool_plan"]}
+
+    assert payload["readiness"]["needs_build"] is True
+    assert plan_steps["build_rag_index"]["tool"] == "rag_build"
+    assert plan_steps["build_rag_index"]["arguments"] == {"project_id": "<project-id>"}
+    assert plan_steps["build_rag_index"]["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json"]
+    assert "query_rag" not in plan_steps
+
+
+def test_rag_contract_agent_tool_plan_treats_voyage_as_backend_operations():
+    payload = ensure_rag_contract({
+        "status": "blocked",
+        "reason_code": "voyage_not_configured",
+        "selected_provider": "voyage",
+        "provider_state": "missing",
+        "next_commands": ["mdtero rag status --json"],
+    })
+
+    plan_steps = {step["step"]: step for step in payload["agent_tool_plan"]}
+
+    assert payload["readiness"]["provider_blocked"] is True
+    assert plan_steps["check_backend_provider"]["tool"] == "backend_operations"
+    assert "users should not provide a local Voyage key" in plan_steps["check_backend_provider"]["purpose"]
+    assert plan_steps["check_backend_provider"]["next_commands"] == ["mdtero rag status --json"]
 
 
 def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_path: Path):
@@ -4498,6 +4539,9 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
     assert "mdtero rag query \"<question>\"" in output
     assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
+    assert "Agent plan" in output
+    assert "query_rag -> rag_query" in output
+    assert "handoff_to_local_agent -> mcp_briefing" in output
 
 
 def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, tmp_path: Path, capsys):
@@ -4529,6 +4573,8 @@ def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, t
     assert "Hint: Rebuild project RAG" in output
     assert "mdtero rag build" in output
     assert "mdtero rag status --json" in output
+    assert "Agent plan" in output
+    assert "build_rag_index -> rag_build" in output
 
 
 def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, capsys):
@@ -4555,6 +4601,8 @@ def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, 
     assert payload["reason_code"] == "rag_index_partial"
     assert payload["server_project_id"] == "99"
     assert payload["summary"]["pending_embedding_count"] == 2
+    assert payload["agent_tool_plan"][0]["step"] == "inspect_rag_status"
+    assert any(step["step"] == "build_rag_index" for step in payload["agent_tool_plan"])
 
 
 def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypatch, tmp_path: Path, capsys):
@@ -4581,6 +4629,7 @@ def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypat
     assert payload["local_ready_for_ingest_count"] == 1
     assert "backend /api/v1 project RAG routes" in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
+    assert payload["agent_tool_plan"][0]["tool"] == "server_rag_status"
 
 
 def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
@@ -4762,6 +4811,8 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     assert "Corrosion Paper:3-4 · 10.1000/rag" in output
     assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
+    assert "Agent plan" in output
+    assert "query_rag -> rag_query" in output
 
 
 def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matches(monkeypatch, tmp_path: Path, capsys):
@@ -4823,6 +4874,8 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     assert payload["agent_summary"]["provider_configured"] is True
     assert payload["agent_summary"]["ready_for_query"] is True
     assert payload["agent_summary"]["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
+    assert any(step["step"] == "query_rag" for step in payload["agent_tool_plan"])
+    assert any(step["step"] == "handoff_to_local_agent" for step in payload["agent_tool_plan"])
     assert payload["action_hint"] == "RAG query completed. Review the returned answer, citations, and matches."
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
@@ -4840,6 +4893,8 @@ def test_rag_status_reports_local_precondition_when_project_is_unlinked(monkeypa
     assert "1/1 local paper(s)" in output
     assert "mdtero rag build --json" in output
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in output
+    assert "Agent plan" in output
+    assert "create_or_link_server_project -> project_bridge" in output
 
 
 def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path, capsys):
@@ -4855,6 +4910,8 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
     assert payload["reason_code"] == "server_project_not_linked"
     assert "mdtero rag build --json" in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert payload["agent_tool_plan"][0]["step"] == "inspect_rag_status"
+    assert any(step["step"] == "create_or_link_server_project" for step in payload["agent_tool_plan"])
 
 
 def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch, tmp_path: Path, capsys):

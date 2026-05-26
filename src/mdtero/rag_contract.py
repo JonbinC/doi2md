@@ -8,6 +8,7 @@ def ensure_rag_contract(payload: dict[str, Any]) -> dict[str, Any]:
 
     payload.setdefault("readiness", build_rag_readiness(payload))
     payload.setdefault("agent_summary", build_rag_agent_summary(payload))
+    payload.setdefault("agent_tool_plan", build_rag_agent_tool_plan(payload))
     return payload
 
 
@@ -104,6 +105,101 @@ def build_rag_agent_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "match_count": readiness.get("match_count", 0),
         "next_commands": _next_commands(payload),
     }
+
+
+def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else build_rag_readiness(payload)
+    reason_code = str(payload.get("reason_code") or "unknown").strip()
+    normalized_reason = reason_code.lower()
+    status = str(payload.get("status") or "unknown").strip()
+    project_id = str(payload.get("server_project_id") or payload.get("project_id") or "<project-id>")
+    next_commands = _next_commands(payload)
+    ready_for_query = bool(readiness.get("ready_for_query"))
+    provider_blocked = bool(readiness.get("provider_blocked"))
+    needs_ingest = bool(readiness.get("needs_ingest"))
+    needs_build = bool(readiness.get("needs_build"))
+
+    plan: list[dict[str, Any]] = [
+        {
+            "step": "inspect_rag_status",
+            "tool": "server_rag_status",
+            "purpose": "Read backend Voyage RAG readiness before build/query decisions.",
+            "when": "Always call first for a server project or after a failed build/query.",
+            "arguments": {"project_id": project_id},
+            "success_signal": "readiness.next_step, agent_summary, reason_code, and next_commands are present.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
+            "next_commands": ["mdtero rag status --json"],
+        }
+    ]
+
+    if normalized_reason == "server_project_not_linked":
+        plan.append({
+            "step": "create_or_link_server_project",
+            "tool": "project_bridge",
+            "purpose": "Create or bind the local Mdtero project to a server project before server-side Voyage RAG can ingest, build, or query.",
+            "when": "reason_code is server_project_not_linked or server_project_id is missing.",
+            "arguments": {"project_id": project_id},
+            "success_signal": "server_project_id is present in the local project and `mdtero rag status --json` can inspect it.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "server_project_id"],
+            "next_commands": next_commands,
+        })
+    elif provider_blocked:
+        plan.append({
+            "step": "check_backend_provider",
+            "tool": "backend_operations",
+            "purpose": "Confirm the server-side Voyage provider is configured and reachable; users should not provide a local Voyage key.",
+            "when": "readiness.provider_blocked is true or reason_code starts with voyage_.",
+            "arguments": {"selected_provider": payload.get("selected_provider") or "voyage"},
+            "success_signal": "provider_state becomes configured and provider_configured is true.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "provider_state"],
+            "next_commands": next_commands,
+        })
+    elif needs_ingest:
+        plan.append({
+            "step": "ingest_project_documents",
+            "tool": "project_ingest",
+            "purpose": "Import succeeded parse Markdown artifacts into the server project before building Voyage embeddings.",
+            "when": "readiness.needs_ingest is true or reason_code is project_has_no_chunks.",
+            "arguments": {"project_id": project_id},
+            "success_signal": "summary.chunk_count is greater than zero.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands"],
+            "next_commands": next_commands,
+        })
+    elif needs_build:
+        plan.append({
+            "step": "build_rag_index",
+            "tool": "rag_build",
+            "purpose": "Create or refresh server-side Voyage embeddings for imported project chunks.",
+            "when": "readiness.needs_build is true or reason_code is rag_index_not_built/rag_index_partial.",
+            "arguments": {"project_id": project_id},
+            "success_signal": "readiness.ready_for_query is true and reason_code is indexed.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
+            "next_commands": next_commands,
+        })
+
+    if ready_for_query or status == "succeeded" or reason_code in {"indexed", "rag_query_succeeded", "ok", "no_matches"}:
+        plan.append({
+            "step": "query_rag",
+            "tool": "rag_query",
+            "purpose": "Ask grounded project questions against server-side Voyage RAG and use evidence_pack/source_nodes/citations as the evidence surface.",
+            "when": "readiness.ready_for_query is true, or after rag_build succeeds.",
+            "arguments": {"project_id": project_id, "question": "<project question>", "limit": 5},
+            "success_signal": "reason_code is rag_query_succeeded/no_matches and evidence_pack plus citations are present.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
+            "next_commands": next_commands,
+        })
+
+    plan.append({
+        "step": "handoff_to_local_agent",
+        "tool": "mcp_briefing",
+        "purpose": "Expose the server RAG state to local FastMCP agents through the CLI project bridge.",
+        "when": "After status/build/query, or whenever a local agent needs project context.",
+        "arguments": {},
+        "success_signal": "mdtero mcp briefing --json includes project_bridge, rag, recommended_next_commands, and mcp_tool_plan.",
+        "failure_fields": ["reason_code", "action_hint", "next_commands"],
+        "next_commands": ["mdtero mcp briefing --json", "mdtero mcp serve"],
+    })
+    return plan
 
 
 def _next_commands(payload: dict[str, Any]) -> list[str]:

@@ -1981,6 +1981,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 "action_hint": "Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `mdtero project ingest --json` and `mdtero rag status --json`.",
                 "next_commands": next_commands,
             }
+            ensure_rag_contract(payload)
             payload = redact_sensitive_payload(payload)
             if args.json:
                 print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -1991,12 +1992,14 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 console.print("Next:")
                 for command in next_commands:
                     console.print(f"  {command}")
+                _print_rag_agent_tool_plan(payload, console=console)
             return 1
         summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
         result.setdefault("project", state.name)
         result.setdefault("server_project_id", str(project_id))
         result.setdefault("local_ready_for_ingest_count", indexed)
         result.setdefault("local_paper_count", len(state.papers))
+        ensure_rag_contract(result)
         if args.json:
             print(json.dumps(redact_sensitive_payload(result), indent=2, ensure_ascii=False))
             return 0
@@ -2013,6 +2016,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
             console.print("Next:")
             for command in next_commands:
                 console.print(f"  {command}")
+        _print_rag_agent_tool_plan(redact_sensitive_payload(result), console=console)
         return 0
     payload = {
         "status": "not_ready",
@@ -2024,6 +2028,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
         "next_commands": ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
     }
+    ensure_rag_contract(payload)
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
@@ -2032,6 +2037,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
     console.print("Next:")
     for command in payload["next_commands"]:
         console.print(f"  {command}")
+    _print_rag_agent_tool_plan(payload, console=console)
     return 0
 
 
@@ -2386,6 +2392,7 @@ def _rag_failure_next_commands(command: str, reason_code: str) -> list[str]:
 
 
 def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) -> None:
+    ensure_rag_contract(payload)
     payload = redact_sensitive_payload(payload)
     if json_output:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -2398,9 +2405,11 @@ def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) ->
         console.print("Next:")
         for command in next_commands:
             console.print(f"  {command}")
+    _print_rag_agent_tool_plan(payload, console=console)
 
 
 def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> None:
+    ensure_rag_contract(payload)
     payload = redact_sensitive_payload(payload)
     if json_output:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -2428,6 +2437,23 @@ def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> No
         console.print("\n[bold]Next[/bold]")
         for command in next_commands:
             console.print(f"  {command}")
+    _print_rag_agent_tool_plan(payload, console=console)
+
+
+def _print_rag_agent_tool_plan(payload: dict[str, Any], *, console: Console) -> None:
+    plan = payload.get("agent_tool_plan") if isinstance(payload.get("agent_tool_plan"), list) else []
+    if not plan:
+        return
+    console.print("\n[bold]Agent plan[/bold]")
+    for step in plan[:4]:
+        if not isinstance(step, dict):
+            continue
+        step_name = str(step.get("step") or "").strip()
+        tool = str(step.get("tool") or "").strip()
+        if step_name and tool:
+            console.print(f"  {step_name} -> {tool}")
+        elif step_name:
+            console.print(f"  {step_name}")
 
 
 def _normalize_rag_query_payload(payload: dict[str, Any], *, project_id: str, question: str) -> dict[str, Any]:
