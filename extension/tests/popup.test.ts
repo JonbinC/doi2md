@@ -22,6 +22,7 @@ import {
   getTaskFailureText,
   getTaskFailureCliHandoff,
   buildTaskFailureCliHandoffPlan,
+  buildCliHandoffCommandPlan,
   formatCliHandoffClipboard,
   firstNextCommand,
   firstTaskNextCommand,
@@ -681,11 +682,24 @@ describe("getTaskFailureText", () => {
       primaryCommand: "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
       commands: [
         "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
-        "mdtero status task-123 --wait --timeout 300 --json"
+        "mdtero status task-123 --wait --timeout 300 --json",
+        "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero mcp briefing --json"
       ],
       source: "backend_task",
       kind: "parse"
     });
+  });
+
+  it("fills missing parse handoff follow-up commands for extension fallback plans", () => {
+    expect(buildCliHandoffCommandPlan("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json")).toEqual([
+      "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      "mdtero status <task-id> --wait --timeout 300 --json",
+      "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+      "mdtero mcp briefing --json"
+    ]);
+
+    expect(buildCliHandoffCommandPlan("mdtero rag status --json")).toEqual(["mdtero rag status --json"]);
   });
 
   it("formats multi-step CLI handoffs for local agents", () => {
@@ -701,7 +715,8 @@ describe("getTaskFailureText", () => {
       "Run these commands in order:",
       "1. mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
       "2. mdtero status task-123 --wait --timeout 300 --json",
-      "3. mdtero mcp briefing --json"
+      "3. mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+      "4. mdtero mcp briefing --json"
     ].join("\n"));
 
     expect(formatCliHandoffClipboard("mdtero rag status --json", [])).toBe("mdtero rag status --json");
@@ -723,7 +738,13 @@ describe("getTaskFailureText", () => {
       buildTaskFailureCliHandoffPlan({ next_commands: [] }, "10.1000/demo", "parse")
     ).toMatchObject({
       source: "fallback_parse",
-      primaryCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json"
+      primaryCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      commands: [
+        "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+        "mdtero status <task-id> --wait --timeout 300 --json",
+        "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+        "mdtero mcp briefing --json"
+      ]
     });
   });
 

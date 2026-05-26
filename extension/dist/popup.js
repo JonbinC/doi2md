@@ -604,8 +604,33 @@ function firstNextCommand(commands) {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
   return normalizeCliHandoffCommand(command);
 }
-function formatCliHandoffClipboard(primaryCommand, planCommands) {
+var PARSE_HANDOFF_FOLLOWUPS = [
+  "mdtero status <task-id> --wait --timeout 300 --json",
+  "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+  "mdtero mcp briefing --json"
+];
+function buildCliHandoffCommandPlan(primaryCommand, planCommands) {
   const commands = normalizeCommandList([primaryCommand, ...planCommands ?? []]);
+  const primary = commands[0] || "";
+  if (!/^mdtero\s+parse\b/.test(primary)) {
+    return commands;
+  }
+  const statusCommands = commands.filter((command) => /^mdtero\s+status\b/.test(command));
+  const downloadCommands = commands.filter((command) => /^mdtero\s+download\b/.test(command));
+  const mcpCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
+  const otherCommands = commands.filter(
+    (command) => command !== primary && !/^mdtero\s+status\b/.test(command) && !/^mdtero\s+download\b/.test(command) && command !== "mdtero mcp briefing --json"
+  );
+  return normalizeCommandList([
+    primary,
+    ...statusCommands.length ? statusCommands : [PARSE_HANDOFF_FOLLOWUPS[0]],
+    ...downloadCommands.length ? downloadCommands : [PARSE_HANDOFF_FOLLOWUPS[1]],
+    ...mcpCommands.length ? mcpCommands : [PARSE_HANDOFF_FOLLOWUPS[2]],
+    ...otherCommands
+  ]);
+}
+function formatCliHandoffClipboard(primaryCommand, planCommands) {
+  const commands = buildCliHandoffCommandPlan(primaryCommand, planCommands);
   if (commands.length <= 1) {
     return commands[0] || "";
   }
@@ -621,7 +646,7 @@ function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
   if (taskCommands.length > 0) {
     return {
       primaryCommand: taskCommands[0],
-      commands: taskCommands,
+      commands: buildCliHandoffCommandPlan(taskCommands[0], taskCommands),
       source: "backend_task",
       kind
     };
@@ -630,7 +655,7 @@ function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
   if (resultCommands.length > 0) {
     return {
       primaryCommand: resultCommands[0],
-      commands: resultCommands,
+      commands: buildCliHandoffCommandPlan(resultCommands[0], resultCommands),
       source: "backend_result",
       kind
     };
@@ -639,7 +664,7 @@ function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
   if (fallback) {
     return {
       primaryCommand: fallback,
-      commands: [fallback],
+      commands: buildCliHandoffCommandPlan(fallback),
       source: "fallback_parse",
       kind
     };
@@ -857,13 +882,14 @@ function updateWorkflowState() {
 function setCliHandoff(input, commandOverride, planCommands) {
   const commands = normalizeHandoffCommands(planCommands);
   const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
+  const handoffCommands = command ? buildCliHandoffCommandPlan(command, commands) : [];
   if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton || !cliHandoffNoteEl) {
     return;
   }
   cliHandoffEl.hidden = !command;
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
-  currentCliHandoffCommands = command ? normalizeHandoffCommands([command, ...commands]) : [];
+  currentCliHandoffCommands = handoffCommands;
   renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
