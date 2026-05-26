@@ -35,6 +35,7 @@ import {
   getSavedResultSummary,
   getUsageStatusText,
   getTaskFailureText,
+  buildCliHandoffCommandPlan,
   buildTaskFailureCliHandoffPlan,
   formatCliHandoffClipboard,
   getDownloadFailureText,
@@ -265,13 +266,14 @@ function updateWorkflowState() {
 function setCliHandoff(input?: string | null, commandOverride?: string | null, planCommands?: string[] | null) {
   const commands = normalizeHandoffCommands(planCommands);
   const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
+  const handoffCommands = command ? buildCliHandoffCommandPlan(command, commands) : [];
   if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton || !cliHandoffNoteEl) {
     return;
   }
   cliHandoffEl.hidden = !command;
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
-  currentCliHandoffCommands = command ? normalizeHandoffCommands([command, ...commands]) : [];
+  currentCliHandoffCommands = handoffCommands;
   renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }

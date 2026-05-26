@@ -36,6 +36,8 @@ describe("workspace", () => {
     expect(popupHtml).toContain('id="cli-handoff-note"');
     expect(popupHtml).toContain('id="cli-handoff-plan"');
     expect(popupHtml).toContain('id="copy-cli-handoff"');
+    expect(popupHtml).toContain('Copy handoff');
+    expect(popupHtml).not.toContain('Copy CLI command');
     expect(popupHtml).not.toContain('id="campus-hint"');
     expect(popupHtml).not.toContain('id="helper-status"');
     expect(popupHtml).not.toContain('id="pdf-engine-select"');

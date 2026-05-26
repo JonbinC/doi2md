@@ -405,8 +405,39 @@ export interface CliHandoffPlan {
   kind: "parse" | "translate";
 }
 
-export function formatCliHandoffClipboard(primaryCommand: string, planCommands?: string[] | null): string {
+const PARSE_HANDOFF_FOLLOWUPS = [
+  "mdtero status <task-id> --wait --timeout 300 --json",
+  "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+  "mdtero mcp briefing --json",
+];
+
+export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?: string[] | null): string[] {
   const commands = normalizeCommandList([primaryCommand, ...(planCommands ?? [])]);
+  const primary = commands[0] || "";
+  if (!/^mdtero\s+parse\b/.test(primary)) {
+    return commands;
+  }
+  const statusCommands = commands.filter((command) => /^mdtero\s+status\b/.test(command));
+  const downloadCommands = commands.filter((command) => /^mdtero\s+download\b/.test(command));
+  const mcpCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
+  const otherCommands = commands.filter(
+    (command) =>
+      command !== primary &&
+      !/^mdtero\s+status\b/.test(command) &&
+      !/^mdtero\s+download\b/.test(command) &&
+      command !== "mdtero mcp briefing --json"
+  );
+  return normalizeCommandList([
+    primary,
+    ...(statusCommands.length ? statusCommands : [PARSE_HANDOFF_FOLLOWUPS[0]]),
+    ...(downloadCommands.length ? downloadCommands : [PARSE_HANDOFF_FOLLOWUPS[1]]),
+    ...(mcpCommands.length ? mcpCommands : [PARSE_HANDOFF_FOLLOWUPS[2]]),
+    ...otherCommands,
+  ]);
+}
+
+export function formatCliHandoffClipboard(primaryCommand: string, planCommands?: string[] | null): string {
+  const commands = buildCliHandoffCommandPlan(primaryCommand, planCommands);
   if (commands.length <= 1) {
     return commands[0] || "";
   }
@@ -432,7 +463,7 @@ export function buildTaskFailureCliHandoffPlan(
   if (taskCommands.length > 0) {
     return {
       primaryCommand: taskCommands[0],
-      commands: taskCommands,
+      commands: buildCliHandoffCommandPlan(taskCommands[0], taskCommands),
       source: "backend_task",
       kind
     };
@@ -442,7 +473,7 @@ export function buildTaskFailureCliHandoffPlan(
   if (resultCommands.length > 0) {
     return {
       primaryCommand: resultCommands[0],
-      commands: resultCommands,
+      commands: buildCliHandoffCommandPlan(resultCommands[0], resultCommands),
       source: "backend_result",
       kind
     };
@@ -452,7 +483,7 @@ export function buildTaskFailureCliHandoffPlan(
   if (fallback) {
     return {
       primaryCommand: fallback,
-      commands: [fallback],
+      commands: buildCliHandoffCommandPlan(fallback),
       source: "fallback_parse",
       kind
     };
