@@ -18,7 +18,7 @@ from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
 from .projects import ProjectState, ensure_project
 
 WORKSTATION_SETUP_COMMAND = "mdtero setup"
-HEADLESS_SETUP_COMMAND = "mdtero setup --api-key"
+HEADLESS_SETUP_COMMAND = "mdtero setup --api-key --json"
 
 
 def build_dashboard_model(
