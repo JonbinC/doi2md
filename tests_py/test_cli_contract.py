@@ -398,6 +398,67 @@ def test_smoke_classifies_live_401_as_authentication_required(monkeypatch, tmp_p
     assert "Production auth failed" in parse_step["action_hint"]
 
 
+def test_smoke_preserves_discovery_error_payload(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_invalid"))
+
+    def fake_discover(self, query, *, limit=10):
+        raise DiscoveryError(
+            {
+                "status": "failed",
+                "error_code": "authentication_required",
+                "reason_code": "authentication_required",
+                "status_code": 401,
+                "source": "openalex_server",
+                "message": "missing or invalid credentials",
+                "action_hint": "Run `mdtero setup --api-key <key>` and verify with `mdtero doctor --json` before server OpenAlex discovery.",
+                "next_commands": ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"],
+            }
+        )
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": "https://api.mdtero.test",
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": False,
+            "skip_download": True,
+            "skip_translate": True,
+            "skip_rag": True,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+    discover_step = next(step for step in payload["steps"] if step["name"] == "discover")
+
+    assert discover_step["reason_code"] == "authentication_required"
+    assert discover_step["error_code"] == "authentication_required"
+    assert discover_step["http_status"] == 401
+    assert discover_step["message"] == "missing or invalid credentials"
+    assert discover_step["next_commands"] == ["mdtero setup --api-key <key>", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+    assert payload["primary_failure"] == {
+        "step": "discover",
+        "reason_code": "authentication_required",
+        "action_hint": "Run `mdtero setup --api-key <key>` and verify with `mdtero doctor --json` before server OpenAlex discovery.",
+    }
+    assert payload["next_commands"][:2] == ["mdtero setup --api-key <key>", "mdtero doctor --json"]
+
+
 def test_smoke_surfaces_translation_provider_failures(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
