@@ -4107,6 +4107,11 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert "agent_briefing" in model["mcp"]["tools"]
+    assert [step["step"] for step in model["mcp"]["tool_plan"]] == ["brief", "inspect_project", "prepare_rag"]
+    assert model["mcp"]["tool_plan"][0]["tool"] == "agent_briefing"
+    assert model["mcp"]["tool_plan"][0]["failure_fields"] == ["reason_code", "action_hint", "next_commands"]
+    assert model["mcp"]["tool_plan"][-1]["tool"] == "server_rag_status"
+    assert "ready_for_query is false" in model["mcp"]["tool_plan"][-1]["when"]
     assert model["mcp"]["task_tools"] == [
         {"tool": "submit_parse", "purpose": "Submit DOI/URL parse and optionally wait for completion"},
         {"tool": "task_status", "purpose": "Poll task status and sync local project state"},
@@ -4211,6 +4216,11 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["mcp"]["serve_command"] == "mdtero mcp serve"
     assert model["mcp"]["briefing_command"] == "mdtero mcp briefing --json"
     assert "mdtero rag build --json" in model["mcp"]["recommended_next_commands"]
+    plan_steps = {step["step"]: step for step in model["mcp"]["tool_plan"]}
+    assert plan_steps["download_artifact"]["tool"] == "download_artifact"
+    assert plan_steps["translate_ready_artifact"]["tool"] == "request_translation"
+    assert plan_steps["prepare_rag"]["tool"] == "server_rag_status"
+    assert "readiness" in plan_steps["prepare_rag"]["failure_fields"]
     palette_commands = [item["command"] for item in model["command_palette"]]
     assert "mdtero project ingest --json" in palette_commands
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in palette_commands
@@ -4251,6 +4261,11 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "task_status" in output
     assert "download_artifact" in output
     assert "request_translation" in output
+    assert "MCP Tool Plan" in output
+    assert "prepare_rag" in output
+    assert "server_rag_status" in output
+    assert "failure_fields" not in output
+    assert "readiness" in output
     assert "r" in output
     assert "refresh" in output
     assert rendered is not None
