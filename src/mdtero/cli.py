@@ -2576,10 +2576,19 @@ def _print_next_steps(console: Console) -> None:
     console.print("\n[bold]Next commands[/bold]")
     sections = [
         (
+            "Verify this workstation",
+            [
+                "mdtero doctor --json",
+                "mdtero config academic --json",
+                "mdtero agent detect --json",
+            ],
+        ),
+        (
             "Start a local project",
             [
                 "mdtero project init --name literature-review",
-                "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3",
+                "mdtero discover \"graph neural networks\" --limit 5 --interactive",
+                "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3 --json",
                 "mdtero project import-bib references.bib",
             ],
         ),
@@ -2593,6 +2602,14 @@ def _print_next_steps(console: Console) -> None:
                 "mdtero project parse --wait --timeout 300 --json",
                 "mdtero project refresh --wait --timeout 300 --json",
                 "mdtero project download --output-dir ./mdtero-output --json",
+            ],
+        ),
+        (
+            "Translate completed Markdown",
+            [
+                "mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json",
+                "mdtero translate paper.md --to zh-CN --wait --timeout 600 --json",
+                "mdtero download <translation-task-id> translated_md --output-dir ./mdtero-output --json",
             ],
         ),
         (
@@ -2611,7 +2628,7 @@ def _print_next_steps(console: Console) -> None:
                 "mdtero rag query \"What are the key claims and methods?\" --build-if-needed --json",
                 "mdtero mcp briefing --json",
                 "mdtero mcp serve",
-                "mdtero agent install",
+                "mdtero agent install --interactive",
                 "mdtero tui",
             ],
         ),

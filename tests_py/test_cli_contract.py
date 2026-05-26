@@ -1013,13 +1013,22 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     output = capsys.readouterr().out
     compact_output = " ".join(output.split())
 
+    assert "Verify this workstation" in output
+    assert "mdtero doctor --json" in output
+    assert "mdtero config academic --json" in output
+    assert "mdtero agent detect --json" in output
     assert "Start a local project" in output
     assert "mdtero project init --name literature-review" in output
-    assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3" in output
+    assert "mdtero discover \"graph neural networks\" --limit 5 --interactive" in output
+    assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3 --json" in output
     assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json" in output
     assert "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json" in compact_output
     assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in output
     assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in output
+    assert "Translate completed Markdown" in output
+    assert "mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json" in output
+    assert "mdtero translate paper.md --to zh-CN --wait --timeout 600 --json" in output
+    assert "mdtero download <translation-task-id> translated_md --output-dir ./mdtero-output --json" in compact_output
     assert "mdtero config zotero" in output
     assert "mdtero zotero import --limit 20" in output
     assert "mdtero zotero sync" in output
@@ -1027,7 +1036,8 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero rag build --json" in output
     assert "mdtero rag query \"What are the key claims and methods?\" --build-if-needed --json" in compact_output
     assert "mdtero mcp serve" in output
-    assert "mdtero agent install" in output
+    assert "mdtero agent install --interactive" in output
+    assert "mdtero agent install\n" not in output
 
 
 def test_result_selection_supports_all_and_number_lists():
