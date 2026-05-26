@@ -2539,6 +2539,74 @@ def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path
     ]
 
 
+def test_parse_batch_missing_directory_returns_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    missing = tmp_path / "missing-papers"
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["parse", "--batch", str(missing), "--json"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "batch_path_not_found"
+    assert payload["path"] == str(missing)
+    assert payload["supported_extensions"] == ["pdf", "epub", "html", "xml"]
+    assert payload["next_commands"] == [
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero parse --batch <directory> --wait --timeout 300 --json",
+    ]
+
+
+def test_parse_batch_empty_directory_returns_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    batch = tmp_path / "papers"
+    batch.mkdir()
+    (batch / "notes.txt").write_text("not a paper artifact", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["parse", "--batch", str(batch), "--json"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "batch_no_supported_files"
+    assert payload["path"] == str(batch)
+    assert "PDF, EPUB, XML, or HTML" in payload["action_hint"]
+
+
+def test_parse_file_missing_or_unsupported_returns_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    missing = tmp_path / "missing.pdf"
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["parse", "--file", str(missing), "--json"]) == 2
+    missing_payload = json.loads(capsys.readouterr().out)
+    assert missing_payload["reason_code"] == "file_path_not_found"
+    assert missing_payload["path"] == str(missing)
+
+    unsupported = tmp_path / "notes.txt"
+    unsupported.write_text("notes", encoding="utf-8")
+    assert cli.main(["parse", "--file", str(unsupported), "--json"]) == 2
+    unsupported_payload = json.loads(capsys.readouterr().out)
+    assert unsupported_payload["reason_code"] == "file_type_not_supported"
+    assert unsupported_payload["supported_extensions"] == ["pdf", "epub", "html", "xml"]
+
+
+def test_parse_missing_input_returns_agent_json_without_traceback(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["parse", "--json"]) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["reason_code"] == "parse_input_missing"
+    assert "DOI/URL" in payload["action_hint"]
+
+
 def test_cmd_parse_enriches_doi_task_submission_for_agents(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
