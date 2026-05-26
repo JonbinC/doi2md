@@ -17,6 +17,26 @@ FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+def workflow_dispatch_only(text: str) -> bool:
+    in_on_block = False
+    events: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if line == "on:" or line.startswith("on:"):
+            in_on_block = True
+            inline_value = line.removeprefix("on:").strip()
+            if inline_value:
+                events.append(inline_value.rstrip(":"))
+            continue
+        if in_on_block and not line.startswith(" "):
+            break
+        if in_on_block and line.startswith("  ") and not line.startswith("    "):
+            events.append(stripped.rstrip(":"))
+    return events == ["workflow_dispatch"]
+
+
 def workflow_files(workflow_dir: Path = WORKFLOW_DIR) -> list[Path]:
     if not workflow_dir.is_dir():
         return []
@@ -28,6 +48,8 @@ def check_workflow(path: Path) -> list[str]:
     failures: list[str] = []
     if "workflow_dispatch:" not in text:
         failures.append("missing workflow_dispatch")
+    if not workflow_dispatch_only(text):
+        failures.append("not workflow_dispatch-only")
     if "runs-on: linux-small" not in text:
         failures.append("missing linux-small runner")
     if "List required secret names" not in text:
