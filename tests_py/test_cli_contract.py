@@ -3183,6 +3183,21 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["agents"]["installed_count"] == 0
     assert briefing["agents"]["pending_install_targets"] == ["codex"]
     assert briefing["agents"]["interactive_install_command"] == "mdtero agent install --interactive"
+    tool_plan = briefing["mcp_tool_plan"]
+    assert [step["tool"] for step in tool_plan][:2] == ["agent_briefing", "project_status"]
+    assert any(step["step"] == "submit_pending_parse" and step["tool"] == "submit_parse" for step in tool_plan)
+    assert any(step["step"] == "inspect_failed_task" and step["tool"] == "task_status" for step in tool_plan)
+    assert any(step["step"] == "download_artifact" and step["tool"] == "download_artifact" for step in tool_plan)
+    assert any(step["step"] == "translate_ready_artifact" and step["tool"] == "request_translation" for step in tool_plan)
+    assert any(step["step"] == "query_rag" and step["tool"] == "rag_query" for step in tool_plan)
+    assert any(step["step"] == "install_agent_skill" and step["tool"] == "agent_commands" for step in tool_plan)
+    submit_step = next(step for step in tool_plan if step["step"] == "submit_pending_parse")
+    assert submit_step["arguments"] == {"input_value": "10.1000/todo", "wait": True, "timeout": 300, "interval": 2}
+    failed_step = next(step for step in tool_plan if step["step"] == "inspect_failed_task")
+    assert failed_step["arguments"] == {"task_id": "task-bad", "wait": False}
+    query_step = next(step for step in tool_plan if step["step"] == "query_rag")
+    assert "evidence_pack.context_markdown" in query_step["purpose"]
+    assert "reason_code" in query_step["failure_fields"]
     assert briefing["recommended_next_commands"] == [
         "mdtero project parse --wait --timeout 300 --json",
         "mdtero project parse --include-failed --wait --timeout 300 --json",
@@ -3199,6 +3214,35 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert "download_artifact" in briefing["mcp_tools"]
     assert "request_translation" in briefing["mcp_tools"]
     assert "rag_query" in briefing["mcp_tools"]
+
+
+def test_mcp_agent_briefing_tool_plan_guides_rag_preparation(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    briefing = build_agent_briefing(tmp_path, rag_status_fetcher=lambda _project_id: {})
+    tool_plan = briefing["mcp_tool_plan"]
+
+    assert any(step["step"] == "download_artifact" for step in tool_plan)
+    prepare_step = next(step for step in tool_plan if step["step"] == "prepare_rag")
+    assert prepare_step["tool"] == "server_rag_status"
+    assert "ready_for_query is false" in prepare_step["when"]
+    assert "readiness.next_step" in prepare_step["success_signal"]
+    assert "next_commands" in prepare_step["failure_fields"]
+    assert not any(step["step"] == "query_rag" for step in tool_plan)
+
+
+def test_mcp_agent_briefing_tool_plan_handles_uninitialized_project(tmp_path: Path):
+    briefing = build_agent_briefing(tmp_path, config=MdteroConfig(api_key="key"))
+    tool_plan = briefing["mcp_tool_plan"]
+
+    assert [step["step"] for step in tool_plan] == ["brief", "inspect_project", "initialize_project"]
+    assert tool_plan[-1]["tool"] == "agent_commands"
+    assert tool_plan[-1]["next_commands"] == [
+        "mdtero project init --name <name>",
+        "mdtero project add <doi-or-url> --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+    ]
 
 
 def test_mcp_submit_parse_tool_waits_and_updates_local_project(tmp_path: Path):

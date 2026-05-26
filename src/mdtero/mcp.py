@@ -1232,7 +1232,159 @@ def build_agent_briefing(
             "rag_query",
             "agent_commands",
         ],
+        "mcp_tool_plan": _build_mcp_tool_plan(
+            state=state,
+            commands=commands,
+            pending=pending,
+            running=running,
+            succeeded=succeeded,
+            failed=failed,
+            server_rag=server_rag,
+            pending_agent_installs=pending_agent_installs,
+        ),
     })
+
+
+def _build_mcp_tool_plan(
+    *,
+    state: Any | None,
+    commands: dict[str, Any],
+    pending: list[Any],
+    running: list[Any],
+    succeeded: list[Any],
+    failed: list[Any],
+    server_rag: dict[str, Any],
+    pending_agent_installs: list[Any],
+) -> list[dict[str, Any]]:
+    plan: list[dict[str, Any]] = [
+        {
+            "step": "brief",
+            "tool": "agent_briefing",
+            "purpose": "Read the account, local project, server RAG, installed agent skills, and recommended next commands before using other Mdtero tools.",
+            "when": "Always call this first in a new agent session or after a failed Mdtero action.",
+            "arguments": {},
+            "success_signal": "Payload includes project, account, health, rag, project_bridge, recommended_next_commands, and this mcp_tool_plan.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands"],
+        },
+        {
+            "step": "inspect_project",
+            "tool": "project_status",
+            "purpose": "Inspect the local project queue and decide whether papers are pending, running, failed, or ready for ingest.",
+            "when": "Use after agent_briefing when you need current per-paper state or before changing the project queue.",
+            "arguments": {},
+            "success_signal": "status plus paper counts and next_commands are present.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands"],
+        },
+    ]
+
+    if state is None:
+        plan.append({
+            "step": "initialize_project",
+            "tool": "agent_commands",
+            "purpose": "No MCP tool creates a local project yet; return the CLI command bundle and ask the user or agent shell to initialize it.",
+            "when": "project.initialized is false or reason_code is project_not_initialized.",
+            "arguments": {},
+            "success_signal": "Use commands.project_init_named, then rerun agent_briefing.",
+            "next_commands": [commands.get("project_init_named", "mdtero project init --name <name>"), commands["project_add"], commands["parse_doi_or_url"]],
+            "failure_fields": ["reason_code", "action_hint", "next_commands"],
+        })
+        return redact_sensitive_payload(plan)
+
+    if pending:
+        plan.append({
+            "step": "submit_pending_parse",
+            "tool": "submit_parse",
+            "purpose": "Submit one pending DOI/URL/local input to Mdtero and wait for the parse task so the project can later be ingested into server-side Voyage RAG.",
+            "when": "health.pending_count is greater than zero.",
+            "arguments": {"input_value": pending[0].input, "wait": True, "timeout": 300, "interval": 2},
+            "success_signal": "status is succeeded and final_task.preferred_artifact or download_artifacts includes paper_md/paper_bundle.",
+            "next_on_success": "Call download_artifact for review, then server_rag_status or rag_query with build-if-needed.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "client_acquisition", "final_task"],
+        })
+
+    if running:
+        running_task_id = running[0].task_id or "<task-id>"
+        plan.append({
+            "step": "poll_running_task",
+            "tool": "task_status",
+            "purpose": "Poll a running parse or translation task and update the local project state with provider, artifact, reason_code, and action_hint.",
+            "when": "health.running_count is greater than zero.",
+            "arguments": {"task_id": running_task_id, "wait": True, "timeout": 300, "interval": 2},
+            "success_signal": "status becomes succeeded or failed with next_commands.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "translation_attempts"],
+        })
+
+    if failed:
+        failed_task_id = failed[0].task_id or "<task-id>"
+        plan.append({
+            "step": "inspect_failed_task",
+            "tool": "task_status",
+            "purpose": "Fetch the failed task detail before retrying so the agent preserves reason_code, action_hint, provider attempts, and artifact availability.",
+            "when": "health.failed_count is greater than zero or blocked_items is non-empty.",
+            "arguments": {"task_id": failed_task_id, "wait": False},
+            "success_signal": "Failure payload includes reason_code, action_hint, and next_commands that can be followed without traceback.",
+            "next_on_success": "If publisher/session access blocked parsing, use browser extension or submit_parse with a direct file/XML/HTML artifact; if translation failed, retry request_translation after provider health is fixed.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "translation_attempts"],
+        })
+
+    if succeeded:
+        succeeded_task_id = succeeded[0].task_id or "<task-id>"
+        plan.append({
+            "step": "download_artifact",
+            "tool": "download_artifact",
+            "purpose": "Download the backend-selected Markdown or ZIP artifact for review, local notes, Zotero sync, translation, or downstream agent work.",
+            "when": "ready_artifacts is non-empty or a task has status=succeeded.",
+            "arguments": {"task_id": succeeded_task_id, "artifact": None, "output_dir": "./mdtero-output"},
+            "success_signal": "status is downloaded and path points at a local artifact.",
+            "next_on_success": "Call request_translation for translated Markdown, or rag_query to build/query backend Voyage RAG.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "message"],
+        })
+        plan.append({
+            "step": "translate_ready_artifact",
+            "tool": "request_translation",
+            "purpose": "Ask the Mdtero backend to translate a parsed Markdown artifact while preserving provider attempt diagnostics.",
+            "when": "A succeeded parse task exists and the user requests translation.",
+            "arguments": {"task_id_or_markdown_path": succeeded_task_id, "target_language": "zh-CN", "wait": True, "timeout": 600, "interval": 2},
+            "success_signal": "final_task or result exposes translated_md.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "translation_attempts"],
+        })
+
+    rag_summary = server_rag.get("agent_summary") if isinstance(server_rag.get("agent_summary"), dict) else {}
+    if rag_summary.get("ready_for_query") or server_rag.get("status") == "ready":
+        plan.append({
+            "step": "query_rag",
+            "tool": "rag_query",
+            "purpose": "Ask a grounded project question against server-side Voyage RAG and return answer, citations, source_nodes, matches, and evidence_pack.context_markdown.",
+            "when": "rag.agent_summary.ready_for_query is true, or the user asks a question about the project.",
+            "arguments": {"question": "<project question>"},
+            "success_signal": "reason_code is rag_query_succeeded and evidence_pack.context_markdown plus citations are present.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
+        })
+    else:
+        plan.append({
+            "step": "prepare_rag",
+            "tool": "server_rag_status",
+            "purpose": "Check whether the backend Voyage index needs ingest, build, provider configuration, or more parsed documents.",
+            "when": "rag.agent_summary.ready_for_query is false or rag.reason_code is not indexed/rag_query_succeeded.",
+            "arguments": {},
+            "success_signal": "readiness.next_step and next_commands identify ingest/build/query or provider-blocked state.",
+            "next_on_success": "Follow next_commands; agents may call rag_query(question), which bootstraps build-if-needed through the CLI/MCP wrapper.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
+        })
+
+    if pending_agent_installs:
+        plan.append({
+            "step": "install_agent_skill",
+            "tool": "agent_commands",
+            "purpose": "MCP cannot modify every agent workspace directly; use the returned interactive install command to install Mdtero skills into detected agents.",
+            "when": "agents.pending_install_count is greater than zero.",
+            "arguments": {},
+            "success_signal": "Run commands.agent_install, then rerun agent_briefing and verify pending_install_count is zero.",
+            "next_commands": [commands["agent_install"], commands["mcp_briefing"], commands["serve_mcp"]],
+            "failure_fields": ["reason_code", "action_hint", "next_commands"],
+        })
+
+    return redact_sensitive_payload(plan)
 
 
 def _load_project_or_none(root: Path) -> Any | None:
