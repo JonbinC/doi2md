@@ -2338,6 +2338,8 @@ def _detail_next_commands(detail: dict[str, Any]) -> list[str]:
 
 
 def _http_error_detail(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, DiscoveryError):
+        return redact_sensitive_payload(exc.payload) if isinstance(exc.payload, dict) else {}
     if isinstance(exc, MdteroApiError):
         detail = exc.payload.get("detail") if isinstance(exc.payload, dict) else None
         if isinstance(detail, dict):
@@ -2355,6 +2357,9 @@ def _http_error_detail(exc: Exception) -> dict[str, Any]:
 
 
 def _exception_status_code(exc: Exception) -> int | None:
+    if isinstance(exc, DiscoveryError):
+        value = exc.payload.get("status_code") if isinstance(exc.payload, dict) else None
+        return int(value) if isinstance(value, int) else None
     if isinstance(exc, MdteroApiError):
         value = exc.payload.get("status_code") if isinstance(exc.payload, dict) else None
         return int(value) if isinstance(value, int) else None
