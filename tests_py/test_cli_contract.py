@@ -4296,6 +4296,22 @@ def test_rag_build_bootstrap_failure_preserves_backend_next_commands(monkeypatch
     assert payload["next_commands"] == ["mdtero doctor", "mdtero rag status --json"]
 
 
+def test_rag_project_errors_prefer_cli_bootstrap_commands():
+    from mdtero import cli
+
+    hint = cli._rag_action_hint("status", "project_not_found")
+    commands = cli._rag_failure_next_commands("status", "invalid_project_id")
+
+    assert "mdtero rag build --json" in hint
+    assert "--build-if-needed" in hint
+    assert "mdtero project create-server" not in hint
+    assert commands == [
+        "mdtero rag build --json",
+        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
+
+
 def test_rag_query_unlinked_project_plain_output_is_actionable(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
