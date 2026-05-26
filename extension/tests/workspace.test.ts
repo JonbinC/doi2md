@@ -135,11 +135,27 @@ describe("workspace", () => {
     expect(styles).toContain(".panel-popup { width: 380px; max-width: 100vw; }");
     expect(styles).toContain(".panel-popup .shell { max-height: min(600px, 100vh); overflow-y: auto; }");
     expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(styles).toContain('.workflow-strip span[data-state="active"]');
+    expect(styles).toContain('.workflow-strip span[data-state="done"]');
+    expect(styles).toContain('.workflow-strip span[data-state="pending"]');
     expect(styles).toContain(".guide-item { display: grid; grid-template-columns: auto minmax(0, 1fr);");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
     expect(styles).toContain("button { min-height: 40px;");
     expect(styles).toContain(".cli-handoff code { min-width: 0; overflow: auto;");
     expect(styles).toContain("white-space: pre-wrap;");
     expect(styles).toContain(".hero { background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 250, 244, 0.88)), linear-gradient(135deg, rgba(109, 57, 32, 0.06), transparent 52%);");
+  });
+
+  it("keeps popup workflow steps stateful for OAuth, parse, translate, and download", () => {
+    const popupSource = readFileSync(resolve("src/popup/index.ts"), "utf-8");
+
+    expect(popupSource).toContain('type WorkflowState = "pending" | "active" | "done"');
+    expect(popupSource).toContain("function updateWorkflowState()");
+    expect(popupSource).toContain("setWorkflowStep(workflowAuthEl, isSignedIn ? \"done\" : \"active\")");
+    expect(popupSource).toContain("setWorkflowStep(workflowParseEl, hasParsedArtifact ? \"done\" : isSignedIn ? \"active\" : \"pending\")");
+    expect(popupSource).toContain("setWorkflowStep(workflowTranslateEl, hasTranslatedArtifact ? \"done\" : isTranslating || hasParsedArtifact ? \"active\" : \"pending\")");
+    expect(popupSource).toContain("setWorkflowStep(workflowDownloadEl, hasDownloadableArtifact ? \"done\" : hasParsedArtifact || hasTranslatedArtifact ? \"active\" : \"pending\")");
+    expect(popupSource).toContain('workflowDone: "done"');
+    expect(popupSource).toContain('workflowDone: "完成"');
   });
 });
