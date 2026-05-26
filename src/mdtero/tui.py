@@ -51,6 +51,14 @@ def build_dashboard_model(
         next_steps=next_steps,
     )
     extension_handoff = _extension_handoff_payload(commands)
+    launch_bundle = _launch_bundle_payload(
+        cfg=cfg,
+        project=project,
+        rag=rag,
+        commands=commands,
+        next_steps=next_steps,
+        extension_handoff=extension_handoff,
+    )
     handoff = {
         "ready_artifacts": briefing["ready_artifacts"],
         "blocked_items": briefing["blocked_items"],
@@ -123,6 +131,7 @@ def build_dashboard_model(
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "extension_handoff": extension_handoff,
+        "launch_bundle": launch_bundle,
         "handoff": handoff,
         "command_palette": command_palette,
         "commands": commands,
@@ -146,6 +155,7 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
         _mcp_tool_plan_panel(model),
         _command_palette_panel(model),
+        _launch_bundle_panel(model),
         Columns([_operator_panel(model), _extension_handoff_panel(model)], equal=True, expand=True),
         _shortcuts_panel(model),
         _handoff_panel(model),
@@ -489,6 +499,92 @@ def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
     ]
 
 
+def _launch_bundle_payload(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    commands: dict[str, str],
+    next_steps: list[str],
+    extension_handoff: dict[str, Any],
+) -> dict[str, Any]:
+    setup_commands = [
+        commands.get("doctor") or "mdtero doctor --json",
+        commands.get("setup") or WORKSTATION_SETUP_COMMAND,
+        commands.get("login_api_key") or HEADLESS_SETUP_COMMAND,
+        commands.get("agent_detect") or "mdtero agent detect --json",
+        commands.get("agent_install") or "mdtero agent install --interactive",
+    ]
+    parse_commands = [
+        commands.get("discover") or 'mdtero discover "your topic" --json',
+        commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        commands.get("parse_batch") or "mdtero parse --batch ./papers --wait --timeout 300 --json",
+    ]
+    project_commands = [
+        commands.get("project_init_named") or commands.get("project_init") or "mdtero project init --name literature-review",
+        commands.get("parse_pending") or "mdtero project parse --wait --timeout 300 --json",
+        commands.get("refresh") or "mdtero project refresh --wait --timeout 300 --json",
+        commands.get("download_markdown") or "mdtero project download --output-dir ./mdtero-output --json",
+        commands.get("zotero_import") or "mdtero zotero import --json",
+        commands.get("zotero_sync") or "mdtero zotero sync --json",
+    ]
+    rag_commands = _dedupe_commands([
+        "mdtero project ingest --json" if project.server_project_id else "mdtero rag build --json",
+        *(rag.get("next_commands") if isinstance(rag.get("next_commands"), list) else []),
+        commands.get("rag_status") or "mdtero rag status --json",
+        commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json",
+        commands.get("rag_query") or 'mdtero rag query "<question>" --build-if-needed --json',
+        commands.get("mcp_briefing") or "mdtero mcp briefing --json",
+        commands.get("serve_mcp") or "mdtero mcp serve",
+    ])
+    groups = [
+        {
+            "label": "Setup",
+            "purpose": "Authenticate, verify the local runtime, and install agent skills when a workspace is detected.",
+            "commands": _dedupe_commands(setup_commands if not cfg.is_authenticated else [setup_commands[0], *setup_commands[3:]]),
+        },
+        {
+            "label": "Parse",
+            "purpose": "Submit one DOI/URL, local file, or batch directory with traceable task status.",
+            "commands": _dedupe_commands(parse_commands),
+        },
+        {
+            "label": "Project",
+            "purpose": "Manage the local library, refresh task state, download artifacts, and sync Zotero metadata/results.",
+            "commands": _dedupe_commands(project_commands),
+        },
+        {
+            "label": "RAG + MCP",
+            "purpose": "Create or reuse the server Voyage RAG project, query grounded evidence, then brief local FastMCP agents.",
+            "commands": rag_commands,
+        },
+        {
+            "label": "Extension handoff",
+            "purpose": "Recover from publisher challenges, campus sessions, or browser-saved files without losing reason_code/action_hint.",
+            "commands": _dedupe_commands([str(command) for command in extension_handoff.get("commands") or []]),
+        },
+    ]
+    return {
+        "copy_hint": "Copy one group into a terminal or agent prompt; commands are ordered and JSON-first where possible.",
+        "primary_group": "Setup" if not cfg.is_authenticated else ("RAG + MCP" if project.papers else "Parse"),
+        "next_commands": _dedupe_commands(next_steps),
+        "groups": groups,
+    }
+
+
+def _dedupe_commands(commands: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for command in commands:
+        value = str(command or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
 def _command_palette_payload(
     *,
     cfg: MdteroConfig,
@@ -724,6 +820,23 @@ def _command_palette_panel(model: dict[str, Any]) -> Panel:
             style=style,
         )
     return Panel(table, title="Command Palette", border_style="white")
+
+
+def _launch_bundle_panel(model: dict[str, Any]) -> Panel:
+    bundle = model.get("launch_bundle") if isinstance(model.get("launch_bundle"), dict) else {}
+    groups = bundle.get("groups") if isinstance(bundle.get("groups"), list) else []
+    table = Table("Group", "Purpose", "Commands", expand=True)
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        commands = group.get("commands") if isinstance(group.get("commands"), list) else []
+        command_text = "\n".join(str(command) for command in commands[:6])
+        table.add_row(str(group.get("label") or "-"), str(group.get("purpose") or "-")[:110], command_text or "-")
+    hint = Table.grid(expand=True)
+    hint.add_column(ratio=1)
+    hint.add_row(str(bundle.get("copy_hint") or "Copy a command group into your terminal or agent prompt."))
+    hint.add_row(f"Primary group: {bundle.get('primary_group') or '-'}")
+    return Panel(Group(hint, table), title="Launch Bundles", border_style="yellow")
 
 
 def _brief_item_label(item: dict[str, Any]) -> str:
