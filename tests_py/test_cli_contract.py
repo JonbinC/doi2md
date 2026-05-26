@@ -4971,6 +4971,8 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "source_nodes" in combined
     assert "evidence_pack.context_markdown" in combined
     assert "next_commands" in combined
+    assert "primary_failure" in combined
+    assert "failed_steps" in combined
 
 
 def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
@@ -4987,10 +4989,10 @@ def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
     assert "reason_code=rag_query_succeeded" in report
     assert "citation_count=5" in report
     assert "match_count=5" in report
-    assert "196 passed" in report
-    assert "141 passed" in report
-    assert "241 passed" in report
-    assert "99 passed" in report
+    assert "202 passed" in report
+    assert "138 passed" in report
+    assert "248 passed" in report
+    assert "101 passed" in report
     assert "npm run smoke:routes -- --base-url <production-url> --json" in report
 
 

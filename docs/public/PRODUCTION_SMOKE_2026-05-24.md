@@ -64,12 +64,12 @@ This re-smoke proves the current public CLI can complete the arXiv source-first 
 
 ## Repository Gates Re-run After Cleanup
 
-- Backend: latest release gate passed with `241 passed` across public assets, deploy assets, v1 API, usage/tasks, translation, script layout, source connectivity, parser policy, route acceptance, PDF upload proof, backend production smoke tooling, public route-contract cleanup, and parser pipeline surfaces.
+- Backend: latest release gate passed with `248 passed` across public assets, deploy assets, v1 API, usage/tasks, translation, script layout, source connectivity, parser policy, route acceptance, PDF upload proof, backend production smoke tooling, public route-contract cleanup, and parser pipeline surfaces.
 - Backend secret guard: passed; no tracked `.env.yaml`, private keys, or signed temporary URL tokens were found.
-- Public CLI: latest release gate passed with `196 passed` for `tests_py`; `python3 -m compileall -q src/mdtero` passed; `python3 scripts/ci/secret_guard.py` passed.
+- Public CLI: latest release gate passed with `202 passed` for `tests_py`; `python3 -m compileall -q src/mdtero` passed; `python3 scripts/ci/secret_guard.py` passed.
 - Public package build: `uv build` produced `mdtero-0.2.0a9` sdist and wheel; installing the wheel in a temporary venv and running `mdtero --version` returned `mdtero 0.2.0a9`.
-- Public extension: latest release gate passed with `141 passed` for the full extension test suite; `npm run build` passed and refreshed `extension/dist`; `python3 scripts/ci/extension_dist_smoke.py` passed for the packaged MV3 bundle. The popup/background tests prove CLI handoff commands for failed local PDF/EPUB uploads, and the dist smoke now rejects retired publisher-specific action names.
-- Website/dashboard: latest release gate passed with `99 passed`; `npm run build` passed and verified 11 production route artifacts. The deploy route smoke command is `npm run smoke:routes -- --base-url <production-url> --json`.
+- Public extension: latest release gate passed with `138 passed` for the full extension test suite; `npm run build` passed and refreshed `extension/dist`; `python3 scripts/ci/extension_dist_smoke.py` passed for the packaged MV3 bundle. The popup/background tests prove CLI handoff commands for failed local PDF/EPUB uploads, and the dist smoke now rejects retired publisher-specific action names.
+- Website/dashboard: latest release gate passed with `101 passed`; `npm run build` passed and verified 11 production route artifacts. The deploy route smoke command is `npm run smoke:routes -- --base-url <production-url> --json`.
 - Website deploy workflow now runs route smoke against both the Vercel deployment URL and `https://mdtero.com` after deploy, so missing markers such as `/docs/install.html` without `evidence_pack.context_markdown` fail the deploy job instead of slipping through as a stale production build.
 - `git diff --check` passed in backend, public, and nextmdtero.
 
