@@ -70,12 +70,23 @@ function describeErrorPayload(payload) {
   const message = firstString(record.error_message, record.message, record.detail);
   const reasonCode = firstString(record.reason_code, record.error_code);
   const actionHint = firstString(record.action_hint);
-  const nextCommand = Array.isArray(record.next_commands) ? normalizeCliHandoffCommand(record.next_commands.map((value) => String(value || "").trim()).find(Boolean)) : "";
+  const nextCommands = nextCommandsFromErrorDetail(record.next_commands);
   if (message) parts.push(message);
   if (reasonCode) parts.push(`Reason: ${reasonCode}`);
   if (actionHint) parts.push(`Next: ${actionHint}`);
-  if (nextCommand) parts.push(`Command: ${nextCommand}`);
+  if (nextCommands.length === 1) {
+    parts.push(`Command: ${nextCommands[0]}`);
+  } else if (nextCommands.length > 1) {
+    parts.push(`Commands: ${nextCommands.map((command, index) => `${index + 1}. ${command}`).join(" ")}`);
+  }
   return redactSensitiveText(parts.join(" "));
+}
+function nextCommandsFromErrorDetail(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const commands = value.map((command) => normalizeCliHandoffCommand(String(command || "").trim())).filter((command) => command.length > 0);
+  return Array.from(new Set(commands));
 }
 function firstString(...values) {
   for (const value of values) {
