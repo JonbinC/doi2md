@@ -18,11 +18,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Forgejo secrets used by this workflow:"
-          echo "- INFISICAL_SERVICE_TOKEN"
-          echo "- INFISICAL_PROJECT_ID"
-          echo "- INFISICAL_ENV"
-          echo "- MDTERO_PUBLIC_SMOKE_KEY"
+          echo "Forgejo secrets used by this workflow: none."
+          echo "This lightweight smoke does not read Infisical, provider keys, or Mdtero API keys."
 
       - name: Run lightweight public client checks
         shell: bash

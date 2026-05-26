@@ -16,6 +16,8 @@ git push forgejo <branch>
 git push forgejo --tags
 ```
 
+Do not push GitHub `origin` during private platform migration work.
+
 ## Forgejo Actions
 
 Forgejo Actions is manual-first during phase 1.
@@ -71,6 +73,15 @@ The separate `Public Production Smoke` workflow is also manual-only. It exists f
 - Use `smoke_scope=core` for discovery, DOI parse, artifact download, and server-side Voyage RAG. Use `smoke_scope=full` only when translation provider health should be included in the release gate.
 - The job runs `mdtero smoke --api-base <api_base> --json --timeout 600 --interval 2` from a temporary directory through `uv run --project`, then removes the smoke directory.
 - Missing `MDTERO_API_KEY` exits with code `78`; it should be treated as missing operator setup, not a product regression.
+
+## Browser extension smoke boundary
+
+The browser extension remains in this repo and is validated by the manual `Public CLI and Extension CI` workflow.
+
+- `check_scope=smoke` verifies the non-secret public contracts.
+- `check_scope=full` runs extension tests, builds the MV3 bundle, and executes `scripts/ci/extension_dist_smoke.py`.
+- The extension must use website OAuth, current page/DOI parse, PDF/EPUB upload, task polling, translation, download, and CLI handoff only.
+- The extension must not ship Python dependencies, native messaging helpers, publisher API keys, Infisical credentials, or backend provider secrets.
 
 ## Secrets
 
