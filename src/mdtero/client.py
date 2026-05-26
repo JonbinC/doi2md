@@ -188,6 +188,9 @@ class MdteroClient:
     def create_project(self, name: str, *, description: str | None = None) -> dict[str, Any]:
         return self._request("POST", "/api/v1/projects", json={"name": name, "description": description})
 
+    def list_projects(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/projects")
+
     def import_task_to_project(self, project_id: str, task_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/projects/{project_id}/tasks/{task_id}/import")
 
