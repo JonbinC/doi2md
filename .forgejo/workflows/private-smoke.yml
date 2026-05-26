@@ -1,0 +1,34 @@
+name: Private Public Client Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: linux-small
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List required secret names
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Forgejo secrets used by this workflow:"
+          echo "- INFISICAL_SERVICE_TOKEN"
+          echo "- INFISICAL_PROJECT_ID"
+          echo "- INFISICAL_ENV"
+          echo "- MDTERO_PUBLIC_SMOKE_KEY"
+
+      - name: Run lightweight public client checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 scripts/ci/secret_guard.py
+          python3 scripts/ci/forgejo_workflow_policy.py
+          python3 -m compileall -q src/mdtero scripts
