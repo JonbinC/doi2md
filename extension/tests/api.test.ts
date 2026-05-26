@@ -326,6 +326,44 @@ describe("createApiClient", () => {
     );
   });
 
+  it("preserves multi-step backend next commands in extension error handoff", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            error_message: "Project RAG is not ready.",
+            reason_code: "server_project_not_linked",
+            action_hint: "Create and bind a server project before querying RAG.",
+            next_commands: [
+              "mdtero project create-server --json",
+              "mdtero project ingest --json",
+              "mdtero rag build --json",
+              "mdtero rag status --json"
+            ]
+          }
+        }),
+        {
+          status: 409,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      )
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    await expect(client.getTask("task-123")).rejects.toThrow(
+      "Project RAG is not ready. Reason: server_project_not_linked Next: Create and bind a server project before querying RAG. Commands: 1. mdtero project create-server --json 2. mdtero project ingest --json 3. mdtero rag build --json 4. mdtero rag status --json"
+    );
+  });
+
   it("refuses parse requests when the user is not signed in", async () => {
     const fetchMock = vi.mocked(fetch);
 
