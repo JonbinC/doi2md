@@ -1734,7 +1734,7 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
 
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
     route = {
-        "route_kind": "browser_capture_first",
+        "route_kind": "browser_capture_required",
         "acquisition_mode": "native_source_adapter",
         "requires_raw_upload": False,
         "action_sequence": ["fetch_remote_html"],
@@ -5663,7 +5663,7 @@ def test_workflow_trace_marks_completed_client_acquisition():
     trace = parse_trace_from_route(
         "10.1000/demo",
         {
-            "route_kind": "browser_capture_first",
+            "route_kind": "browser_capture_required",
             "acquisition_mode": "native_source_adapter",
             "requires_raw_upload": False,
             "action_sequence": ["fetch_remote_html"],
@@ -5994,6 +5994,7 @@ jobs:
     failures = policy.check_all(tmp_path)
     assert failures[".forgejo/workflows/bad.yml"] == [
         "missing workflow_dispatch",
+        "not workflow_dispatch-only",
         "missing linux-small runner",
         "missing secret-name listing step",
         "missing Forgejo secret-name summary",
@@ -6105,6 +6106,10 @@ def test_extension_contract_prefers_browser_source_over_retired_helper_action():
     assert "requiresHelper?: boolean" not in shared_contract
     assert 'action_sequence: ["fetch_browser_source"]' in ssot_tests
     assert 'action_sequence: ["fetch_browser_source"]' in background_tests
+    assert 'route_kind: "browser_capture_required"' in ssot_tests
+    assert 'route_kind: "browser_capture_required"' in background_tests
+    assert "browser_capture_first" not in ssot_tests
+    assert "browser_capture_first" not in background_tests
     assert 'fetch_helper_source' not in ssot_tests
     assert "html_helper_first" not in ssot_tests
     assert "requiresHelper" not in ssot_tests
