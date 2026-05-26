@@ -5,7 +5,7 @@ This directory keeps stable public-facing notes for the Mdtero launch surfaces.
 The current public product shape is:
 
 - Python/uv CLI and TUI from `JonbinC/doi2md`.
-- Repeatable deploy smoke through `mdtero smoke --json`; it should stay non-interactive, secret-safe, and broad enough to cover discovery, DOI parse, artifact download, and server-side Voyage RAG build/status/query.
+- Repeatable deploy smoke through `mdtero smoke --json`; it should stay non-interactive, secret-safe, and broad enough to cover discovery, DOI parse, artifact download, server-side Voyage RAG build/status/query, and MCP briefing tool availability.
 - Browser extension for login, DOI/current-page parse, PDF/EPUB upload, polling, translation, and download.
 - Extension-to-CLI handoff is a public contract: when browser capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with the full CLI recovery bundle: `mdtero doctor --json`, `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`, `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`, `mdtero status <task-id> --wait --timeout 300 --json`, `mdtero download <task-id> paper_md --output-dir ./mdtero-output --json`, `mdtero project ingest --json`, `mdtero rag query "<question>" --build-if-needed --json`, and `mdtero mcp briefing --json` so `client_acquisition`, raw upload, `reason_code`, `action_hint`, `download_artifacts`, and `next_commands` remain visible to local agents.
 - Agent skill installation through `mdtero agent install`; the npm runtime path is retired.
@@ -23,7 +23,7 @@ Do not present GROBID as a public user-selectable parser. Do not describe RAG as
 当前公开产品形态：
 
 - `JonbinC/doi2md` 提供 Python/uv CLI 和 TUI。
-- 上线复测使用 `mdtero smoke --json`，保持非交互、脱敏，并覆盖 discovery、DOI 解析、artifact 下载和服务端 Voyage RAG build/status/query。
+- 上线复测使用 `mdtero smoke --json`，保持非交互、脱敏，并覆盖 discovery、DOI 解析、artifact 下载、服务端 Voyage RAG build/status/query 和 MCP briefing tool 可用性。
 - 浏览器扩展负责登录、当前页/DOI 解析、PDF/EPUB 上传、轮询、翻译和下载。
 - 扩展到 CLI 的交接是公开 contract：当浏览器抓取被 publisher challenge、校园网/登录态或用户保存文件流程阻断时，继续使用完整 CLI 恢复链路：`mdtero doctor --json`、`mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`、`mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`、`mdtero status <task-id> --wait --timeout 300 --json`、`mdtero download <task-id> paper_md --output-dir ./mdtero-output --json`、`mdtero project ingest --json`、`mdtero rag query "<question>" --build-if-needed --json` 和 `mdtero mcp briefing --json`，让 `client_acquisition`、raw upload、`reason_code`、`action_hint`、`download_artifacts` 和 `next_commands` 继续对本地 agent 可见。
 - agent skill 通过 `mdtero agent install` 安装，不依赖 npm。

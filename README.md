@@ -100,7 +100,7 @@ mdtero tui
 Validated in the current alpha:
 
 - API-key login, `mdtero doctor`, `mdtero doctor --json`, and local config; JSON diagnostics include safe auth/dependency/academic/Zotero/project/RAG summaries plus `next_commands` without echoing secrets
-- deploy smoke with `mdtero smoke --json`; it creates an isolated project, runs discovery, arXiv/DOI parse with task polling, artifact download, server-side Voyage RAG build/status/query, and returns step-level `reason_code`, `action_hint`, task ids, paths, server project id, plus top-level `primary_failure`, `failed_steps`, and recovery `next_commands` when a smoke step fails
+- deploy smoke with `mdtero smoke --json`; it creates an isolated project, runs discovery, arXiv/DOI parse with task polling, artifact download, server-side Voyage RAG build/status/query, validates `mdtero mcp briefing --json` exposes `agent_briefing`, `server_rag_status`, and `rag_query`, and returns step-level `reason_code`, `action_hint`, task ids, paths, server project id, plus top-level `primary_failure`, `failed_steps`, and recovery `next_commands` when a smoke step fails
 - optional academic-key setup through either the interactive `mdtero config academic` flow or headless flags such as `--semantic-scholar-key <key> --json`; JSON output reports configured keys without echoing secrets
 - DOI/arXiv parse with task polling and Markdown/bundle download
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
@@ -193,7 +193,7 @@ mdtero mcp serve
 
 当前已经跑通 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 自动绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations`、`matches`、`source_nodes` 和 `evidence_pack.context_markdown`，方便 agent 直接引用证据并保留来源。MCP 的首选入口是 `agent_briefing`，会一次返回账户状态、项目健康、可下载成果、失败项、RAG 状态、agent skill 安装状态、下一步命令和 `mcp_tool_plan`；本地 agent 应按这个 playbook 选择 `submit_parse`、`task_status`、`download_artifact`、`request_translation`、`server_rag_status` 或 `rag_query`，并在失败时读取 `failure_fields` 中的 `reason_code`、`action_hint` 和 `next_commands`。MCP `rag_query(question)` 工具也会在需要时创建/绑定 server project、导入成功任务并触发 build，然后再查询。agent skill 安装由 Python CLI 负责，不依赖 npm。
 `mdtero doctor --json` 是给本地 agent 和上线 smoke 用的结构化入口，会返回认证、依赖、学术 key 是否配置、Zotero、项目队列、server project/RAG readiness 和下一步命令，但不会输出任何 secret。
-`mdtero smoke --json` 是上线后复测入口，会在临时项目里跑 discovery、DOI/arXiv 解析、下载、服务端 Voyage RAG build/status/query，并输出每一步的 `reason_code`、`action_hint`、task id、下载路径和 server project id；失败时顶层还会返回 `primary_failure`、`failed_steps` 和可继续执行的 `next_commands`。
+`mdtero smoke --json` 是上线后复测入口，会在临时项目里跑 discovery、DOI/arXiv 解析、下载、服务端 Voyage RAG build/status/query，并验证 `mdtero mcp briefing --json` 暴露 `agent_briefing`、`server_rag_status` 和 `rag_query`；同时输出每一步的 `reason_code`、`action_hint`、task id、下载路径和 server project id，失败时顶层还会返回 `primary_failure`、`failed_steps` 和可继续执行的 `next_commands`。
 CLI JSON 和 MCP payload 会在交给本地 agent 前清理带签名的 MinerU/OSS URL、Bearer/API-key header、Mdtero API key 和常见 token query 参数；`reason_code`、`action_hint`、`next_commands` 和证据字段仍会保留，方便 agent 继续执行。
 当浏览器扩展遇到 publisher challenge、校园网/机构登录态或只能由用户保存文件的场景时，把 DOI、URL 或已保存的 PDF/EPUB/XML/HTML 交给 Python CLI 继续，并保留完整交接链路：
 

@@ -295,6 +295,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             f"mdtero parse {args.doi} --trace --wait --timeout {int(args.timeout)} --json",
             f"mdtero translate <task-id-or-paper.md> --to {args.translate_to} --wait --timeout {int(args.timeout)} --json",
             "mdtero rag status --json",
+            "mdtero mcp briefing --json",
         ],
     }
 
@@ -442,6 +443,35 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             _smoke_add_step(payload, "rag", "failed", server_project_id=payload.get("server_project_id"), **_smoke_exception_payload(exc, default_reason="rag_failed"))
     else:
         _smoke_add_step(payload, "rag", "skipped", reason_code="parse_not_succeeded")
+
+    if args.skip_rag:
+        _smoke_add_step(payload, "mcp_briefing", "skipped", reason_code="rag_skipped")
+    elif parse_task and parse_task.get("status") == "succeeded":
+        try:
+            from .mcp import build_agent_briefing
+
+            briefing = build_agent_briefing(workdir)
+            mcp_tools = briefing.get("mcp_tools") if isinstance(briefing.get("mcp_tools"), list) else []
+            missing_tools = [tool for tool in ("agent_briefing", "server_rag_status", "rag_query") if tool not in mcp_tools]
+            if missing_tools:
+                raise RuntimeError(f"mcp_briefing_missing_tools:{','.join(missing_tools)}")
+            _smoke_add_step(
+                payload,
+                "mcp_briefing",
+                "succeeded",
+                server_project_id=payload.get("server_project_id"),
+                reason_code=briefing.get("health", {}).get("rag_reason_code") if isinstance(briefing.get("health"), dict) else None,
+                project_bridge=briefing.get("project_bridge"),
+                rag=briefing.get("rag"),
+                mcp_tools=mcp_tools,
+                mcp_tool_plan=briefing.get("mcp_tool_plan"),
+                recommended_next_commands=briefing.get("recommended_next_commands"),
+            )
+        except Exception as exc:
+            terminal_failures += 1
+            _smoke_add_step(payload, "mcp_briefing", "failed", server_project_id=payload.get("server_project_id"), **_smoke_exception_payload(exc, default_reason="mcp_briefing_failed"))
+    else:
+        _smoke_add_step(payload, "mcp_briefing", "skipped", reason_code="parse_not_succeeded")
 
     payload["status"] = "succeeded" if terminal_failures == 0 else "failed"
     payload["failed_count"] = terminal_failures
@@ -1957,7 +1987,10 @@ def _smoke_step_next_commands(step: dict[str, Any]) -> list[str]:
 
 def _smoke_exception_payload(exc: Exception, *, default_reason: str) -> dict[str, Any]:
     detail = _http_error_detail(exc)
+    message = str(detail.get("message") or exc)
     reason_code = str(detail.get("reason_code") or detail.get("error_code") or default_reason)
+    if default_reason == "mcp_briefing_failed" and message.startswith("mcp_briefing_missing_tools"):
+        reason_code = message
     status_code = _exception_status_code(exc)
     if status_code in {401, 403} or reason_code in {"authentication_required", "missing_or_invalid_credentials"}:
         reason_code = "authentication_required" if status_code != 403 else "forbidden"
@@ -1967,7 +2000,7 @@ def _smoke_exception_payload(exc: Exception, *, default_reason: str) -> dict[str
         "error_code": reason_code,
         "error_type": exc.__class__.__name__,
         "http_status": status_code,
-        "message": str(detail.get("message") or exc),
+        "message": message,
         "action_hint": action_hint,
         "next_commands": _detail_next_commands(detail) or _smoke_failure_next_commands(reason_code),
     }
@@ -1983,14 +2016,18 @@ def _smoke_action_hint(reason_code: str) -> str:
         return "Check backend translation provider diagnostics, quota, and API keys, then rerun `mdtero smoke --json`."
     if reason_code in {"task_wait_timeout", "rag_wait_timeout"}:
         return "The backend is still processing. Rerun smoke with a larger --timeout, or poll the task/RAG status directly."
+    if reason_code == "mcp_briefing_failed" or reason_code.startswith("mcp_briefing_missing_tools"):
+        return "Check local project state with `mdtero mcp briefing --json`; the CLI should expose agent_briefing, server_rag_status, and rag_query before launch."
     return "Inspect this smoke step and rerun after fixing the reported backend or client path."
 
 
 def _smoke_failure_next_commands(reason_code: str) -> list[str]:
     if reason_code in {"auth_missing", "authentication_required", "unauthorized", "forbidden"}:
-        return ["mdtero setup --api-key", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
+        return ["mdtero setup --api-key --json", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
     if reason_code in {"rag_index_not_built", "project_has_no_chunks", "server_project_import_failed", "rag_failed"}:
-        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json"]
+    if reason_code == "mcp_briefing_failed" or reason_code.startswith("mcp_briefing_missing_tools"):
+        return ["mdtero mcp briefing --json", "mdtero rag status --json", "mdtero mcp serve"]
     if reason_code in {"parse_failed", "task_wait_timeout"}:
         return ["mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 600 --json", "mdtero status <task-id> --json"]
     if reason_code.startswith("translation_provider") or reason_code in {"translate_failed", "translation_task_id_missing"}:
