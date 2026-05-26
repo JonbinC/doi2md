@@ -48,7 +48,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3`
 - poll status: `mdtero status <task-id> --wait --timeout 300 --json`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`
-- translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --json` or `mdtero translate <paper.md> --to zh-CN --json`
+- translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json` or `mdtero translate <paper.md> --to zh-CN --wait --timeout 600 --json`
 - build server project RAG, automatically creating/binding/importing when needed: `mdtero rag build --json`
 - query server project RAG after build: `mdtero rag query "<question>" --build-if-needed --json`
 - print local agent context without starting a server: `mdtero mcp briefing --json`

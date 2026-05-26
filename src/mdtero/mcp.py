@@ -124,7 +124,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "parse_pending": "mdtero project parse --wait --timeout 300 --json",
         "refresh": "mdtero project refresh --wait --timeout 300 --json",
         "download_markdown": "mdtero project download --output-dir ./mdtero-output --json",
-        "translate": "mdtero translate <task-id-or-markdown-file> --to zh-CN --json",
+        "translate": "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json",
         "zotero_import": "mdtero zotero import --json",
         "zotero_sync": "mdtero zotero sync --json",
         "rag_status": "mdtero rag status --json",

@@ -84,8 +84,8 @@ mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
 mdtero parse --batch ./papers --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --json
-mdtero translate <parse-task-id> --to zh-CN --json
-mdtero translate paper.md --to zh-CN --json
+mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json
+mdtero translate paper.md --to zh-CN --wait --timeout 600 --json
 mdtero rag status --json
 mdtero rag build --json
 mdtero rag query "What are the strongest findings?" --build-if-needed --json
@@ -165,7 +165,7 @@ mdtero project init --name literature-review
 mdtero project status --json
 mdtero project import-bib references.bib --json
 mdtero project parse --wait --timeout 300 --json
-mdtero translate <parse-task-id> --to zh-CN --json
+mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json
 mdtero rag status --json
 mdtero rag build --json
 mdtero rag query "这批论文的核心方法是什么？" --build-if-needed --json
