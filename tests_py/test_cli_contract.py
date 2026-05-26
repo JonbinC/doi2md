@@ -17,7 +17,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
+from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -2973,6 +2973,17 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
         "mdtero rag build --json",
     ]
     assert status["next_actions"]["commands"]["mcp_briefing"] == "mdtero mcp briefing --json"
+    assert status["project_bridge"]["status"] == "bound"
+    assert status["project_bridge"]["server_project"]["id"] == "42"
+    assert status["project_bridge"]["local_project_name_is_server_project_id"] is False
+    assert status["project_bridge"]["bridge_commands"] == [
+        "mdtero doctor --json",
+        "mdtero project status --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
+        "mdtero mcp briefing --json",
+    ]
     assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
     assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
     assert commands["commands"]["parse_batch"] == "mdtero parse --batch <directory> --wait --timeout 300 --json"
@@ -2998,6 +3009,8 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert rag["ready"] is True
     assert rag["status"] == "ready"
     assert rag["reason_code"] == "ready"
+    assert rag["project_bridge"]["status"] == "bound"
+    assert rag["project_bridge"]["binding_source"] == "local_project_file"
     assert rag["next_commands"] == [
         "mdtero project ingest --json",
         "mdtero rag status --json",
@@ -3019,6 +3032,9 @@ def test_mcp_rag_context_guides_unlinked_ready_project(tmp_path: Path):
     assert rag["ready"] is False
     assert rag["reason_code"] == "server_project_not_linked"
     assert rag["server_project_id"] is None
+    assert rag["project_bridge"]["status"] == "needs_server_binding"
+    assert rag["project_bridge"]["server_project"]["linked"] is False
+    assert rag["project_bridge"]["next_commands"][:2] == ["mdtero project status --json", "mdtero rag build --json"]
     assert rag["ready_for_ingest_count"] == 1
     assert rag["next_commands"] == [
         "mdtero rag build --json",
@@ -3061,7 +3077,40 @@ def test_mcp_project_status_guides_uninitialized_agent_workflows(tmp_path: Path)
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
     assert status["next_actions"]["commands"]["project_init_named"] == "mdtero project init --name <name>"
+    assert status["project_bridge"]["status"] == "not_initialized"
+    assert status["project_bridge"]["next_commands"][:3] == [
+        "mdtero doctor --json",
+        "mdtero project init --name <name>",
+        "mdtero project status --json",
+    ]
     assert "project, RAG, or MCP workflows" in status["action_hint"]
+
+
+def test_mcp_project_bridge_contract_for_agents(tmp_path: Path):
+    uninitialized = build_project_bridge(tmp_path)
+    assert uninitialized["status"] == "not_initialized"
+    assert uninitialized["reason_code"] == "project_not_initialized"
+    assert uninitialized["local_project"]["initialized"] is False
+    assert uninitialized["server_project"]["linked"] is False
+    assert uninitialized["local_project_name_is_server_project_id"] is False
+
+    init_project(tmp_path, name="bridge-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    unlinked = build_project_bridge(tmp_path)
+    assert unlinked["status"] == "needs_server_binding"
+    assert unlinked["reason_code"] == "server_project_not_linked"
+    assert unlinked["local_project"]["name"] == "bridge-demo"
+    assert unlinked["server_project"]["id"] is None
+    assert "mdtero rag build --json" in unlinked["next_commands"]
+
+    bind_server_project(tmp_path, "server-42")
+    linked = build_project_bridge(tmp_path)
+    assert linked["status"] == "bound"
+    assert linked["reason_code"] == "server_project_linked"
+    assert linked["server_project"]["id"] == "server-42"
+    assert linked["server_project"]["provider"] == "voyage"
+    assert linked["binding_source"] == "local_project_file"
+    assert linked["bridge_commands"].count("mdtero rag status --json") == 2
 
 
 def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_path: Path):
@@ -3126,6 +3175,10 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["rag"]["agent_summary"]["provider_state"] == "configured"
     assert briefing["rag"]["agent_summary"]["provider_configured"] is True
     assert briefing["rag"]["agent_summary"]["embedding_model"] == "voyage-test"
+    assert briefing["project_bridge"]["status"] == "bound"
+    assert briefing["project_bridge"]["server_project"]["id"] == "42"
+    assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
+    assert briefing["project_bridge"]["bridge_commands"][-1] == "mdtero mcp briefing --json"
     assert briefing["agents"]["detected_count"] == 1
     assert briefing["agents"]["installed_count"] == 0
     assert briefing["agents"]["pending_install_targets"] == ["codex"]
@@ -5307,6 +5360,7 @@ def test_public_script_surface_is_ci_only():
     repo_root = Path(__file__).resolve().parents[1]
     expected = {
         "scripts/ci/extension_dist_smoke.py",
+        "scripts/ci/forgejo_workflow_policy.py",
         "scripts/ci/private_platform_preflight.sh",
         "scripts/ci/release_gate.sh",
         "scripts/ci/secret_guard.py",
