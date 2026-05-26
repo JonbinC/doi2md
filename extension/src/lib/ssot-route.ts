@@ -6,6 +6,7 @@ import type {
 } from "@mdtero/shared";
 
 import { executeAction } from "./action-executor";
+import { buildCliParseCommand } from "./cli-handoff";
 
 export interface SsotPageContext {
   tabId?: number;
@@ -64,7 +65,7 @@ export async function executeSsotActionSequence(
       return {
         success: false,
         error: String(error),
-        nextCommand: `mdtero parse ${JSON.stringify(context.input)} --trace --wait --timeout 300 --json`,
+        nextCommand: buildCliParseCommand(context.input),
       };
     }
   }
@@ -90,7 +91,7 @@ export async function executeSsotActionSequence(
           return { success: true, taskId: task.task_id, task };
         } catch (error) {
           if (routePlan.fail_closed) {
-            return { success: false, error: String(error), nextCommand: result.nextCommand };
+            return { success: false, error: String(error), nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
           }
           continue;
         }
@@ -109,14 +110,14 @@ export async function executeSsotActionSequence(
         requiresBrowserCapture: result.requiresBrowserCapture,
         requiresUpload: result.requiresUpload,
         error: result.error,
-        nextCommand: result.nextCommand,
+        nextCommand: result.nextCommand || buildCliParseCommand(context.input),
       };
     }
 
     if (routePlan.fail_closed) {
-      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand };
+      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
     }
   }
 
-  return { success: false, error: "No executable action succeeded" };
+  return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
 }
