@@ -3886,6 +3886,7 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
     assert status["server_project_id"] == "42"
     assert status["readiness"] == {
         "ready_for_query": True,
+        "readiness_status": "ready",
         "can_build": True,
         "needs_ingest": False,
         "needs_build": False,
@@ -3906,6 +3907,7 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "provider_configured": True,
         "embedding_model": "voyage-test",
         "ready_for_query": True,
+        "readiness_status": "ready",
         "next_step": "query",
         "document_count": 0,
         "embedded_count": 5,
@@ -3915,6 +3917,66 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
     }
     assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
+
+
+def test_mcp_server_rag_status_treats_needs_build_as_waiting(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_fetcher(project_id):
+        assert project_id == "42"
+        return {
+            "status": "not_ready",
+            "reason_code": "rag_index_not_built",
+            "selected_provider": "voyage",
+            "provider_state": "configured",
+            "provider_configured": True,
+            "embedding_model": "voyage-4",
+            "summary": {"document_count": 1, "chunk_count": 12, "embedded_count": 0, "pending_embedding_count": 12},
+            "action_hint": "Build the server project index before querying.",
+        }
+
+    status = build_server_rag_status(tmp_path, fetcher=fake_fetcher)
+    briefing = build_agent_briefing(tmp_path, rag_status_fetcher=fake_fetcher, agent_root=tmp_path)
+
+    assert status["readiness"]["readiness_status"] == "waiting"
+    assert status["readiness"]["ready_for_query"] is False
+    assert status["readiness"]["needs_build"] is True
+    assert status["readiness"]["provider_blocked"] is False
+    assert status["readiness"]["next_step"] == "build"
+    assert status["agent_summary"]["readiness_status"] == "waiting"
+    assert status["agent_summary"]["next_step"] == "build"
+    assert status["next_commands"][:3] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert "Build the server project index" in status["action_hint"]
+    assert briefing["health"]["rag_reason_code"] == "rag_index_not_built"
+    assert briefing["rag"]["agent_summary"]["readiness_status"] == "waiting"
+    assert "mdtero rag build --json" in briefing["recommended_next_commands"]
+
+
+def test_mcp_server_rag_status_treats_voyage_not_configured_as_blocked(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_fetcher(project_id):
+        assert project_id == "42"
+        return {
+            "status": "failed",
+            "reason_code": "voyage_not_configured",
+            "selected_provider": "voyage",
+            "provider_state": "not_configured",
+            "provider_configured": False,
+            "action_hint": "Configure VOYAGE_API_KEY on the backend before querying.",
+        }
+
+    status = build_server_rag_status(tmp_path, fetcher=fake_fetcher)
+
+    assert status["readiness"]["readiness_status"] == "blocked"
+    assert status["readiness"]["provider_blocked"] is True
+    assert status["readiness"]["next_step"] == "check_backend_rag_provider"
+    assert status["agent_summary"]["readiness_status"] == "blocked"
+    assert "VOYAGE_API_KEY" not in status.get("action_hint", "")
 
 
 def test_mcp_server_rag_status_handles_server_unavailable(tmp_path: Path):
