@@ -3806,6 +3806,12 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert "agent_briefing" in model["mcp"]["tools"]
+    assert model["mcp"]["task_tools"] == [
+        {"tool": "submit_parse", "purpose": "Submit DOI/URL parse and optionally wait for completion"},
+        {"tool": "task_status", "purpose": "Poll task status and sync local project state"},
+        {"tool": "request_translation", "purpose": "Translate parse task or Markdown with provider-attempt diagnostics"},
+        {"tool": "rag_query", "purpose": "Bootstrap/query server-side Voyage RAG with evidence pack"},
+    ]
     assert model["extension_handoff"]["commands"][0] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
     assert model["extension_handoff"]["commands"][1] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
     assert "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources" in model["extension_handoff"]["cli_scope"]
@@ -3833,6 +3839,9 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
         for item in model["command_palette"]
     )
     assert any(item["command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" for item in model["command_palette"])
+    assert any(item["area"] == "MCP" and item["command"] == "submit_parse" for item in model["command_palette"])
+    assert any(item["area"] == "MCP" and item["command"] == "task_status" for item in model["command_palette"])
+    assert any(item["area"] == "MCP" and item["command"] == "request_translation" for item in model["command_palette"])
     assert any(item["area"] == "Extension" and item["use"] == "Handoff challenged page or saved file to CLI" for item in model["command_palette"])
     assert any(item["area"] == "Extension" and item["use"] == "Upload a browser-saved PDF/EPUB/XML/HTML" for item in model["command_palette"])
 
@@ -3935,6 +3944,9 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "voyage-4" in output
     assert "Build the server project index before" in output
     assert "querying" in output
+    assert "submit_parse" in output
+    assert "task_status" in output
+    assert "request_translation" in output
     assert "r" in output
     assert "refresh" in output
     assert rendered is not None
