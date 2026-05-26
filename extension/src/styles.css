@@ -515,6 +515,24 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.cli-handoff-plan {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  padding-left: 18px;
+  color: var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.cli-handoff-plan[hidden] {
+  display: none;
+}
+
+.cli-handoff-plan li {
+  overflow-wrap: anywhere;
+}
+
 .action-card label {
   margin-top: 10px;
 }

@@ -35,7 +35,7 @@ import {
   getSavedResultSummary,
   getUsageStatusText,
   getTaskFailureText,
-  getTaskFailureCliHandoff,
+  buildTaskFailureCliHandoffPlan,
   getDownloadFailureText,
   buildCliParseCommand,
   buildCliFileParseCommand,
@@ -198,6 +198,7 @@ const resultEl = document.querySelector<HTMLParagraphElement>("#result");
 const cliHandoffEl = document.querySelector<HTMLDivElement>("#cli-handoff");
 const cliHandoffNoteEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-note");
 const cliHandoffCommandEl = document.querySelector<HTMLElement>("#cli-handoff-command");
+const cliHandoffPlanEl = document.querySelector<HTMLOListElement>("#cli-handoff-plan");
 const copyCliHandoffButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff");
 const artifactActionsEl = document.querySelector<HTMLElement>("#artifact-actions");
 const downloadButton = document.querySelector<HTMLButtonElement>("#download-link");
@@ -259,15 +260,35 @@ function updateWorkflowState() {
   setWorkflowStep(workflowDownloadEl, hasDownloadableArtifact ? "done" : hasParsedArtifact || hasTranslatedArtifact ? "active" : "pending");
 }
 
-function setCliHandoff(input?: string | null, commandOverride?: string | null) {
-  const command = String(commandOverride || "").trim() || buildCliParseCommand(input);
+function setCliHandoff(input?: string | null, commandOverride?: string | null, planCommands?: string[] | null) {
+  const commands = normalizeHandoffCommands(planCommands);
+  const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
   if (!cliHandoffEl || !cliHandoffCommandEl || !copyCliHandoffButton || !cliHandoffNoteEl) {
     return;
   }
   cliHandoffEl.hidden = !command;
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
+  renderCliHandoffPlan(command ? [command, ...commands] : []);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
+}
+
+function normalizeHandoffCommands(commands?: string[] | null): string[] {
+  return Array.from(new Set((commands ?? []).map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function renderCliHandoffPlan(commands: string[]) {
+  if (!cliHandoffPlanEl) {
+    return;
+  }
+  const unique = normalizeHandoffCommands(commands);
+  cliHandoffPlanEl.innerHTML = "";
+  cliHandoffPlanEl.hidden = unique.length <= 1;
+  unique.slice(1).forEach((command) => {
+    const item = document.createElement("li");
+    item.textContent = command;
+    cliHandoffPlanEl.appendChild(item);
+  });
 }
 
 async function copyCliHandoff() {
@@ -690,9 +711,9 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
         uiLanguage
       )
     );
-    const failureHandoff = getTaskFailureCliHandoff(task, currentInput, kind);
-    if (failureHandoff) {
-      setCliHandoff(currentInput, failureHandoff);
+    const failureHandoffPlan = buildTaskFailureCliHandoffPlan(task, currentInput, kind);
+    if (failureHandoffPlan.primaryCommand) {
+      setCliHandoff(currentInput, failureHandoffPlan.primaryCommand, failureHandoffPlan.commands);
     } else {
       setCliHandoff(null);
     }
