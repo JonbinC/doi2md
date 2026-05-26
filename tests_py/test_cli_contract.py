@@ -687,6 +687,7 @@ def test_doctor_reports_project_queue_and_rag_readiness(monkeypatch, tmp_path: P
     bind_server_project(tmp_path, "42")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
     add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+    monkeypatch.setattr(cli, "_doctor_server_rag_status", lambda cfg, root, *, remote_auth: None)
     monkeypatch.chdir(tmp_path)
 
     assert cli.cmd_doctor(type("Args", (), {})()) == 0
@@ -701,6 +702,45 @@ def test_doctor_reports_project_queue_and_rag_readiness(monkeypatch, tmp_path: P
     assert ("RAG readiness", "check", "run mdtero project ingest --json, then mdtero rag status --json") in rows
 
 
+def test_doctor_reports_live_server_rag_readiness(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    mock_doctor_remote_auth_ok(monkeypatch)
+    save_config(MdteroConfig(api_key="mdt_live_config"))
+    init_project(tmp_path, name="doctor-demo")
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    def fake_status(self, project_id):
+        assert project_id == "42"
+        return {
+            "project_id": "42",
+            "status": "ready",
+            "reason_code": "indexed",
+            "selected_provider": "voyage",
+            "provider_state": "configured",
+            "provider_configured": True,
+            "embedding_model": "voyage-test",
+            "readiness": {"ready_for_query": True, "next_step": "query", "chunk_count": 8, "embedded_count": 8},
+            "agent_summary": {"ready_for_query": True, "selected_provider": "voyage", "provider_state": "configured", "embedding_model": "voyage-test"},
+            "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
+        }
+
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_doctor(type("Args", (), {})()) == 0
+    output = capsys.readouterr().out
+    rows = cli._doctor_project_rows(tmp_path, server_rag_status=cli._doctor_server_rag_status(load_config(), tmp_path, remote_auth={"status": "ok"}))
+
+    assert "RAG readiness" in output
+    assert "ready" in output
+    assert "voyage-test" in output
+    assert ("RAG readiness", "ready", "indexed; query with mdtero rag query \"<question>\" --build-if-needed --json") in rows
+    assert ("Server RAG provider", "configured", "voyage / voyage-test") in rows
+
+
 def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -709,6 +749,7 @@ def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_pat
     save_config(MdteroConfig(api_key="mdt_live_config"))
     init_project(tmp_path, name="doctor-demo")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.setattr(cli, "_doctor_server_rag_status", lambda cfg, root, *, remote_auth: None)
     monkeypatch.chdir(tmp_path)
 
     assert cli.cmd_doctor(type("Args", (), {})()) == 0
@@ -739,6 +780,7 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     init_project(tmp_path, name="doctor-demo")
     bind_server_project(tmp_path, "42")
     add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    monkeypatch.setattr(cli, "_doctor_server_rag_status", lambda cfg, root, *, remote_auth: None)
     monkeypatch.chdir(tmp_path)
 
     assert cli.cmd_doctor(type("Args", (), {"json": True})()) == 0
