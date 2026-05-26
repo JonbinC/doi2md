@@ -46,7 +46,7 @@ For repo-checkout testing without installing the wheel, run the same command thr
 - `mdtero project refresh --wait --timeout 300 --json` refreshed 1 succeeded task.
 - `mdtero project download --output-dir ./out --json` downloaded `out/vaswani2017attention.zip`.
 - `mdtero rag build --json` created and bound server project `13`, imported 1 task, and returned `status=succeeded`, `reason_code=indexed`, `document_count=1`, `chunk_count=39`, `embedded_count=39`, and `embedding_model=voyage-4`.
-- `mdtero rag status --json` returned `status=ready`, `reason_code=indexed`, `pending_embedding_count=0`, and next commands for `mdtero rag query "<question>" --build-if-needed --json` and `mdtero mcp serve`.
+- `mdtero rag status --json` returned `status=ready`, `reason_code=indexed`, `pending_embedding_count=0`, and next commands for `mdtero rag query "<question>" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`.
 - `mdtero rag query "What is the core contribution of this paper?" --build-if-needed --json` returned `status=succeeded`, `reason_code=rag_query_succeeded`, `citation_count=5`, `match_count=5`, and an extractive answer grounded in the Transformer paper.
 
 This re-smoke proves the current public CLI can complete the arXiv source-first parse, artifact download, server-project bootstrap, task import, backend Voyage embedding build, RAG status, and RAG query path against production.

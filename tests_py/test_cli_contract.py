@@ -3973,7 +3973,7 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
             "selected_provider": "voyage",
             "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
             "action_hint": "Query this project or serve it over MCP.",
-            "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp serve"],
+            "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp briefing --json", "mdtero mcp serve"],
         }
 
     monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
@@ -3987,6 +3987,7 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
     assert "voyage-test" in output
     assert "Hint: Query this project or serve it over MCP." in output
     assert "mdtero rag query \"<question>\"" in output
+    assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
 
 
@@ -4237,7 +4238,7 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
                     "source_url": "https://doi.org/10.1000/rag",
                 }
             ],
-            "next_commands": ["mdtero rag status --json", "mdtero mcp serve"],
+            "next_commands": ["mdtero rag status --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
         }
 
     monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
@@ -4250,6 +4251,7 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     assert "Answer" in output
     assert "[1] Coating improves corrosion resistance." in output
     assert "Corrosion Paper:3-4 · 10.1000/rag" in output
+    assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
 
 
