@@ -123,6 +123,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "import_bib": "mdtero project import-bib <refs.bib> --json",
         "parse_pending": "mdtero project parse --wait --timeout 300 --json",
         "refresh": "mdtero project refresh --wait --timeout 300 --json",
+        "download_artifact": "mdtero download <task-id> <artifact> --output-dir ./mdtero-output --json",
         "download_markdown": "mdtero project download --output-dir ./mdtero-output --json",
         "translate": "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json",
         "zotero_import": "mdtero zotero import --json",
@@ -538,6 +539,83 @@ def request_translation_for_agent(
             except Exception:
                 pass
     return redact_sensitive_payload(result)
+
+
+def download_artifact_for_agent(
+    task_id: str,
+    project_root: Path | None = None,
+    *,
+    artifact: str | None = None,
+    output_dir: str | Path = "./mdtero-output",
+    client: Any | None = None,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    cleaned_task_id = str(task_id or "").strip()
+    commands = build_agent_commands(root)["commands"]
+    if not cleaned_task_id:
+        return {
+            "status": "failed",
+            "reason_code": "task_id_required",
+            "action_hint": "Provide a Mdtero task id before requesting an artifact download.",
+            "next_commands": ["mdtero project status --json", "mdtero project refresh --wait --timeout 300 --json"],
+        }
+
+    active_client = client or MdteroClient()
+    selected_artifact = str(artifact or "").strip()
+    task: dict[str, Any] | None = None
+    if not selected_artifact:
+        try:
+            task = active_client.task(cleaned_task_id)
+            _enrich_agent_task_status(task)
+            selected_artifact = _preferred_agent_artifact(
+                task,
+                default="translated_md" if _looks_like_translation_task(task) else "paper_md",
+            )
+        except Exception as exc:
+            return _agent_tool_exception_payload(
+                exc,
+                reason_code="artifact_selection_failed",
+                action_hint="Mdtero could not inspect the task to select a download artifact. Pass an explicit artifact name or check task status first.",
+                next_commands=[f"mdtero status {cleaned_task_id} --json", f"mdtero download {cleaned_task_id} paper_md --output-dir ./mdtero-output --json"],
+                extra={"task_id": cleaned_task_id},
+            )
+
+    resolved_output_dir = _resolve_agent_output_dir(output_dir, root)
+    try:
+        path = active_client.download(cleaned_task_id, selected_artifact, resolved_output_dir)
+    except FileNotFoundError as exc:
+        return {
+            "status": "failed",
+            "reason_code": "artifact_not_available",
+            "task_id": cleaned_task_id,
+            "artifact": selected_artifact,
+            "output_dir": str(resolved_output_dir),
+            "message": redact_sensitive_text(str(exc)),
+            "action_hint": "The selected artifact is not available for this task. Check task status for download_artifacts and preferred_artifact, then retry with that artifact name.",
+            "next_commands": [f"mdtero status {cleaned_task_id} --json", f"mdtero download {cleaned_task_id} <artifact> --output-dir ./mdtero-output --json"],
+        }
+    except Exception as exc:
+        return _agent_tool_exception_payload(
+            exc,
+            reason_code="artifact_download_failed",
+            action_hint="Artifact download failed. Check authentication, task ownership, and task status before retrying.",
+            next_commands=[f"mdtero status {cleaned_task_id} --json", f"mdtero download {cleaned_task_id} {selected_artifact} --output-dir ./mdtero-output --json", "mdtero doctor --json"],
+            extra={"task_id": cleaned_task_id, "artifact": selected_artifact, "output_dir": str(resolved_output_dir)},
+        )
+
+    payload: dict[str, Any] = {
+        "status": "downloaded",
+        "reason_code": "artifact_downloaded",
+        "task_id": cleaned_task_id,
+        "artifact": selected_artifact,
+        "path": str(path),
+        "output_dir": str(resolved_output_dir),
+        "action_hint": "Artifact downloaded. Use the local file for review, translation, Zotero notes, RAG ingest, or downstream agent work.",
+        "next_commands": _download_artifact_next_commands(cleaned_task_id, selected_artifact, commands),
+    }
+    if task is not None:
+        payload["task"] = task
+    return redact_sensitive_payload(payload)
 
 
 def _normalize_rag_query_result_for_agents(
@@ -1027,6 +1105,7 @@ def build_agent_briefing(
             "paper_context",
             "submit_parse",
             "task_status",
+            "download_artifact",
             "request_translation",
             "rag_context",
             "server_rag_status",
@@ -1087,6 +1166,27 @@ def _paper_agent_summary(paper: Any, *, include_download: bool) -> dict[str, Any
     return redact_sensitive_payload(payload)
 
 
+def _resolve_agent_output_dir(output_dir: str | Path, root: Path) -> Path:
+    path = Path(str(output_dir or "./mdtero-output")).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return path
+
+
+def _download_artifact_next_commands(task_id: str, artifact: str, commands: dict[str, Any]) -> list[str]:
+    next_commands = [
+        f"mdtero status {task_id} --json",
+        commands.get("download_artifact", "mdtero download <task-id> <artifact> --output-dir ./mdtero-output --json"),
+        commands.get("download_markdown", "mdtero project download --output-dir ./mdtero-output --json"),
+    ]
+    if artifact == "translated_md":
+        next_commands.append("mdtero project refresh --wait --timeout 300 --json")
+    else:
+        next_commands.extend([commands.get("translate", "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json"), "mdtero project ingest --json", commands.get("rag_query", "mdtero rag query \"<question>\" --build-if-needed --json")])
+    next_commands.extend([commands.get("mcp_briefing", "mdtero mcp briefing --json"), commands.get("serve_mcp", "mdtero mcp serve")])
+    return _dedupe_commands(next_commands)
+
+
 def _dedupe_commands(commands: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -1132,6 +1232,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def task_status(task_id: str, wait: bool = False, timeout: float = 300.0, interval: float = 2.0) -> dict:
         return task_status_for_agent(task_id, root, wait=wait, timeout=timeout, interval=interval)
+
+    @mcp.tool
+    def download_artifact(task_id: str, artifact: str | None = None, output_dir: str = "./mdtero-output") -> dict:
+        return download_artifact_for_agent(task_id, root, artifact=artifact, output_dir=output_dir)
 
     @mcp.tool
     def request_translation(task_id_or_markdown_path: str, target_language: str = "zh-CN", wait: bool = True, timeout: float = 600.0, interval: float = 2.0) -> dict:

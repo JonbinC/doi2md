@@ -67,6 +67,7 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
 - `submit_parse(input_value, wait=False)`: submit a DOI/URL/file handoff through the same route-aware CLI path and update the local project record; use this when the agent should start work without asking the user to copy a terminal command
 - `task_status(task_id, wait=False)`: poll a parse or translation task, sync the local project state, and return `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, and `next_commands`
+- `download_artifact(task_id, artifact=None, output_dir="./mdtero-output")`: download the preferred task artifact, or an explicit `paper_md`, `paper_bundle`, or `translated_md`, and return the local path plus next commands for translation/RAG/MCP
 - `request_translation(task_id_or_markdown_path, target_language="zh-CN", wait=False)`: request backend translation for a completed parse task or local Markdown file and return provider-attempt diagnostics when translation fails
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
