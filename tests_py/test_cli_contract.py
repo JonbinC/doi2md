@@ -3313,11 +3313,57 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["project_bridge"]["server_project"]["id"] == "42"
     assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
     assert briefing["project_bridge"]["bridge_commands"][-1] == "mdtero mcp briefing --json"
+    assert briefing["extension_handoff"] == {
+        "purpose": "Use the browser extension for OAuth/session-aware page capture and the CLI/MCP tools for local files, campus-network fetches, status polling, downloads, translation, and RAG.",
+        "browser_scope": [
+            "website OAuth login and quota display",
+            "current tab DOI/page capture",
+            "PDF/EPUB upload from the browser",
+            "task polling, translation, and artifact download",
+        ],
+        "cli_scope": [
+            "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources",
+            "local file and batch parsing",
+            "project queue/status/download/Zotero/RAG/MCP commands for local agents",
+        ],
+        "handoff_triggers": [
+            "publisher challenge or JavaScript verification page",
+            "campus-network or logged-in browser state needs manual confirmation",
+            "extension capture cannot access the current tab or direct download URL",
+            "server task returns reason_code/action_hint/next_commands for recovery",
+        ],
+        "commands": [
+            "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+            "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        ],
+        "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
+        "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
+    }
+    assert [step["step"] for step in briefing["handoff_protocol"]] == [
+        "inspect_failure",
+        "retry_source_capture",
+        "download_or_translate",
+        "build_or_query_rag",
+    ]
+    assert briefing["handoff_protocol"][0]["preserve_fields"] == [
+        "task_id",
+        "reason_code",
+        "action_hint",
+        "next_commands",
+        "download_artifacts",
+        "translation_attempts",
+    ]
+    assert briefing["handoff_protocol"][1]["commands"] == [
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+    ]
     assert briefing["agents"]["detected_count"] == 1
     assert briefing["agents"]["installed_count"] == 0
     assert briefing["agents"]["pending_install_targets"] == ["codex"]
     assert briefing["agents"]["interactive_install_command"] == "mdtero agent install --interactive"
     tool_plan = briefing["mcp_tool_plan"]
+    assert "extension_handoff" in tool_plan[0]["success_signal"]
+    assert "handoff_protocol" in tool_plan[0]["success_signal"]
     assert [step["tool"] for step in tool_plan][:2] == ["agent_briefing", "project_status"]
     assert any(step["step"] == "submit_pending_parse" and step["tool"] == "submit_parse" for step in tool_plan)
     assert any(step["step"] == "inspect_failed_task" and step["tool"] == "task_status" for step in tool_plan)

@@ -1198,6 +1198,8 @@ def build_agent_briefing(
             "next_commands": server_rag.get("next_commands", []),
         },
         "project_bridge": build_project_bridge(root),
+        "extension_handoff": _extension_handoff_payload(commands),
+        "handoff_protocol": _agent_handoff_protocol(commands),
         "agents": {
             "detected_count": len(detected_agents),
             "installed_count": len(installed_agents),
@@ -1263,7 +1265,7 @@ def _build_mcp_tool_plan(
             "purpose": "Read the account, local project, server RAG, installed agent skills, and recommended next commands before using other Mdtero tools.",
             "when": "Always call this first in a new agent session or after a failed Mdtero action.",
             "arguments": {},
-            "success_signal": "Payload includes project, account, health, rag, project_bridge, recommended_next_commands, and this mcp_tool_plan.",
+            "success_signal": "Payload includes project, account, health, rag, project_bridge, extension_handoff, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
             "failure_fields": ["reason_code", "action_hint", "next_commands"],
         },
         {
@@ -1385,6 +1387,68 @@ def _build_mcp_tool_plan(
         })
 
     return redact_sensitive_payload(plan)
+
+
+def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "purpose": "Use the browser extension for OAuth/session-aware page capture and the CLI/MCP tools for local files, campus-network fetches, status polling, downloads, translation, and RAG.",
+        "browser_scope": [
+            "website OAuth login and quota display",
+            "current tab DOI/page capture",
+            "PDF/EPUB upload from the browser",
+            "task polling, translation, and artifact download",
+        ],
+        "cli_scope": [
+            "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources",
+            "local file and batch parsing",
+            "project queue/status/download/Zotero/RAG/MCP commands for local agents",
+        ],
+        "handoff_triggers": [
+            "publisher challenge or JavaScript verification page",
+            "campus-network or logged-in browser state needs manual confirmation",
+            "extension capture cannot access the current tab or direct download URL",
+            "server task returns reason_code/action_hint/next_commands for recovery",
+        ],
+        "commands": [
+            commands.get("extension_handoff_url") or commands.get("parse_doi_or_url"),
+            commands.get("extension_handoff_file") or commands.get("parse_file"),
+        ],
+        "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
+        "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
+    }
+
+
+def _agent_handoff_protocol(commands: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "step": "inspect_failure",
+            "use": "task_status",
+            "when": "A parse, upload, translation, or RAG step failed or timed out.",
+            "preserve_fields": ["task_id", "reason_code", "action_hint", "next_commands", "download_artifacts", "translation_attempts"],
+            "next_commands": ["mdtero status <task-id> --json", commands.get("mcp_briefing", "mdtero mcp briefing --json")],
+        },
+        {
+            "step": "retry_source_capture",
+            "use": "extension_or_cli",
+            "when": "reason_code indicates publisher challenge, browser-only session, missing full text, or local acquisition failure.",
+            "commands": [commands.get("extension_handoff_url"), commands.get("extension_handoff_file")],
+            "success_signal": "client_acquisition is present or task status succeeds with paper_md/paper_bundle in download_artifacts.",
+        },
+        {
+            "step": "download_or_translate",
+            "use": "download_artifact/request_translation",
+            "when": "A parse task succeeded and exposes paper_md or paper_bundle.",
+            "commands": [commands.get("download_artifact"), commands.get("translate")],
+            "success_signal": "local path or translated_md artifact is available.",
+        },
+        {
+            "step": "build_or_query_rag",
+            "use": "server_rag_status/rag_query",
+            "when": "At least one parse task succeeded or the user asks a project-level question.",
+            "commands": [commands.get("rag_status"), commands.get("rag_build"), commands.get("rag_query")],
+            "success_signal": "readiness.ready_for_query is true or evidence_pack.context_markdown is returned.",
+        },
+    ]
 
 
 def _load_project_or_none(root: Path) -> Any | None:
