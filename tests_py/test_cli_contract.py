@@ -5428,14 +5428,63 @@ def test_public_private_platform_preflight_is_non_secret_and_non_deploying():
     assert "embeds credentials; remove them" in preflight
     assert "GIT_TERMINAL_PROMPT=0 git ls-remote --heads" in preflight
     assert '"$python_bin" scripts/ci/secret_guard.py' in preflight
+    assert '"$python_bin" scripts/ci/forgejo_workflow_policy.py' in preflight
     assert "npm --prefix extension test -- --run" in preflight
     assert '"$python_bin" scripts/ci/extension_dist_smoke.py >/dev/null' in preflight
     assert "status=ok" in preflight
+    assert "forgejo_policy=ok" in preflight
     assert "INFISICAL_TOKEN" not in preflight
     assert "docker" not in preflight
     assert "uv build" not in preflight
     assert "twine" not in preflight
     assert "set -x" not in preflight
+
+
+def test_public_forgejo_workflow_policy_enforces_manual_linux_small_secret_listing(tmp_path: Path):
+    repo_root = Path(__file__).resolve().parents[1]
+    policy = load_python_script(repo_root / "scripts" / "ci" / "forgejo_workflow_policy.py")
+
+    workflow_dir = tmp_path / ".forgejo" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "ok.yml").write_text(
+        """
+name: OK
+on:
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: linux-small
+    steps:
+      - name: List required secret names
+        run: |
+          echo "Forgejo secrets used by this workflow: none."
+""".strip(),
+        encoding="utf-8",
+    )
+    assert policy.check_all(tmp_path) == {}
+
+    (workflow_dir / "bad.yml").write_text(
+        """
+name: Bad
+on:
+  push:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ADMIN_PASSWORD: demo
+""".strip(),
+        encoding="utf-8",
+    )
+    failures = policy.check_all(tmp_path)
+    assert failures[".forgejo/workflows/bad.yml"] == [
+        "missing workflow_dispatch",
+        "missing linux-small runner",
+        "missing secret-name listing step",
+        "missing Forgejo secret-name summary",
+        "push-trigger",
+        "admin-password",
+    ]
 
 
 def test_public_generated_dependency_and_package_artifacts_are_not_source():
