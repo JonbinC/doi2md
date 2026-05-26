@@ -4432,6 +4432,15 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["handoff"]["active_items"] == []
+    assert model["launch_bundle"]["primary_group"] == "Setup"
+    assert model["launch_bundle"]["copy_hint"] == "Copy one group into a terminal or agent prompt; commands are ordered and JSON-first where possible."
+    launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
+    assert list(launch_groups) == ["Setup", "Parse", "Project", "RAG + MCP", "Extension handoff"]
+    assert launch_groups["Setup"]["commands"][:3] == ["mdtero doctor --json", "mdtero setup", "mdtero setup --api-key <key>"]
+    assert "mdtero agent detect --json" in launch_groups["Setup"]["commands"]
+    assert "mdtero agent install --interactive" in launch_groups["Setup"]["commands"]
+    assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json" in launch_groups["Parse"]["commands"]
+    assert "mdtero mcp briefing --json" in launch_groups["Extension handoff"]["commands"]
     assert model["next_steps"][:2] == ["mdtero setup", "mdtero doctor --json"]
     assert "mdtero setup --api-key <key>" in model["next_steps"]
     assert model["operator_summary"][0] == {"area": "Account", "state": "missing", "detail": "run mdtero setup"}
@@ -4535,6 +4544,14 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert any(item["command"] == "mdtero rag build --json" and item["is_next"] for item in model["command_palette"])
     assert model["handoff"]["ready_artifacts"][0]["download_command"] == "mdtero download task-done paper_md --output-dir ./mdtero-output --json"
     assert model["handoff"]["recommended_next_commands"][0] == "mdtero project download --output-dir ./mdtero-output --json"
+    assert model["launch_bundle"]["primary_group"] == "RAG + MCP"
+    launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
+    assert "mdtero project ingest --json" in launch_groups["RAG + MCP"]["commands"]
+    assert "mdtero rag build --json" in launch_groups["RAG + MCP"]["commands"]
+    assert "mdtero rag status --json" in launch_groups["RAG + MCP"]["commands"]
+    assert "mdtero rag query \"<question>\" --build-if-needed --json" in launch_groups["RAG + MCP"]["commands"]
+    assert "mdtero mcp briefing --json" in launch_groups["RAG + MCP"]["commands"]
+    assert "mdtero mcp serve" in launch_groups["RAG + MCP"]["commands"]
     assert model["zotero"]["configured"] is True
     assert model["agents"]["labels"] == ["Codex"]
     assert model["agents"]["detected_count"] == 1
@@ -4556,6 +4573,9 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "publisher challenge" in output
     assert "Shortcuts" in output
     assert "Command Palette" in output
+    assert "Launch Bundles" in output
+    assert "Copy one group into a terminal" in output
+    assert "RAG + MCP" in output
     assert "Create/bind/import/build Voyage index" in output
     assert "voyage / configured" in output
     assert "voyage-4" in output
