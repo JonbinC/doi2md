@@ -380,6 +380,23 @@ export function firstTaskNextCommand(
   return firstNextCommand([...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]);
 }
 
+export function getTaskFailureCliHandoff(
+  task:
+    | (Pick<TaskRecord, "next_commands"> & {
+        result?: Pick<TaskResult, "next_commands"> | null;
+      })
+    | null
+    | undefined,
+  input?: string | null,
+  kind: "parse" | "translate" = "parse"
+): string {
+  const nextCommand = firstTaskNextCommand(task);
+  if (nextCommand) {
+    return nextCommand;
+  }
+  return kind === "parse" ? buildCliParseCommand(input) : "";
+}
+
 export function firstNextCommand(commands?: string[] | null): string {
   const command = (commands ?? []).map((value) => String(value || "").trim()).find(Boolean) || "";
   return normalizeCliHandoffCommand(command);

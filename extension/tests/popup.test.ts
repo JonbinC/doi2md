@@ -20,6 +20,7 @@ import {
   getPreferredArtifactKey,
   getResultWarningText,
   getTaskFailureText,
+  getTaskFailureCliHandoff,
   firstNextCommand,
   firstTaskNextCommand,
   getTranslationAttemptSummary,
@@ -620,6 +621,47 @@ describe("getTaskFailureText", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
     expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
     expect(firstNextCommand(null)).toBe("");
+  });
+
+  it("uses backend next commands for failed translation handoff", () => {
+    expect(
+      getTaskFailureCliHandoff(
+        {
+          next_commands: [
+            "mdtero translate task-123 --to zh-CN --wait --timeout 600 --json"
+          ]
+        },
+        "10.1000/demo",
+        "translate"
+      )
+    ).toBe("mdtero translate task-123 --to zh-CN --wait --timeout 600 --json");
+  });
+
+  it("falls back to a traceable parse command only for parse failures", () => {
+    expect(
+      getTaskFailureCliHandoff(
+        {
+          next_commands: []
+        },
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML",
+        "parse"
+      )
+    ).toBe(
+      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace --wait --timeout 300 --json"
+    );
+  });
+
+  it("does not invent a parse handoff for failed translation tasks without next commands", () => {
+    expect(
+      getTaskFailureCliHandoff(
+        {
+          next_commands: [],
+          result: { next_commands: [] }
+        },
+        "10.1000/demo",
+        "translate"
+      )
+    ).toBe("");
   });
 
   it("falls back to result-level next commands for CLI handoff", () => {

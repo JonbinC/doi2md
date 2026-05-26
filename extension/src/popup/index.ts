@@ -35,8 +35,8 @@ import {
   getSavedResultSummary,
   getUsageStatusText,
   getTaskFailureText,
+  getTaskFailureCliHandoff,
   getDownloadFailureText,
-  firstTaskNextCommand,
   buildCliParseCommand,
   buildCliFileParseCommand,
   getCliHandoffNote,
@@ -660,8 +660,13 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
         uiLanguage
       )
     );
+    const failureHandoff = getTaskFailureCliHandoff(task, currentInput, kind);
+    if (failureHandoff) {
+      setCliHandoff(currentInput, failureHandoff);
+    } else {
+      setCliHandoff(null);
+    }
     if (kind === "parse") {
-      setCliHandoff(currentInput, firstTaskNextCommand(task));
       isParsing = false;
     } else {
       isTranslating = false;
