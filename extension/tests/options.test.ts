@@ -159,6 +159,47 @@ describe("extension options page", () => {
     expect(document.querySelector("#history-list")?.textContent).not.toContain("Download BUNDLE");
   });
 
+  it("renders and downloads history actions from v1 download_artifacts", async () => {
+    mockSettings = {
+      apiBaseUrl: "https://api.mdtero.com",
+      token: "token-1",
+      email: "reader@example.com",
+      uiLanguage: "en",
+    };
+    mockGetMyTasks.mockResolvedValueOnce({
+      items: [
+        {
+          task_id: "task-v1",
+          status: "succeeded",
+          task_kind: "parse",
+          created_at: "2026-05-01T00:00:00Z",
+          paper_input: "10.48550/arXiv.1706.03762",
+          result: {
+            preferred_artifact: "paper_md",
+            download_artifacts: [
+              { artifact: "paper_md", filename: "vaswani2017attention.md" },
+              { artifact: "paper_bundle", filename: "vaswani2017attention.zip" },
+            ],
+          },
+        },
+      ],
+    });
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
+
+    await loadOptionsModule();
+
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download Markdown");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download ZIP");
+
+    const markdownButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".history-download-button"))
+      .find((button) => button.textContent === "Download Markdown");
+    markdownButton?.click();
+
+    await vi.waitFor(() => {
+      expect(mockDownloadArtifact).toHaveBeenCalledWith("task-v1", "paper_md", "vaswani2017attention.md");
+    });
+  });
+
   it("persists advanced API base and language without publisher key fields", async () => {
     globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 

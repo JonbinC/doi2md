@@ -14,6 +14,9 @@ export interface PopupState {
   parseTaskId?: string;
   parseArtifactKey?: string;
   parseFilename?: string;
+  parseMarkdownTaskId?: string;
+  parseMarkdownArtifactKey?: string;
+  parseMarkdownFilename?: string;
   parseMarkdownPath?: string;
   translatedTaskId?: string;
   translatedFilename?: string;
@@ -124,14 +127,15 @@ export function getPendingPopupTask(
 export function getReconnectablePendingTranslationTask(
   state: PopupState | undefined,
   detectedInput: string,
-  parseMarkdownPath: string
+  parseMarkdownRef: string
 ): { taskId: string; kind: "translate" } | undefined {
+  const stateMarkdownRef = state?.parseMarkdownPath || state?.parseMarkdownTaskId;
   if (
     !state ||
     state.input !== detectedInput ||
     state.pendingTaskKind !== "translate" ||
     !state.pendingTaskId ||
-    state.parseMarkdownPath !== parseMarkdownPath
+    stateMarkdownRef !== parseMarkdownRef
   ) {
     return undefined;
   }

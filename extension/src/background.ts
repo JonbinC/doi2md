@@ -110,8 +110,29 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
+      if (message.sourceMarkdownPath) {
+        return client.createTranslateTask({
+          source_markdown_path: message.sourceMarkdownPath,
+          target_language: message.targetLanguage,
+          mode: message.mode
+        });
+      }
+      if (!message.sourceTaskId || !message.sourceArtifactKey) {
+        throw new Error("Parse a paper to Markdown first; no source Markdown artifact is available for translation.");
+      }
+      const artifact = await client.downloadArtifact(
+        message.sourceTaskId,
+        message.sourceArtifactKey,
+        message.sourceFilename
+      );
+      const sourceMarkdownText = await artifact.blob.text();
+      if (!sourceMarkdownText.trim()) {
+        throw new Error("The Markdown artifact is empty and cannot be translated.");
+      }
       return client.createTranslateTask({
-        source_markdown_path: message.sourceMarkdownPath,
+        source_markdown_path: "",
+        source_markdown_text: sourceMarkdownText,
+        source_markdown_filename: artifact.filename || message.sourceFilename || "paper.md",
         target_language: message.targetLanguage,
         mode: message.mode
       });

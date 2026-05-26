@@ -209,7 +209,14 @@ const recentTasksSummaryEl = document.querySelector<HTMLElement>("#recent-tasks-
 const recentTaskListEl = document.querySelector<HTMLDivElement>("#recent-task-list");
 
 const client = createApiClient(readSettings);
-let lastParsedMarkdownPath: string | null = null;
+type ParsedMarkdownSource = {
+  path?: string | null;
+  taskId?: string | null;
+  artifactKey?: string | null;
+  filename?: string | null;
+};
+
+let lastParsedMarkdownSource: ParsedMarkdownSource | null = null;
 let currentInput: string | null = null;
 let uiLanguage: UiLanguage = "en";
 let isParsing = false;
@@ -411,8 +418,21 @@ function renderActionButtons() {
   }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
-    translateButton.disabled = isTranslating || !lastParsedMarkdownPath;
+    translateButton.disabled = isTranslating || !hasParsedMarkdownSource(lastParsedMarkdownSource);
   }
+}
+
+function hasParsedMarkdownSource(source?: ParsedMarkdownSource | null): boolean {
+  return Boolean(source?.path || (source?.taskId && source?.artifactKey));
+}
+
+function parsedMarkdownRef(source?: ParsedMarkdownSource | null): string {
+  return String(source?.path || source?.taskId || "").trim();
+}
+
+function getArtifactDescriptor(result: TaskRecord["result"], artifactKey: string) {
+  return result?.artifacts?.[artifactKey]
+    ?? result?.download_artifacts?.find((artifact) => artifact.artifact === artifactKey);
 }
 
 function clearSecondaryDownloads() {
@@ -498,23 +518,28 @@ function renderArtifacts(task: TaskRecord) {
 }
 
 async function persistPopupState(task: TaskRecord) {
-  if (!currentInput || !task.result?.artifacts) {
+  if (!currentInput || !task.result) {
     return;
   }
 
   const previous = await readPopupState();
   const preferredParseArtifact =
     task.result.preferred_artifact === "paper_bundle" ? "paper_bundle" : "paper_md";
-  const preferredParseDescriptor = task.result.artifacts[preferredParseArtifact];
+  const preferredParseDescriptor = getArtifactDescriptor(task.result, preferredParseArtifact);
+  const paperMarkdownDescriptor = getArtifactDescriptor(task.result, "paper_md");
+  const translatedDescriptor = getArtifactDescriptor(task.result, "translated_md");
   const nextState = {
     input: currentInput,
     parseTaskId: preferredParseDescriptor ? task.task_id : previous?.parseTaskId,
     parseArtifactKey: preferredParseDescriptor ? preferredParseArtifact : previous?.parseArtifactKey,
     parseFilename: preferredParseDescriptor?.filename ?? previous?.parseFilename,
-    parseMarkdownPath: task.result.artifacts.paper_md?.path ?? previous?.parseMarkdownPath,
-    translatedTaskId: task.result.artifacts.translated_md ? task.task_id : previous?.translatedTaskId,
+    parseMarkdownTaskId: paperMarkdownDescriptor ? task.task_id : previous?.parseMarkdownTaskId,
+    parseMarkdownArtifactKey: paperMarkdownDescriptor ? "paper_md" : previous?.parseMarkdownArtifactKey,
+    parseMarkdownFilename: paperMarkdownDescriptor?.filename ?? previous?.parseMarkdownFilename,
+    parseMarkdownPath: task.result.artifacts?.paper_md?.path ?? previous?.parseMarkdownPath,
+    translatedTaskId: translatedDescriptor ? task.task_id : previous?.translatedTaskId,
     translatedFilename:
-      task.result.artifacts.translated_md?.filename ?? previous?.translatedFilename,
+      translatedDescriptor?.filename ?? previous?.translatedFilename,
     pendingTaskId: undefined,
     pendingTaskKind: undefined
   };
@@ -617,8 +642,13 @@ async function hydrateSavedState(detectedInput: string) {
   if (summary) {
     setResult(summary);
   }
-  lastParsedMarkdownPath = savedState.parseMarkdownPath ?? null;
-  hasParsedArtifact = Boolean(savedState.parseTaskId || savedState.parseMarkdownPath);
+  lastParsedMarkdownSource = {
+    path: savedState.parseMarkdownPath,
+    taskId: savedState.parseMarkdownTaskId,
+    artifactKey: savedState.parseMarkdownArtifactKey,
+    filename: savedState.parseMarkdownFilename
+  };
+  hasParsedArtifact = Boolean(savedState.parseTaskId || hasParsedMarkdownSource(lastParsedMarkdownSource));
   hasTranslatedArtifact = Boolean(savedState.translatedTaskId || savedState.translatedFilename);
   hasDownloadableArtifact = hasParsedArtifact || hasTranslatedArtifact;
   updateWorkflowState();
@@ -696,7 +726,15 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     return;
   }
 
-  lastParsedMarkdownPath = task.result?.artifacts?.paper_md?.path ?? lastParsedMarkdownPath;
+  const paperMarkdownDescriptor = getArtifactDescriptor(task.result, "paper_md");
+  if (paperMarkdownDescriptor) {
+    lastParsedMarkdownSource = {
+      path: task.result?.artifacts?.paper_md?.path ?? lastParsedMarkdownSource?.path,
+      taskId: task.task_id,
+      artifactKey: "paper_md",
+      filename: paperMarkdownDescriptor.filename
+    };
+  }
   setCliHandoff(null);
   renderArtifacts(task);
   await persistPopupState(task);
@@ -708,7 +746,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     hasDownloadableArtifact = true;
     const preferredArtifactKey = getPreferredArtifactKey(task.result);
     const filename = preferredArtifactKey
-      ? task.result?.artifacts?.[preferredArtifactKey]?.filename
+      ? getArtifactDescriptor(task.result, preferredArtifactKey)?.filename
       : undefined;
     const warningText = getResultWarningText(task.result, uiLanguage);
     if (filename) {
@@ -720,7 +758,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     isTranslating = false;
     hasTranslatedArtifact = true;
     hasDownloadableArtifact = true;
-    const filename = task.result?.artifacts?.translated_md?.filename;
+    const filename = getArtifactDescriptor(task.result, "translated_md")?.filename;
     if (filename) {
       setResult(getCurrentCopy().translateReady(filename));
     }
@@ -950,16 +988,17 @@ translateButton?.addEventListener("click", async () => {
   if (isTranslating) {
     return;
   }
-  if (!lastParsedMarkdownPath) {
+  if (!hasParsedMarkdownSource(lastParsedMarkdownSource)) {
     setResult(getCurrentCopy().translateFirst);
     return;
   }
 
   const previous = await readPopupState();
+  const markdownRef = parsedMarkdownRef(lastParsedMarkdownSource);
   const reconnectableTask = getReconnectablePendingTranslationTask(
     previous,
     currentInput ?? "",
-    lastParsedMarkdownPath
+    markdownRef
   );
   if (reconnectableTask) {
     isTranslating = true;
@@ -976,7 +1015,7 @@ translateButton?.addEventListener("click", async () => {
   setResult(getActionStatusText("queued_translate", uiLanguage));
   const response = await chrome.runtime.sendMessage(
     createTranslateMessage(
-      lastParsedMarkdownPath,
+      lastParsedMarkdownSource ?? {},
       translateLanguageEl?.value ?? "zh",
       "standard"
     )
@@ -992,7 +1031,10 @@ translateButton?.addEventListener("click", async () => {
   await writePopupState({
     ...(await readPopupState()),
     input: currentInput ?? "",
-    parseMarkdownPath: lastParsedMarkdownPath,
+    parseMarkdownPath: lastParsedMarkdownSource?.path || undefined,
+    parseMarkdownTaskId: lastParsedMarkdownSource?.taskId || undefined,
+    parseMarkdownArtifactKey: lastParsedMarkdownSource?.artifactKey || undefined,
+    parseMarkdownFilename: lastParsedMarkdownSource?.filename || undefined,
     pendingTaskId: response.result.task_id,
     pendingTaskKind: "translate"
   });
