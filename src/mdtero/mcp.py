@@ -6,7 +6,7 @@ from typing import Any
 from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, load_config
-from .projects import bind_server_project, load_project, paper_to_document, project_documents, project_path
+from .projects import add_paper, bind_server_project, load_project, paper_from_submission, paper_to_document, project_documents, project_path, update_task
 from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
 
@@ -392,6 +392,154 @@ def query_server_rag(
     return redact_sensitive_payload(result)
 
 
+def submit_parse_for_agent(
+    input_value: str,
+    project_root: Path | None = None,
+    *,
+    client: Any | None = None,
+    wait: bool = True,
+    timeout: float = 300.0,
+    interval: float = 2.0,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    cleaned_input = str(input_value or "").strip()
+    commands = build_agent_commands(root)["commands"]
+    if not cleaned_input:
+        return {
+            "status": "failed",
+            "reason_code": "parse_input_required",
+            "input": cleaned_input,
+            "action_hint": "Provide a DOI, URL, or local file path before asking Mdtero MCP to parse.",
+            "next_commands": [commands["parse_doi_or_url"], commands["parse_file"]],
+        }
+    active_client = client or MdteroClient()
+    try:
+        result = active_client.parse_with_route(cleaned_input)[1]
+    except Exception as exc:
+        return _agent_tool_exception_payload(
+            exc,
+            reason_code="parse_submission_failed",
+            action_hint="Parse submission failed. Retry from the CLI with trace output, or use the browser extension/file upload handoff for publisher pages.",
+            next_commands=[commands["parse_doi_or_url"], commands["parse_file"], commands["extension_handoff_url"]],
+            extra={"input": cleaned_input},
+        )
+    _enrich_agent_parse_submission(result)
+    if result.get("task_id"):
+        try:
+            add_paper(root, paper_from_submission(cleaned_input, result, source="mcp"))
+        except Exception:
+            pass
+    if wait and result.get("task_id"):
+        final_task = _wait_for_agent_task(active_client, str(result["task_id"]), timeout=timeout, interval=interval)
+        _enrich_agent_task_status(final_task)
+        if final_task.get("status") != "timeout":
+            try:
+                update_task(root, final_task)
+            except Exception:
+                pass
+        result["final_task"] = final_task
+        for key in ("status", "reason_code", "action_hint", "preferred_artifact", "next_commands"):
+            if final_task.get(key) not in (None, "", [], {}):
+                result[key] = final_task[key]
+    return redact_sensitive_payload(result)
+
+
+def task_status_for_agent(
+    task_id: str,
+    project_root: Path | None = None,
+    *,
+    client: Any | None = None,
+    wait: bool = False,
+    timeout: float = 300.0,
+    interval: float = 2.0,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    cleaned_task_id = str(task_id or "").strip()
+    if not cleaned_task_id:
+        return {
+            "status": "failed",
+            "reason_code": "task_id_required",
+            "action_hint": "Provide a Mdtero task id before requesting task status.",
+            "next_commands": ["mdtero project status --json", "mdtero project refresh --wait --timeout 300 --json"],
+        }
+    active_client = client or MdteroClient()
+    try:
+        task = _wait_for_agent_task(active_client, cleaned_task_id, timeout=timeout, interval=interval) if wait else active_client.task(cleaned_task_id)
+    except Exception as exc:
+        return _agent_tool_exception_payload(
+            exc,
+            reason_code="task_status_failed",
+            action_hint="Task status could not be fetched. Check authentication/connectivity with `mdtero doctor --json`, then retry.",
+            next_commands=[f"mdtero status {cleaned_task_id} --json", "mdtero doctor --json"],
+            extra={"task_id": cleaned_task_id},
+        )
+    _enrich_agent_task_status(task)
+    if task.get("status") != "timeout":
+        try:
+            update_task(root, task)
+        except Exception:
+            pass
+    return redact_sensitive_payload(task)
+
+
+def request_translation_for_agent(
+    task_id_or_markdown_path: str,
+    project_root: Path | None = None,
+    *,
+    target_language: str = "zh-CN",
+    client: Any | None = None,
+    wait: bool = True,
+    timeout: float = 600.0,
+    interval: float = 2.0,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    source = str(task_id_or_markdown_path or "").strip()
+    commands = build_agent_commands(root)["commands"]
+    if not source:
+        return {
+            "status": "failed",
+            "reason_code": "translation_source_required",
+            "action_hint": "Provide a parse task id or local Markdown path before requesting translation.",
+            "next_commands": [commands["translate"]],
+        }
+    active_client = client or MdteroClient()
+    try:
+        local_path = Path(source).expanduser()
+        if local_path.exists() and local_path.is_file():
+            result = active_client.translate_text(local_path.read_text(encoding="utf-8"), filename=local_path.name, target_language=target_language)
+        else:
+            result = active_client.translate_task(source, target_language=target_language)
+    except ValueError as exc:
+        if str(exc) == "translation_source_artifact_missing":
+            return {
+                "status": "failed",
+                "reason_code": "translation_source_artifact_missing",
+                "task_id": source,
+                "action_hint": "The parse task does not expose a server-side paper_md path for translation. Download paper_md and retry with the local Markdown path.",
+                "next_commands": [f"mdtero status {source} --json", f"mdtero download {source} paper_md --output-dir ./mdtero-output --json", commands["translate"]],
+            }
+        raise
+    except Exception as exc:
+        return _agent_tool_exception_payload(
+            exc,
+            reason_code="translation_submission_failed",
+            action_hint="Translation submission failed. Check authentication and backend translation provider health, then retry with waitable translation.",
+            next_commands=[commands["translate"], "mdtero doctor --json"],
+            extra={"source": source, "target_language": target_language},
+        )
+    _enrich_agent_translate_submission(result)
+    if wait and result.get("task_id"):
+        final_task = _wait_for_agent_task(active_client, str(result["task_id"]), timeout=timeout, interval=interval)
+        _enrich_agent_task_status(final_task)
+        result["final_task"] = final_task
+        if final_task.get("status") not in {None, "timeout"}:
+            try:
+                update_task(root, final_task)
+            except Exception:
+                pass
+    return redact_sensitive_payload(result)
+
+
 def _normalize_rag_query_result_for_agents(
     payload: dict[str, Any],
     *,
@@ -646,6 +794,129 @@ def _rag_query_failure_next_commands(detail: dict[str, Any], commands: dict[str,
     return ["mdtero rag status --json", commands["rag_build"], commands["rag_query"]]
 
 
+def _wait_for_agent_task(client: Any, task_id: str, *, timeout: float, interval: float) -> dict[str, Any]:
+    try:
+        return client.wait(task_id, interval=max(0.25, float(interval or 2.0)), timeout=max(0.25, float(timeout or 300.0)))
+    except TimeoutError:
+        return {
+            "task_id": task_id,
+            "status": "timeout",
+            "stage": "waiting",
+            "reason_code": "task_wait_timeout",
+            "action_hint": "The task is still running or queued after the local MCP wait timeout. Poll again later or use a larger timeout.",
+            "next_commands": [f"mdtero status {task_id} --wait --timeout {int(timeout)} --json", f"mdtero status {task_id} --json"],
+        }
+
+
+def _enrich_agent_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(result.get("task_id") or result.get("id") or "").strip()
+    if not task_id:
+        return result
+    result.setdefault("task_id", task_id)
+    result.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    result.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    preferred_artifact = _preferred_agent_artifact(result, default="paper_md")
+    result.setdefault("preferred_artifact", preferred_artifact)
+    result["next_commands"] = _dedupe_commands([
+        *[str(command) for command in result.get("next_commands") or []],
+        f"mdtero status {task_id} --wait --timeout 300 --json",
+        f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+    ])
+    return result
+
+
+def _enrich_agent_translate_submission(result: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(result.get("task_id") or result.get("id") or "").strip()
+    if not task_id:
+        return result
+    result.setdefault("task_id", task_id)
+    result.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    result.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    result.setdefault("preferred_artifact", "translated_md")
+    result["next_commands"] = _dedupe_commands([
+        *[str(command) for command in result.get("next_commands") or []],
+        f"mdtero status {task_id} --wait --timeout 600 --json",
+        f"mdtero download {task_id} translated_md --output-dir ./mdtero-output --json",
+    ])
+    return result
+
+
+def _enrich_agent_task_status(task: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(task.get("task_id") or task.get("id") or "").strip()
+    if not task_id:
+        return task
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    for key in ("reason_code", "action_hint", "translation_attempts", "download_artifacts"):
+        value = result.get(key)
+        if value not in (None, "", [], {}) and task.get(key) in (None, "", [], {}):
+            task[key] = value
+    task.setdefault("task_id", task_id)
+    task.setdefault("task_api", "/api/v1/tasks/{task_id}")
+    task.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    preferred_artifact = _preferred_agent_artifact(task, default="translated_md" if _looks_like_translation_task(task) else "paper_md")
+    if str(task.get("status") or "").lower() == "succeeded":
+        task.setdefault("preferred_artifact", preferred_artifact)
+    existing_commands = [str(command) for command in task.get("next_commands") or []]
+    status = str(task.get("status") or "").lower()
+    if status == "succeeded":
+        defaults = [f"mdtero download {task_id} {preferred_artifact} --output-dir ./mdtero-output --json"]
+    elif status in {"failed", "cancelled"}:
+        defaults = [f"mdtero status {task_id} --json"]
+        if _looks_like_translation_task(task):
+            defaults.extend(["mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json", "mdtero smoke --skip-translate --json"])
+        else:
+            defaults.append("mdtero project parse --include-failed --wait --timeout 300 --json")
+    elif status == "timeout":
+        defaults = [f"mdtero status {task_id} --wait --timeout 300 --json", f"mdtero status {task_id} --json"]
+    else:
+        defaults = [f"mdtero status {task_id} --wait --timeout 300 --json"]
+    task["next_commands"] = _dedupe_commands([*existing_commands, *defaults])
+    return task
+
+
+def _preferred_agent_artifact(payload: dict[str, Any], *, default: str) -> str:
+    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+    candidates = [payload.get("preferred_artifact"), result.get("preferred_artifact"), payload.get("artifact"), result.get("artifact")]
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    candidates.extend([
+        "translated_md" if "translated_md" in artifacts else None,
+        "paper_md" if "paper_md" in artifacts else None,
+        "paper_bundle" if "paper_bundle" in artifacts else None,
+    ])
+    for candidate in candidates:
+        cleaned = str(candidate or "").strip()
+        if cleaned:
+            return cleaned
+    return default
+
+
+def _looks_like_translation_task(task: dict[str, Any]) -> bool:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    return str(task.get("task_kind") or "").strip() == "translate" or bool(task.get("translation_attempts") or result.get("translation_attempts")) or "translated_md" in artifacts
+
+
+def _agent_tool_exception_payload(exc: Exception, *, reason_code: str, action_hint: str, next_commands: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "failed",
+        "reason_code": reason_code,
+        "error_type": exc.__class__.__name__,
+        "message": redact_sensitive_text(str(exc)),
+        "action_hint": action_hint,
+        "next_commands": _dedupe_commands(next_commands),
+    }
+    response = getattr(exc, "response", None)
+    if response is not None and getattr(response, "status_code", None) is not None:
+        payload["http_status"] = response.status_code
+    detail = getattr(exc, "payload", None)
+    if isinstance(detail, dict):
+        payload.update({key: value for key, value in redact_sensitive_payload(detail).items() if key not in {"status"} and value not in (None, "", [], {})})
+    if extra:
+        payload.update(extra)
+    return redact_sensitive_payload(payload)
+
+
 def build_agent_briefing(
     project_root: Path | None = None,
     *,
@@ -754,6 +1025,9 @@ def build_agent_briefing(
             "agent_briefing",
             "project_status",
             "paper_context",
+            "submit_parse",
+            "task_status",
+            "request_translation",
             "rag_context",
             "server_rag_status",
             "rag_query",
@@ -850,6 +1124,18 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def rag_context() -> dict:
         return build_rag_context(root)
+
+    @mcp.tool
+    def submit_parse(input_value: str, wait: bool = True, timeout: float = 300.0, interval: float = 2.0) -> dict:
+        return submit_parse_for_agent(input_value, root, wait=wait, timeout=timeout, interval=interval)
+
+    @mcp.tool
+    def task_status(task_id: str, wait: bool = False, timeout: float = 300.0, interval: float = 2.0) -> dict:
+        return task_status_for_agent(task_id, root, wait=wait, timeout=timeout, interval=interval)
+
+    @mcp.tool
+    def request_translation(task_id_or_markdown_path: str, target_language: str = "zh-CN", wait: bool = True, timeout: float = 600.0, interval: float = 2.0) -> dict:
+        return request_translation_for_agent(task_id_or_markdown_path, root, target_language=target_language, wait=wait, timeout=timeout, interval=interval)
 
     @mcp.tool
     def server_rag_status() -> dict:

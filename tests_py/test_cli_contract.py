@@ -17,7 +17,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, serve_project_context
+from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_status, build_rag_context, build_server_rag_status, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -3063,7 +3063,119 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "mdtero mcp serve",
     ]
     assert "agent_briefing" in briefing["mcp_tools"]
+    assert "submit_parse" in briefing["mcp_tools"]
+    assert "task_status" in briefing["mcp_tools"]
+    assert "request_translation" in briefing["mcp_tools"]
     assert "rag_query" in briefing["mcp_tools"]
+
+
+def test_mcp_submit_parse_tool_waits_and_updates_local_project(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    calls = []
+
+    class FakeClient:
+        def parse_with_route(self, input_value):
+            calls.append(("parse_with_route", input_value))
+            return (
+                {"route_kind": "source_first"},
+                {"task_id": "task-parse", "status": "queued", "result": {"preferred_artifact": "paper_md"}},
+                None,
+            )
+
+        def wait(self, task_id, *, interval=2.0, timeout=300.0):
+            calls.append(("wait", task_id, interval, timeout))
+            return {
+                "task_id": task_id,
+                "status": "succeeded",
+                "task_kind": "parse",
+                "result": {"artifacts": {"paper_md": {"filename": "paper.md"}}, "preferred_artifact": "paper_md"},
+            }
+
+    payload = submit_parse_for_agent("10.48550/arXiv.1706.03762", tmp_path, client=FakeClient(), wait=True, timeout=11, interval=0.5)
+    state = load_project(tmp_path)
+
+    assert payload["task_id"] == "task-parse"
+    assert payload["status"] == "succeeded"
+    assert payload["final_task"]["preferred_artifact"] == "paper_md"
+    assert payload["next_commands"] == ["mdtero download task-parse paper_md --output-dir ./mdtero-output --json"]
+    assert [(paper.input, paper.task_id, paper.status, paper.artifact) for paper in state.papers] == [
+        ("10.48550/arXiv.1706.03762", "task-parse", "succeeded", "paper_md")
+    ]
+    assert calls == [("parse_with_route", "10.48550/arXiv.1706.03762"), ("wait", "task-parse", 0.5, 11.0)]
+
+
+def test_mcp_task_status_tool_promotes_reason_and_updates_project(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/demo", task_id="task-failed", status="queued"))
+
+    class FakeClient:
+        def task(self, task_id):
+            assert task_id == "task-failed"
+            return {
+                "task_id": task_id,
+                "status": "failed",
+                "error_code": "parser_failed",
+                "result": {"reason_code": "client_acquisition_challenge_page", "action_hint": "Use extension handoff."},
+            }
+
+    payload = task_status_for_agent("task-failed", tmp_path, client=FakeClient())
+    state = load_project(tmp_path)
+
+    assert payload["reason_code"] == "client_acquisition_challenge_page"
+    assert payload["action_hint"] == "Use extension handoff."
+    assert payload["next_commands"] == ["mdtero status task-failed --json", "mdtero project parse --include-failed --wait --timeout 300 --json"]
+    assert state.papers[0].status == "failed"
+    assert state.papers[0].reason_code == "client_acquisition_challenge_page"
+
+
+def test_mcp_request_translation_tool_waits_and_preserves_provider_attempts(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    calls = []
+
+    class FakeClient:
+        def translate_task(self, task_id, *, target_language="zh-CN"):
+            calls.append(("translate_task", task_id, target_language))
+            return {"task_id": "task-translate", "status": "queued"}
+
+        def wait(self, task_id, *, interval=2.0, timeout=600.0):
+            calls.append(("wait", task_id, interval, timeout))
+            return {
+                "task_id": task_id,
+                "task_kind": "translate",
+                "status": "failed",
+                "result": {
+                    "reason_code": "translation_provider_chain_failed",
+                    "action_hint": "All configured providers failed.",
+                    "translation_attempts": [{"provider": "mimo", "reason_code": "translation_provider_auth_failed"}],
+                },
+            }
+
+    payload = request_translation_for_agent("parse-task", tmp_path, client=FakeClient(), target_language="zh-CN", wait=True, timeout=17, interval=1.5)
+
+    assert payload["task_id"] == "task-translate"
+    assert payload["preferred_artifact"] == "translated_md"
+    assert payload["final_task"]["reason_code"] == "translation_provider_chain_failed"
+    assert payload["final_task"]["translation_attempts"][0]["reason_code"] == "translation_provider_auth_failed"
+    assert payload["final_task"]["next_commands"] == [
+        "mdtero status task-translate --json",
+        "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json",
+        "mdtero smoke --skip-translate --json",
+    ]
+    assert calls == [("translate_task", "parse-task", "zh-CN"), ("wait", "task-translate", 1.5, 17.0)]
+
+
+def test_mcp_agent_tools_redact_backend_errors(tmp_path: Path):
+    class FakeClient:
+        def parse_with_route(self, _input_value):
+            raise RuntimeError("Bearer mdt_live_secret_token https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?Signature=secret")
+
+    payload = submit_parse_for_agent("https://example.test/paper", tmp_path, client=FakeClient())
+    text = json.dumps(payload)
+
+    assert payload["reason_code"] == "parse_submission_failed"
+    assert "mdt_live_secret_token" not in text
+    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "Signature=secret" not in text
 
 
 def test_mcp_agent_briefing_redacts_signed_urls_and_tokens(monkeypatch, tmp_path: Path):
