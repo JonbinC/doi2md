@@ -23,6 +23,7 @@ jobs:
   smoke:
     name: Public smoke gate
     runs-on: linux-small
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,6 +55,7 @@ jobs:
     if: ${{ inputs.check_scope == 'full' }}
     needs: [smoke]
     runs-on: linux-small
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,6 +94,7 @@ jobs:
     if: ${{ inputs.check_scope == 'full' }}
     needs: [smoke]
     runs-on: linux-small
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4

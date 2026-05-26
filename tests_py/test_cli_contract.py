@@ -4785,6 +4785,8 @@ def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
     assert 'default: "smoke"' in workflow
     assert "Public smoke gate" in workflow
     assert "runs-on: linux-small" in workflow
+    assert "timeout-minutes: 10" in workflow
+    assert "timeout-minutes: 20" in workflow
     assert "test_forgejo_phase_one_workflow_is_manual_lightweight_and_private" in workflow
     assert "if: ${{ inputs.check_scope == 'full' }}" in workflow
     assert "\n  push:" not in workflow
