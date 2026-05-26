@@ -241,6 +241,18 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
         calls.append(("rag_query", project_id, question))
         return {"answer": "Ready.", "matches": [{"document_id": "doc-1", "snippet": "Ready evidence."}]}
 
+    def fake_briefing(root):
+        calls.append(("mcp_briefing", Path(root).name))
+        return {
+            "project": {"initialized": True, "name": "mdtero-smoke"},
+            "health": {"rag_reason_code": "indexed"},
+            "project_bridge": {"status": "bound", "server_project": {"id": "42"}},
+            "rag": {"reason_code": "indexed", "agent_summary": {"readiness_status": "ready"}},
+            "mcp_tools": ["agent_briefing", "server_rag_status", "rag_query"],
+            "mcp_tool_plan": [{"tool": "agent_briefing", "step": "inspect_project"}],
+            "recommended_next_commands": ["mdtero rag status --json", "mdtero mcp serve"],
+        }
+
     monkeypatch.setattr(MdteroClient, "discover", fake_discover)
     monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
     monkeypatch.setattr(MdteroClient, "wait", fake_wait)
@@ -251,6 +263,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     monkeypatch.setattr(MdteroClient, "rag_build", fake_rag_build)
     monkeypatch.setattr(MdteroClient, "rag_status", fake_rag_status)
     monkeypatch.setattr(MdteroClient, "rag_query", fake_rag_query)
+    monkeypatch.setattr("mdtero.mcp.build_agent_briefing", fake_briefing)
 
     args = type(
         "Args",
@@ -284,10 +297,12 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     assert payload["task_ids"] == ["task-1"]
     assert payload["translation_task_ids"] == ["translate-1"]
     assert payload["server_project_id"] == "42"
-    assert [step["name"] for step in payload["steps"]] == ["discover", "parse", "download", "translate", "rag"]
+    assert [step["name"] for step in payload["steps"]] == ["discover", "parse", "download", "translate", "rag", "mcp_briefing"]
     assert payload["steps"][1]["selected_provider"] == "arxiv_native"
     assert payload["steps"][3]["target_language"] == "zh-CN"
     assert payload["steps"][4]["query"]["answer"] == "Ready."
+    assert payload["steps"][5]["mcp_tools"] == ["agent_briefing", "server_rag_status", "rag_query"]
+    assert payload["steps"][5]["reason_code"] == "indexed"
     assert payload["downloaded_paths"][0].endswith("paper.md")
     assert payload["translated_paths"][0].endswith("paper_CN.md")
     assert state.server_project_id == "42"
@@ -304,6 +319,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
         ("rag_build", "42"),
         ("rag_status", "42"),
         ("rag_query", "42", "What is indexed?"),
+        ("mcp_briefing", "smoke"),
     ]
 
 
@@ -348,8 +364,71 @@ def test_smoke_can_skip_discovery_download_and_rag(monkeypatch, tmp_path: Path, 
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "succeeded"
-    assert [step["status"] for step in payload["steps"]] == ["skipped", "succeeded", "skipped", "skipped", "skipped"]
-    assert [step["reason_code"] for step in payload["steps"] if step["status"] == "skipped"] == ["skipped", "skipped", "skipped", "skipped"]
+    assert [step["status"] for step in payload["steps"]] == ["skipped", "succeeded", "skipped", "skipped", "skipped", "skipped"]
+    assert [step["reason_code"] for step in payload["steps"] if step["status"] == "skipped"] == ["skipped", "skipped", "skipped", "skipped", "rag_skipped"]
+
+
+def test_smoke_fails_when_mcp_briefing_missing_agent_tools(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    save_config(MdteroConfig(api_key="mdt_live_test"))
+
+    def fake_parse_with_route(self, input_value):
+        return ({"route_kind": "source_first"}, {"task_id": "task-1", "status": "queued"}, None)
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        return {"task_id": task_id, "status": "succeeded", "result": {"preferred_artifact": "paper_md"}}
+
+    def fake_create_project(self, name, *, description=None):
+        return {"id": 42, "name": name}
+
+    def fake_import_task(self, project_id, task_id):
+        return {"document_id": "doc-1", "import_status": "imported"}
+
+    def fake_briefing(root):
+        return {"project": {"initialized": True}, "mcp_tools": ["agent_briefing", "server_rag_status"]}
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create_project)
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import_task)
+    monkeypatch.setattr(MdteroClient, "rag_build", lambda self, project_id: {"status": "queued"})
+    monkeypatch.setattr(MdteroClient, "rag_status", lambda self, project_id: {"status": "ready", "reason_code": "indexed"})
+    monkeypatch.setattr(MdteroClient, "rag_query", lambda self, project_id, question: {"answer": "Ready", "matches": []})
+    monkeypatch.setattr("mdtero.mcp.build_agent_briefing", fake_briefing)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "api_base": None,
+            "workdir": tmp_path / "smoke",
+            "doi": "10.48550/arXiv.1706.03762",
+            "query": "rag papers",
+            "limit": 3,
+            "question": "What is indexed?",
+            "project_id": None,
+            "skip_discovery": True,
+            "skip_download": True,
+            "skip_translate": True,
+            "skip_rag": False,
+            "timeout": 5,
+            "interval": 0.5,
+            "translate_to": "zh-CN",
+            "json": True,
+        },
+    )()
+
+    assert cli.cmd_smoke(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+    mcp_step = next(step for step in payload["steps"] if step["name"] == "mcp_briefing")
+
+    assert payload["primary_failure"]["step"] == "mcp_briefing"
+    assert mcp_step["status"] == "failed"
+    assert mcp_step["reason_code"].startswith("mcp_briefing_missing_tools")
+    assert mcp_step["next_commands"] == ["mdtero mcp briefing --json", "mdtero rag status --json", "mdtero mcp serve"]
+    assert "agent_briefing, server_rag_status, and rag_query" in mcp_step["action_hint"]
 
 
 def test_smoke_classifies_live_401_as_authentication_required(monkeypatch, tmp_path: Path, capsys):
@@ -403,7 +482,7 @@ def test_smoke_classifies_live_401_as_authentication_required(monkeypatch, tmp_p
     assert parse_step["error_code"] == "authentication_required"
     assert parse_step["http_status"] == 401
     assert parse_step["next_commands"] == [
-        "mdtero setup --api-key",
+        "mdtero setup --api-key --json",
         "mdtero doctor --json",
         "mdtero smoke --json --timeout 600 --interval 2",
     ]
