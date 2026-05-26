@@ -103,7 +103,9 @@ export interface ActionResult {
 }
 
 export interface TranslateTaskRequest {
-  source_markdown_path: string;
+  source_markdown_path?: string;
+  source_markdown_text?: string;
+  source_markdown_filename?: string;
   target_language: string;
   mode: string;
 }

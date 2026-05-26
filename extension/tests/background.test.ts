@@ -6,6 +6,7 @@ const createUploadedParseTask = vi.fn();
 const createRawUploadTask = vi.fn();
 const createTranslateTask = vi.fn();
 const getTask = vi.fn();
+const downloadArtifact = vi.fn();
 const fetchRoutePlan = vi.fn();
 const readSettings = vi.fn();
 const writeSettings = vi.fn();
@@ -16,7 +17,8 @@ vi.mock("../src/lib/api", () => ({
     createUploadedParseTask,
     createRawUploadTask,
     createTranslateTask,
-    getTask
+    getTask,
+    downloadArtifact
   })),
   createRouterSSOTClient: vi.fn(() => ({
     fetchRoutePlan
@@ -57,6 +59,7 @@ describe("extension background routing", () => {
     createRawUploadTask.mockResolvedValue({ task_id: "task-v2", status: "queued" });
     createTranslateTask.mockResolvedValue({ task_id: "task-translate", status: "queued" });
     getTask.mockResolvedValue({ task_id: "task-1", status: "queued" });
+    downloadArtifact.mockResolvedValue({ blob: new Blob(["# Demo\n\nBody"]), filename: "demo.md" });
     fetchRoutePlan.mockReset();
   });
 
@@ -187,6 +190,78 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-legacy", status: "queued" }
+      });
+    });
+  });
+
+  it("translates by server markdown path when legacy artifacts expose one", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.translate.request",
+        sourceMarkdownPath: "/app/tasks/parse-1/paper.md",
+        targetLanguage: "zh",
+        mode: "standard"
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(downloadArtifact).not.toHaveBeenCalled();
+      expect(createTranslateTask).toHaveBeenCalledWith({
+        source_markdown_path: "/app/tasks/parse-1/paper.md",
+        target_language: "zh",
+        mode: "standard"
+      });
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-translate", status: "queued" }
+      });
+    });
+  });
+
+  it("translates v1-only markdown artifacts by downloading text first", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.translate.request",
+        sourceTaskId: "task-parse",
+        sourceArtifactKey: "paper_md",
+        sourceFilename: "vaswani2017attention.md",
+        targetLanguage: "zh",
+        mode: "standard"
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(downloadArtifact).toHaveBeenCalledWith("task-parse", "paper_md", "vaswani2017attention.md");
+      expect(createTranslateTask).toHaveBeenCalledWith({
+        source_markdown_path: "",
+        source_markdown_text: "# Demo\n\nBody",
+        source_markdown_filename: "demo.md",
+        target_language: "zh",
+        mode: "standard"
+      });
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-translate", status: "queued" }
       });
     });
   });

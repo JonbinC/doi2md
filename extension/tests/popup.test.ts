@@ -51,10 +51,32 @@ describe("createSsotParseMessage", () => {
 describe("createTranslateMessage", () => {
   it("builds a translation message from a parsed markdown path", () => {
     expect(
-      createTranslateMessage("/tmp/zhou2025performance/paper.md", "zh", "standard")
+      createTranslateMessage({ path: "/tmp/zhou2025performance/paper.md" }, "zh", "standard")
     ).toEqual({
       type: "mdtero.translate.request",
       sourceMarkdownPath: "/tmp/zhou2025performance/paper.md",
+      targetLanguage: "zh",
+      mode: "standard"
+    });
+  });
+
+  it("builds a translation message from a v1 task artifact when no server path is exposed", () => {
+    expect(
+      createTranslateMessage(
+        {
+          taskId: "task-parse",
+          artifactKey: "paper_md",
+          filename: "vaswani2017attention.md"
+        },
+        "zh",
+        "standard"
+      )
+    ).toEqual({
+      type: "mdtero.translate.request",
+      sourceMarkdownPath: undefined,
+      sourceTaskId: "task-parse",
+      sourceArtifactKey: "paper_md",
+      sourceFilename: "vaswani2017attention.md",
       targetLanguage: "zh",
       mode: "standard"
     });

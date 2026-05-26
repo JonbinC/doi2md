@@ -42,13 +42,21 @@ export function createFileParseMessage(
 }
 
 export function createTranslateMessage(
-  sourceMarkdownPath: string,
+  sourceMarkdown: {
+    path?: string | null;
+    taskId?: string | null;
+    artifactKey?: string | null;
+    filename?: string | null;
+  },
   targetLanguage: string,
   mode: string
 ) {
   return {
     type: "mdtero.translate.request" as const,
-    sourceMarkdownPath,
+    sourceMarkdownPath: sourceMarkdown.path || undefined,
+    sourceTaskId: sourceMarkdown.taskId || undefined,
+    sourceArtifactKey: sourceMarkdown.artifactKey || undefined,
+    sourceFilename: sourceMarkdown.filename || undefined,
     targetLanguage,
     mode
   };
