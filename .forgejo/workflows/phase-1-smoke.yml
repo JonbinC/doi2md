@@ -1,0 +1,36 @@
+name: Forgejo Phase 1 Public Client Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forgejo-phase-1-public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Manual public client migration smoke
+    runs-on: linux-small
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List required secret names
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Forgejo secrets used by this workflow: none."
+          echo "This phase-1 smoke does not read Infisical, provider keys, Mdtero API keys, or admin credentials."
+
+      - name: Run lightweight public client checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 scripts/ci/secret_guard.py
+          python3 scripts/ci/forgejo_workflow_policy.py
+          python3 -m compileall -q src/mdtero scripts
