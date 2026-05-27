@@ -598,7 +598,7 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             "mdtero doctor --json",
             "mdtero config academic --json",
             "mdtero discover \"<topic>\" --limit 5 --json",
-            "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+            "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
             "mdtero rag query \"<question>\" --build-if-needed --json",
             "mdtero mcp briefing --json",
         ],
@@ -1974,7 +1974,7 @@ def _local_ready_for_rag_count(state: Any) -> int:
 
 def _rag_recovery_commands() -> list[str]:
     return [
-        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
         "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
