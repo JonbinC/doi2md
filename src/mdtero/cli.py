@@ -204,6 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     rag_query.add_argument("question")
     rag_query.add_argument("--project-id")
     rag_query.add_argument("--build-if-needed", action="store_true", help="Create/bind/import/build server RAG before querying when the local project is not ready.")
+    _add_wait_options(rag_query)
     rag_query.add_argument("--json", action="store_true")
     rag_status = _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
     rag_status.add_argument("--project-id")
@@ -1890,6 +1891,15 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
             _print_rag_command_failure(payload, json_output=args.json)
             return 1
         bootstrap["build"] = build
+        if not _rag_status_payload_is_ready(build):
+            status_after_build = _wait_for_rag_ready(client, project_id, args=args)
+            bootstrap["status_after_build"] = status_after_build
+            if not _rag_status_payload_is_ready(status_after_build):
+                reason_code = str(status_after_build.get("reason_code") or "rag_index_not_ready")
+                payload = _rag_query_build_not_ready(project_id, args.question, bootstrap, reason_code=reason_code)
+                payload["status_after_build"] = status_after_build
+                _print_rag_command_failure(payload, json_output=args.json)
+                return 1
     else:
         client = MdteroClient()
         project_id = _server_project_id_or_report(args, command="query")
@@ -1923,6 +1933,26 @@ def _rag_query_bootstrap_not_ready(project_id: str, question: str, bootstrap: di
         "action_hint": f"RAG query bootstrap could not import every succeeded parse task. Fix the import failures, rerun `{RAG_INGEST_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}`.",
         "next_commands": [RAG_INGEST_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
+
+
+def _rag_query_build_not_ready(project_id: str, question: str, bootstrap: dict[str, Any], *, reason_code: str) -> dict[str, Any]:
+    return {
+        "status": "failed",
+        "command": "rag_query",
+        "reason_code": reason_code,
+        "error_code": "rag_precondition_failed",
+        "server_project_id": project_id,
+        "question": question,
+        "bootstrap": bootstrap,
+        "action_hint": "Server-side Voyage RAG build has not become query-ready yet. Keep polling `mdtero rag status --json`, then retry the one-command RAG query.",
+        "next_commands": [RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
+    }
+
+
+def _rag_status_payload_is_ready(payload: dict[str, Any]) -> bool:
+    status = str(payload.get("status") or "").lower()
+    reason_code = str(payload.get("reason_code") or "").lower()
+    return status in {"ready", "succeeded", "indexed"} or reason_code in {"indexed", "rag_index_ready", "rag_ready"}
 
 
 def _local_ready_for_rag_count(state: Any) -> int:

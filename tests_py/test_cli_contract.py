@@ -691,6 +691,7 @@ def test_wait_commands_accept_timeout_and_interval_flags():
     project_parse_args = parser.parse_args(["project", "parse", "--wait", "--timeout", "9", "--interval", "2.5"])
     project_refresh_args = parser.parse_args(["project", "refresh", "--wait", "--timeout", "11", "--interval", "3.5"])
     translate_args = parser.parse_args(["translate", "parse-1", "--wait", "--timeout", "13", "--interval", "4.5"])
+    rag_query_args = parser.parse_args(["rag", "query", "What changed?", "--build-if-needed", "--timeout", "17", "--interval", "2"])
 
     assert parse_args.timeout == 5
     assert parse_args.interval == 0.5
@@ -702,6 +703,8 @@ def test_wait_commands_accept_timeout_and_interval_flags():
     assert project_refresh_args.interval == 3.5
     assert translate_args.timeout == 13
     assert translate_args.interval == 4.5
+    assert rag_query_args.timeout == 17
+    assert rag_query_args.interval == 2
 
 
 def test_rag_query_accepts_build_if_needed_flag():
@@ -6179,18 +6182,20 @@ def test_rag_query_build_if_needed_returns_bootstrap_context_when_query_not_read
     def fake_build(self, project_id):
         return {"status": "queued", "reason_code": "rag_build_queued"}
 
-    def fake_query(self, project_id, question):
-        request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
-        response = httpx.Response(409, request=request, json={"detail": {"reason_code": "rag_index_not_built"}})
-        raise httpx.HTTPStatusError("not ready", request=request, response=response)
+    def fake_status(self, project_id):
+        return {"status": "waiting", "reason_code": "rag_index_not_built", "next_commands": ["mdtero rag status --json"]}
+
+    def fake_query(self, project_id, question):  # pragma: no cover - should not query until RAG is ready
+        raise AssertionError("query should not run before RAG status is ready")
 
     monkeypatch.setattr(MdteroClient, "create_project", fake_create)
     monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
     monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
     monkeypatch.setattr(MdteroClient, "rag_query", fake_query)
     monkeypatch.chdir(tmp_path)
 
-    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "What is ready?", "build_if_needed": True, "json": True})()) == 1
+    assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "What is ready?", "build_if_needed": True, "timeout": 0.01, "interval": 0.01, "json": True})()) == 1
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["command"] == "rag_query"
@@ -6198,7 +6203,9 @@ def test_rag_query_build_if_needed_returns_bootstrap_context_when_query_not_read
     assert payload["server_project_id"] == "42"
     assert payload["bootstrap"]["ingest"]["imported_count"] == 1
     assert payload["bootstrap"]["build"]["reason_code"] == "rag_build_queued"
-    assert payload["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert payload["bootstrap"]["status_after_build"]["reason_code"] == "rag_index_not_built"
+    assert payload["status_after_build"]["reason_code"] == "rag_index_not_built"
+    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
 
 
 def test_zotero_item_maps_to_project_paper():
