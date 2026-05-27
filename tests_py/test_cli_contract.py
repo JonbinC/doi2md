@@ -3691,6 +3691,17 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["rag"]["agent_summary"]["provider_state"] == "configured"
     assert briefing["rag"]["agent_summary"]["provider_configured"] is True
     assert briefing["rag"]["agent_summary"]["embedding_model"] == "voyage-test"
+    expected_citation_contract = {
+        "answer_kind": "extractive_evidence_pack",
+        "evidence_fields": ["answer", "citations", "source_nodes", "matches", "evidence_pack.context_markdown"],
+        "required_for_final_answer": ["citations", "source_nodes"],
+        "agent_instruction": (
+            "Use source_nodes and citations as grounded evidence. Treat answer as an extractive summary, "
+            "not a generated final synthesis, unless a downstream LLM rewrites it with citations preserved."
+        ),
+        "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "citation_contract"],
+    }
+    assert briefing["rag"]["citation_contract"] == expected_citation_contract
     assert briefing["rag"]["next_best_action"] == {
         "action": "query",
         "scope": "user_or_agent",
@@ -3700,6 +3711,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
         "action_hint": "RAG is ready; ask a grounded project question and preserve answer, citations, source_nodes, and evidence_pack.",
         "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
+        "citation_contract": expected_citation_contract,
     }
     checklist = {item["id"]: item for item in briefing["onboarding_checklist"]}
     assert list(checklist) == [
@@ -4250,6 +4262,11 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
     assert payload["evidence_pack"]["question"] == "What does attention replace?"
     assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
     assert "grounded evidence" in payload["evidence_pack"]["agent_instruction"]
+    assert payload["citation_contract"]["answer_kind"] == "extractive_evidence_pack"
+    assert payload["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
+    assert "evidence_pack.context_markdown" in payload["citation_contract"]["evidence_fields"]
+    assert "grounded evidence" in payload["citation_contract"]["agent_instruction"]
+    assert payload["next_best_action"]["citation_contract"] == payload["citation_contract"]
     assert payload["readiness"]["ready_for_query"] is True
     assert payload["readiness"]["provider_blocked"] is False
     assert payload["readiness"]["next_step"] == "query"
@@ -4789,7 +4806,10 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
         "action_hint": "RAG is ready; ask a grounded project question and preserve answer, citations, source_nodes, and evidence_pack.",
         "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
+        "citation_contract": status["citation_contract"],
     }
+    assert status["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
+    assert "evidence_pack.context_markdown" in status["citation_contract"]["evidence_fields"]
     assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
 
@@ -5682,6 +5702,11 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     assert payload["evidence_pack"]["question"] == "What is the contribution?"
     assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
     assert "grounded evidence" in payload["evidence_pack"]["agent_instruction"]
+    assert payload["citation_contract"]["answer_kind"] == "extractive_evidence_pack"
+    assert payload["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
+    assert "evidence_pack.context_markdown" in payload["citation_contract"]["evidence_fields"]
+    assert "grounded evidence" in payload["citation_contract"]["agent_instruction"]
+    assert payload["next_best_action"]["citation_contract"] == payload["citation_contract"]
     assert payload["readiness"]["ready_for_query"] is True
     assert payload["readiness"]["provider_blocked"] is False
     assert payload["readiness"]["next_step"] == "query"

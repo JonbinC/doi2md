@@ -6,6 +6,7 @@ from typing import Any
 def ensure_rag_contract(payload: dict[str, Any]) -> dict[str, Any]:
     """Backfill the shared server/CLI/MCP RAG readiness contract."""
 
+    payload.setdefault("citation_contract", build_rag_citation_contract(payload))
     payload.setdefault("readiness", build_rag_readiness(payload))
     payload["next_best_action"] = build_rag_next_best_action(payload)
     payload.setdefault("agent_summary", build_rag_agent_summary(payload))
@@ -182,6 +183,21 @@ def build_rag_next_best_action(payload: dict[str, Any]) -> dict[str, Any]:
         "primary_command": primary_command,
         "action_hint": hint,
         "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
+        "citation_contract": payload.get("citation_contract") or build_rag_citation_contract(payload),
+    }
+
+
+def build_rag_citation_contract(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    answer_kind = str((payload or {}).get("answer_kind") or "extractive_evidence_pack")
+    return {
+        "answer_kind": answer_kind,
+        "evidence_fields": ["answer", "citations", "source_nodes", "matches", "evidence_pack.context_markdown"],
+        "required_for_final_answer": ["citations", "source_nodes"],
+        "agent_instruction": (
+            "Use source_nodes and citations as grounded evidence. Treat answer as an extractive summary, "
+            "not a generated final synthesis, unless a downstream LLM rewrites it with citations preserved."
+        ),
+        "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "citation_contract"],
     }
 
 
