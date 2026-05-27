@@ -100,7 +100,7 @@ def build_input_route_contract() -> dict[str, Any]:
                     "mdtero project ingest --json",
                     ONE_COMMAND_RAG_BOOTSTRAP,
                     "mdtero rag status --json",
-                    "mdtero rag build --json",
+                    "mdtero rag build --wait --json",
                     GENERIC_RAG_QUERY_COMMAND,
                     "mdtero mcp briefing --json",
                     "mdtero mcp serve",
@@ -232,7 +232,7 @@ def build_onboarding_checklist(
             "title": "Build backend Voyage RAG",
             "status": "ready_after_parse",
             "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
-            "secondary_commands": [GENERIC_RAG_QUERY_COMMAND, "mdtero rag status --json", "mdtero rag build --json"],
+            "secondary_commands": [GENERIC_RAG_QUERY_COMMAND, "mdtero rag status --json", "mdtero rag build --wait --json"],
             "action_hint": "Voyage runs on the Mdtero backend; no local RAG provider key or manual server project id is required.",
         },
         {
@@ -326,7 +326,7 @@ def build_next_step_command_groups() -> list[dict[str, Any]]:
             [
                 ONE_COMMAND_RAG_BOOTSTRAP,
                 "mdtero rag status --json",
-                "mdtero rag build --json",
+                "mdtero rag build --wait --json",
                 GENERIC_RAG_QUERY_COMMAND,
                 "mdtero mcp briefing --json",
                 "mdtero mcp serve",

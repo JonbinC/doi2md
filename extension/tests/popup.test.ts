@@ -739,7 +739,7 @@ describe("getTaskFailureText", () => {
         "mdtero project refresh --wait --timeout 300 --json",
         "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "mdtero rag status --json",
-        "mdtero rag build --json",
+        "mdtero rag build --wait --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
         "mdtero mcp serve"
@@ -758,7 +758,7 @@ describe("getTaskFailureText", () => {
       "mdtero project refresh --wait --timeout 300 --json",
       "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
       "mdtero rag status --json",
-      "mdtero rag build --json",
+      "mdtero rag build --wait --json",
       "mdtero rag query \"<question>\" --build-if-needed --json",
       "mdtero mcp briefing --json",
       "mdtero mcp serve"
@@ -788,7 +788,7 @@ describe("getTaskFailureText", () => {
       "5. mdtero project refresh --wait --timeout 300 --json",
       "6. mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
       "7. mdtero rag status --json",
-      "8. mdtero rag build --json",
+      "8. mdtero rag build --wait --json",
       "9. mdtero rag query \"<question>\" --build-if-needed --json",
       "10. mdtero mcp briefing --json",
       "11. mdtero mcp serve",
@@ -844,14 +844,14 @@ describe("getTaskFailureText", () => {
     expect(
       formatCliHandoffClipboard("mdtero rag status --json", [
         "mdtero rag status --json",
-        "mdtero rag build --json"
+        "mdtero rag build --wait --json"
       ])
     ).toBe([
       "# Mdtero CLI handoff",
       "",
       "Run these commands in order:",
       "1. mdtero rag status --json",
-      "2. mdtero rag build --json"
+      "2. mdtero rag build --wait --json"
     ].join("\n"));
   });
 
@@ -880,7 +880,7 @@ describe("getTaskFailureText", () => {
         "mdtero project refresh --wait --timeout 300 --json",
         "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "mdtero rag status --json",
-        "mdtero rag build --json",
+        "mdtero rag build --wait --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
         "mdtero mcp serve"

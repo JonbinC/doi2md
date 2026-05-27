@@ -385,7 +385,7 @@ describe("createApiClient", () => {
             next_commands: [
               "mdtero project create-server --json",
               "mdtero project ingest --json",
-              "mdtero rag build --json",
+              "mdtero rag build --wait --json",
               "mdtero rag status --json"
             ]
           }
@@ -407,7 +407,7 @@ describe("createApiClient", () => {
     );
 
     await expect(client.getTask("task-123")).rejects.toThrow(
-      "Project RAG is not ready. Reason: server_project_not_linked Next: Create and bind a server project before querying RAG. Commands: 1. mdtero project create-server --json 2. mdtero project ingest --json 3. mdtero rag build --json 4. mdtero rag status --json"
+      "Project RAG is not ready. Reason: server_project_not_linked Next: Create and bind a server project before querying RAG. Commands: 1. mdtero project create-server --json 2. mdtero project ingest --json 3. mdtero rag build --wait --json 4. mdtero rag status --json"
     );
   });
 

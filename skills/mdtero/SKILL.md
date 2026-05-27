@@ -38,7 +38,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output --json`
 - bootstrap server-side Voyage RAG and query from one command: `mdtero rag query "What are the strongest findings?" --build-if-needed --json`
 - use a reusable project question when automating: `mdtero rag query "<question>" --build-if-needed --json`
-- explicit recovery/debug commands remain available: `mdtero rag build --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
+- explicit recovery/debug commands remain available: `mdtero rag build --wait --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
 - parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 300 --json`
 - continue from an extension handoff: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`

@@ -461,7 +461,7 @@ const PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero project refresh --wait --timeout 300 --json",
   "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
   "mdtero rag status --json",
-  "mdtero rag build --json",
+  "mdtero rag build --wait --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
   "mdtero mcp briefing --json",
   "mdtero mcp serve",
@@ -479,7 +479,7 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
   const projectRefreshCommands = commands.filter((command) => command === "mdtero project refresh --wait --timeout 300 --json");
   const ragBootstrapCommands = commands.filter((command) => command === PARSE_HANDOFF_FOLLOWUPS[4]);
   const ragStatusCommands = commands.filter((command) => command === "mdtero rag status --json");
-  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --json");
+  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --wait --json");
   const ragQueryCommands = commands.filter((command) => /^mdtero\s+rag\s+query\b/.test(command));
   const genericRagQueryCommands = ragQueryCommands.filter((command) => command !== PARSE_HANDOFF_FOLLOWUPS[4]);
   const mcpBriefingCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
@@ -491,7 +491,7 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
       !/^mdtero\s+download\b/.test(command) &&
       command !== "mdtero project ingest --json" &&
       command !== "mdtero project refresh --wait --timeout 300 --json" &&
-      command !== "mdtero rag build --json" &&
+      command !== "mdtero rag build --wait --json" &&
       command !== "mdtero rag status --json" &&
       !/^mdtero\s+rag\s+query\b/.test(command) &&
       command !== "mdtero mcp briefing --json" &&

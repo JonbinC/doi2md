@@ -115,7 +115,7 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero project ingest --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero project parse --wait --timeout 300 --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero project refresh --wait --timeout 300 --json");
-    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag build --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag build --wait --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag status --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp briefing --json");
@@ -205,7 +205,7 @@ describe("extension options page", () => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero project ingest --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero project refresh --wait --timeout 300 --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"));
-      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag build --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag build --wait --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag status --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag query \"<question>\" --build-if-needed --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("Preserve citation_contract.required_for_final_answer"));
