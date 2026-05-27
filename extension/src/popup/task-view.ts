@@ -50,6 +50,71 @@ export function getSourceArtifactKeys(result?: TaskResult | null): string[] {
   return SOURCE_ORDER.filter((key) => artifactKeys.includes(key));
 }
 
+export function getTaskProcessingSummary(
+  task:
+    | (Pick<
+        TaskRecord,
+        | "selected_provider"
+        | "parser_strategy"
+        | "client_acquisition"
+        | "parse_outcome"
+        | "reason_code"
+        | "action_hint"
+        | "preferred_artifact"
+      > & {
+        result?: Pick<
+          TaskResult,
+          | "selected_provider"
+          | "parser_strategy"
+          | "client_acquisition"
+          | "parse_outcome"
+          | "reason_code"
+          | "action_hint"
+          | "preferred_artifact"
+          | "download_artifacts"
+          | "artifacts"
+        > | null;
+      })
+    | null
+    | undefined,
+  language: UiLanguage = "en"
+): string[] {
+  const result = task?.result;
+  const provider = firstPresentString(task?.selected_provider, result?.selected_provider);
+  const strategy = firstPresentString(task?.parser_strategy, result?.parser_strategy);
+  const acquisition = summarizeClientAcquisition(task?.client_acquisition || result?.client_acquisition);
+  const outcome = summarizeParseOutcome(task?.parse_outcome || result?.parse_outcome);
+  const reason = firstPresentString(task?.reason_code, result?.reason_code);
+  const actionHint = firstPresentString(task?.action_hint, result?.action_hint);
+  const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
+  const artifacts = summarizeDownloadArtifacts(result);
+  const lines: string[] = [];
+
+  if (provider || strategy) {
+    const value = [provider, strategy].filter(Boolean).join(" · ");
+    lines.push(language === "zh" ? `处理路径：${value}` : `Processing path: ${value}`);
+  }
+  if (acquisition) {
+    lines.push(language === "zh" ? `本地/浏览器抓取：${acquisition}` : `Acquisition: ${acquisition}`);
+  }
+  if (outcome) {
+    lines.push(language === "zh" ? `解析结果：${outcome}` : `Outcome: ${outcome}`);
+  }
+  if (preferredArtifact) {
+    lines.push(language === "zh" ? `首选产物：${preferredArtifact}` : `Preferred artifact: ${preferredArtifact}`);
+  }
+  if (artifacts) {
+    lines.push(language === "zh" ? `可下载：${artifacts}` : `Downloads: ${artifacts}`);
+  }
+  if (reason) {
+    lines.push(language === "zh" ? `原因：${reason}` : `Reason: ${reason}`);
+  }
+  if (actionHint) {
+    lines.push(language === "zh" ? `下一步：${redactSensitiveText(actionHint)}` : `Next: ${redactSensitiveText(actionHint)}`);
+  }
+  return lines.map(redactSensitiveText).filter(Boolean);
+}
+
 export function getDownloadLabel(artifactKey: string, language: UiLanguage = "en"): string {
   if (language === "zh") {
     if (artifactKey === "paper_md") {
@@ -644,6 +709,45 @@ function firstPresentString(...values: unknown[]): string | undefined {
     }
   }
   return undefined;
+}
+
+function summarizeClientAcquisition(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const source = firstPresentString(record.source);
+  const artifactKind = firstPresentString(record.artifact_kind, record.kind);
+  const statusCode = firstPresentString(record.status_code);
+  const contentType = firstPresentString(record.content_type);
+  const parts = [source, artifactKind, statusCode ? `HTTP ${statusCode}` : undefined, contentType].filter(Boolean);
+  return parts.length ? parts.join(" · ") : summarizeObjectForHandoff(value);
+}
+
+function summarizeParseOutcome(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const outcome = firstPresentString(record.outcome_code, record.outcome, record.status);
+  const reason = firstPresentString(record.reason_code);
+  const parts = [outcome, reason].filter(Boolean);
+  return parts.length ? parts.join(" · ") : summarizeObjectForHandoff(value);
+}
+
+function summarizeDownloadArtifacts(result?: Pick<TaskResult, "download_artifacts" | "artifacts"> | null): string | undefined {
+  const listed = (result?.download_artifacts ?? [])
+    .map((artifact) => {
+      const name = firstPresentString(artifact.artifact);
+      const filename = firstPresentString(artifact.filename);
+      return [name, filename].filter(Boolean).join(": ");
+    })
+    .filter(Boolean);
+  const keyed = Object.entries(result?.artifacts ?? {})
+    .map(([artifact, descriptor]) => [artifact, descriptor?.filename].filter(Boolean).join(": "))
+    .filter(Boolean);
+  const artifacts = Array.from(new Set([...listed, ...keyed]));
+  return artifacts.length ? artifacts.join("; ") : undefined;
 }
 
 function summarizeObjectForHandoff(value: unknown): string | undefined {

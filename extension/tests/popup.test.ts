@@ -21,6 +21,7 @@ import {
   getResultWarningText,
   getTaskFailureText,
   getTaskFailureCliHandoff,
+  getTaskProcessingSummary,
   buildApiErrorCliHandoffPlan,
   buildApiErrorHandoffContext,
   buildTaskFailureCliHandoffPlan,
@@ -287,6 +288,57 @@ describe("getSourceArtifactKeys", () => {
         ]
       })
     ).toEqual(["paper_pdf", "paper_xml"]);
+  });
+});
+
+describe("getTaskProcessingSummary", () => {
+  it("summarizes provider, strategy, acquisition, outcome, and artifacts for popup visibility", () => {
+    expect(
+      getTaskProcessingSummary(
+        {
+          selected_provider: "mineru_precision",
+          parser_strategy: "mineru_precision_ast",
+          client_acquisition: {
+            source: "curl_cffi",
+            artifact_kind: "pdf",
+            status_code: 200,
+            content_type: "application/pdf"
+          },
+          parse_outcome: {
+            outcome_code: "fulltext_accepted"
+          },
+          result: {
+            preferred_artifact: "paper_md",
+            download_artifacts: [
+              { artifact: "paper_md", filename: "gholami2019drone.md" },
+              { artifact: "paper_bundle", filename: "gholami2019drone.zip" }
+            ]
+          }
+        },
+        "en"
+      )
+    ).toEqual([
+      "Processing path: mineru_precision · mineru_precision_ast",
+      "Acquisition: curl_cffi · pdf · HTTP 200 · application/pdf",
+      "Outcome: fulltext_accepted",
+      "Preferred artifact: paper_md",
+      "Downloads: paper_md: gholami2019drone.md; paper_bundle: gholami2019drone.zip"
+    ]);
+  });
+
+  it("localizes failure diagnostics and redacts sensitive hints", () => {
+    expect(
+      getTaskProcessingSummary(
+        {
+          reason_code: "client_acquisition_challenge_page",
+          action_hint: "Retry with Bearer secret-token at https://oss.example.com/file.pdf?token=abc"
+        },
+        "zh"
+      )
+    ).toEqual([
+      "原因：client_acquisition_challenge_page",
+      "下一步：Retry with Bearer [redacted] at https://oss.example.com/file.pdf?token=[redacted]"
+    ]);
   });
 });
 
