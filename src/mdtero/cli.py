@@ -2616,6 +2616,15 @@ def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> No
             source_ref = str(citation.get("doi") or citation.get("source_url") or "").strip()
             suffix = f" · {source_ref}" if source_ref else ""
             console.print(f"  [{order}] {title}{line_ref}{suffix}")
+    citation_contract = payload.get("citation_contract") if isinstance(payload.get("citation_contract"), dict) else {}
+    required_fields = citation_contract.get("required_for_final_answer") if isinstance(citation_contract.get("required_for_final_answer"), list) else []
+    agent_instruction = str(citation_contract.get("agent_instruction") or "").strip()
+    if required_fields or agent_instruction:
+        console.print("\n[bold]Citation contract[/bold]")
+        if required_fields:
+            console.print(f"  Final answers must preserve: {', '.join(str(field) for field in required_fields)}")
+        if agent_instruction:
+            console.print(f"  {agent_instruction}")
     next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
     if next_commands:
         console.print("\n[bold]Next[/bold]")
