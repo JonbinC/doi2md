@@ -17,7 +17,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
+from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -4998,6 +4998,67 @@ def test_mcp_server_rag_status_treats_needs_build_as_waiting(tmp_path: Path):
     assert briefing["health"]["rag_reason_code"] == "rag_index_not_built"
     assert briefing["rag"]["agent_summary"]["readiness_status"] == "waiting"
     assert "mdtero rag build --wait --json" in briefing["recommended_next_commands"]
+    assert "server_rag_build" in briefing["mcp_tools"]
+    assert briefing["mcp_server"]["tools"] == [
+        "agent_briefing",
+        "project_init",
+        "project_status",
+        "project_add",
+        "paper_context",
+        "submit_parse",
+        "task_status",
+        "download_artifact",
+        "request_translation",
+        "rag_context",
+        "server_rag_status",
+        "server_rag_build",
+        "rag_query",
+        "agent_commands",
+    ]
+    prepare_step = next(step for step in briefing["mcp_tool_plan"] if step["step"] == "prepare_rag")
+    assert prepare_step["tool"] == "server_rag_build"
+    assert prepare_step["arguments"] == {"wait": True, "timeout": 300, "interval": 2}
+
+
+def test_mcp_server_rag_build_waits_until_ready(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    class FakeClient:
+        def create_project(self, name, *, description=None):
+            calls.append(("create", name, description))
+            return {"id": 42, "name": name}
+
+        def import_task_to_project(self, project_id, task_id):
+            calls.append(("import", project_id, task_id))
+            return {"document_id": "doc-1"}
+
+        def rag_build(self, project_id):
+            calls.append(("build", project_id))
+            return {"status": "queued", "reason_code": "rag_build_queued"}
+
+        def rag_status(self, project_id):
+            calls.append(("status", project_id))
+            return {"status": "ready", "reason_code": "indexed", "readiness": {"ready_for_query": True}}
+
+    payload = build_server_rag_for_agent(tmp_path, client=FakeClient(), wait=True, timeout=1, interval=0.01)
+    state = load_project(tmp_path)
+
+    assert payload["status"] == "queued"
+    assert payload["reason_code"] == "rag_build_queued"
+    assert payload["ready_for_query"] is True
+    assert payload["server_project_id"] == "42"
+    assert payload["bootstrap"]["created_server_project"] is True
+    assert payload["bootstrap"]["ingest"]["imported_count"] == 1
+    assert payload["status_after_build"]["reason_code"] == "indexed"
+    assert state.server_project_id == "42"
+    assert calls == [
+        ("create", "agent-demo", "Mdtero local project: agent-demo"),
+        ("import", "42", "task-done"),
+        ("build", "42"),
+        ("status", "42"),
+    ]
 
 
 def test_mcp_server_rag_status_treats_voyage_not_configured_as_blocked(tmp_path: Path):
@@ -5270,7 +5331,8 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     plan_steps = {step["step"]: step for step in model["mcp"]["tool_plan"]}
     assert plan_steps["download_artifact"]["tool"] == "download_artifact"
     assert plan_steps["translate_ready_artifact"]["tool"] == "request_translation"
-    assert plan_steps["prepare_rag"]["tool"] == "server_rag_status"
+    assert plan_steps["prepare_rag"]["tool"] == "server_rag_build"
+    assert plan_steps["prepare_rag"]["arguments"] == {"wait": True, "timeout": 300, "interval": 2}
     assert "readiness" in plan_steps["prepare_rag"]["failure_fields"]
     assert model["mcp"]["agent_playbook"]["current_phase"] == "build_or_query_rag"
     assert model["mcp"]["agent_playbook"]["first_action"]["tool"] == "rag_query"
@@ -5347,7 +5409,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "rag_query" in output
     assert "evidence_pack.context_markdown" in output
     assert "prepare_rag" in output
-    assert "server_rag_status" in output
+    assert "server_rag_build" in output
     assert "failure_fields" not in output
     assert "readiness" in output
     assert "r" in output

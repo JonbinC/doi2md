@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any
 
 from .agent import detect_target_status
@@ -520,6 +521,53 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     return redact_sensitive_payload(status)
 
 
+def build_server_rag_for_agent(
+    project_root: Path | None = None,
+    *,
+    client: Any | None = None,
+    wait: bool = True,
+    timeout: float = 300.0,
+    interval: float = 2.0,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    state = _load_project_or_none(root)
+    commands = build_agent_commands(root)["commands"]
+    if state is None:
+        return {
+            "status": "not_ready",
+            "reason_code": "project_not_initialized",
+            "project": root.resolve().name,
+            "server_project_id": None,
+            "action_hint": "Initialize a local Mdtero project before building server-side Voyage RAG.",
+            "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+        }
+    active_client = client or MdteroClient()
+    project_id, bootstrap = _bootstrap_server_rag_for_build(active_client, root, state, commands)
+    if not project_id:
+        return redact_sensitive_payload(bootstrap)
+    result = bootstrap.get("build") if isinstance(bootstrap.get("build"), dict) else {}
+    if not isinstance(result, dict):
+        result = {"status": "submitted", "result": result}
+    result.setdefault("project", state.name)
+    result.setdefault("server_project_id", project_id)
+    result.setdefault("bootstrap", {key: value for key, value in bootstrap.items() if key != "build"})
+    result.setdefault("action_hint", "Server-side Voyage RAG build was submitted. Use status_after_build when wait=true, then query with rag_query(question).")
+    result.setdefault("next_commands", [commands["rag_status"], commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
+    if wait:
+        status_after_build = _wait_for_agent_rag_ready(active_client, project_id, timeout=timeout, interval=interval)
+        result["status_after_build"] = status_after_build
+        if _rag_status_payload_is_ready(status_after_build):
+            result.setdefault("ready_for_query", True)
+            result["action_hint"] = "Server-side Voyage RAG is query-ready. Ask a grounded project question with rag_query(question)."
+            result["next_commands"] = [commands["rag_status"], commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]]
+        else:
+            result.setdefault("ready_for_query", False)
+            result["reason_code"] = str(status_after_build.get("reason_code") or result.get("reason_code") or "rag_index_not_ready")
+            result["action_hint"] = "RAG build was submitted but is not query-ready yet. Continue polling server_rag_status or retry server_rag_build with a longer timeout."
+            result["next_commands"] = [commands["rag_status"], commands["rag_build"], commands["rag_query"]]
+    return redact_sensitive_payload(result)
+
+
 def query_server_rag(
     question: str,
     project_root: Path | None = None,
@@ -1034,6 +1082,128 @@ def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, command
     return project_id, bootstrap
 
 
+def _bootstrap_server_rag_for_build(client: Any, root: Path, state: Any, commands: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    project_id = str(state.server_project_id or "").strip()
+    if not succeeded:
+        return None, {
+            "status": "not_ready",
+            "reason_code": "no_succeeded_tasks",
+            "project": state.name,
+            "server_project_id": project_id or state.server_project_id,
+            "local_ready_for_ingest_count": 0,
+            "local_paper_count": len(state.papers),
+            "action_hint": "Parse at least one paper successfully before building server-side Voyage RAG.",
+            "next_commands": _rag_recovery_commands(commands),
+        }
+
+    bootstrap: dict[str, Any] = {
+        "created_server_project": False,
+        "bound_local_project": bool(project_id),
+        "ingest": {"imported_count": 0, "failed_count": 0, "items": [], "failures": []},
+    }
+    if not project_id:
+        try:
+            created, reused = _find_or_create_server_project_for_mcp(client, state.name, description=f"Mdtero local project: {state.name}")
+        except Exception as exc:
+            return None, _bootstrap_failure_payload(state, commands, exc, reason_code="server_project_create_failed")
+        project_id = str(created.get("id") or "").strip() if isinstance(created, dict) else ""
+        if not project_id:
+            return None, _bootstrap_failure_payload(state, commands, RuntimeError("server_project_id_missing"), reason_code="server_project_id_missing")
+        bind_server_project(root, project_id)
+        bootstrap.update({"created_server_project": not reused, "reused_server_project": reused, "bound_local_project": True, "project": created})
+
+    items: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for paper in succeeded:
+        try:
+            result = client.import_task_to_project(project_id, paper.task_id)
+        except Exception as exc:
+            failures.append({
+                "input": paper.input,
+                "task_id": paper.task_id,
+                "status": "failed",
+                "error_type": exc.__class__.__name__,
+                "reason_code": "server_project_import_failed",
+            })
+            continue
+        items.append({"input": paper.input, "task_id": paper.task_id, "result": result})
+    bootstrap["ingest"] = {
+        "server_project_id": project_id,
+        "imported_count": len(items),
+        "failed_count": len(failures),
+        "items": items,
+        "failures": failures,
+    }
+    if failures:
+        return None, {
+            "status": "failed",
+            "reason_code": "server_project_import_failed",
+            "project": state.name,
+            "server_project_id": project_id,
+            "bootstrap": bootstrap,
+            "action_hint": "Some succeeded parse tasks could not be imported into the server project. Fix import failures, then rerun server_rag_build.",
+            "next_commands": ["mdtero project ingest --json", "mdtero rag status --json", commands["rag_build"]],
+        }
+    try:
+        bootstrap["build"] = client.rag_build(project_id)
+    except Exception as exc:
+        detail = _rag_query_exception_detail(exc)
+        return None, {
+            "status": "failed",
+            "reason_code": str(detail.get("reason_code") or "server_rag_build_failed"),
+            "project": state.name,
+            "server_project_id": project_id,
+            "error_type": exc.__class__.__name__,
+            "bootstrap": bootstrap,
+            "action_hint": _public_rag_action_hint(
+                str(detail.get("reason_code") or "server_rag_build_failed"),
+                detail.get("action_hint"),
+            ),
+            "next_commands": _rag_query_failure_next_commands(detail, commands),
+        }
+    return project_id, bootstrap
+
+
+def _wait_for_agent_rag_ready(client: Any, project_id: str, *, timeout: float, interval: float) -> dict[str, Any]:
+    poll_interval = max(0.25, float(interval or 2.0))
+    deadline = time.monotonic() + max(0.25, float(timeout or 300.0))
+    last_status: dict[str, Any] = {}
+    while True:
+        try:
+            last_status = client.rag_status(project_id)
+        except Exception as exc:
+            return _agent_tool_exception_payload(
+                exc,
+                reason_code="server_rag_status_unavailable",
+                action_hint="RAG build was submitted, but MCP could not poll backend RAG status. Retry server_rag_status or server_rag_build.",
+                next_commands=["mdtero rag status --json", "mdtero rag build --wait --json"],
+                extra={"server_project_id": project_id},
+            )
+        if _rag_status_payload_is_ready(last_status):
+            last_status.setdefault("ready_for_query", True)
+            return last_status
+        status = str(last_status.get("status") or "").lower()
+        if status in {"failed", "cancelled", "error"}:
+            last_status.setdefault("ready_for_query", False)
+            return last_status
+        if time.monotonic() >= deadline:
+            last_status.setdefault("status", "timeout")
+            last_status.setdefault("reason_code", "rag_wait_timeout")
+            last_status.setdefault("ready_for_query", False)
+            last_status.setdefault("action_hint", "Server-side RAG build did not become ready within the MCP wait timeout.")
+            last_status.setdefault("next_commands", ["mdtero rag status --json", "mdtero rag build --wait --json"])
+            return last_status
+        time.sleep(poll_interval)
+
+
+def _rag_status_payload_is_ready(payload: dict[str, Any]) -> bool:
+    status = str(payload.get("status") or "").lower()
+    reason_code = str(payload.get("reason_code") or "").lower()
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else {}
+    return bool(readiness.get("ready_for_query")) or status in {"ready", "succeeded", "indexed"} or reason_code in {"indexed", "rag_index_ready", "rag_ready"}
+
+
 def _find_or_create_server_project_for_mcp(client: Any, name: str, *, description: str | None = None) -> tuple[dict[str, Any], bool]:
     normalized_name = str(name or "").strip()
     try:
@@ -1380,6 +1550,7 @@ def build_agent_briefing(
             "request_translation",
             "rag_context",
             "server_rag_status",
+            "server_rag_build",
             "rag_query",
             "agent_commands",
         ],
@@ -1413,6 +1584,7 @@ def _mcp_server_payload(commands: dict[str, Any], root: Path) -> dict[str, Any]:
         "request_translation",
         "rag_context",
         "server_rag_status",
+        "server_rag_build",
         "rag_query",
         "agent_commands",
     ]
@@ -1571,14 +1743,16 @@ def _build_mcp_tool_plan(
             "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
         })
     else:
+        next_step = str(server_rag.get("readiness", {}).get("next_step") if isinstance(server_rag.get("readiness"), dict) else "")
+        needs_build = next_step == "build" or server_rag.get("reason_code") in {"rag_index_not_built", "rag_index_partial"}
         plan.append({
             "step": "prepare_rag",
-            "tool": "server_rag_status",
-            "purpose": "Check whether the backend Voyage index needs ingest, build, provider configuration, or more parsed documents.",
+            "tool": "server_rag_build" if needs_build else "server_rag_status",
+            "purpose": "Build or inspect the backend Voyage index, preserving readiness and provider diagnostics for the next agent step.",
             "when": "rag.agent_summary.ready_for_query is false or rag.reason_code is not indexed/rag_query_succeeded.",
-            "arguments": {},
-            "success_signal": "readiness.next_step and next_commands identify ingest/build/query or provider-blocked state.",
-            "next_on_success": "Follow next_commands; agents may call rag_query(question), which bootstraps build-if-needed through the CLI/MCP wrapper.",
+            "arguments": {"wait": True, "timeout": 300, "interval": 2} if needs_build else {},
+            "success_signal": "status_after_build.ready_for_query is true, or readiness.next_step and next_commands identify ingest/build/query/provider-blocked state.",
+            "next_on_success": "Call rag_query(question) once ready; otherwise follow next_commands without guessing server project ids.",
             "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
         })
 
@@ -2044,6 +2218,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def server_rag_status() -> dict:
         return build_server_rag_status(root)
+
+    @mcp.tool
+    def server_rag_build(wait: bool = True, timeout: float = 300.0, interval: float = 2.0) -> dict:
+        return build_server_rag_for_agent(root, wait=wait, timeout=timeout, interval=interval)
 
     @mcp.tool
     def rag_query(question: str) -> dict:
