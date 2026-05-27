@@ -7,11 +7,11 @@ Mdtero Account is the control plane for API keys, quota, billing, history, diagn
 ## Recommended Quick Start
 
 ```bash
-uv tool install git+https://github.com/JonbinC/doi2md.git
+uv tool install mdtero
 mdtero setup
 ```
 
-This is the current alpha install path. After the PyPI handoff, `uv tool install mdtero` becomes the stable command. Until then, install from GitHub to get the tested `0.2.0a9` client.
+This is the stable public install path. If PyPI propagation lags during alpha testing, use `uv tool install git+https://github.com/JonbinC/doi2md.git` as the temporary fallback to get the tested `0.2.0a9` client.
 
 `mdtero setup` is the preferred human onboarding flow: it authenticates, offers optional academic-key setup, detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces, and can install selected agent skills before showing next commands. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` intentionally skips agent detection; run `mdtero agent install --interactive` later on the machine that owns the agent workspace. Do not put the API key value directly in shell history.
 
@@ -28,7 +28,7 @@ curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
 sh install-mdtero.sh --agent codex
 ```
 
-The install script requires `uv`, installs the Python runtime from the public GitHub repo during alpha, then runs `mdtero agent install --target <target>`.
+The install script requires `uv`, installs the Python runtime from PyPI with a public GitHub fallback during alpha, then runs `mdtero agent install --target <target>`.
 
 ## Connect An Agent Workspace
 
@@ -127,7 +127,7 @@ uv tool uninstall mdtero
 
 ## Troubleshooting
 
-- If `mdtero` is missing during alpha, run `uv tool install git+https://github.com/JonbinC/doi2md.git`.
+- If `mdtero` is missing, run `uv tool install mdtero`; during alpha, use `uv tool install git+https://github.com/JonbinC/doi2md.git` only if the PyPI package is unavailable.
 - If `uv` is missing, install it from `https://docs.astral.sh/uv/getting-started/installation/`.
 - If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero setup --api-key --json`.
 - If no agent workspace is detected, pass an explicit `--target`.
@@ -141,10 +141,11 @@ The browser extension owns browser-context capture, OAuth bridge, user-selected 
 
 ## 中文版
 
-Mdtero 当前公开主线是 Python/uv 客户端。alpha 阶段推荐：
+Mdtero 当前公开主线是 Python/uv 客户端。默认安装：
 
 ```bash
-uv tool install git+https://github.com/JonbinC/doi2md.git
+uv tool install mdtero
+# fallback: uv tool install git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 mdtero doctor
 ```

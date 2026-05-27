@@ -2088,7 +2088,8 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
         ]),
         "command_blocks": {
             "workstation_oauth": "\n".join([
-                "uv tool install git+https://github.com/JonbinC/doi2md.git",
+                "uv tool install mdtero",
+                "# Alpha fallback if PyPI has not propagated yet: uv tool install git+https://github.com/JonbinC/doi2md.git",
                 str(commands.get("setup") or "mdtero setup"),
                 "mdtero setup --json",
                 str(commands.get("doctor") or "mdtero doctor --json"),
@@ -2331,9 +2332,9 @@ def serve_project_context(project_root: Path | None = None) -> None:
     except Exception as exc:  # pragma: no cover - optional runtime import
         raise RuntimeError(
             "FastMCP is required for `mdtero mcp serve`. Run `mdtero doctor --json` first; "
-            "during alpha, reinstall the public client with "
-            "`uv tool install --force git+https://github.com/JonbinC/doi2md.git`. "
-            "After the PyPI handoff, `uv tool install --force mdtero` is the stable command."
+            "reinstall the public client with `uv tool install --force mdtero`. "
+            "If PyPI propagation lags during alpha testing, use "
+            "`uv tool install --force git+https://github.com/JonbinC/doi2md.git` as the temporary fallback."
         ) from exc
 
     root = project_root or Path.cwd()
