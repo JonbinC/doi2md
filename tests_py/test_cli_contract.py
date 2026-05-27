@@ -3795,6 +3795,23 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["agents"]["installed_count"] == 0
     assert briefing["agents"]["pending_install_targets"] == ["codex"]
     assert briefing["agents"]["interactive_install_command"] == "mdtero agent install --interactive"
+    assert briefing["mcp_server"] == {
+        "name": "mdtero",
+        "runtime": "FastMCP",
+        "transport": "stdio",
+        "serve_command": "mdtero mcp serve",
+        "briefing_command": "mdtero mcp briefing --json",
+        "startup_order": ["mdtero doctor --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
+        "primary_tool": "agent_briefing",
+        "tools": briefing["mcp_tools"],
+        "agent_config_hint": {
+            "command": "mdtero",
+            "args": ["mcp", "serve"],
+            "working_directory": str(tmp_path.resolve()),
+            "skill_install_command": "mdtero agent install --interactive",
+        },
+        "action_hint": "Start this FastMCP stdio server from the local project root after running `mdtero mcp briefing --json`; agents should call `agent_briefing` before other tools.",
+    }
     tool_plan = briefing["mcp_tool_plan"]
     assert "extension_handoff" in tool_plan[0]["success_signal"]
     assert "handoff_protocol" in tool_plan[0]["success_signal"]
@@ -4850,6 +4867,13 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["rag"]["reason_code"] == "no_succeeded_tasks"
     assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
+    assert model["mcp"]["server"]["transport"] == "stdio"
+    assert model["mcp"]["server"]["agent_config_hint"] == {
+        "command": "mdtero",
+        "args": ["mcp", "serve"],
+        "working_directory": str(tmp_path.resolve()),
+        "skill_install_command": "mdtero agent install --interactive",
+    }
     assert "agent_briefing" in model["mcp"]["tools"]
     assert [step["step"] for step in model["mcp"]["tool_plan"]] == ["brief", "inspect_project", "prepare_rag"]
     assert model["mcp"]["tool_plan"][0]["tool"] == "agent_briefing"

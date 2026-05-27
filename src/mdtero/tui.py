@@ -128,6 +128,7 @@ def build_dashboard_model(
             "briefing_command": commands["mcp_briefing"],
             "serve_command": commands["serve_mcp"],
             "primary_tool": "agent_briefing",
+            "server": briefing.get("mcp_server"),
             "tools": briefing["mcp_tools"],
             "task_tools": _mcp_task_tools_payload(briefing["mcp_tools"]),
             "tool_plan": _mcp_tool_plan_payload(briefing.get("mcp_tool_plan") or []),
