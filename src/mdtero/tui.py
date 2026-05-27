@@ -13,8 +13,9 @@ from textual.widgets import Footer, Header, Static
 
 from .agent import detect_target_status
 from .client import MdteroClient
-from .config import MdteroConfig, load_config
+from .config import MdteroConfig, config_path, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
+from .onboarding import build_academic_onboarding_summary
 from .projects import ProjectState, ensure_project
 
 WORKSTATION_SETUP_COMMAND = "mdtero setup"
@@ -42,6 +43,7 @@ def build_dashboard_model(
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
     briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg, agent_root=agent_root)
+    onboarding_checklist = briefing.get("onboarding_checklist") or []
     next_steps = _next_steps(cfg, project, rag, commands)
     command_palette = _command_palette_payload(
         cfg=cfg,
@@ -88,6 +90,7 @@ def build_dashboard_model(
             "semantic_scholar": bool(cfg.academic.semantic_scholar_api_key),
             "discover_source": "local Semantic Scholar" if cfg.has_semantic_scholar_key else "server OpenAlex",
             "configure_command": "mdtero config academic",
+            "application_links": build_academic_onboarding_summary(cfg, path=config_path(), saved=False)["application_links"],
         },
         "project": _project_payload(project, pending=pending, running=running, succeeded=succeeded, failed=failed),
         "rag": rag,
@@ -131,6 +134,7 @@ def build_dashboard_model(
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "extension_handoff": extension_handoff,
+        "onboarding_checklist": onboarding_checklist,
         "launch_bundle": launch_bundle,
         "handoff": handoff,
         "command_palette": command_palette,
@@ -151,6 +155,7 @@ def build_dashboard_model(
 def render_dashboard_text(model: dict[str, Any]) -> Group:
     return Group(
         _hero_panel(model),
+        _onboarding_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
         _mcp_tool_plan_panel(model),
@@ -673,6 +678,22 @@ def _hero_panel(model: dict[str, Any]) -> Panel:
         card_values.append("")
     cards.add_row(*card_values[:4])
     return Panel(Group(grid, cards), title="Mdtero Control Console", border_style="yellow")
+
+
+def _onboarding_panel(model: dict[str, Any]) -> Panel:
+    table = Table("Step", "Status", "Primary command", expand=True)
+    checklist = model.get("onboarding_checklist") if isinstance(model.get("onboarding_checklist"), list) else []
+    for item in checklist:
+        if not isinstance(item, dict):
+            continue
+        table.add_row(
+            str(item.get("title") or item.get("id") or "-"),
+            str(item.get("status") or "-"),
+            str(item.get("primary_command") or "-"),
+        )
+    if not checklist:
+        table.add_row("Setup", "unknown", "mdtero setup --json")
+    return Panel(table, title="Onboarding Checklist", border_style="magenta")
 
 
 def _account_panel(model: dict[str, Any]) -> Panel:
