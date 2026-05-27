@@ -19,7 +19,15 @@ from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
-from .onboarding import ACADEMIC_OPTIONS, build_academic_onboarding_summary, build_input_route_contract, build_next_step_command_groups, build_onboarding_checklist
+from .onboarding import (
+    ACADEMIC_OPTIONS,
+    GENERIC_RAG_QUERY_COMMAND,
+    ONE_COMMAND_RAG_BOOTSTRAP,
+    build_academic_onboarding_summary,
+    build_input_route_contract,
+    build_next_step_command_groups,
+    build_onboarding_checklist,
+)
 from .projects import (
     PaperRecord,
     add_paper,
@@ -46,6 +54,11 @@ DEFAULT_WAIT_INTERVAL_SECONDS = 2.0
 SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
 SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
 API_KEY_PROMPT_SENTINEL = "__mdtero_prompt_for_api_key__"
+RAG_STATUS_COMMAND = "mdtero rag status --json"
+RAG_BUILD_COMMAND = "mdtero rag build --json"
+RAG_INGEST_COMMAND = "mdtero project ingest --json"
+RAG_MCP_BRIEFING_COMMAND = "mdtero mcp briefing --json"
+RAG_MCP_SERVE_COMMAND = "mdtero mcp serve"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -935,7 +948,7 @@ def _doctor_project_rows(root: Path, *, server_rag_status: dict[str, Any] | None
         (
             "Server project",
             "ok" if state.server_project_id else "not linked",
-            state.server_project_id or "run mdtero rag build --json",
+            state.server_project_id or f"run {ONE_COMMAND_RAG_BOOTSTRAP}",
         ),
     ]
     if server_rag_status:
@@ -959,7 +972,7 @@ def _doctor_project_rows(root: Path, *, server_rag_status: dict[str, Any] | None
     elif state.server_project_id:
         rows.append(("RAG readiness", "needs papers", "parse papers before mdtero project ingest --json"))
     elif ready_for_ingest:
-        rows.append(("RAG readiness", "not linked", "run mdtero rag build --json to create, bind, ingest, and build"))
+        rows.append(("RAG readiness", "not linked", f"run {ONE_COMMAND_RAG_BOOTSTRAP}"))
     else:
         rows.append(("RAG readiness", "not ready", "add and parse papers before RAG"))
     return rows
@@ -1824,8 +1837,8 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
             "server_project_id": project_id,
             "bootstrap": bootstrap,
             "ingest": ingest,
-            "action_hint": "Some succeeded parse tasks could not be imported into the server project. Fix the import failures, rerun `mdtero project ingest --json`, then rerun `mdtero rag build --json`.",
-            "next_commands": ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"],
+            "action_hint": f"Some succeeded parse tasks could not be imported into the server project. Fix the import failures, rerun `{RAG_INGEST_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}`.",
+            "next_commands": [RAG_INGEST_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND],
         }
         _print_rag_command_failure(payload, json_output=_args.json)
         return 1
@@ -1907,8 +1920,8 @@ def _rag_query_bootstrap_not_ready(project_id: str, question: str, bootstrap: di
         "server_project_id": project_id,
         "question": question,
         "bootstrap": bootstrap,
-        "action_hint": "RAG query bootstrap could not import every succeeded parse task. Fix the import failures, rerun `mdtero project ingest --json`, then rerun `mdtero rag build --json` and query again.",
-        "next_commands": ["mdtero project ingest --json", "mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
+        "action_hint": f"RAG query bootstrap could not import every succeeded parse task. Fix the import failures, rerun `{RAG_INGEST_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}`.",
+        "next_commands": [RAG_INGEST_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
 
 
@@ -2113,7 +2126,7 @@ def _smoke_failure_next_commands(reason_code: str) -> list[str]:
     if reason_code in {"auth_missing", "authentication_required", "unauthorized", "forbidden"}:
         return ["mdtero setup --api-key --json", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
     if reason_code in {"rag_index_not_built", "project_has_no_chunks", "server_project_import_failed", "rag_failed"}:
-        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
+        return [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND, RAG_MCP_BRIEFING_COMMAND, RAG_MCP_SERVE_COMMAND]
     if reason_code == "mcp_briefing_failed" or reason_code.startswith("mcp_briefing_missing_tools"):
         return ["mdtero mcp briefing --json", "mdtero rag status --json", "mdtero mcp serve"]
     if reason_code in {"parse_failed", "task_wait_timeout"}:
@@ -2200,9 +2213,12 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
             result = MdteroClient().rag_status(project_id)
         except Exception as exc:
             http_status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-            next_commands = ["mdtero project ingest --json", "mdtero rag status --json"]
+            next_commands = [RAG_INGEST_COMMAND]
             if indexed:
-                next_commands.append("mdtero rag build --json")
+                next_commands.append(ONE_COMMAND_RAG_BOOTSTRAP)
+            next_commands.append(RAG_STATUS_COMMAND)
+            if indexed:
+                next_commands.append(RAG_BUILD_COMMAND)
             payload = {
                 "status": "unavailable",
                 "reason_code": "server_rag_status_unavailable",
@@ -2212,7 +2228,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 "local_paper_count": len(state.papers),
                 "error_type": exc.__class__.__name__,
                 "http_status": http_status,
-                "action_hint": "Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `mdtero project ingest --json` and `mdtero rag status --json`.",
+                "action_hint": f"Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `{ONE_COMMAND_RAG_BOOTSTRAP}` or inspect with `{RAG_STATUS_COMMAND}`.",
                 "next_commands": next_commands,
             }
             ensure_rag_contract(payload)
@@ -2259,8 +2275,8 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         "server_project_id": None,
         "local_ready_for_ingest_count": indexed,
         "local_paper_count": len(state.papers),
-        "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
-        "next_commands": ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
+        "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side Voyage RAG, and query without copying a server project id.",
+        "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
     ensure_rag_contract(payload)
     if args.json:
@@ -2585,10 +2601,10 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
     detail = _http_error_detail(exc)
     reason_code = str(detail.get("reason_code") or detail.get("error_code") or exc)
     if reason_code == "server_project_id_missing":
-        action_hint = "The server project creation response did not include an id. Check the backend project API contract, then rerun `mdtero rag build --json`."
+        action_hint = f"The server project creation response did not include an id. Check the backend project API contract, then rerun `{ONE_COMMAND_RAG_BOOTSTRAP}`."
     else:
-        action_hint = str(detail.get("action_hint") or "Create or link a server project before running server-side Voyage RAG.")
-    next_commands = _detail_next_commands(detail) or ["mdtero project create-server --json", "mdtero project ingest --json", "mdtero rag status --json", f"mdtero rag {command} --json"]
+        action_hint = str(detail.get("action_hint") or f"Retry `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can create or link a server project before running server-side Voyage RAG.")
+    next_commands = _detail_next_commands(detail) or [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero project create-server --json", RAG_INGEST_COMMAND, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND]
     return {
         "status": "failed",
         "command": f"rag_{command}",
@@ -2654,28 +2670,28 @@ def _rag_action_hint(command: str, reason_code: str) -> str:
     if reason_code == "voyage_not_configured":
         return _public_rag_action_hint(command, reason_code)
     if reason_code == "rag_index_not_built":
-        return "Build this server project RAG index before querying."
+        return f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` from the local project so the CLI can build server-side Voyage RAG and query in one step."
     if reason_code == "project_has_no_chunks":
-        return "Import succeeded parse tasks first with `mdtero project ingest --json`, then run `mdtero rag build --json`."
+        return f"Import succeeded parse tasks with `{RAG_INGEST_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}`."
     if reason_code == "forbidden":
         return "Use credentials for the owner of this server project."
     if reason_code in {"project_not_found", "invalid_project_id"}:
-        return "Run `mdtero rag build --json` or `mdtero rag query \"<question>\" --build-if-needed --json` from the local Mdtero project so the CLI can create or bind the correct server project."
+        return f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` from the local Mdtero project so the CLI can create or bind the correct server project without copying ids by hand."
     if command == "query":
-        return "Check `mdtero rag status --json`, then run `mdtero rag build --json` if the project is not ready."
-    return "Check `mdtero rag status --json`, fix the reported precondition, then retry."
+        return f"Check `{RAG_STATUS_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}` if the project is not ready."
+    return f"Check `{RAG_STATUS_COMMAND}`, fix the reported precondition, then retry."
 
 
 def _rag_failure_next_commands(command: str, reason_code: str) -> list[str]:
     if reason_code == "project_has_no_chunks":
-        return ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
+        return [RAG_INGEST_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND]
     if command == "query" and reason_code == "rag_index_not_built":
-        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        return [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND]
     if reason_code in {"project_not_found", "invalid_project_id"}:
-        return ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        return [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND]
     if reason_code in {"voyage_not_configured", "forbidden"}:
-        return ["mdtero rag status --json"]
-    return ["mdtero rag status --json", "mdtero rag build --json"]
+        return [RAG_STATUS_COMMAND]
+    return [RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_BUILD_COMMAND]
 
 
 def _print_rag_command_failure(payload: dict[str, Any], *, json_output: bool) -> None:
@@ -2872,7 +2888,7 @@ def _server_project_id(args: argparse.Namespace) -> str:
     state = load_project(Path.cwd())
     if state.server_project_id:
         return state.server_project_id
-    raise SystemExit("No server project is linked. Run `mdtero rag build --json` to create, bind, import, and build server-side Voyage RAG.")
+    raise SystemExit(f"No server project is linked. Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create, bind, import, build, and query server-side Voyage RAG.")
 
 
 def _server_project_id_or_report(args: argparse.Namespace, *, command: str) -> str | None:
@@ -2905,8 +2921,8 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
         "project": state.name,
         "local_ready_for_ingest_count": sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id),
         "local_paper_count": len(state.papers),
-        "action_hint": "Run `mdtero rag build --json` to create and bind a server project, import succeeded parse tasks, and start server-side Voyage RAG.",
-        "next_commands": ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
+        "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side Voyage RAG, and query without copying a server project id.",
+        "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
 
 
