@@ -23,6 +23,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Forgejo Actions phase: migration phase 1 manual smoke."
+          echo "Trigger policy: workflow_dispatch only; no push, pull_request, or schedule trigger."
+          echo "Runner policy: linux-small."
           echo "Forgejo secrets used by this workflow: none."
           echo "This phase-1 smoke does not read Infisical, provider keys, Mdtero API keys, or admin credentials."
 

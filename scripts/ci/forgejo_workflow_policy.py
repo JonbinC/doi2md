@@ -13,7 +13,7 @@ FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("pull-request-trigger", re.compile(r"^\s{2}pull_request\s*:", re.MULTILINE)),
     ("schedule-trigger", re.compile(r"^\s{2}schedule\s*:", re.MULTILINE)),
     ("embedded-pat", re.compile(r"PERSONAL_ACCESS_TOKEN|PAT\s*=")),
-    ("admin-password", re.compile(r"ADMIN_PASSWORD|admin_password")),
+    ("admin-credential", re.compile(r"ADMIN_(?:PASSWORD|TOKEN|SECRET)|ROOT_PASSWORD|admin_(?:password|token|secret)")),
     ("secret-assignment", re.compile(r"(?:INFISICAL_TOKEN|MDTERO_API_KEY|VERCEL_TOKEN)\s*=")),
 )
 
@@ -22,7 +22,7 @@ GITHUB_ROLLBACK_FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("pull-request-trigger", re.compile(r"^\s{2}pull_request\s*:", re.MULTILINE)),
     ("schedule-trigger", re.compile(r"^\s{2}schedule\s*:", re.MULTILINE)),
     ("embedded-pat", re.compile(r"PERSONAL_ACCESS_TOKEN|PAT\s*=")),
-    ("admin-password", re.compile(r"ADMIN_PASSWORD|admin_password")),
+    ("admin-credential", re.compile(r"ADMIN_(?:PASSWORD|TOKEN|SECRET)|ROOT_PASSWORD|admin_(?:password|token|secret)")),
 )
 
 
