@@ -93,6 +93,8 @@ function fallbackArtifactFilename(artifact, preferredFilename) {
   if (artifact === "paper_bundle") return "paper_bundle.zip";
   if (artifact === "paper_md") return "paper.md";
   if (artifact === "paper_pdf") return "paper.pdf";
+  if (artifact === "paper_epub") return "paper.epub";
+  if (artifact === "paper_html") return "paper.html";
   if (artifact === "paper_xml") return "paper.xml";
   if (artifact === "translated_md") return "translated.md";
   return `${artifact}.bin`;

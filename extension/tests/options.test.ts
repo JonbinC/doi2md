@@ -326,6 +326,8 @@ describe("extension options page", () => {
               paper_md: { filename: "vaswani2017attention.md" },
               paper_bundle: { filename: "vaswani2017attention.zip" },
               translated_md: { filename: "vaswani2017attention_CN.md" },
+              paper_epub: { filename: "vaswani2017attention.epub" },
+              paper_html: { filename: "vaswani2017attention.html" },
             },
           },
         },
@@ -338,6 +340,8 @@ describe("extension options page", () => {
     expect(document.querySelector("#history-list")?.textContent).toContain("Download Markdown");
     expect(document.querySelector("#history-list")?.textContent).toContain("Download ZIP");
     expect(document.querySelector("#history-list")?.textContent).toContain("Download Translation");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download EPUB");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download HTML");
     expect(document.querySelector("#history-list")?.textContent).not.toContain("Download BUNDLE");
   });
 
@@ -361,6 +365,8 @@ describe("extension options page", () => {
             download_artifacts: [
               { artifact: "paper_md", filename: "vaswani2017attention.md" },
               { artifact: "paper_bundle", filename: "vaswani2017attention.zip" },
+              { artifact: "paper_epub", filename: "vaswani2017attention.epub" },
+              { artifact: "paper_html", filename: "vaswani2017attention.html" },
             ],
           },
         },
@@ -372,6 +378,8 @@ describe("extension options page", () => {
 
     expect(document.querySelector("#history-list")?.textContent).toContain("Download Markdown");
     expect(document.querySelector("#history-list")?.textContent).toContain("Download ZIP");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download EPUB");
+    expect(document.querySelector("#history-list")?.textContent).toContain("Download HTML");
 
     const markdownButton = Array.from(document.querySelectorAll<HTMLButtonElement>(".history-download-button"))
       .find((button) => button.textContent === "Download Markdown");

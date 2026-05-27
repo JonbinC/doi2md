@@ -58,6 +58,8 @@ function fallbackArtifactFilename(artifact, preferredFilename) {
   if (artifact === "paper_bundle") return "paper_bundle.zip";
   if (artifact === "paper_md") return "paper.md";
   if (artifact === "paper_pdf") return "paper.pdf";
+  if (artifact === "paper_epub") return "paper.epub";
+  if (artifact === "paper_html") return "paper.html";
   if (artifact === "paper_xml") return "paper.xml";
   if (artifact === "translated_md") return "translated.md";
   return `${artifact}.bin`;
@@ -386,6 +388,8 @@ mdtero mcp serve`]
       paper_bundle: "ZIP",
       translated_md: "Translation",
       paper_pdf: "PDF",
+      paper_epub: "EPUB",
+      paper_html: "HTML",
       paper_xml: "XML"
     },
     historyRefresh: "Refresh",
@@ -492,6 +496,8 @@ mdtero mcp serve`]
       paper_bundle: "\u538B\u7F29\u5305",
       translated_md: "\u8BD1\u6587",
       paper_pdf: "PDF",
+      paper_epub: "EPUB",
+      paper_html: "HTML",
       paper_xml: "XML"
     },
     historyRefresh: "\u5237\u65B0",
