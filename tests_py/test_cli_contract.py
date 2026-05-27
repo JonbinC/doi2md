@@ -5027,6 +5027,12 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
     assert model["handoff"]["active_items"] == []
+    assert model["launch_summary"]["primary_path"] == "authenticate"
+    assert model["launch_summary"]["primary_group"] == "Setup"
+    assert model["launch_summary"]["primary_next_command"] == "mdtero setup"
+    assert model["launch_summary"]["ready_count"] < model["launch_summary"]["total_count"]
+    assert any(item["id"] == "auth" and item["ready"] is False for item in model["launch_summary"]["blocked_checks"])
+    assert "mdtero setup" in model["launch_summary"]["recommended_flow"]
     assert model["launch_bundle"]["primary_group"] == "Setup"
     assert model["launch_bundle"]["copy_hint"] == "Copy one group into a terminal or agent prompt; commands are ordered and JSON-first where possible."
     launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
@@ -5148,6 +5154,11 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["handoff"]["ready_artifacts"][0]["download_command"] == "mdtero download task-done paper_md --output-dir ./mdtero-output --json"
     assert model["handoff"]["recommended_next_commands"][0] == "mdtero project download --output-dir ./mdtero-output --json"
     assert model["launch_bundle"]["primary_group"] == "RAG + MCP"
+    assert model["launch_summary"]["primary_path"] == "build_rag"
+    assert model["launch_summary"]["primary_group"] == "RAG + MCP"
+    assert model["launch_summary"]["primary_next_command"] == "mdtero rag status --json"
+    assert any(item["id"] == "rag" and item["ready"] is False for item in model["launch_summary"]["blocked_checks"])
+    assert "mdtero mcp briefing --json" in model["launch_summary"]["recommended_flow"]
     launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
     assert "mdtero project ingest --json" in launch_groups["RAG + MCP"]["commands"]
     assert "mdtero rag build --json" in launch_groups["RAG + MCP"]["commands"]
@@ -5167,6 +5178,9 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     console.print(rendered)
     output = console.export_text()
     assert "Mdtero Control Console" in output
+    assert "Launch path" in output
+    assert "build_rag" in output
+    assert "Readiness" in output
     assert "Onboarding Checklist" in output
     assert "Results ready" in output
     assert "Agent Handoff" in output
@@ -5288,6 +5302,9 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
     assert model["health"]["status"] == "ready"
     assert model["health"]["headline"] == "Project RAG ready"
     assert model["health"]["primary_next_command"] == "mdtero rag status --json"
+    assert model["launch_summary"]["primary_path"] == "query_rag_or_serve_mcp"
+    assert model["launch_summary"]["primary_next_command"] == "mdtero rag status --json"
+    assert any(item["id"] == "rag" and item["ready"] is True for item in model["launch_summary"]["checks"])
     assert model["rag"]["ready"] is True
     assert model["rag"]["reason_code"] == "indexed"
     assert model["rag"]["server_summary"]["embedded_count"] == 3
