@@ -3915,6 +3915,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     }
     assert "full API key secret" in setup_handoff["auth_boundary"]["secret_transport"]
     assert "secret value" in setup_handoff["auth_boundary"]["secret_transport"]
+    assert "current page session" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
+    assert "explicit clear" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
     assert "VOYAGE_API_KEY" not in str(setup_handoff)
     assert "mdt_live_env" not in str(setup_handoff)
     assert briefing["dashboard_handoff_json"]["source"] == "dashboard_history_copy"
@@ -5306,6 +5308,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert setup_handoff["api_key"]["full_secret_shown_once"] is True
     assert setup_handoff["api_key"]["full_secret_included"] is False
     assert "secure CLI prompt" in setup_handoff["auth_boundary"]["secret_transport"]
+    assert "current page session" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
+    assert "explicit clear" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
     assert setup_handoff["rag"]["owner"] == "backend_voyage"
     assert setup_handoff["rag"]["local_voyage_key_required"] is False
     assert setup_handoff["mcp"]["first_tool"] == "agent_briefing"
@@ -6998,7 +7002,7 @@ jobs:
         "missing secret-name listing step",
         "missing Forgejo secret-name summary",
         "push-trigger",
-        "admin-password",
+        "admin-credential",
     ]
 
 

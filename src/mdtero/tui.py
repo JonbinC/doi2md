@@ -546,7 +546,7 @@ def _dashboard_setup_handoff_payload(payload: Any) -> dict[str, Any]:
             "workstation": str(auth_boundary.get("workstation") or "Use browser OAuth with `mdtero setup` on a normal workstation."),
             "headless": str(auth_boundary.get("headless") or "Use `mdtero setup --api-key --json` only on trusted headless shells."),
             "secret_transport": str(auth_boundary.get("secret_transport") or "Paste the full secret only into the secure CLI prompt."),
-            "dashboard_secret_retention": str(auth_boundary.get("dashboard_secret_retention") or "The dashboard shows the full secret once, then only the prefix identifier."),
+            "dashboard_secret_retention": str(auth_boundary.get("dashboard_secret_retention") or "The full secret is shown once and may remain only in the current page session for install prompts until refresh or explicit clear. Persistent dashboard lists show only the prefix identifier."),
         },
         "api_key": {
             "full_secret_shown_once": bool(api_key.get("full_secret_shown_once", True)),
