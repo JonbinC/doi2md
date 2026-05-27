@@ -3046,7 +3046,13 @@ def test_project_create_server_reports_backend_gap_without_traceback(monkeypatch
     assert payload["http_status"] == 404
     assert payload["server_project_id"] is None
     assert "backend /api/v1/projects endpoint" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero doctor --json", "mdtero project create-server --json", "mdtero rag build --json", "mdtero rag status --json"]
+    assert payload["next_commands"] == [
+        "mdtero doctor --json",
+        "mdtero project create-server --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+    ]
 
 
 def test_project_create_server_reports_missing_id_as_agent_json(monkeypatch, tmp_path: Path, capsys):
@@ -5316,7 +5322,8 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Launch Bundles" in output
     assert "Copy one group into a terminal" in output
     assert "RAG + MCP" in output
-    assert "Create/bind/import/build Voyage index" in output
+    assert "One-command Voyage bootstrap and query" in output
+    assert "Explicit recovery build when bootstrap query is not enough" in output
     assert "voyage / configured" in output
     assert "voyage-4" in output
     assert "Build the server project index before" in output

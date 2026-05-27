@@ -604,10 +604,10 @@ def _launch_bundle_payload(
         commands.get("zotero_sync") or "mdtero zotero sync --json",
     ]
     rag_commands = _dedupe_commands([
-        "mdtero project ingest --json" if project.server_project_id else "mdtero rag build --json",
+        "mdtero project ingest --json",
+        ONE_COMMAND_RAG_BOOTSTRAP,
         *(rag.get("next_commands") if isinstance(rag.get("next_commands"), list) else []),
         commands.get("rag_status") or "mdtero rag status --json",
-        ONE_COMMAND_RAG_BOOTSTRAP,
         commands.get("rag_query") or GENERIC_RAG_QUERY_COMMAND,
         commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json",
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
@@ -761,7 +761,7 @@ def _command_palette_payload(
         {"area": "Zotero", "use": "Import Zotero metadata", "command": commands.get("zotero_import")},
         {"area": "Zotero", "use": "Sync Mdtero results back", "command": commands.get("zotero_sync")},
         {"area": "RAG", "use": "One-command Voyage bootstrap and query", "command": ONE_COMMAND_RAG_BOOTSTRAP},
-        {"area": "RAG", "use": "Create/bind/import/build Voyage index explicitly", "command": rag_build_command},
+        {"area": "RAG", "use": "Explicit recovery build when bootstrap query is not enough", "command": rag_build_command},
         {"area": "RAG", "use": "Check server RAG readiness", "command": commands.get("rag_status")},
         {"area": "RAG", "use": "Ask grounded project question", "command": commands.get("rag_query")},
         {"area": "MCP", "use": "Tool: submit_parse(input_value)", "command": "submit_parse"},
