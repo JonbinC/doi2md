@@ -297,7 +297,7 @@ def build_next_step_command_groups() -> list[dict[str, Any]]:
             "Browser extension handoff",
             [
                 "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-                "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+                "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
                 "mdtero status <task-id> --wait --timeout 300 --json",
                 "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
                 "mdtero project ingest --json",
