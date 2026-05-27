@@ -267,6 +267,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         "downloaded_paths": [],
         "translated_paths": [],
         "server_project_id": str(args.project_id or "").strip() or None,
+        "coverage_contract": _smoke_coverage_contract(args),
         "next_commands": [
             "mdtero doctor --json",
             f"mdtero parse {args.doi} --trace --wait --timeout {int(args.timeout)} --json",
@@ -1933,6 +1934,65 @@ def _smoke_add_step(payload: dict[str, Any], name: str, status: str, **fields: A
     step.update({key: value for key, value in fields.items() if value not in (None, "", [], {})})
     payload.setdefault("steps", []).append(redact_sensitive_payload(step))
     return step
+
+
+def _smoke_coverage_contract(args: argparse.Namespace) -> dict[str, Any]:
+    timeout = int(float(getattr(args, "timeout", DEFAULT_WAIT_TIMEOUT_SECONDS) or DEFAULT_WAIT_TIMEOUT_SECONDS))
+    translate_to = str(getattr(args, "translate_to", "zh-CN") or "zh-CN")
+    skipped = []
+    if getattr(args, "skip_discovery", False):
+        skipped.append("discovery")
+    if getattr(args, "skip_download", False):
+        skipped.append("artifact_download")
+    if getattr(args, "skip_translate", False):
+        skipped.append("translation")
+    if getattr(args, "skip_rag", False):
+        skipped.extend(["rag", "mcp_briefing"])
+    return {
+        "schema_version": "2026-05-27",
+        "goal": "production_cli_smoke",
+        "covered_by_this_command": [
+            "auth_config_presence",
+            "server_openalex_or_local_semantic_scholar_discovery" if not getattr(args, "skip_discovery", False) else "discovery_skipped",
+            "doi_or_url_route_parse_status",
+            "artifact_download" if not getattr(args, "skip_download", False) else "artifact_download_skipped",
+            "translation_task" if not getattr(args, "skip_translate", False) else "translation_skipped",
+            "server_voyage_rag_build_query" if not getattr(args, "skip_rag", False) else "rag_skipped",
+            "mcp_agent_briefing_contract" if not getattr(args, "skip_rag", False) else "mcp_briefing_skipped",
+        ],
+        "requires_separate_smoke": [
+            {
+                "id": "pdf_mineru_urlapi",
+                "command": f"mdtero parse --file <paper.pdf> --trace --wait --timeout {timeout} --json",
+                "reason": "PDF/MinerU URL API requires a user-selected local PDF and should not be implied by DOI smoke.",
+            },
+            {
+                "id": "epub_upload",
+                "command": f"mdtero parse --file <paper.epub> --trace --wait --timeout {timeout} --json",
+                "reason": "EPUB upload is a separate raw-file path from DOI/native-source parsing.",
+            },
+            {
+                "id": "browser_extension_mv3",
+                "command": "npm --prefix extension test -- --run && npm --prefix extension run build && python3 scripts/ci/extension_dist_smoke.py",
+                "reason": "Extension OAuth, current-page capture, PDF/EPUB upload UI, polling, translation, and download are packaged in the MV3 bundle.",
+            },
+        ],
+        "post_success_next_commands": _dedupe_string_list([
+            "mdtero doctor --json",
+            f"mdtero parse --file <paper.pdf> --trace --wait --timeout {timeout} --json",
+            f"mdtero translate <task-id-or-paper.md> --to {translate_to} --wait --timeout {timeout} --json",
+            "mdtero rag query \"<question>\" --build-if-needed --json",
+            "mdtero mcp briefing --json",
+            "mdtero mcp serve",
+        ]),
+        "skipped_by_flags": skipped,
+        "artifact_expectations": {
+            "parse": ["paper_md", "paper_bundle"],
+            "translate": ["translated_md"],
+            "source": ["paper_pdf", "paper_xml"],
+        },
+        "evidence_fields": ["reason_code", "action_hint", "download_artifacts", "selected_provider", "parser_strategy", "client_acquisition", "citation_contract", "citations", "source_nodes"],
+    }
 
 
 def _enrich_smoke_failure_summary(payload: dict[str, Any]) -> dict[str, Any]:

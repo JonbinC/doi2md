@@ -297,6 +297,28 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     assert payload["task_ids"] == ["task-1"]
     assert payload["translation_task_ids"] == ["translate-1"]
     assert payload["server_project_id"] == "42"
+    coverage = payload["coverage_contract"]
+    assert coverage["schema_version"] == "2026-05-27"
+    assert coverage["goal"] == "production_cli_smoke"
+    assert coverage["covered_by_this_command"] == [
+        "auth_config_presence",
+        "server_openalex_or_local_semantic_scholar_discovery",
+        "doi_or_url_route_parse_status",
+        "artifact_download",
+        "translation_task",
+        "server_voyage_rag_build_query",
+        "mcp_agent_briefing_contract",
+    ]
+    assert {item["id"] for item in coverage["requires_separate_smoke"]} == {
+        "pdf_mineru_urlapi",
+        "epub_upload",
+        "browser_extension_mv3",
+    }
+    assert coverage["skipped_by_flags"] == []
+    assert "mdtero parse --file <paper.pdf> --trace --wait --timeout 5 --json" in coverage["post_success_next_commands"]
+    assert coverage["artifact_expectations"]["parse"] == ["paper_md", "paper_bundle"]
+    assert "selected_provider" in coverage["evidence_fields"]
+    assert "client_acquisition" in coverage["evidence_fields"]
     assert [step["name"] for step in payload["steps"]] == ["discover", "parse", "download", "translate", "rag", "mcp_briefing"]
     assert payload["steps"][1]["selected_provider"] == "arxiv_native"
     assert payload["steps"][3]["target_language"] == "zh-CN"
@@ -364,6 +386,16 @@ def test_smoke_can_skip_discovery_download_and_rag(monkeypatch, tmp_path: Path, 
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "succeeded"
+    assert payload["coverage_contract"]["covered_by_this_command"] == [
+        "auth_config_presence",
+        "discovery_skipped",
+        "doi_or_url_route_parse_status",
+        "artifact_download_skipped",
+        "translation_skipped",
+        "rag_skipped",
+        "mcp_briefing_skipped",
+    ]
+    assert payload["coverage_contract"]["skipped_by_flags"] == ["discovery", "artifact_download", "translation", "rag", "mcp_briefing"]
     assert [step["status"] for step in payload["steps"]] == ["skipped", "succeeded", "skipped", "skipped", "skipped", "skipped"]
     assert [step["reason_code"] for step in payload["steps"] if step["status"] == "skipped"] == ["skipped", "skipped", "skipped", "skipped", "rag_skipped"]
 
