@@ -15,7 +15,7 @@ from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
-from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
+from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, _semantic_scholar_parse_url, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -1348,6 +1348,38 @@ def test_discover_project_add_summary_preserves_semantic_scholar_and_fallback_so
     assert semantic_summary["fallback_reason_code"] is None
     assert fallback_summary["source_mode"] == "openalex_server"
     assert fallback_summary["fallback_reason_code"] == "semantic_scholar_rate_limited"
+
+
+def test_semantic_scholar_discovery_uses_parse_friendly_external_id_urls():
+    assert _semantic_scholar_parse_url({"DOI": "10.48550/arXiv.1706.03762", "ArXiv": "1706.03762"}) == "https://doi.org/10.48550/arXiv.1706.03762"
+    assert _semantic_scholar_parse_url({"ArXiv": "2312.07559"}) == "https://arxiv.org/abs/2312.07559"
+    assert _semantic_scholar_parse_url({"PMCID": "7517829"}) == "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7517829/"
+    assert _semantic_scholar_parse_url({"PubMed": "123456"}) == "https://pubmed.ncbi.nlm.nih.gov/123456/"
+
+
+def test_semantic_scholar_discovery_add_prefers_arxiv_over_s2_page(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    init_project(tmp_path, name="s2-discovery")
+
+    result = {
+        "source": "semantic_scholar_local",
+        "items": [
+            {
+                "title": "PaperQA",
+                "doi": None,
+                "url": _semantic_scholar_parse_url({"ArXiv": "2312.07559"}) or "https://www.semanticscholar.org/paper/demo",
+                "semantic_scholar_url": "https://www.semanticscholar.org/paper/demo",
+                "source": "semantic_scholar_local",
+            }
+        ],
+    }
+
+    summary = _add_discovery_results_to_project(result, selection="1")
+    state = load_project(tmp_path)
+
+    assert summary["source_mode"] == "semantic_scholar_local"
+    assert summary["added"][0]["input"] == "https://arxiv.org/abs/2312.07559"
+    assert state.papers[0].input == "https://arxiv.org/abs/2312.07559"
 
 
 def test_discover_interactive_adds_prompted_results_to_project(monkeypatch, tmp_path: Path, capsys):
