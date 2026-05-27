@@ -575,6 +575,7 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             for item in detect_target_status()
         ]
     configured_academic = academic["configured"]
+    next_command_groups = _next_step_command_groups()
     return {
         "status": "configured" if cfg.is_authenticated else "missing_auth",
         "reason_code": "setup_configured" if cfg.is_authenticated else "auth_missing",
@@ -604,8 +605,104 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             "mdtero rag query \"<question>\" --build-if-needed --json",
             "mdtero mcp briefing --json",
         ],
-        "next_command_groups": _next_step_command_groups(),
+        "next_command_groups": next_command_groups,
+        "onboarding_checklist": _setup_onboarding_checklist(
+            authenticated=cfg.is_authenticated,
+            headless=headless,
+            academic=academic,
+            agent_status=agent_status,
+            agent_detection_skipped=agent_detection_skipped,
+        ),
     }
+
+
+def _setup_onboarding_checklist(
+    *,
+    authenticated: bool,
+    headless: bool,
+    academic: dict[str, Any],
+    agent_status: list[dict[str, Any]],
+    agent_detection_skipped: bool,
+) -> list[dict[str, Any]]:
+    configured_academic = academic.get("configured") if isinstance(academic.get("configured"), dict) else {}
+    has_semantic_scholar = bool(configured_academic.get("semantic_scholar_api_key"))
+    detected_agents = [item for item in agent_status if item.get("detected")]
+    installed_agents = [item for item in detected_agents if item.get("installed")]
+    return [
+        {
+            "id": "auth",
+            "title": "Authenticate",
+            "status": "complete" if authenticated else "needs_action",
+            "primary_command": "mdtero doctor --json" if authenticated else ("mdtero setup --api-key --json" if headless else "mdtero setup"),
+            "action_hint": "Browser OAuth is preferred on workstations; API-key setup is for trusted headless servers and agents.",
+        },
+        {
+            "id": "academic_keys",
+            "title": "Optional academic resource keys",
+            "status": "enhanced" if any(configured_academic.values()) else "optional",
+            "primary_command": "mdtero config academic",
+            "action_hint": "Configure Elsevier, Wiley TDM, or Semantic Scholar keys only when you have them. Without Semantic Scholar, discovery uses server OpenAlex.",
+            "links": academic.get("application_links", {}),
+        },
+        {
+            "id": "discovery",
+            "title": "Discover papers",
+            "status": "local_semantic_scholar" if has_semantic_scholar else "server_openalex",
+            "primary_command": "mdtero discover \"<topic>\" --limit 5 --interactive",
+            "action_hint": "Use space-bar multi-select in interactive discovery, or `--add --select 1,3 --json` for agent-safe project intake.",
+        },
+        {
+            "id": "project",
+            "title": "Create a local project",
+            "status": "recommended",
+            "primary_command": "mdtero project init --name literature-review",
+            "action_hint": "Project mode tracks DOI/file queues, task ids, downloads, Zotero imports, server RAG binding, and MCP context.",
+        },
+        {
+            "id": "parse",
+            "title": "Parse DOI, URL, PDF, EPUB, XML, or HTML",
+            "status": "ready",
+            "primary_command": "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
+            "secondary_commands": [
+                "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+                "mdtero parse --batch ./papers --wait --timeout 300 --json",
+                "mdtero project parse --wait --timeout 300 --json",
+            ],
+            "action_hint": "Use trace output to preserve route, client_acquisition, raw upload, reason_code, action_hint, and download_artifacts for agents.",
+        },
+        {
+            "id": "zotero",
+            "title": "Connect Zotero",
+            "status": "optional",
+            "primary_command": "mdtero config zotero",
+            "secondary_commands": ["mdtero zotero import --limit 20", "mdtero zotero sync"],
+            "action_hint": "Import is read-first project intake; sync should be run deliberately after reviewing local project state.",
+        },
+        {
+            "id": "rag",
+            "title": "Build backend Voyage RAG",
+            "status": "ready_after_parse",
+            "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
+            "secondary_commands": ["mdtero rag build --json", "mdtero rag status --json"],
+            "action_hint": "Voyage runs on the Mdtero backend; users do not configure a local VOYAGE_API_KEY.",
+        },
+        {
+            "id": "mcp",
+            "title": "Expose context to local agents",
+            "status": "ready",
+            "primary_command": "mdtero mcp briefing --json",
+            "secondary_commands": ["mdtero mcp serve"],
+            "action_hint": "FastMCP tools expose project status, parse/download/translation commands, server RAG status, and rag_query(question).",
+        },
+        {
+            "id": "agent_skills",
+            "title": "Install local agent skills",
+            "status": "skipped_headless" if agent_detection_skipped else ("installed" if installed_agents and len(installed_agents) == len(detected_agents) else "needs_selection" if detected_agents else "not_detected"),
+            "primary_command": "mdtero agent install --interactive",
+            "secondary_commands": ["mdtero agent detect --json"],
+            "action_hint": "Use space to multi-select detected Codex, Claude, Gemini, Hermes, or OpenCode workspaces.",
+        },
+    ]
 
 
 def cmd_login(args: argparse.Namespace) -> int:
