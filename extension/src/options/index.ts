@@ -49,8 +49,8 @@ const COPY = {
       ["Discover", "mdtero discover \"<topic>\" --limit 5 --interactive", "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
       ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
       ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
-      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "Backend Voyage RAG is driven by the CLI project."],
-      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, and RAG readiness to local agents."],
+      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "Backend Voyage RAG is driven by the CLI project; citation_contract requires final answers to preserve citations and source_nodes."],
+      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, RAG readiness, and citation_contract to local agents."],
       ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
       ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
     ],
@@ -129,8 +129,8 @@ const COPY = {
       ["发现", "mdtero discover \"<topic>\" --limit 5 --interactive", "有 Semantic Scholar 时走本地；否则走服务端 OpenAlex。"],
       ["解析", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "保留 route、client_acquisition、reason_code、action_hint 和 artifacts。"],
       ["文件上传", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "浏览器保存的文件或 publisher challenge 页面交给 CLI 继续。"],
-      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "后端 Voyage RAG 由 CLI 项目驱动。"],
-      ["MCP briefing", "mdtero mcp briefing --json", "把账户、项目、extension_handoff 和 RAG readiness 暴露给本地 agent。"],
+      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "后端 Voyage RAG 由 CLI 项目驱动；citation_contract 要求最终回答保留 citations 和 source_nodes。"],
+      ["MCP briefing", "mdtero mcp briefing --json", "把账户、项目、extension_handoff、RAG readiness 和 citation_contract 暴露给本地 agent。"],
       ["MCP 服务", "mdtero mcp serve", "在本地项目根目录运行 FastMCP stdio server，给 agent 提供上下文工具。"],
       ["Agent skill", "mdtero agent install --interactive", "动态检测 Codex、Claude、Gemini、Hermes、OpenCode，并用空格多选安装。"]
     ],
@@ -242,6 +242,7 @@ const CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero rag build --json",
   "mdtero rag status --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
+  "# Preserve citation_contract.required_for_final_answer: final RAG answers keep citations and source_nodes.",
   "mdtero mcp briefing --json",
   "mdtero mcp serve",
 ].join("\n");

@@ -145,10 +145,11 @@ describe("extension options page", () => {
     expect(checklistText).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
     expect(checklistText).toContain("mdtero agent install --interactive");
     expect(checklistText).toContain("Backend Voyage RAG is driven by the CLI project");
+    expect(checklistText).toContain("citation_contract requires final answers to preserve citations and source_nodes");
     expect(checklistText).toContain("mdtero mcp briefing --json");
     expect(checklistText).toContain("mdtero mcp serve");
     expect(checklistText).toContain("FastMCP stdio server");
-    expect(checklistText).toContain("RAG readiness to local agents");
+    expect(checklistText).toContain("RAG readiness, and citation_contract to local agents");
     expect(checklistText).not.toContain("native helper");
     expect(checklistText).not.toContain("publisher API");
     expect(document.querySelector("#password-input")).toBeNull();
@@ -176,6 +177,8 @@ describe("extension options page", () => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag build --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag status --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag query \"<question>\" --build-if-needed --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("Preserve citation_contract.required_for_final_answer"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("final RAG answers keep citations and source_nodes"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp briefing --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp serve"));
     });
