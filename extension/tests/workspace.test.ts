@@ -57,6 +57,9 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="website-auth-note"');
     expect(optionsHtml).toContain('id="connection-guide-card"');
     expect(optionsHtml).toContain('id="connection-guide-list"');
+    expect(optionsHtml).toContain('id="input-route-card"');
+    expect(optionsHtml).toContain('id="input-route-list"');
+    expect(optionsHtml).toContain('Extension + CLI');
     expect(optionsHtml).toContain('id="cli-handoff-guide-card"');
     expect(optionsHtml).toContain('id="cli-handoff-guide-command"');
     expect(optionsHtml).toContain('id="copy-cli-handoff-guide"');
@@ -150,6 +153,8 @@ describe("workspace", () => {
     expect(styles).toContain('.workflow-strip span[data-state="done"]');
     expect(styles).toContain('.workflow-strip span[data-state="pending"]');
     expect(styles).toContain(".guide-item { display: grid; grid-template-columns: auto minmax(0, 1fr);");
+    expect(styles).toContain(".input-route-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
+    expect(styles).toContain(".input-route-copy { width: 100%; }");
     expect(styles).toContain(".handoff-guide-header { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
     expect(styles).toContain(".handoff-guide-command { display: block;");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
@@ -167,6 +172,9 @@ describe("workspace", () => {
     expect(optionsSource).toContain("uv tool install git+https://github.com/JonbinC/doi2md.git");
     expect(optionsSource).toContain("mdtero setup");
     expect(optionsSource).toContain("mdtero setup --json");
+    expect(optionsSource).toContain("Choose the shortest path to a Markdown artifact");
+    expect(optionsSource).toContain("mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json");
+    expect(optionsSource).toContain("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json");
     expect(optionsSource).toContain("onboarding checklist");
     expect(optionsSource).toContain("mdtero config academic");
     expect(optionsSource).toContain("mdtero mcp briefing --json");
