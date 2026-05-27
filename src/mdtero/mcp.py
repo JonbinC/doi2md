@@ -1264,6 +1264,7 @@ def build_agent_briefing(
                 for agent in agent_status
             ],
         },
+        "mcp_server": _mcp_server_payload(commands, root),
         "recommended_next_commands": _dedupe_commands(next_commands),
         "mcp_tools": [
             "agent_briefing",
@@ -1289,6 +1290,45 @@ def build_agent_briefing(
             pending_agent_installs=pending_agent_installs,
         ),
     })
+
+
+def _mcp_server_payload(commands: dict[str, Any], root: Path) -> dict[str, Any]:
+    tools = [
+        "agent_briefing",
+        "project_status",
+        "paper_context",
+        "submit_parse",
+        "task_status",
+        "download_artifact",
+        "request_translation",
+        "rag_context",
+        "server_rag_status",
+        "rag_query",
+        "agent_commands",
+    ]
+    serve_command = commands.get("serve_mcp", "mdtero mcp serve")
+    briefing_command = commands.get("mcp_briefing", "mdtero mcp briefing --json")
+    return {
+        "name": "mdtero",
+        "runtime": "FastMCP",
+        "transport": "stdio",
+        "serve_command": serve_command,
+        "briefing_command": briefing_command,
+        "startup_order": [
+            commands.get("doctor", "mdtero doctor --json"),
+            briefing_command,
+            serve_command,
+        ],
+        "primary_tool": "agent_briefing",
+        "tools": tools,
+        "agent_config_hint": {
+            "command": "mdtero",
+            "args": ["mcp", "serve"],
+            "working_directory": str(root.resolve()),
+            "skill_install_command": commands.get("agent_install", "mdtero agent install --interactive"),
+        },
+        "action_hint": "Start this FastMCP stdio server from the local project root after running `mdtero mcp briefing --json`; agents should call `agent_briefing` before other tools.",
+    }
 
 
 def _build_mcp_tool_plan(
