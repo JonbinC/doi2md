@@ -252,17 +252,49 @@ class MdteroClient:
         items = []
         for item in data.get("data") or []:
             external_ids = item.get("externalIds") or {}
+            doi = _semantic_scholar_external_id(external_ids, "DOI")
+            parse_url = _semantic_scholar_parse_url(external_ids)
+            semantic_scholar_url = item.get("url")
             items.append(
                 {
                     "title": item.get("title"),
                     "year": item.get("year"),
-                    "doi": external_ids.get("DOI"),
-                    "url": item.get("url"),
+                    "doi": doi,
+                    "url": parse_url or semantic_scholar_url,
+                    "semantic_scholar_url": semantic_scholar_url,
+                    "external_ids": external_ids,
+                    "abstract": item.get("abstract"),
                     "authors": [author.get("name") for author in item.get("authors") or [] if author.get("name")],
                     "source": "semantic_scholar_local",
                 }
             )
         return {"items": items, "source": "semantic_scholar_local"}
+
+
+def _semantic_scholar_external_id(external_ids: Any, key: str) -> str:
+    if not isinstance(external_ids, dict):
+        return ""
+    for candidate_key, value in external_ids.items():
+        if str(candidate_key).lower() == key.lower():
+            return str(value or "").strip()
+    return ""
+
+
+def _semantic_scholar_parse_url(external_ids: Any) -> str:
+    doi = _semantic_scholar_external_id(external_ids, "DOI")
+    if doi:
+        return f"https://doi.org/{doi}"
+    arxiv = _semantic_scholar_external_id(external_ids, "ArXiv")
+    if arxiv:
+        return f"https://arxiv.org/abs/{arxiv}"
+    pmcid = _semantic_scholar_external_id(external_ids, "PMCID")
+    if pmcid:
+        cleaned = pmcid if pmcid.upper().startswith("PMC") else f"PMC{pmcid}"
+        return f"https://www.ncbi.nlm.nih.gov/pmc/articles/{cleaned}/"
+    pubmed = _semantic_scholar_external_id(external_ids, "PubMed") or _semantic_scholar_external_id(external_ids, "PMID")
+    if pubmed:
+        return f"https://pubmed.ncbi.nlm.nih.gov/{pubmed}/"
+    return ""
 
 
 def _mime_type(path: Path) -> str:
