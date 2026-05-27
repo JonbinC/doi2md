@@ -298,8 +298,8 @@ var COPY = {
       ["Discover", 'mdtero discover "<topic>" --limit 5 --interactive', "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
       ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
       ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
-      ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "Backend Voyage RAG is driven by the CLI project."],
-      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, and RAG readiness to local agents."],
+      ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "Backend Voyage RAG is driven by the CLI project; citation_contract requires final answers to preserve citations and source_nodes."],
+      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, RAG readiness, and citation_contract to local agents."],
       ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
       ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
     ],
@@ -377,8 +377,8 @@ var COPY = {
       ["\u53D1\u73B0", 'mdtero discover "<topic>" --limit 5 --interactive', "\u6709 Semantic Scholar \u65F6\u8D70\u672C\u5730\uFF1B\u5426\u5219\u8D70\u670D\u52A1\u7AEF OpenAlex\u3002"],
       ["\u89E3\u6790", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "\u4FDD\u7559 route\u3001client_acquisition\u3001reason_code\u3001action_hint \u548C artifacts\u3002"],
       ["\u6587\u4EF6\u4E0A\u4F20", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "\u6D4F\u89C8\u5668\u4FDD\u5B58\u7684\u6587\u4EF6\u6216 publisher challenge \u9875\u9762\u4EA4\u7ED9 CLI \u7EE7\u7EED\u3002"],
-      ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "\u540E\u7AEF Voyage RAG \u7531 CLI \u9879\u76EE\u9A71\u52A8\u3002"],
-      ["MCP briefing", "mdtero mcp briefing --json", "\u628A\u8D26\u6237\u3001\u9879\u76EE\u3001extension_handoff \u548C RAG readiness \u66B4\u9732\u7ED9\u672C\u5730 agent\u3002"],
+      ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "\u540E\u7AEF Voyage RAG \u7531 CLI \u9879\u76EE\u9A71\u52A8\uFF1Bcitation_contract \u8981\u6C42\u6700\u7EC8\u56DE\u7B54\u4FDD\u7559 citations \u548C source_nodes\u3002"],
+      ["MCP briefing", "mdtero mcp briefing --json", "\u628A\u8D26\u6237\u3001\u9879\u76EE\u3001extension_handoff\u3001RAG readiness \u548C citation_contract \u66B4\u9732\u7ED9\u672C\u5730 agent\u3002"],
       ["MCP \u670D\u52A1", "mdtero mcp serve", "\u5728\u672C\u5730\u9879\u76EE\u6839\u76EE\u5F55\u8FD0\u884C FastMCP stdio server\uFF0C\u7ED9 agent \u63D0\u4F9B\u4E0A\u4E0B\u6587\u5DE5\u5177\u3002"],
       ["Agent skill", "mdtero agent install --interactive", "\u52A8\u6001\u68C0\u6D4B Codex\u3001Claude\u3001Gemini\u3001Hermes\u3001OpenCode\uFF0C\u5E76\u7528\u7A7A\u683C\u591A\u9009\u5B89\u88C5\u3002"]
     ],
@@ -485,6 +485,7 @@ var CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero rag build --json",
   "mdtero rag status --json",
   'mdtero rag query "<question>" --build-if-needed --json',
+  "# Preserve citation_contract.required_for_final_answer: final RAG answers keep citations and source_nodes.",
   "mdtero mcp briefing --json",
   "mdtero mcp serve"
 ].join("\n");
