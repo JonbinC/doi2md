@@ -12,6 +12,7 @@ def ensure_rag_contract(payload: dict[str, Any]) -> dict[str, Any]:
     payload.setdefault("agent_summary", build_rag_agent_summary(payload))
     payload.setdefault("agent_tool_plan", build_rag_agent_tool_plan(payload))
     payload.setdefault("mcp_server", build_mcp_server_contract(payload))
+    payload.setdefault("dashboard_handoff_json", build_dashboard_rag_handoff_contract(payload))
     return payload
 
 
@@ -201,6 +202,55 @@ def build_rag_citation_contract(payload: dict[str, Any] | None = None) -> dict[s
             "not a generated final synthesis, unless a downstream LLM rewrites it with citations preserved."
         ),
         "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "citation_contract"],
+    }
+
+
+def build_dashboard_rag_handoff_contract(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    data = payload or {}
+    project_id = str(data.get("server_project_id") or data.get("project_id") or "<project-id>")
+    return {
+        "source": "dashboard_project_rag_copy",
+        "purpose": "Paste Dashboard project/RAG handoff JSON into a local agent so it can continue through MCP without copying server project ids by hand.",
+        "expected_fields": [
+            "project_id",
+            "status",
+            "reason_code",
+            "action_hint",
+            "selected_provider",
+            "provider_state",
+            "provider_configured",
+            "readiness",
+            "agent_summary",
+            "next_best_action",
+            "next_commands",
+            "citation_contract",
+            "citations",
+            "source_nodes",
+            "matches",
+            "evidence_pack.context_markdown",
+            "project_bridge",
+            "mcp_server",
+            "agent_tool_plan",
+            "agent_playbook",
+        ],
+        "first_mcp_tool": "server_rag_status",
+        "tool_sequence": ["server_rag_status", "project_ingest", "server_rag_build", "rag_query", "mcp_briefing"],
+        "validation_step": {
+            "tool": "server_rag_status",
+            "arguments": {"project_id": project_id},
+            "success_signal": "Returned project_id matches the dashboard handoff JSON and preserves readiness, reason_code, next_commands, and citation_contract.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness", "provider_state", "provider_configured"],
+        },
+        "fallback_commands": [
+            "mdtero rag status --json",
+            'mdtero rag query "What are the strongest findings?" --build-if-needed --json',
+            "mdtero rag build --wait --json",
+            'mdtero rag query "<question>" --build-if-needed --json',
+            "mdtero mcp briefing --json",
+            "mdtero mcp serve",
+        ],
+        "redaction_policy": "Dashboard RAG handoff JSON must not contain provider secrets, API keys, signed URLs, OSS tokens, or bearer tokens; agents should validate live status instead of asking for unredacted credentials.",
+        "agent_instruction": "Treat Dashboard RAG handoff JSON as a starting state, not proof of current server state. Call server_rag_status first, preserve all expected_fields, then ingest, build, query, or start MCP according to readiness and next_best_action.",
     }
 
 
