@@ -3173,6 +3173,12 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert "website OAuth" in route_by_id["browser_extension_handoff"]["best_for"]
     assert "publisher challenge" in route_by_id["browser_extension_handoff"]["best_for"]
     assert route_by_id["rag_mcp_after_parse"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
+    assert route_by_id["rag_mcp_after_parse"]["next_commands"][:4] == [
+        "mdtero project ingest --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+    ]
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in route_by_id["rag_mcp_after_parse"]["next_commands"]
     assert "citations" in route_by_id["rag_mcp_after_parse"]["evidence_fields"]
     assert payload["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
@@ -5131,6 +5137,12 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert "backend MinerU-first" in input_routes["file_upload"]["action_hint"]
     assert input_routes["browser_extension_handoff"]["status"] == "manual_capture"
     assert "website OAuth" in input_routes["browser_extension_handoff"]["best_for"]
+    assert input_routes["rag_mcp_after_parse"]["next_commands"][:4] == [
+        "mdtero project ingest --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+    ]
     assert input_routes["rag_mcp_after_parse"]["evidence_fields"] == ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"]
     assert model["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
     assert model["agents"]["detect_command"] == "mdtero agent detect --json"
