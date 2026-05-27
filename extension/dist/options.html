@@ -68,6 +68,18 @@
         <p id="cli-handoff-guide-boundary" class="meta-label">The extension does not install Python dependencies or store publisher API keys.</p>
       </section>
 
+      <section class="card" id="mcp-server-config-card">
+        <div class="handoff-guide-header">
+          <div>
+            <h2 id="mcp-server-config-title">Agent MCP server</h2>
+            <p id="mcp-server-config-note" class="meta-label">After setup, start mdtero mcp serve from a local project and paste this stdio server config into your agent.</p>
+          </div>
+          <button id="copy-mcp-server-config" type="button" class="ghost-chip">Copy MCP config</button>
+        </div>
+        <span id="mcp-server-config-meta" class="meta-pill mcp-meta-pill">FastMCP · stdio · local project root</span>
+        <code id="mcp-server-config-command" class="handoff-guide-command mcp-server-command">{"mcpServers":{"mdtero":{"command":"mdtero","args":["mcp","serve"],"cwd":"&lt;local-mdtero-project-root&gt;"}}}</code>
+      </section>
+
       <section class="card" id="cli-onboarding-card">
         <div class="handoff-guide-header">
           <div>

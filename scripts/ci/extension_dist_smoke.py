@@ -62,6 +62,10 @@ OPTIONS_REQUIRED_MARKERS = (
     "CLI setup checklist",
     "mdtero setup --json",
     "mdtero agent install --interactive",
+    "FastMCP",
+    "stdio",
+    "mcpServers",
+    "mdtero mcp serve",
     "Website OAuth is connected",
     "browser capture, upload, translation, and download settings",
 )

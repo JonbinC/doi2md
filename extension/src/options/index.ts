@@ -33,6 +33,11 @@ const COPY = {
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
+    mcpServerConfigTitle: "Agent MCP server",
+    mcpServerConfigNote: "After `mdtero setup`, start `mdtero mcp serve` from a local project and paste this stdio server config into Codex, Claude, Gemini, Hermes, or OpenCode.",
+    mcpServerConfigMeta: "FastMCP · stdio · local project root",
+    copyMcpServerConfig: "Copy MCP config",
+    mcpServerConfigCopied: "MCP config copied.",
     cliOnboardingTitle: "CLI setup checklist",
     cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
     cliOnboardingPill: "Python / uv",
@@ -46,6 +51,7 @@ const COPY = {
       ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
       ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "Backend Voyage RAG is driven by the CLI project."],
       ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, and RAG readiness to local agents."],
+      ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
       ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
     ],
     guideTitle: "Connection guide",
@@ -107,6 +113,11 @@ const COPY = {
     cliHandoffGuideBoundary: "扩展不安装 Python 依赖、不运行本地 helper，也不保存 Elsevier/Wiley/Semantic Scholar key；这些只留在本地 CLI 的 `mdtero config academic`。",
     copyCliHandoffGuide: "复制交接",
     cliHandoffGuideCopied: "CLI 交接已复制。",
+    mcpServerConfigTitle: "Agent MCP 服务",
+    mcpServerConfigNote: "运行 `mdtero setup` 后，在本地项目目录启动 `mdtero mcp serve`，再把这段 stdio server 配置粘贴到 Codex、Claude、Gemini、Hermes 或 OpenCode。",
+    mcpServerConfigMeta: "FastMCP · stdio · 本地项目根目录",
+    copyMcpServerConfig: "复制 MCP 配置",
+    mcpServerConfigCopied: "MCP 配置已复制。",
     cliOnboardingTitle: "CLI 配置清单",
     cliOnboardingNote: "Python 客户端负责本地抓取、项目队列、Zotero、后端 Voyage RAG、MCP 和 agent skill。",
     cliOnboardingPill: "Python / uv",
@@ -120,6 +131,7 @@ const COPY = {
       ["文件上传", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "浏览器保存的文件或 publisher challenge 页面交给 CLI 继续。"],
       ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "后端 Voyage RAG 由 CLI 项目驱动。"],
       ["MCP briefing", "mdtero mcp briefing --json", "把账户、项目、extension_handoff 和 RAG readiness 暴露给本地 agent。"],
+      ["MCP 服务", "mdtero mcp serve", "在本地项目根目录运行 FastMCP stdio server，给 agent 提供上下文工具。"],
       ["Agent skill", "mdtero agent install --interactive", "动态检测 Codex、Claude、Gemini、Hermes、OpenCode，并用空格多选安装。"]
     ],
     guideTitle: "连接引导",
@@ -183,6 +195,11 @@ const cliHandoffGuideNoteEl = document.querySelector<HTMLParagraphElement>("#cli
 const cliHandoffGuideBoundaryEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-guide-boundary");
 const cliHandoffGuideCommandEl = document.querySelector<HTMLElement>("#cli-handoff-guide-command");
 const copyCliHandoffGuideButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff-guide");
+const mcpServerConfigTitleEl = document.querySelector<HTMLHeadingElement>("#mcp-server-config-title");
+const mcpServerConfigNoteEl = document.querySelector<HTMLParagraphElement>("#mcp-server-config-note");
+const mcpServerConfigMetaEl = document.querySelector<HTMLSpanElement>("#mcp-server-config-meta");
+const mcpServerConfigCommandEl = document.querySelector<HTMLElement>("#mcp-server-config-command");
+const copyMcpServerConfigButton = document.querySelector<HTMLButtonElement>("#copy-mcp-server-config");
 const cliOnboardingTitleEl = document.querySelector<HTMLHeadingElement>("#cli-onboarding-title");
 const cliOnboardingNoteEl = document.querySelector<HTMLParagraphElement>("#cli-onboarding-note");
 const cliOnboardingPillEl = document.querySelector<HTMLSpanElement>("#cli-onboarding-pill");
@@ -226,7 +243,22 @@ const CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero rag status --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
   "mdtero mcp briefing --json",
+  "mdtero mcp serve",
 ].join("\n");
+
+const MCP_SERVER_CONFIG = JSON.stringify(
+  {
+    mcpServers: {
+      mdtero: {
+        command: "mdtero",
+        args: ["mcp", "serve"],
+        cwd: "<local-mdtero-project-root>",
+      },
+    },
+  },
+  null,
+  2
+);
 
 function renderHistoryNotice(message: string, color?: string) {
   if (!historyList) return;
@@ -294,6 +326,11 @@ function applyLanguage() {
   if (cliHandoffGuideBoundaryEl) cliHandoffGuideBoundaryEl.textContent = copy.cliHandoffGuideBoundary;
   if (cliHandoffGuideCommandEl) cliHandoffGuideCommandEl.textContent = CLI_HANDOFF_GUIDE_COMMAND;
   if (copyCliHandoffGuideButton) copyCliHandoffGuideButton.textContent = copy.copyCliHandoffGuide;
+  if (mcpServerConfigTitleEl) mcpServerConfigTitleEl.textContent = copy.mcpServerConfigTitle;
+  if (mcpServerConfigNoteEl) mcpServerConfigNoteEl.textContent = copy.mcpServerConfigNote;
+  if (mcpServerConfigMetaEl) mcpServerConfigMetaEl.textContent = copy.mcpServerConfigMeta;
+  if (mcpServerConfigCommandEl) mcpServerConfigCommandEl.textContent = MCP_SERVER_CONFIG;
+  if (copyMcpServerConfigButton) copyMcpServerConfigButton.textContent = copy.copyMcpServerConfig;
   if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
   if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
   if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
@@ -513,6 +550,11 @@ openAccountButton?.addEventListener("click", () => {
 copyCliHandoffGuideButton?.addEventListener("click", async () => {
   await navigator.clipboard?.writeText(CLI_HANDOFF_GUIDE_COMMAND);
   copyCliHandoffGuideButton.textContent = copyFor(uiLanguage).cliHandoffGuideCopied;
+});
+
+copyMcpServerConfigButton?.addEventListener("click", async () => {
+  await navigator.clipboard?.writeText(MCP_SERVER_CONFIG);
+  copyMcpServerConfigButton.textContent = copyFor(uiLanguage).mcpServerConfigCopied;
 });
 
 saveButton?.addEventListener("click", async () => {

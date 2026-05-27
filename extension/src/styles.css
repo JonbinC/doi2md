@@ -431,6 +431,15 @@ summary,
   margin-top: 8px;
 }
 
+.mcp-meta-pill {
+  display: inline-flex;
+  margin-top: 10px;
+}
+
+.mcp-server-command {
+  max-height: 220px;
+}
+
 label {
   display: block;
   margin-bottom: 7px;

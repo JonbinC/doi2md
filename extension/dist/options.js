@@ -282,6 +282,11 @@ var COPY = {
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
+    mcpServerConfigTitle: "Agent MCP server",
+    mcpServerConfigNote: "After `mdtero setup`, start `mdtero mcp serve` from a local project and paste this stdio server config into Codex, Claude, Gemini, Hermes, or OpenCode.",
+    mcpServerConfigMeta: "FastMCP \xB7 stdio \xB7 local project root",
+    copyMcpServerConfig: "Copy MCP config",
+    mcpServerConfigCopied: "MCP config copied.",
     cliOnboardingTitle: "CLI setup checklist",
     cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
     cliOnboardingPill: "Python / uv",
@@ -295,6 +300,7 @@ var COPY = {
       ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
       ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "Backend Voyage RAG is driven by the CLI project."],
       ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, and RAG readiness to local agents."],
+      ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
       ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
     ],
     guideTitle: "Connection guide",
@@ -355,6 +361,11 @@ var COPY = {
     cliHandoffGuideBoundary: "\u6269\u5C55\u4E0D\u5B89\u88C5 Python \u4F9D\u8D56\u3001\u4E0D\u8FD0\u884C\u672C\u5730 helper\uFF0C\u4E5F\u4E0D\u4FDD\u5B58 Elsevier/Wiley/Semantic Scholar key\uFF1B\u8FD9\u4E9B\u53EA\u7559\u5728\u672C\u5730 CLI \u7684 `mdtero config academic`\u3002",
     copyCliHandoffGuide: "\u590D\u5236\u4EA4\u63A5",
     cliHandoffGuideCopied: "CLI \u4EA4\u63A5\u5DF2\u590D\u5236\u3002",
+    mcpServerConfigTitle: "Agent MCP \u670D\u52A1",
+    mcpServerConfigNote: "\u8FD0\u884C `mdtero setup` \u540E\uFF0C\u5728\u672C\u5730\u9879\u76EE\u76EE\u5F55\u542F\u52A8 `mdtero mcp serve`\uFF0C\u518D\u628A\u8FD9\u6BB5 stdio server \u914D\u7F6E\u7C98\u8D34\u5230 Codex\u3001Claude\u3001Gemini\u3001Hermes \u6216 OpenCode\u3002",
+    mcpServerConfigMeta: "FastMCP \xB7 stdio \xB7 \u672C\u5730\u9879\u76EE\u6839\u76EE\u5F55",
+    copyMcpServerConfig: "\u590D\u5236 MCP \u914D\u7F6E",
+    mcpServerConfigCopied: "MCP \u914D\u7F6E\u5DF2\u590D\u5236\u3002",
     cliOnboardingTitle: "CLI \u914D\u7F6E\u6E05\u5355",
     cliOnboardingNote: "Python \u5BA2\u6237\u7AEF\u8D1F\u8D23\u672C\u5730\u6293\u53D6\u3001\u9879\u76EE\u961F\u5217\u3001Zotero\u3001\u540E\u7AEF Voyage RAG\u3001MCP \u548C agent skill\u3002",
     cliOnboardingPill: "Python / uv",
@@ -368,6 +379,7 @@ var COPY = {
       ["\u6587\u4EF6\u4E0A\u4F20", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "\u6D4F\u89C8\u5668\u4FDD\u5B58\u7684\u6587\u4EF6\u6216 publisher challenge \u9875\u9762\u4EA4\u7ED9 CLI \u7EE7\u7EED\u3002"],
       ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "\u540E\u7AEF Voyage RAG \u7531 CLI \u9879\u76EE\u9A71\u52A8\u3002"],
       ["MCP briefing", "mdtero mcp briefing --json", "\u628A\u8D26\u6237\u3001\u9879\u76EE\u3001extension_handoff \u548C RAG readiness \u66B4\u9732\u7ED9\u672C\u5730 agent\u3002"],
+      ["MCP \u670D\u52A1", "mdtero mcp serve", "\u5728\u672C\u5730\u9879\u76EE\u6839\u76EE\u5F55\u8FD0\u884C FastMCP stdio server\uFF0C\u7ED9 agent \u63D0\u4F9B\u4E0A\u4E0B\u6587\u5DE5\u5177\u3002"],
       ["Agent skill", "mdtero agent install --interactive", "\u52A8\u6001\u68C0\u6D4B Codex\u3001Claude\u3001Gemini\u3001Hermes\u3001OpenCode\uFF0C\u5E76\u7528\u7A7A\u683C\u591A\u9009\u5B89\u88C5\u3002"]
     ],
     guideTitle: "\u8FDE\u63A5\u5F15\u5BFC",
@@ -430,6 +442,11 @@ var cliHandoffGuideNoteEl = document.querySelector("#cli-handoff-guide-note");
 var cliHandoffGuideBoundaryEl = document.querySelector("#cli-handoff-guide-boundary");
 var cliHandoffGuideCommandEl = document.querySelector("#cli-handoff-guide-command");
 var copyCliHandoffGuideButton = document.querySelector("#copy-cli-handoff-guide");
+var mcpServerConfigTitleEl = document.querySelector("#mcp-server-config-title");
+var mcpServerConfigNoteEl = document.querySelector("#mcp-server-config-note");
+var mcpServerConfigMetaEl = document.querySelector("#mcp-server-config-meta");
+var mcpServerConfigCommandEl = document.querySelector("#mcp-server-config-command");
+var copyMcpServerConfigButton = document.querySelector("#copy-mcp-server-config");
 var cliOnboardingTitleEl = document.querySelector("#cli-onboarding-title");
 var cliOnboardingNoteEl = document.querySelector("#cli-onboarding-note");
 var cliOnboardingPillEl = document.querySelector("#cli-onboarding-pill");
@@ -468,8 +485,22 @@ var CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero rag build --json",
   "mdtero rag status --json",
   'mdtero rag query "<question>" --build-if-needed --json',
-  "mdtero mcp briefing --json"
+  "mdtero mcp briefing --json",
+  "mdtero mcp serve"
 ].join("\n");
+var MCP_SERVER_CONFIG = JSON.stringify(
+  {
+    mcpServers: {
+      mdtero: {
+        command: "mdtero",
+        args: ["mcp", "serve"],
+        cwd: "<local-mdtero-project-root>"
+      }
+    }
+  },
+  null,
+  2
+);
 function renderHistoryNotice(message, color) {
   if (!historyList) return;
   historyList.textContent = "";
@@ -524,6 +555,11 @@ function applyLanguage() {
   if (cliHandoffGuideBoundaryEl) cliHandoffGuideBoundaryEl.textContent = copy.cliHandoffGuideBoundary;
   if (cliHandoffGuideCommandEl) cliHandoffGuideCommandEl.textContent = CLI_HANDOFF_GUIDE_COMMAND;
   if (copyCliHandoffGuideButton) copyCliHandoffGuideButton.textContent = copy.copyCliHandoffGuide;
+  if (mcpServerConfigTitleEl) mcpServerConfigTitleEl.textContent = copy.mcpServerConfigTitle;
+  if (mcpServerConfigNoteEl) mcpServerConfigNoteEl.textContent = copy.mcpServerConfigNote;
+  if (mcpServerConfigMetaEl) mcpServerConfigMetaEl.textContent = copy.mcpServerConfigMeta;
+  if (mcpServerConfigCommandEl) mcpServerConfigCommandEl.textContent = MCP_SERVER_CONFIG;
+  if (copyMcpServerConfigButton) copyMcpServerConfigButton.textContent = copy.copyMcpServerConfig;
   if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
   if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
   if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
@@ -713,6 +749,10 @@ openAccountButton?.addEventListener("click", () => {
 copyCliHandoffGuideButton?.addEventListener("click", async () => {
   await navigator.clipboard?.writeText(CLI_HANDOFF_GUIDE_COMMAND);
   copyCliHandoffGuideButton.textContent = copyFor(uiLanguage).cliHandoffGuideCopied;
+});
+copyMcpServerConfigButton?.addEventListener("click", async () => {
+  await navigator.clipboard?.writeText(MCP_SERVER_CONFIG);
+  copyMcpServerConfigButton.textContent = copyFor(uiLanguage).mcpServerConfigCopied;
 });
 saveButton?.addEventListener("click", async () => {
   const current = await readSettings();
