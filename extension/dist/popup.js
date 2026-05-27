@@ -660,11 +660,23 @@ function formatCliHandoffClipboard(primaryCommand, planCommands) {
   if (commands.length <= 1) {
     return commands[0] || "";
   }
+  const parseHandoff = /^mdtero\s+parse\b/.test(commands[0] || "");
   return [
     "# Mdtero CLI handoff",
     "",
+    ...parseHandoff ? [
+      "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
+      "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      ""
+    ] : [],
     "Run these commands in order:",
-    ...commands.map((command, index) => `${index + 1}. ${command}`)
+    ...commands.map((command, index) => `${index + 1}. ${command}`),
+    ...parseHandoff ? [
+      "",
+      "Agent handoff:",
+      "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
+      '- Use `mdtero rag query "<question>" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.'
+    ] : []
   ].join("\n");
 }
 function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
