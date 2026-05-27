@@ -4479,6 +4479,30 @@ def test_rag_contract_does_not_request_ingest_after_successful_query_without_sum
     assert "build_rag_index" not in plan_steps
 
 
+def test_rag_contract_backfills_dashboard_project_handoff_for_agents():
+    payload = ensure_rag_contract({
+        "project_id": 42,
+        "status": "ready",
+        "reason_code": "indexed",
+        "selected_provider": "voyage",
+        "provider_state": "configured",
+        "summary": {"chunk_count": 3, "embedded_count": 3},
+    })
+
+    handoff = payload["dashboard_handoff_json"]
+
+    assert handoff["source"] == "dashboard_project_rag_copy"
+    assert handoff["first_mcp_tool"] == "server_rag_status"
+    assert handoff["tool_sequence"] == ["server_rag_status", "project_ingest", "server_rag_build", "rag_query", "mcp_briefing"]
+    assert handoff["validation_step"]["arguments"] == {"project_id": "42"}
+    assert "citation_contract" in handoff["expected_fields"]
+    assert "evidence_pack.context_markdown" in handoff["expected_fields"]
+    assert "provider_configured" in handoff["validation_step"]["failure_fields"]
+    assert "provider secrets" in handoff["redaction_policy"]
+    assert "VOYAGE_API_KEY" not in handoff["agent_instruction"]
+    assert "mdtero mcp serve" in handoff["fallback_commands"]
+
+
 def test_rag_contract_agent_tool_plan_guides_build_when_index_is_missing():
     payload = ensure_rag_contract({
         "status": "not_ready",
@@ -6087,6 +6111,9 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     assert payload["agent_summary"]["provider_configured"] is True
     assert payload["agent_summary"]["ready_for_query"] is True
     assert payload["agent_summary"]["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
+    assert payload["dashboard_handoff_json"]["first_mcp_tool"] == "server_rag_status"
+    assert payload["dashboard_handoff_json"]["validation_step"]["arguments"] == {"project_id": "42"}
+    assert "evidence_pack.context_markdown" in payload["dashboard_handoff_json"]["expected_fields"]
     assert any(step["step"] == "query_rag" for step in payload["agent_tool_plan"])
     assert any(step["step"] == "handoff_to_local_agent" for step in payload["agent_tool_plan"])
     assert payload["action_hint"] == "RAG query completed. Review the returned answer, citations, and matches."
