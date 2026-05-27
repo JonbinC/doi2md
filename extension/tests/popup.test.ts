@@ -722,6 +722,9 @@ describe("getTaskFailureText", () => {
     ).toBe([
       "# Mdtero CLI handoff",
       "",
+      "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
+      "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      "",
       "Run these commands in order:",
       "1. mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
       "2. mdtero status task-123 --wait --timeout 300 --json",
@@ -731,10 +734,29 @@ describe("getTaskFailureText", () => {
       "6. mdtero rag build --json",
       "7. mdtero rag status --json",
       "8. mdtero rag query \"<question>\" --build-if-needed --json",
-      "9. mdtero mcp briefing --json"
+      "9. mdtero mcp briefing --json",
+      "",
+      "Agent handoff:",
+      "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
+      "- Use `mdtero rag query \"<question>\" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one."
     ].join("\n"));
 
     expect(formatCliHandoffClipboard("mdtero rag status --json", [])).toBe("mdtero rag status --json");
+  });
+
+  it("keeps non-parse multi-step handoffs concise", () => {
+    expect(
+      formatCliHandoffClipboard("mdtero rag status --json", [
+        "mdtero rag status --json",
+        "mdtero rag build --json"
+      ])
+    ).toBe([
+      "# Mdtero CLI handoff",
+      "",
+      "Run these commands in order:",
+      "1. mdtero rag status --json",
+      "2. mdtero rag build --json"
+    ].join("\n"));
   });
 
   it("reports the command source when falling back to result or parse input", () => {
