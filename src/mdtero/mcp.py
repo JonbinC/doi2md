@@ -1281,6 +1281,18 @@ def build_agent_briefing(
     next_commands.extend(str(command) for command in server_rag.get("next_commands", []) if command)
     next_commands.extend([commands["mcp_briefing"], commands["serve_mcp"]])
 
+    recommended_next_commands = _dedupe_commands(next_commands)
+    mcp_tool_plan = _build_mcp_tool_plan(
+        state=state,
+        commands=commands,
+        pending=pending,
+        running=running,
+        succeeded=succeeded,
+        failed=failed,
+        server_rag=server_rag,
+        pending_agent_installs=pending_agent_installs,
+    )
+
     return redact_sensitive_payload({
         "project": {
             "name": state.name if state is not None else root.resolve().name,
@@ -1350,7 +1362,7 @@ def build_agent_briefing(
             ],
         },
         "mcp_server": _mcp_server_payload(commands, root),
-        "recommended_next_commands": _dedupe_commands(next_commands),
+        "recommended_next_commands": recommended_next_commands,
         "mcp_tools": [
             "agent_briefing",
             "project_init",
@@ -1366,8 +1378,10 @@ def build_agent_briefing(
             "rag_query",
             "agent_commands",
         ],
-        "mcp_tool_plan": _build_mcp_tool_plan(
+        "mcp_tool_plan": mcp_tool_plan,
+        "agent_playbook": _build_agent_playbook(
             state=state,
+            config=config,
             commands=commands,
             pending=pending,
             running=running,
@@ -1375,6 +1389,8 @@ def build_agent_briefing(
             failed=failed,
             server_rag=server_rag,
             pending_agent_installs=pending_agent_installs,
+            mcp_tool_plan=mcp_tool_plan,
+            recommended_next_commands=recommended_next_commands,
         ),
     })
 
@@ -1574,6 +1590,192 @@ def _build_mcp_tool_plan(
         })
 
     return redact_sensitive_payload(plan)
+
+
+def _build_agent_playbook(
+    *,
+    state: Any | None,
+    config: MdteroConfig,
+    commands: dict[str, Any],
+    pending: list[Any],
+    running: list[Any],
+    succeeded: list[Any],
+    failed: list[Any],
+    server_rag: dict[str, Any],
+    pending_agent_installs: list[Any],
+    mcp_tool_plan: list[dict[str, Any]],
+    recommended_next_commands: list[str],
+) -> dict[str, Any]:
+    rag_summary = server_rag.get("agent_summary") if isinstance(server_rag.get("agent_summary"), dict) else {}
+    readiness = server_rag.get("readiness") if isinstance(server_rag.get("readiness"), dict) else {}
+    rag_ready = bool(rag_summary.get("ready_for_query") or readiness.get("ready_for_query") or server_rag.get("status") == "ready")
+    provider_blocked = bool(readiness.get("provider_blocked"))
+
+    if not config.is_authenticated:
+        phase = "authenticate"
+        first_tool = "agent_commands"
+        first_command = commands.get("login_api_key", "mdtero setup --api-key --json")
+    elif state is None:
+        phase = "initialize_project"
+        first_tool = "project_init"
+        first_command = commands.get("project_init_named", "mdtero project init --name <name>")
+    elif pending:
+        phase = "parse_pending"
+        first_tool = "submit_parse"
+        first_command = commands.get("parse_pending", "mdtero project parse --wait --timeout 300 --json")
+    elif running:
+        phase = "poll_tasks"
+        first_tool = "task_status"
+        first_command = commands.get("refresh", "mdtero project refresh --wait --timeout 300 --json")
+    elif failed and not succeeded:
+        phase = "recover_failed_parse"
+        first_tool = "task_status"
+        first_command = "mdtero project parse --include-failed --wait --timeout 300 --json"
+    elif provider_blocked:
+        phase = "backend_rag_blocked"
+        first_tool = "server_rag_status"
+        first_command = commands.get("rag_status", "mdtero rag status --json")
+    elif rag_ready:
+        phase = "query_rag"
+        first_tool = "rag_query"
+        first_command = commands.get("rag_query", "mdtero rag query \"<question>\" --build-if-needed --json")
+    elif succeeded:
+        phase = "build_or_query_rag"
+        first_tool = "rag_query"
+        first_command = commands.get("rag_query", "mdtero rag query \"<question>\" --build-if-needed --json")
+    else:
+        phase = "add_and_parse"
+        first_tool = "project_add"
+        first_command = commands.get("project_add", "mdtero project add <doi-or-url> --json")
+
+    ordered_steps = _agent_playbook_steps(
+        commands=commands,
+        mcp_tool_plan=mcp_tool_plan,
+        phase=phase,
+        pending=pending,
+        running=running,
+        succeeded=succeeded,
+        failed=failed,
+        rag_ready=rag_ready,
+        provider_blocked=provider_blocked,
+        pending_agent_installs=pending_agent_installs,
+    )
+    return redact_sensitive_payload({
+        "version": "2026-05-agent-playbook-v1",
+        "mode": "mcp_tools_first",
+        "objective": "Move the current Mdtero workspace from local inputs to parsed artifacts, backend Voyage RAG, and FastMCP handoff without guessing state.",
+        "current_phase": phase,
+        "first_action": {
+            "tool": first_tool,
+            "command": first_command,
+            "reason_code": server_rag.get("reason_code") or ("project_not_initialized" if state is None else "project_state_requires_action"),
+        },
+        "ordered_steps": ordered_steps,
+        "stop_conditions": [
+            "A tool returns reason_code/action_hint that requires user credentials, publisher login, or backend operations.",
+            "A parse/upload/translation/RAG task remains queued beyond the requested timeout; return task_id and next_commands instead of looping indefinitely.",
+            "RAG provider state is provider_blocked or voyage_not_configured; do not ask the user for VOYAGE_API_KEY because RAG is a backend Mdtero operation.",
+        ],
+        "success_signals": [
+            "parse task succeeded with paper_md or paper_bundle in download_artifacts",
+            "download_artifact returned a local path",
+            "rag_query returned evidence_pack.context_markdown plus citations and source_nodes",
+            "mcp_server.startup_order can be followed and agent_briefing is the primary tool",
+        ],
+        "preserve_fields": [
+            "task_id",
+            "reason_code",
+            "action_hint",
+            "next_commands",
+            "download_artifacts",
+            "translation_attempts",
+            "client_acquisition",
+            "readiness",
+            "citation_contract",
+            "citations",
+            "source_nodes",
+            "evidence_pack.context_markdown",
+        ],
+        "fallback_commands": recommended_next_commands,
+        "guardrails": [
+            "Prefer MCP tools when the server is running; otherwise follow fallback_commands in order.",
+            "Use browser extension handoff for publisher challenge pages, logged-in browser sessions, or manual PDF/EPUB capture.",
+            "Keep API keys, signed URLs, bearer tokens, and provider credentials out of prompts and logs.",
+            "Final RAG answers must preserve citation_contract.required_for_final_answer, especially citations and source_nodes.",
+        ],
+    })
+
+
+def _agent_playbook_steps(
+    *,
+    commands: dict[str, Any],
+    mcp_tool_plan: list[dict[str, Any]],
+    phase: str,
+    pending: list[Any],
+    running: list[Any],
+    succeeded: list[Any],
+    failed: list[Any],
+    rag_ready: bool,
+    provider_blocked: bool,
+    pending_agent_installs: list[Any],
+) -> list[dict[str, Any]]:
+    by_step = {str(step.get("step") or ""): step for step in mcp_tool_plan if isinstance(step, dict)}
+    steps: list[dict[str, Any]] = []
+
+    def append(step_id: str, *, command: str | None = None, required: bool = True) -> None:
+        source = by_step.get(step_id)
+        if not source:
+            return
+        item = {
+            "step": step_id,
+            "tool": source.get("tool"),
+            "required": required,
+            "when": source.get("when"),
+            "arguments": source.get("arguments", {}),
+            "command_fallback": command,
+            "success_signal": source.get("success_signal"),
+            "failure_fields": source.get("failure_fields", ["reason_code", "action_hint", "next_commands"]),
+        }
+        if source.get("next_on_success"):
+            item["next_on_success"] = source.get("next_on_success")
+        steps.append(item)
+
+    append("brief", command=commands.get("mcp_briefing", "mdtero mcp briefing --json"))
+    append("inspect_project", command=commands.get("project_status", "mdtero project status --json"))
+
+    if phase == "initialize_project":
+        append("initialize_project", command=commands.get("project_init_named", "mdtero project init --name <name>"))
+        append("add_first_project_item", command=commands.get("project_add", "mdtero project add <doi-or-url> --json"), required=False)
+    elif phase in {"add_and_parse", "parse_pending"}:
+        if pending:
+            append("submit_pending_parse", command=commands.get("parse_pending", "mdtero project parse --wait --timeout 300 --json"))
+        else:
+            append("add_first_project_item", command=commands.get("project_add", "mdtero project add <doi-or-url> --json"))
+    elif phase == "poll_tasks":
+        append("poll_running_task", command=commands.get("refresh", "mdtero project refresh --wait --timeout 300 --json"))
+    elif phase == "recover_failed_parse":
+        append("inspect_failed_task", command="mdtero project parse --include-failed --wait --timeout 300 --json")
+
+    if running and phase != "poll_tasks":
+        append("poll_running_task", command=commands.get("refresh", "mdtero project refresh --wait --timeout 300 --json"), required=False)
+    if failed and phase != "recover_failed_parse":
+        append("inspect_failed_task", command="mdtero project parse --include-failed --wait --timeout 300 --json", required=False)
+    if succeeded:
+        append("download_artifact", command=commands.get("download_markdown", "mdtero project download --output-dir ./mdtero-output --json"), required=False)
+
+    if provider_blocked:
+        append("prepare_rag", command=commands.get("rag_status", "mdtero rag status --json"))
+    elif rag_ready:
+        append("query_rag", command=commands.get("rag_query", "mdtero rag query \"<question>\" --build-if-needed --json"))
+    else:
+        append("prepare_rag", command=commands.get("rag_status", "mdtero rag status --json"))
+        if succeeded:
+            append("query_rag", command=commands.get("rag_query", "mdtero rag query \"<question>\" --build-if-needed --json"), required=False)
+
+    if pending_agent_installs:
+        append("install_agent_skill", command=commands.get("agent_install", "mdtero agent install --interactive"), required=False)
+
+    return steps
 
 
 def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:

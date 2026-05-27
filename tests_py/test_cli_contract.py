@@ -3849,6 +3849,28 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     query_step = next(step for step in tool_plan if step["step"] == "query_rag")
     assert "evidence_pack.context_markdown" in query_step["purpose"]
     assert "reason_code" in query_step["failure_fields"]
+    playbook = briefing["agent_playbook"]
+    assert playbook["version"] == "2026-05-agent-playbook-v1"
+    assert playbook["mode"] == "mcp_tools_first"
+    assert playbook["current_phase"] == "parse_pending"
+    assert playbook["first_action"] == {
+        "tool": "submit_parse",
+        "command": "mdtero project parse --wait --timeout 300 --json",
+        "reason_code": "indexed",
+    }
+    playbook_steps = {step["step"]: step for step in playbook["ordered_steps"]}
+    assert list(playbook_steps)[:3] == ["brief", "inspect_project", "submit_pending_parse"]
+    assert playbook_steps["submit_pending_parse"]["tool"] == "submit_parse"
+    assert playbook_steps["submit_pending_parse"]["arguments"] == {"input_value": "10.1000/todo", "wait": True, "timeout": 300, "interval": 2}
+    assert playbook_steps["inspect_failed_task"]["required"] is False
+    assert playbook_steps["query_rag"]["required"] is True
+    assert playbook_steps["query_rag"]["command_fallback"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert "citation_contract" in playbook["preserve_fields"]
+    assert "source_nodes" in playbook["preserve_fields"]
+    assert "evidence_pack.context_markdown" in playbook["preserve_fields"]
+    assert any("VOYAGE_API_KEY" in condition for condition in playbook["stop_conditions"])
+    assert any("citation_contract.required_for_final_answer" in guardrail for guardrail in playbook["guardrails"])
+    assert playbook["fallback_commands"] == briefing["recommended_next_commands"]
     assert briefing["recommended_next_commands"] == [
         "mdtero project parse --wait --timeout 300 --json",
         "mdtero project parse --include-failed --wait --timeout 300 --json",
@@ -4949,6 +4971,12 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["mcp"]["tool_plan"][0]["failure_fields"] == ["reason_code", "action_hint", "next_commands"]
     assert model["mcp"]["tool_plan"][-1]["tool"] == "server_rag_status"
     assert "ready_for_query is false" in model["mcp"]["tool_plan"][-1]["when"]
+    assert model["mcp"]["agent_playbook"]["current_phase"] == "authenticate"
+    assert model["mcp"]["agent_playbook"]["first_action"]["tool"] == "agent_commands"
+    assert model["mcp"]["agent_playbook"]["first_action"]["command"] == "mdtero setup --api-key --json"
+    assert "citation_contract" in model["mcp"]["agent_playbook"]["preserve_fields"]
+    assert "source_nodes" in model["mcp"]["agent_playbook"]["preserve_fields"]
+    assert any(step["step"] == "prepare_rag" for step in model["mcp"]["agent_playbook"]["ordered_steps"])
     assert model["mcp"]["task_tools"] == [
         {"tool": "submit_parse", "purpose": "Submit DOI/URL parse and optionally wait for completion"},
         {"tool": "task_status", "purpose": "Poll task status and sync local project state"},
@@ -5089,6 +5117,12 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert plan_steps["translate_ready_artifact"]["tool"] == "request_translation"
     assert plan_steps["prepare_rag"]["tool"] == "server_rag_status"
     assert "readiness" in plan_steps["prepare_rag"]["failure_fields"]
+    assert model["mcp"]["agent_playbook"]["current_phase"] == "build_or_query_rag"
+    assert model["mcp"]["agent_playbook"]["first_action"]["tool"] == "rag_query"
+    assert model["mcp"]["agent_playbook"]["first_action"]["command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert any(step["step"] == "download_artifact" for step in model["mcp"]["agent_playbook"]["ordered_steps"])
+    assert any(step["step"] == "prepare_rag" for step in model["mcp"]["agent_playbook"]["ordered_steps"])
+    assert "evidence_pack.context_markdown" in model["mcp"]["agent_playbook"]["preserve_fields"]
     palette_commands = [item["command"] for item in model["command_palette"]]
     assert "mdtero project ingest --json" in palette_commands
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in palette_commands
@@ -5144,6 +5178,10 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "download_artifact" in output
     assert "request_translation" in output
     assert "MCP Tool Plan" in output
+    assert "Agent Playbook" in output
+    assert "build_or_query_rag" in output
+    assert "rag_query" in output
+    assert "evidence_pack.context_markdown" in output
     assert "prepare_rag" in output
     assert "server_rag_status" in output
     assert "failure_fields" not in output

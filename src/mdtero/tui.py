@@ -133,6 +133,7 @@ def build_dashboard_model(
             "tools": briefing["mcp_tools"],
             "task_tools": _mcp_task_tools_payload(briefing["mcp_tools"]),
             "tool_plan": _mcp_tool_plan_payload(briefing.get("mcp_tool_plan") or []),
+            "agent_playbook": _agent_playbook_payload(briefing.get("agent_playbook") or {}),
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "extension_handoff": extension_handoff,
@@ -160,6 +161,7 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
         _onboarding_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
+        _agent_playbook_panel(model),
         _mcp_tool_plan_panel(model),
         _command_palette_panel(model),
         _launch_bundle_panel(model),
@@ -478,6 +480,38 @@ def _mcp_tool_plan_payload(plan: list[Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _agent_playbook_payload(playbook: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(playbook, dict):
+        playbook = {}
+    first_action = playbook.get("first_action") if isinstance(playbook.get("first_action"), dict) else {}
+    steps = playbook.get("ordered_steps") if isinstance(playbook.get("ordered_steps"), list) else []
+    return {
+        "version": str(playbook.get("version") or ""),
+        "mode": str(playbook.get("mode") or ""),
+        "current_phase": str(playbook.get("current_phase") or "unknown"),
+        "objective": str(playbook.get("objective") or ""),
+        "first_action": {
+            "tool": str(first_action.get("tool") or "agent_briefing"),
+            "command": str(first_action.get("command") or "mdtero mcp briefing --json"),
+            "reason_code": str(first_action.get("reason_code") or ""),
+        },
+        "ordered_steps": [
+            {
+                "step": str(step.get("step") or ""),
+                "tool": str(step.get("tool") or ""),
+                "required": bool(step.get("required")),
+                "command_fallback": str(step.get("command_fallback") or ""),
+                "failure_fields": [str(field) for field in step.get("failure_fields") or []],
+            }
+            for step in steps
+            if isinstance(step, dict)
+        ][:8],
+        "stop_conditions": [str(item) for item in playbook.get("stop_conditions") or []][:3],
+        "preserve_fields": [str(item) for item in playbook.get("preserve_fields") or []],
+        "guardrails": [str(item) for item in playbook.get("guardrails") or []][:4],
+    }
+
+
 def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
     command_plan = _extension_handoff_commands(commands)
     return {
@@ -786,6 +820,38 @@ def _mcp_tool_plan_panel(model: dict[str, Any]) -> Panel:
             field_text or "-",
         )
     return Panel(table, title="MCP Tool Plan", border_style="magenta")
+
+
+def _agent_playbook_panel(model: dict[str, Any]) -> Panel:
+    playbook = model["mcp"].get("agent_playbook") if isinstance(model.get("mcp"), dict) else {}
+    if not isinstance(playbook, dict):
+        playbook = {}
+    first_action = playbook.get("first_action") if isinstance(playbook.get("first_action"), dict) else {}
+    table = Table("Field", "Value", expand=True)
+    table.add_row("Phase", str(playbook.get("current_phase") or "unknown"))
+    table.add_row("Mode", str(playbook.get("mode") or "mcp_tools_first"))
+    table.add_row("First tool", str(first_action.get("tool") or "agent_briefing"))
+    table.add_row("First command", str(first_action.get("command") or "mdtero mcp briefing --json")[:120])
+    steps = playbook.get("ordered_steps") if isinstance(playbook.get("ordered_steps"), list) else []
+    if steps:
+        compact = []
+        for step in steps[:5]:
+            if not isinstance(step, dict):
+                continue
+            marker = "*" if step.get("required") else "optional"
+            compact.append(f"{step.get('step')}:{step.get('tool')} ({marker})")
+        table.add_row("Ordered steps", " -> ".join(compact))
+    preserve = playbook.get("preserve_fields") if isinstance(playbook.get("preserve_fields"), list) else []
+    if preserve:
+        important = [field for field in preserve if field in {"reason_code", "action_hint", "next_commands", "citation_contract", "citations", "source_nodes", "evidence_pack.context_markdown"}]
+        table.add_row("Preserve", ", ".join(important[:8]))
+    stop_conditions = playbook.get("stop_conditions") if isinstance(playbook.get("stop_conditions"), list) else []
+    if stop_conditions:
+        table.add_row("Stop when", str(stop_conditions[0])[:140])
+    guardrails = playbook.get("guardrails") if isinstance(playbook.get("guardrails"), list) else []
+    if guardrails:
+        table.add_row("Guardrail", str(guardrails[-1])[:140])
+    return Panel(table, title="Agent Playbook", border_style="cyan")
 
 
 def _integration_panel(model: dict[str, Any]) -> Panel:
