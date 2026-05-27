@@ -81,6 +81,8 @@ Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `
 
 If `agent_briefing` includes `dashboard_handoff_json`, use its `expected_fields`, `validation_step`, and `tool_sequence` as the contract for dashboard-to-agent continuation. The copied JSON should already redact signed URLs, bearer/API keys, OSS tokens, and Mdtero secrets; do not request unredacted credentials in chat.
 
+If `agent_briefing` or the dashboard API key dialog provides `dashboard_setup_handoff_json`, treat it as the setup contract for a newly created one-time key. Preserve `auth_boundary`, `first_cli_command`, `next_commands`, `mcp`, `rag`, and `redaction_policy`; verify `api_key.full_secret_included` is false. Ask the user to paste the one-time secret only into the secure `mdtero setup --api-key --json` prompt, then rerun `mdtero doctor --json` and `mdtero mcp briefing --json`. Do not paste the secret into shell commands, MCP output, logs, or this chat.
+
 Prefer MCP tools for multi-step agent work when `mdtero mcp serve` is already running. Prefer CLI commands when the user is reading along in a terminal, when a file path must be selected manually, or when browser-extension handoff copy should remain visible to the user.
 
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.

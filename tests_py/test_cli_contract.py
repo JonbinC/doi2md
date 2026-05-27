@@ -3895,6 +3895,28 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "visible_fields": ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "next_commands"],
         "agent_instruction": "Preserve task_id, selected_provider, parser_strategy, client_acquisition, parse_outcome, reason_code, action_hint, preferred_artifact, download_artifacts, and next_commands when moving between extension, dashboard, CLI, and MCP tools.",
     }
+    setup_handoff = briefing["dashboard_setup_handoff_json"]
+    assert setup_handoff["source"] == "dashboard_api_key_dialog"
+    assert setup_handoff["first_cli_command"] == "mdtero setup --api-key --json"
+    assert setup_handoff["api_key"] == {
+        "prefix_identifier_field": "api_key.prefix_identifier",
+        "full_secret_shown_once": True,
+        "full_secret_included": False,
+        "copy_secret_action": "Use the dashboard Copy secret button, then paste only into the secure CLI prompt.",
+    }
+    assert "mdtero setup --api-key --json" in setup_handoff["next_commands"]
+    assert "mdtero mcp serve" in setup_handoff["next_commands"]
+    assert setup_handoff["mcp"]["first_tool"] == "agent_briefing"
+    assert setup_handoff["rag"] == {
+        "owner": "backend_voyage",
+        "local_voyage_key_required": False,
+        "primary_command": "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "fallback_commands": ["mdtero rag status --json", "mdtero rag build --wait --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
+    }
+    assert "full API key secret" in setup_handoff["auth_boundary"]["secret_transport"]
+    assert "secret value" in setup_handoff["auth_boundary"]["secret_transport"]
+    assert "VOYAGE_API_KEY" not in str(setup_handoff)
+    assert "mdt_live_env" not in str(setup_handoff)
     assert briefing["dashboard_handoff_json"]["source"] == "dashboard_history_copy"
     assert briefing["dashboard_handoff_json"]["first_mcp_tool"] == "task_status"
     assert briefing["dashboard_handoff_json"]["tool_sequence"] == ["task_status", "download_artifact", "request_translation", "server_rag_status", "rag_query"]
@@ -3918,13 +3940,25 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     ]
     assert "signed URLs" in briefing["dashboard_handoff_json"]["redaction_policy"]
     assert [step["step"] for step in briefing["handoff_protocol"]] == [
+        "consume_dashboard_setup_handoff_json",
         "inspect_failure",
         "consume_dashboard_handoff_json",
         "retry_source_capture",
         "download_or_translate",
         "build_or_query_rag",
     ]
+    assert briefing["handoff_protocol"][0]["use"] == "agent_commands"
     assert briefing["handoff_protocol"][0]["preserve_fields"] == [
+        "source",
+        "auth_boundary",
+        "api_key.full_secret_included",
+        "first_cli_command",
+        "next_commands",
+        "mcp",
+        "rag",
+        "redaction_policy",
+    ]
+    assert briefing["handoff_protocol"][1]["preserve_fields"] == [
         "task_id",
         "selected_provider",
         "parser_strategy",
@@ -3937,9 +3971,9 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "translation_attempts",
         "next_commands",
     ]
-    assert briefing["handoff_protocol"][1]["step"] == "consume_dashboard_handoff_json"
-    assert briefing["handoff_protocol"][1]["use"] == "task_status"
-    assert briefing["handoff_protocol"][2]["commands"] == [
+    assert briefing["handoff_protocol"][2]["step"] == "consume_dashboard_handoff_json"
+    assert briefing["handoff_protocol"][2]["use"] == "task_status"
+    assert briefing["handoff_protocol"][3]["commands"] == [
         "mdtero config academic",
         "mdtero discover \"<topic>\" --limit 5 --interactive",
         "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
@@ -3984,6 +4018,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     tool_plan = briefing["mcp_tool_plan"]
     assert "input_routes" in tool_plan[0]["success_signal"]
     assert "extension_handoff" in tool_plan[0]["success_signal"]
+    assert "dashboard_setup_handoff_json" in tool_plan[0]["success_signal"]
     assert "handoff_protocol" in tool_plan[0]["success_signal"]
     assert [step["tool"] for step in tool_plan][:2] == ["agent_briefing", "project_status"]
     assert any(step["step"] == "submit_pending_parse" and step["tool"] == "submit_parse" for step in tool_plan)
@@ -4003,6 +4038,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert playbook["version"] == "2026-05-agent-playbook-v1"
     assert playbook["mode"] == "mcp_tools_first"
     assert playbook["current_phase"] == "parse_pending"
+    assert "dashboard_setup_handoff_json preserves the auth boundary without including the one-time API key secret" in playbook["success_signals"]
     assert playbook["first_action"] == {
         "tool": "submit_parse",
         "command": "mdtero project parse --wait --timeout 300 --json",
