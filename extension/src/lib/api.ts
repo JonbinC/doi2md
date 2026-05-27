@@ -324,6 +324,7 @@ export function createRouterSSOTClient(
         action_hint: "The backend route planner is not available; submit the DOI or URL directly to /api/v1/tasks/parse.",
         server_entrypoint: "/api/v1/tasks/parse",
         upload_entrypoint: "/api/v1/tasks/upload",
+        client_command: normalizeCliHandoffCommand(`mdtero parse ${shellQuoteRouteInput((init?.body && routeInputFromBody(init.body)) || "<doi-or-url>")}`),
         route_planner_fallback: true
       }), {
         status: 200,
@@ -356,6 +357,29 @@ export function createRouterSSOTClient(
       }).then((response) => response.json() as Promise<ExtensionRouteResponse>);
     },
   };
+}
+
+function routeInputFromBody(body: BodyInit): string {
+  if (typeof body !== "string") {
+    return "";
+  }
+  try {
+    const payload = JSON.parse(body) as { input?: unknown };
+    return typeof payload.input === "string" ? payload.input.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function shellQuoteRouteInput(value: string): string {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "<doi-or-url>";
+  }
+  if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(normalized)) {
+    return normalized;
+  }
+  return `'${normalized.replace(/'/g, `'"'"'`)}'`;
 }
 
 export function routeRequiresBrowserCapture(routePlan: ExtensionRouteResponse): boolean {

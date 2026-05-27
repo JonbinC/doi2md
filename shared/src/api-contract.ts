@@ -79,6 +79,7 @@ export interface ExtensionRouteResponse {
   acquisition_candidates?: AcquisitionCandidate[];
   server_entrypoint?: string;
   upload_entrypoint?: string;
+  client_command?: string;
   action_hint?: string;
   route_planner_fallback?: boolean;
 }
