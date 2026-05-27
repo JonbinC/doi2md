@@ -90,10 +90,12 @@ def build_rag_readiness(payload: dict[str, Any]) -> dict[str, Any]:
         readiness_status = "blocked"
     elif ready_for_query:
         readiness_status = "ready"
-    elif needs_ingest or needs_build:
-        readiness_status = "waiting"
+    elif needs_ingest:
+        readiness_status = "needs_ingest"
+    elif needs_build:
+        readiness_status = "needs_build"
     else:
-        readiness_status = "not_ready"
+        readiness_status = "unknown"
     if provider_blocked:
         next_step = "check_backend_rag_provider"
     elif ready_for_query:
@@ -256,12 +258,12 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
     elif provider_blocked:
         plan.append({
             "step": "check_backend_provider",
-            "tool": "backend_operations",
-            "purpose": "Confirm the server-side Voyage provider is configured and reachable; users should not provide a local Voyage key.",
+            "tool": "server_rag_status",
+            "purpose": "Surface the backend Voyage provider state; users should not provide a local Voyage key.",
             "when": "readiness.provider_blocked is true or reason_code starts with voyage_.",
             "arguments": {"selected_provider": payload.get("selected_provider") or "voyage"},
             "success_signal": "provider_state becomes configured and provider_configured is true.",
-            "failure_fields": ["reason_code", "action_hint", "next_commands", "provider_state"],
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "provider_configured", "readiness"],
             "next_commands": next_commands,
         })
     elif needs_ingest:

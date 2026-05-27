@@ -1181,7 +1181,7 @@ def _parse_input_failure(reason_code: str, *, path: Path | None = None, action_h
         "supported_extensions": SUPPORTED_PARSE_FILE_EXTENSIONS,
         "next_commands": [
             "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-            "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+            "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
             "mdtero parse --batch <directory> --wait --timeout 300 --json",
         ],
     }
@@ -1973,7 +1973,7 @@ def _local_ready_for_rag_count(state: Any) -> int:
 def _rag_recovery_commands() -> list[str]:
     return [
         "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
-        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",

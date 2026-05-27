@@ -547,7 +547,7 @@ def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
         "commands": command_plan,
         "primary_commands": [
             commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-            commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+            commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         ],
         "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
     }
@@ -559,7 +559,7 @@ def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
         commands.get("discover_interactive") or "mdtero discover \"<topic>\" --limit 5 --interactive",
         commands.get("discover_add_selected") or "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-        commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
@@ -592,7 +592,7 @@ def _launch_bundle_payload(
     parse_commands = [
         commands.get("discover") or 'mdtero discover "your topic" --json',
         commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-        commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         commands.get("parse_batch") or "mdtero parse --batch ./papers --wait --timeout 300 --json",
     ]
     project_commands = [
