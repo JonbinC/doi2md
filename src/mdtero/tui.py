@@ -484,18 +484,27 @@ def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
             "extension capture cannot access the current tab or direct download URL",
         ],
         "commands": command_plan,
-        "primary_commands": command_plan[:2],
+        "primary_commands": [
+            commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+            commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+        ],
         "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
     }
 
 
 def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
     return [
+        commands.get("config_academic") or "mdtero config academic",
+        commands.get("discover_interactive") or "mdtero discover \"<topic>\" --limit 5 --interactive",
+        commands.get("discover_add_selected") or "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
     ]

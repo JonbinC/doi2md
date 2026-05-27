@@ -31,7 +31,9 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
             "action_hint": "Run `mdtero project init --name <name>` before project, RAG, or MCP workflows.",
             "next_commands": [
                 commands["commands"]["project_init_named"],
-                commands["commands"]["discover"],
+                commands["commands"]["config_academic_json"],
+                commands["commands"]["discover_interactive"],
+                commands["commands"]["discover_add_selected"],
                 commands["commands"]["project_add"],
                 commands["commands"]["parse_doi_or_url"],
             ],
@@ -114,7 +116,11 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "setup": "mdtero setup",
         "login_api_key": "mdtero setup --api-key --json",
         "doctor": "mdtero doctor --json",
+        "config_academic": "mdtero config academic",
+        "config_academic_json": "mdtero config academic --json",
         "discover": "mdtero discover \"<topic>\" --interactive",
+        "discover_interactive": "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "discover_add_selected": "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         "parse_doi_or_url": "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "parse_file": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "parse_batch": "mdtero parse --batch <directory> --wait --timeout 300 --json",
@@ -146,7 +152,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     if state is None:
         commands["project_init_named"] = "mdtero project init --name <name>"
         commands["project_init_here"] = f"mdtero project init --name {_shell_safe_project_name(project_name)}"
-        workflow = [commands["doctor"], commands["project_init_named"], commands["discover"], commands["project_add"], commands["parse_doi_or_url"]]
+        workflow = [commands["doctor"], commands["config_academic_json"], commands["project_init_named"], commands["discover_interactive"], commands["discover_add_selected"], commands["project_add"], commands["parse_doi_or_url"]]
     elif state.server_project_id:
         commands["ingest_for_rag"] = "mdtero project ingest --json"
         recovery_commands["reingest_for_rag"] = "mdtero project ingest --json"
@@ -1155,11 +1161,13 @@ def build_agent_briefing(
     if not config.is_authenticated:
         next_commands.extend([commands["login_api_key"], commands["doctor"]])
     if state is None:
-        next_commands.extend([commands["project_init_named"], commands["discover"], commands["project_add"], commands["parse_doi_or_url"]])
+        next_commands.extend([commands["project_init_named"], commands["config_academic_json"], commands["discover_interactive"], commands["discover_add_selected"], commands["project_add"], commands["parse_doi_or_url"]])
     elif not state.papers:
         next_commands.extend([
-            "mdtero discover \"<topic>\" --interactive",
-            "mdtero project add <doi-or-url> --json",
+            commands["config_academic_json"],
+            commands["discover_interactive"],
+            commands["discover_add_selected"],
+            commands["project_add"],
             commands["parse_doi_or_url"],
         ])
     if pending:
@@ -1425,7 +1433,10 @@ def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:
             "server task returns reason_code/action_hint/next_commands for recovery",
         ],
         "commands": command_plan,
-        "primary_commands": command_plan[:2],
+        "primary_commands": [
+            str(commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"),
+            str(commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"),
+        ],
         "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
         "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
     }
@@ -1433,11 +1444,17 @@ def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:
 
 def _extension_handoff_commands(commands: dict[str, Any]) -> list[str]:
     return [
+        str(commands.get("config_academic") or "mdtero config academic"),
+        str(commands.get("discover_interactive") or "mdtero discover \"<topic>\" --limit 5 --interactive"),
+        str(commands.get("discover_add_selected") or "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json"),
         str(commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"),
         str(commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"),
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
     ]
