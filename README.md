@@ -80,7 +80,7 @@ mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3 --json
 mdtero parse 10.48550/arXiv.1706.03762 --json
 mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json
-mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
 mdtero parse --batch ./papers --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
@@ -117,7 +117,7 @@ Validated in the current alpha:
 ```bash
 mdtero doctor --json
 mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
-mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json
+mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
 mdtero rag query "What are the strongest findings?" --build-if-needed --json
@@ -187,7 +187,7 @@ mdtero doctor --json
 
 ```bash
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project init --name literature-review
@@ -214,7 +214,7 @@ CLI JSON 和 MCP payload 会在交给本地 agent 前清理带签名的 MinerU/O
 ```bash
 mdtero doctor --json
 mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
-mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json
+mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
 mdtero rag query "What are the strongest findings?" --build-if-needed --json

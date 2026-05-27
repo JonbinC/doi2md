@@ -213,7 +213,7 @@ def build_onboarding_checklist(
             "status": "ready",
             "primary_command": "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
             "secondary_commands": [
-                "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+                "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
                 "mdtero parse --batch ./papers --wait --timeout 300 --json",
                 "mdtero project parse --wait --timeout 300 --json",
             ],
@@ -286,7 +286,7 @@ def build_next_step_command_groups() -> list[dict[str, Any]]:
             [
                 "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
                 "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json",
-                "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+                "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
                 "mdtero parse --batch ./papers --wait --timeout 300 --json",
                 "mdtero project parse --wait --timeout 300 --json",
                 "mdtero project refresh --wait --timeout 300 --json",

@@ -63,7 +63,7 @@ mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3 --j
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace
-mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
 mdtero parse --batch ./papers --wait --timeout 300 --json
 mdtero project init --json
 mdtero project status --json
@@ -163,7 +163,7 @@ mdtero agent install --all
 mdtero project init --name alpha-test
 mdtero project status --json
 mdtero parse 10.48550/arXiv.1706.03762 --json
-mdtero parse --file paper.pdf --trace --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./out --json
 mdtero project import-bib references.bib
