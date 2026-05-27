@@ -18,28 +18,7 @@ if ! git remote get-url "$remote_name" >/dev/null 2>&1; then
   esac
 fi
 
-remote_url="$(git remote get-url "$remote_name")"
-case "$remote_url" in
-  http://100.97.234.105:3020/*) ;;
-  *)
-    printf 'public_private_platform_preflight: remote %s does not point at the private Forgejo Tailnet host.\n' "$remote_name" >&2
-    exit 66
-    ;;
-esac
-
-if [[ "$remote_url" =~ ^https?://[^/@]+:[^/@]+@ ]]; then
-  printf 'public_private_platform_preflight: remote %s embeds credentials; remove them before continuing.\n' "$remote_name" >&2
-  exit 67
-fi
-
-if [[ "$remote_url" =~ ^(https?://[^/]+)/ ]]; then
-  forgejo_base="${BASH_REMATCH[1]}"
-else
-  printf 'public_private_platform_preflight: remote %s is not an HTTP(S) Forgejo URL.\n' "$remote_name" >&2
-  exit 66
-fi
-curl --fail --silent --show-error --max-time 5 --head "$forgejo_base" >/dev/null
-GIT_TERMINAL_PROMPT=0 git ls-remote --heads "$remote_name" HEAD >/dev/null
+scripts/ci/forgejo-remote-doctor.sh "$remote_name"
 
 if [[ -x "$repo_root/.venv/bin/python" ]]; then
   python_bin="$repo_root/.venv/bin/python"
