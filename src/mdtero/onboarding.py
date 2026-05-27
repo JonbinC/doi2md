@@ -71,6 +71,7 @@ def build_onboarding_checklist(
     authenticated: bool,
     headless: bool,
     academic: dict[str, Any],
+    dependencies: dict[str, Any] | None = None,
     agent_status: list[dict[str, Any]],
     agent_detection_skipped: bool,
 ) -> list[dict[str, Any]]:
@@ -78,6 +79,9 @@ def build_onboarding_checklist(
     has_semantic_scholar = bool(configured_academic.get("semantic_scholar_api_key"))
     detected_agents = [item for item in agent_status if item.get("detected")]
     installed_agents = [item for item in detected_agents if item.get("installed")]
+    dependencies = dependencies or {}
+    dependency_ready = bool(dependencies.get("ready"))
+    missing_dependencies = [str(value) for value in dependencies.get("missing") or []]
     return [
         {
             "id": "auth",
@@ -85,6 +89,18 @@ def build_onboarding_checklist(
             "status": "complete" if authenticated else "needs_action",
             "primary_command": "mdtero doctor --json" if authenticated else ("mdtero setup --api-key --json" if headless else "mdtero setup"),
             "action_hint": "Browser OAuth is preferred on workstations; API-key setup is for trusted headless servers and agents.",
+        },
+        {
+            "id": "local_dependencies",
+            "title": "Local capture, Zotero, and MCP dependencies",
+            "status": "ready" if dependency_ready else "needs_install",
+            "primary_command": "mdtero doctor --json" if dependency_ready else "uv tool install --upgrade git+https://github.com/JonbinC/doi2md.git",
+            "action_hint": (
+                "curl_cffi, FastMCP, and pyzotero are importable; local acquisition, MCP, and Zotero workflows are available."
+                if dependency_ready
+                else "Missing dependency modules: " + ", ".join(missing_dependencies or ["unknown"]) + ". Reinstall or upgrade the Python/uv Mdtero client before relying on local capture, MCP, or Zotero."
+            ),
+            "required_modules": ["curl_cffi.requests", "fastmcp", "pyzotero"],
         },
         {
             "id": "academic_keys",
