@@ -976,8 +976,8 @@ def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_pat
 
     assert "Server project" in output
     assert "not linked" in output
-    assert "run mdtero rag build --json" in output
-    assert ("RAG readiness", "not linked", "run mdtero rag build --json to create, bind, ingest, and build") in rows
+    assert "mdtero rag query" in output
+    assert ("RAG readiness", "not linked", "run mdtero rag query \"What are the strongest findings?\" --build-if-needed --json") in rows
 
 
 def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path: Path, capsys):
@@ -3499,7 +3499,12 @@ def test_project_ingest_unlinked_project_returns_agent_json_without_traceback(mo
     assert payload["reason_code"] == "server_project_not_linked"
     assert payload["local_ready_for_ingest_count"] == 1
     assert payload["server_project_id"] is None
-    assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert payload["next_commands"] == [
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
 
 
 def test_project_ingest_reports_unavailable_server_import_without_traceback(monkeypatch, tmp_path: Path, capsys):
@@ -4488,7 +4493,12 @@ def test_mcp_rag_query_guides_unlinked_projects(tmp_path: Path):
     assert payload["reason_code"] == "server_project_not_linked"
     assert payload["server_project_id"] is None
     assert payload["answer"] is None
-    assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert payload["next_commands"] == [
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
 
 
 def test_mcp_rag_query_requires_non_empty_question(tmp_path: Path):
@@ -4647,7 +4657,12 @@ def test_mcp_rag_query_returns_reason_codes_on_backend_failures(tmp_path: Path):
     assert payload["status"] == "failed"
     assert payload["reason_code"] == "rag_index_not_built"
     assert payload["error_type"] == "HTTPStatusError"
-    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert payload["next_commands"] == [
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
+        "mdtero rag status --json",
+        "mdtero rag build --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+    ]
 
 
 def test_mcp_rag_query_preserves_backend_action_hint_and_next_commands(tmp_path: Path):
@@ -4831,14 +4846,14 @@ def test_mcp_rag_context_prompts_rag_build_when_unlinked(tmp_path: Path):
     assert rag["ready"] is False
     assert rag["reason_code"] == "server_project_not_linked"
     assert commands["commands"]["rag_build"] == "mdtero rag build --json"
-    assert commands["commands"]["bootstrap_rag"] == "mdtero rag build --json"
+    assert commands["commands"]["bootstrap_rag"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert "create_server_project" not in commands["commands"]
     assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
     assert commands["workflow"] == [
         "mdtero doctor --json",
         "mdtero project parse --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
-        "mdtero rag build --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
     ]
@@ -4956,7 +4971,7 @@ def test_mcp_server_rag_status_treats_needs_build_as_waiting(tmp_path: Path):
     assert status["agent_summary"]["next_step"] == "build"
     assert status["next_best_action"]["action"] == "build"
     assert status["next_best_action"]["primary_command"] == "mdtero rag build --json"
-    assert status["next_commands"][:3] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert status["next_commands"][:3] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json"]
     assert "Build the server project index" in status["action_hint"]
     assert briefing["health"]["rag_reason_code"] == "rag_index_not_built"
     assert briefing["rag"]["agent_summary"]["readiness_status"] == "waiting"
@@ -5004,7 +5019,7 @@ def test_mcp_server_rag_status_handles_server_unavailable(tmp_path: Path):
     assert status["status"] == "unavailable"
     assert status["reason_code"] == "server_rag_status_unavailable"
     assert status["error_type"] == "TimeoutError"
-    assert status["next_commands"] == ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
+    assert status["next_commands"] == ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag build --json"]
 
 
 def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
@@ -5453,8 +5468,8 @@ def test_rag_project_id_helper_points_unlinked_projects_to_bootstrap_build(monke
     else:
         raise AssertionError("expected missing binding error")
 
-    assert "mdtero rag build --json" in message
-    assert "create, bind, import, and build" in message
+    assert "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json" in message
+    assert "create, bind, import, build, and query" in message
 
 
 def test_rag_build_guides_empty_projects_before_creating_server_project(monkeypatch, tmp_path: Path, capsys):
@@ -5632,7 +5647,7 @@ def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypat
     assert payload["http_status"] == 404
     assert payload["local_ready_for_ingest_count"] == 1
     assert "backend /api/v1 project RAG routes" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
+    assert payload["next_commands"] == ["mdtero project ingest --json", "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json"]
     assert payload["agent_tool_plan"][0]["tool"] == "server_rag_status"
 
 
@@ -5711,8 +5726,8 @@ def test_rag_query_not_built_outputs_next_commands(monkeypatch, tmp_path: Path, 
     assert payload["command"] == "rag_query"
     assert payload["reason_code"] == "rag_index_not_built"
     assert payload["http_status"] == 409
-    assert "Build this server project RAG index" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
 
 
 def test_rag_query_failure_preserves_backend_next_commands(monkeypatch, tmp_path: Path, capsys):
@@ -5920,8 +5935,8 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
 
     assert payload["status"] == "not_ready"
     assert payload["reason_code"] == "server_project_not_linked"
-    assert "mdtero rag build --json" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json" in payload["action_hint"]
+    assert payload["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     assert payload["agent_tool_plan"][0]["step"] == "inspect_rag_status"
     assert any(step["step"] == "create_or_link_server_project" for step in payload["agent_tool_plan"])
 
@@ -6053,12 +6068,13 @@ def test_rag_project_errors_prefer_cli_bootstrap_commands():
     hint = cli._rag_action_hint("status", "project_not_found")
     commands = cli._rag_failure_next_commands("status", "invalid_project_id")
 
-    assert "mdtero rag build --json" in hint
+    assert "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json" in hint
     assert "--build-if-needed" in hint
     assert "mdtero project create-server" not in hint
     assert commands == [
-        "mdtero rag build --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "mdtero rag status --json",
+        "mdtero rag build --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
     ]
 
@@ -6073,7 +6089,7 @@ def test_rag_query_unlinked_project_plain_output_is_actionable(monkeypatch, tmp_
     output = capsys.readouterr().out
 
     assert "RAG query not ready: server_project_not_linked" in output
-    assert "mdtero rag build --json" in output
+    assert "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json" in output
     assert "mdtero project ingest" not in output
     assert "mdtero rag query \"<question>\"" in output
 
@@ -6160,7 +6176,7 @@ def test_rag_query_build_if_needed_returns_bootstrap_context_when_query_not_read
     assert payload["server_project_id"] == "42"
     assert payload["bootstrap"]["ingest"]["imported_count"] == 1
     assert payload["bootstrap"]["build"]["reason_code"] == "rag_build_queued"
-    assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+    assert payload["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
 
 
 def test_zotero_item_maps_to_project_paper():

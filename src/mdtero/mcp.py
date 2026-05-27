@@ -249,12 +249,12 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
             commands["rag_query"],
         ]
     else:
-        commands["bootstrap_rag"] = "mdtero rag build --json"
+        commands["bootstrap_rag"] = ONE_COMMAND_RAG_BOOTSTRAP
         workflow = [
             commands["doctor"],
             commands["parse_pending"],
             commands["refresh"],
-            commands["rag_build"],
+            commands["bootstrap_rag"],
             commands["rag_status"],
             commands["rag_query"],
         ]
@@ -480,7 +480,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
             "error_type": exc.__class__.__name__,
-            "next_commands": [commands["ingest_for_rag"], "mdtero rag status --json", commands["rag_build"]],
+            "next_commands": [commands["ingest_for_rag"], "mdtero rag status --json", ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_build"]],
             "project_bridge": build_project_bridge(root),
         })
 
@@ -500,11 +500,11 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
     elif readiness.get("provider_blocked"):
         next_commands = ["mdtero rag status --json"]
     elif next_step == "build":
-        next_commands = [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]]
+        next_commands = [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]]
     elif next_step == "ingest" and local_ready > 0:
-        next_commands = [commands["ingest_for_rag"], commands["rag_build"], "mdtero rag status --json"]
+        next_commands = [commands["ingest_for_rag"], ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"]]
     elif local_ready > 0:
-        next_commands = ["mdtero rag status --json", commands["ingest_for_rag"], commands["rag_build"], commands["rag_query"]]
+        next_commands = [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["ingest_for_rag"], commands["rag_build"], commands["rag_query"]]
     else:
         next_commands = ["mdtero rag status --json", commands["parse_pending"], commands["refresh"], commands["ingest_for_rag"]]
 
@@ -565,8 +565,8 @@ def query_server_rag(
             "server_project_id": None,
             "question": cleaned_question,
             "answer": None,
-            "action_hint": "Run `mdtero rag query \"<question>\" --build-if-needed --json` to create, bind, import, build, and query server-side Voyage RAG from one agent-safe command.",
-            "next_commands": [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]],
+            "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create, bind, import, build, and query server-side Voyage RAG from one agent-safe command.",
+            "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
         }
     try:
         result = (query_fn or (client or MdteroClient()).rag_query)(state.server_project_id, cleaned_question)
@@ -1052,8 +1052,8 @@ def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Except
         "server_project_id": state.server_project_id,
         "answer": None,
         "error_type": exc.__class__.__name__,
-        "action_hint": "Run `mdtero rag build --json` or retry with `mdtero rag query \"<question>\" --build-if-needed --json` so the CLI can create or bind the server project before querying server-side Voyage RAG.",
-        "next_commands": [commands["rag_build"], "mdtero rag status --json", commands["rag_query"]],
+        "action_hint": f"Retry `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can create or bind the server project before querying server-side Voyage RAG.",
+        "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
     }
 
 
@@ -1086,14 +1086,14 @@ def _public_rag_action_hint(reason_code: str, server_hint: object | None = None)
     hint = redact_sensitive_text(server_hint).strip()
     if hint:
         return hint
-    return "Server RAG query failed. Check `mdtero rag status --json`; build or rebuild the server-side Voyage index if it is not ready."
+    return f"Server RAG query failed. Check `mdtero rag status --json`; retry `{ONE_COMMAND_RAG_BOOTSTRAP}` if the server-side Voyage index is not ready."
 
 
 def _rag_query_failure_next_commands(detail: dict[str, Any], commands: dict[str, Any]) -> list[str]:
     server_commands = [str(command).strip() for command in detail.get("next_commands") or [] if str(command).strip()]
     if server_commands:
         return server_commands
-    return ["mdtero rag status --json", commands["rag_build"], commands["rag_query"]]
+    return [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]]
 
 
 def _wait_for_agent_task(client: Any, task_id: str, *, timeout: float, interval: float) -> dict[str, Any]:
@@ -1882,7 +1882,7 @@ def _server_rag_action_hint(status: dict[str, Any], commands: dict[str, Any]) ->
         return server_hint or f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to build or refresh the server-side Voyage index and query the project."
     if readiness.get("needs_ingest") or readiness.get("next_step") == "ingest":
         return server_hint or "Import succeeded parse tasks with `mdtero project ingest --json`, then run `mdtero rag build --json`."
-    return server_hint or f"Check server-side Voyage RAG status, then run `{commands['rag_build']}` if the project is not query-ready."
+    return server_hint or f"Check server-side Voyage RAG status, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` if the project is not query-ready."
 
 
 def _server_rag_agent_summary(status: dict[str, Any]) -> dict[str, Any]:
