@@ -241,7 +241,7 @@ def build_onboarding_checklist(
             "status": "ready",
             "primary_command": "mdtero mcp briefing --json",
             "secondary_commands": ["mdtero mcp serve"],
-            "action_hint": "FastMCP tools expose project status, parse/download/translation commands, server RAG status, and rag_query(question).",
+            "action_hint": "FastMCP tools expose project status, parse/download/translation commands, server RAG status, waited server_rag_build, and rag_query(question).",
         },
         {
             "id": "agent_skills",

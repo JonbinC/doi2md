@@ -446,7 +446,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
 
             briefing = build_agent_briefing(workdir)
             mcp_tools = briefing.get("mcp_tools") if isinstance(briefing.get("mcp_tools"), list) else []
-            missing_tools = [tool for tool in ("agent_briefing", "server_rag_status", "rag_query") if tool not in mcp_tools]
+            missing_tools = [tool for tool in ("agent_briefing", "server_rag_status", "server_rag_build", "rag_query") if tool not in mcp_tools]
             if missing_tools:
                 raise RuntimeError(f"mcp_briefing_missing_tools:{','.join(missing_tools)}")
             _smoke_add_step(
@@ -2159,7 +2159,7 @@ def _smoke_action_hint(reason_code: str) -> str:
     if reason_code in {"task_wait_timeout", "rag_wait_timeout"}:
         return "The backend is still processing. Rerun smoke with a larger --timeout, or poll the task/RAG status directly."
     if reason_code == "mcp_briefing_failed" or reason_code.startswith("mcp_briefing_missing_tools"):
-        return "Check local project state with `mdtero mcp briefing --json`; the CLI should expose agent_briefing, server_rag_status, and rag_query before launch."
+        return "Check local project state with `mdtero mcp briefing --json`; the CLI should expose agent_briefing, server_rag_status, server_rag_build, and rag_query before launch."
     return "Inspect this smoke step and rerun after fixing the reported backend or client path."
 
 

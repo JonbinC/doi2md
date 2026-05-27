@@ -525,6 +525,7 @@ def build_server_rag_for_agent(
     project_root: Path | None = None,
     *,
     client: Any | None = None,
+    project_id: str | None = None,
     wait: bool = True,
     timeout: float = 300.0,
     interval: float = 2.0,
@@ -541,6 +542,10 @@ def build_server_rag_for_agent(
             "action_hint": "Initialize a local Mdtero project before building server-side Voyage RAG.",
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
         }
+    aligned_state, project_mismatch = _align_mcp_server_project_id(root, state, project_id, commands)
+    if project_mismatch is not None:
+        return redact_sensitive_payload(project_mismatch)
+    state = aligned_state
     active_client = client or MdteroClient()
     project_id, bootstrap = _bootstrap_server_rag_for_build(active_client, root, state, commands)
     if not project_id:
@@ -566,6 +571,26 @@ def build_server_rag_for_agent(
             result["action_hint"] = "RAG build was submitted but is not query-ready yet. Continue polling server_rag_status or retry server_rag_build with a longer timeout."
             result["next_commands"] = [commands["rag_status"], commands["rag_build"], commands["rag_query"]]
     return redact_sensitive_payload(result)
+
+
+def _align_mcp_server_project_id(root: Path, state: Any, project_id: str | None, commands: dict[str, Any]) -> tuple[Any, dict[str, Any] | None]:
+    explicit_project_id = str(project_id or "").strip()
+    local_project_id = str(getattr(state, "server_project_id", None) or "").strip()
+    if not explicit_project_id:
+        return state, None
+    if local_project_id and local_project_id != explicit_project_id:
+        return state, {
+            "status": "not_ready",
+            "reason_code": "server_project_id_mismatch",
+            "project": state.name,
+            "server_project_id": local_project_id,
+            "requested_server_project_id": explicit_project_id,
+            "action_hint": "The MCP plan requested a different server project than the local project is bound to. Inspect both ids before rebinding so RAG does not mix project contexts.",
+            "next_commands": [commands["rag_status"], f"mdtero project link-server {explicit_project_id}", commands["mcp_briefing"]],
+        }
+    if local_project_id == explicit_project_id:
+        return state, None
+    return bind_server_project(root, explicit_project_id), None
 
 
 def query_server_rag(
@@ -2220,8 +2245,8 @@ def serve_project_context(project_root: Path | None = None) -> None:
         return build_server_rag_status(root)
 
     @mcp.tool
-    def server_rag_build(wait: bool = True, timeout: float = 300.0, interval: float = 2.0) -> dict:
-        return build_server_rag_for_agent(root, wait=wait, timeout=timeout, interval=interval)
+    def server_rag_build(project_id: str | None = None, wait: bool = True, timeout: float = 300.0, interval: float = 2.0) -> dict:
+        return build_server_rag_for_agent(root, project_id=project_id, wait=wait, timeout=timeout, interval=interval)
 
     @mcp.tool
     def rag_query(question: str) -> dict:

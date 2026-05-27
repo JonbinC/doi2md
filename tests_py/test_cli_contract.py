@@ -248,7 +248,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
             "health": {"rag_reason_code": "indexed"},
             "project_bridge": {"status": "bound", "server_project": {"id": "42"}},
             "rag": {"reason_code": "indexed", "agent_summary": {"readiness_status": "ready"}},
-            "mcp_tools": ["agent_briefing", "server_rag_status", "rag_query"],
+            "mcp_tools": ["agent_briefing", "server_rag_status", "server_rag_build", "rag_query"],
             "mcp_tool_plan": [{"tool": "agent_briefing", "step": "inspect_project"}],
             "recommended_next_commands": ["mdtero rag status --json", "mdtero mcp serve"],
         }
@@ -323,7 +323,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     assert payload["steps"][1]["selected_provider"] == "arxiv_native"
     assert payload["steps"][3]["target_language"] == "zh-CN"
     assert payload["steps"][4]["query"]["answer"] == "Ready."
-    assert payload["steps"][5]["mcp_tools"] == ["agent_briefing", "server_rag_status", "rag_query"]
+    assert payload["steps"][5]["mcp_tools"] == ["agent_briefing", "server_rag_status", "server_rag_build", "rag_query"]
     assert payload["steps"][5]["reason_code"] == "indexed"
     assert payload["downloaded_paths"][0].endswith("paper.md")
     assert payload["translated_paths"][0].endswith("paper_CN.md")
@@ -419,7 +419,7 @@ def test_smoke_fails_when_mcp_briefing_missing_agent_tools(monkeypatch, tmp_path
         return {"document_id": "doc-1", "import_status": "imported"}
 
     def fake_briefing(root):
-        return {"project": {"initialized": True}, "mcp_tools": ["agent_briefing", "server_rag_status"]}
+        return {"project": {"initialized": True}, "mcp_tools": ["agent_briefing", "server_rag_status", "server_rag_build"]}
 
     monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
     monkeypatch.setattr(MdteroClient, "wait", fake_wait)
@@ -460,7 +460,7 @@ def test_smoke_fails_when_mcp_briefing_missing_agent_tools(monkeypatch, tmp_path
     assert mcp_step["status"] == "failed"
     assert mcp_step["reason_code"].startswith("mcp_briefing_missing_tools")
     assert mcp_step["next_commands"] == ["mdtero mcp briefing --json", "mdtero rag status --json", "mdtero mcp serve"]
-    assert "agent_briefing, server_rag_status, and rag_query" in mcp_step["action_hint"]
+    assert "agent_briefing, server_rag_status, server_rag_build, and rag_query" in mcp_step["action_hint"]
 
 
 def test_smoke_classifies_live_401_as_authentication_required(monkeypatch, tmp_path: Path, capsys):
@@ -4458,9 +4458,10 @@ def test_rag_contract_agent_tool_plan_guides_build_when_index_is_missing():
     plan_steps = {step["step"]: step for step in payload["agent_tool_plan"]}
 
     assert payload["readiness"]["needs_build"] is True
-    assert plan_steps["bootstrap_rag_query"]["tool"] == "rag_query"
-    assert plan_steps["bootstrap_rag_query"]["arguments"] == {"project_id": "<project-id>"}
-    assert plan_steps["bootstrap_rag_query"]["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --wait --json"]
+    assert plan_steps["build_rag_index"]["tool"] == "server_rag_build"
+    assert plan_steps["build_rag_index"]["arguments"] == {"project_id": "<project-id>", "wait": True, "timeout": 300, "interval": 2}
+    assert plan_steps["build_rag_index"]["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --wait --json"]
+    assert plan_steps["query_after_build"]["tool"] == "rag_query"
     assert "query_rag" not in plan_steps
 
 
@@ -5059,6 +5060,63 @@ def test_mcp_server_rag_build_waits_until_ready(tmp_path: Path):
         ("build", "42"),
         ("status", "42"),
     ]
+
+
+def test_mcp_server_rag_build_binds_explicit_project_id_from_tool_plan(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    class FakeClient:
+        def import_task_to_project(self, project_id, task_id):
+            calls.append(("import", project_id, task_id))
+            return {"document_id": "doc-1"}
+
+        def rag_build(self, project_id):
+            calls.append(("build", project_id))
+            return {"status": "queued", "reason_code": "rag_build_queued"}
+
+        def rag_status(self, project_id):
+            calls.append(("status", project_id))
+            return {"status": "ready", "reason_code": "indexed", "readiness": {"ready_for_query": True}}
+
+    payload = build_server_rag_for_agent(tmp_path, client=FakeClient(), project_id="42", wait=True, timeout=1, interval=0.01)
+    state = load_project(tmp_path)
+
+    assert payload["server_project_id"] == "42"
+    assert payload["bootstrap"]["created_server_project"] is False
+    assert payload["bootstrap"]["bound_local_project"] is True
+    assert payload["bootstrap"]["ingest"]["imported_count"] == 1
+    assert payload["status_after_build"]["reason_code"] == "indexed"
+    assert state.server_project_id == "42"
+    assert calls == [
+        ("import", "42", "task-done"),
+        ("build", "42"),
+        ("status", "42"),
+    ]
+
+
+def test_mcp_server_rag_build_rejects_conflicting_explicit_project_id(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "local-42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    class FakeClient:
+        def import_task_to_project(self, project_id, task_id):  # pragma: no cover - failure guard
+            raise AssertionError("conflicting project id should not import")
+
+        def rag_build(self, project_id):  # pragma: no cover - failure guard
+            raise AssertionError("conflicting project id should not build")
+
+    payload = build_server_rag_for_agent(tmp_path, client=FakeClient(), project_id="plan-99", wait=True)
+    state = load_project(tmp_path)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "server_project_id_mismatch"
+    assert payload["server_project_id"] == "local-42"
+    assert payload["requested_server_project_id"] == "plan-99"
+    assert "mdtero project link-server plan-99" in payload["next_commands"]
+    assert state.server_project_id == "local-42"
 
 
 def test_mcp_server_rag_status_treats_voyage_not_configured_as_blocked(tmp_path: Path):
@@ -5684,7 +5742,8 @@ def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, t
     assert "mdtero rag build" in output
     assert "mdtero rag status --json" in output
     assert "Agent plan" in output
-    assert "bootstrap_rag_query -> rag_query" in output
+    assert "build_rag_index -> server_rag_build" in output
+    assert "query_after_build -> rag_query" in output
 
 
 def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, capsys):
@@ -5712,7 +5771,8 @@ def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, 
     assert payload["server_project_id"] == "99"
     assert payload["summary"]["pending_embedding_count"] == 2
     assert payload["agent_tool_plan"][0]["step"] == "inspect_rag_status"
-    assert any(step["step"] == "bootstrap_rag_query" and step["tool"] == "rag_query" for step in payload["agent_tool_plan"])
+    assert any(step["step"] == "build_rag_index" and step["tool"] == "server_rag_build" for step in payload["agent_tool_plan"])
+    assert any(step["step"] == "query_after_build" and step["tool"] == "rag_query" for step in payload["agent_tool_plan"])
 
 
 def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypatch, tmp_path: Path, capsys):
