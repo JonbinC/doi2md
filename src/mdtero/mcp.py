@@ -1540,6 +1540,7 @@ def build_agent_briefing(
         "project_bridge": build_project_bridge(root),
         "input_routes": build_input_route_contract(),
         "extension_handoff": _extension_handoff_payload(commands),
+        "dashboard_handoff_json": _dashboard_handoff_json_payload(commands),
         "handoff_protocol": _agent_handoff_protocol(commands),
         "agents": {
             "detected_count": len(detected_agents),
@@ -1660,7 +1661,7 @@ def _build_mcp_tool_plan(
             "purpose": "Read the account, local project, server RAG, installed agent skills, and recommended next commands before using other Mdtero tools.",
             "when": "Always call this first in a new agent session or after a failed Mdtero action.",
             "arguments": {},
-            "success_signal": "Payload includes project, account, health, rag, project_bridge, input_routes, extension_handoff, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
+            "success_signal": "Payload includes project, account, health, rag, project_bridge, input_routes, extension_handoff, dashboard_handoff_json, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
             "failure_fields": ["reason_code", "action_hint", "next_commands"],
         },
         {
@@ -2008,8 +2009,50 @@ def _extension_handoff_payload(commands: dict[str, Any]) -> dict[str, Any]:
             str(commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"),
             str(commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"),
         ],
-        "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
-        "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
+        "visible_fields": ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "next_commands"],
+        "agent_instruction": "Preserve task_id, selected_provider, parser_strategy, client_acquisition, parse_outcome, reason_code, action_hint, preferred_artifact, download_artifacts, and next_commands when moving between extension, dashboard, CLI, and MCP tools.",
+    }
+
+
+def _dashboard_handoff_json_payload(commands: dict[str, Any]) -> dict[str, Any]:
+    fields = [
+        "task_id",
+        "task_kind",
+        "status",
+        "stage",
+        "input_summary",
+        "selected_provider",
+        "parser_strategy",
+        "client_acquisition",
+        "parse_outcome",
+        "preferred_artifact",
+        "download_artifacts",
+        "reason_code",
+        "action_hint",
+        "translation_attempts",
+        "next_commands",
+        "agent_instruction",
+    ]
+    return {
+        "source": "dashboard_history_copy",
+        "purpose": "Paste the dashboard task handoff JSON into a local agent so it can continue from a known task state without scraping the UI.",
+        "expected_fields": fields,
+        "first_mcp_tool": "task_status",
+        "tool_sequence": ["task_status", "download_artifact", "request_translation", "server_rag_status", "rag_query"],
+        "validation_step": {
+            "tool": "task_status",
+            "arguments": {"task_id": "<task_id>", "wait": False},
+            "success_signal": "Returned task_id matches the dashboard handoff JSON and preserves selected_provider/parser_strategy/client_acquisition/parse_outcome/download_artifacts.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "translation_attempts", "client_acquisition"],
+        },
+        "fallback_commands": [
+            "mdtero status <task-id> --json",
+            str(commands.get("download_artifact") or "mdtero download <task-id> <artifact> --output-dir ./mdtero-output --json"),
+            str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
+            str(commands.get("serve_mcp") or "mdtero mcp serve"),
+        ],
+        "redaction_policy": "Dashboard handoff JSON must already redact signed URLs, bearer/API keys, OSS tokens, and Mdtero secrets; agents should not ask the user to paste unredacted secrets.",
+        "agent_instruction": "Treat dashboard handoff JSON as a starting state, not proof of current server state. Call task_status first, preserve all expected_fields, then continue with download_artifact, request_translation, or rag_query according to next_commands and reason_code.",
     }
 
 
@@ -2039,8 +2082,16 @@ def _agent_handoff_protocol(commands: dict[str, Any]) -> list[dict[str, Any]]:
             "step": "inspect_failure",
             "use": "task_status",
             "when": "A parse, upload, translation, or RAG step failed or timed out.",
-            "preserve_fields": ["task_id", "reason_code", "action_hint", "next_commands", "download_artifacts", "translation_attempts"],
+            "preserve_fields": ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "translation_attempts", "next_commands"],
             "next_commands": ["mdtero status <task-id> --json", commands.get("mcp_briefing", "mdtero mcp briefing --json"), commands.get("serve_mcp", "mdtero mcp serve")],
+        },
+        {
+            "step": "consume_dashboard_handoff_json",
+            "use": "task_status",
+            "when": "The user or dashboard provides copied task handoff JSON.",
+            "preserve_fields": ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "next_commands"],
+            "commands": ["mdtero status <task-id> --json", commands.get("mcp_briefing", "mdtero mcp briefing --json")],
+            "success_signal": "The live task_status response agrees with the copied task_id and returns current artifact/reason fields.",
         },
         {
             "step": "retry_source_capture",

@@ -24,6 +24,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
 - if extension capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`; after a successful parse, continue with `mdtero rag query "What are the strongest findings?" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`; preserve `client_acquisition`, raw upload status, `reason_code`, `action_hint`, `next_commands`, and the MCP server startup contract in the handoff back to the user
+- if the dashboard provides copied task handoff JSON, treat it as a starting state rather than live truth: preserve `task_id`, `selected_provider`, `parser_strategy`, `client_acquisition`, `parse_outcome`, `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, and `next_commands`; call `task_status(task_id)` or `mdtero status <task-id> --json` first, then continue with `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query` according to the returned state
 
 ## CLI Workflow
 
@@ -77,6 +78,8 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
 Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, `server_rag_build`, and `rag_query`. When the plan says `build_rag_index`, call `server_rag_build(wait=true)` first, then call `rag_query(question)` only after readiness is true. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, or `readiness` before retrying.
+
+If `agent_briefing` includes `dashboard_handoff_json`, use its `expected_fields`, `validation_step`, and `tool_sequence` as the contract for dashboard-to-agent continuation. The copied JSON should already redact signed URLs, bearer/API keys, OSS tokens, and Mdtero secrets; do not request unredacted credentials in chat.
 
 Prefer MCP tools for multi-step agent work when `mdtero mcp serve` is already running. Prefer CLI commands when the user is reading along in a terminal, when a file path must be selected manually, or when browser-extension handoff copy should remain visible to the user.
 
