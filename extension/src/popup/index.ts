@@ -36,6 +36,8 @@ import {
   getUsageStatusText,
   getTaskFailureText,
   buildCliHandoffCommandPlan,
+  buildApiErrorCliHandoffPlan,
+  buildApiErrorHandoffContext,
   buildTaskFailureCliHandoffPlan,
   buildTaskHandoffContext,
   formatCliHandoffClipboard,
@@ -388,6 +390,15 @@ async function saveArtifact(taskId: string, artifactKey: string, preferredFilena
     triggerBlobDownload(artifact.blob, artifact.filename);
   } catch (error) {
     setResult(getDownloadFailureText(error, getCurrentCopy().downloadFailed, uiLanguage));
+    const handoffPlan = buildApiErrorCliHandoffPlan(error, currentInput, "parse");
+    if (handoffPlan.primaryCommand) {
+      setCliHandoff(
+        currentInput,
+        handoffPlan.primaryCommand,
+        handoffPlan.commands,
+        buildApiErrorHandoffContext(error, "parse")
+      );
+    }
   }
 }
 
