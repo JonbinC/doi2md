@@ -315,6 +315,20 @@ var COPY = {
     inputRoutePill: "Extension + CLI",
     inputRouteCopy: "Copy",
     inputRouteCopied: "Route copied.",
+    serverApiContractTitle: "Server API contract",
+    serverApiContractNote: "The same /api/v1 routes back extension capture, CLI upload, task polling, downloads, project import, and backend Voyage RAG.",
+    copyServerApiContract: "Copy API contract",
+    serverApiContractCopied: "API contract copied.",
+    serverApiContract: [
+      ["route", "/api/v1/route"],
+      ["parse", "/api/v1/tasks/parse"],
+      ["upload", "/api/v1/tasks/upload"],
+      ["status", "/api/v1/tasks/{task_id}"],
+      ["download", "/api/v1/tasks/{task_id}/download/{artifact}"],
+      ["project_import", "/api/v1/projects/{project_id}/tasks/{task_id}/import"],
+      ["rag_build", "/api/v1/projects/{project_id}/rag/build"],
+      ["rag_query", "/api/v1/projects/{project_id}/rag/query"]
+    ],
     inputRoutes: [
       ["DOI or URL", "fast smoke", "Use the CLI for DOI, arXiv, EuropePMC XML, or an open URL the backend route can recognize.", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
       ["PDF / EPUB file", "upload", "Use direct file upload for local PDF, EPUB, XML, or HTML. PDFs go through the backend MinerU-first path.", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
@@ -405,6 +419,20 @@ var COPY = {
     inputRoutePill: "\u6269\u5C55 + CLI",
     inputRouteCopy: "\u590D\u5236",
     inputRouteCopied: "\u8DEF\u5F84\u5DF2\u590D\u5236\u3002",
+    serverApiContractTitle: "\u670D\u52A1\u7AEF API \u5951\u7EA6",
+    serverApiContractNote: "\u6269\u5C55\u6293\u53D6\u3001CLI \u4E0A\u4F20\u3001\u4EFB\u52A1\u8F6E\u8BE2\u3001\u4E0B\u8F7D\u3001\u9879\u76EE\u5BFC\u5165\u548C\u540E\u7AEF Voyage RAG \u90FD\u843D\u5230\u540C\u4E00\u7EC4 /api/v1 \u8DEF\u7531\u3002",
+    copyServerApiContract: "\u590D\u5236 API \u5951\u7EA6",
+    serverApiContractCopied: "API \u5951\u7EA6\u5DF2\u590D\u5236\u3002",
+    serverApiContract: [
+      ["route", "/api/v1/route"],
+      ["parse", "/api/v1/tasks/parse"],
+      ["upload", "/api/v1/tasks/upload"],
+      ["status", "/api/v1/tasks/{task_id}"],
+      ["download", "/api/v1/tasks/{task_id}/download/{artifact}"],
+      ["project_import", "/api/v1/projects/{project_id}/tasks/{task_id}/import"],
+      ["rag_build", "/api/v1/projects/{project_id}/rag/build"],
+      ["rag_query", "/api/v1/projects/{project_id}/rag/query"]
+    ],
     inputRoutes: [
       ["DOI \u6216 URL", "\u5FEB\u901F\u5192\u70DF", "DOI\u3001arXiv\u3001EuropePMC XML\uFF0C\u6216\u540E\u7AEF route \u80FD\u8BC6\u522B\u7684\u5F00\u653E URL\uFF0C\u4F18\u5148\u8D70 CLI\u3002", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
       ["PDF / EPUB \u6587\u4EF6", "\u4E0A\u4F20", "\u672C\u5730 PDF\u3001EPUB\u3001XML \u6216 HTML \u8D70\u76F4\u63A5\u4E0A\u4F20\u3002PDF \u9ED8\u8BA4\u8FDB\u5165\u540E\u7AEF MinerU-first \u8DEF\u5F84\u3002", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
@@ -497,6 +525,10 @@ var inputRouteTitleEl = document.querySelector("#input-route-title");
 var inputRouteNoteEl = document.querySelector("#input-route-note");
 var inputRoutePillEl = document.querySelector("#input-route-pill");
 var inputRouteListEl = document.querySelector("#input-route-list");
+var serverApiContractTitleEl = document.querySelector("#server-api-contract-title");
+var serverApiContractNoteEl = document.querySelector("#server-api-contract-note");
+var serverApiContractListEl = document.querySelector("#server-api-contract-list");
+var copyServerApiContractButton = document.querySelector("#copy-server-api-contract");
 var connectionGuideTitleEl = document.querySelector("#connection-guide-title");
 var connectionGuideListEl = document.querySelector("#connection-guide-list");
 var setupStepAuthEl = document.querySelector("#setup-step-auth");
@@ -613,7 +645,11 @@ function applyLanguage() {
   if (inputRouteTitleEl) inputRouteTitleEl.textContent = copy.inputRouteTitle;
   if (inputRouteNoteEl) inputRouteNoteEl.textContent = copy.inputRouteNote;
   if (inputRoutePillEl) inputRoutePillEl.textContent = copy.inputRoutePill;
+  if (serverApiContractTitleEl) serverApiContractTitleEl.textContent = copy.serverApiContractTitle;
+  if (serverApiContractNoteEl) serverApiContractNoteEl.textContent = copy.serverApiContractNote;
+  if (copyServerApiContractButton) copyServerApiContractButton.textContent = copy.copyServerApiContract;
   renderInputRouteList();
+  renderServerApiContractList();
   renderCliOnboardingList();
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
@@ -624,6 +660,24 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+function renderServerApiContractList() {
+  if (!serverApiContractListEl) return;
+  const copy = copyFor(uiLanguage);
+  serverApiContractListEl.textContent = "";
+  copy.serverApiContract.forEach(([label, value]) => {
+    const item = document.createElement("div");
+    item.className = "server-api-contract-item";
+    const labelEl = document.createElement("span");
+    labelEl.className = "server-api-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("code");
+    valueEl.className = "server-api-value";
+    valueEl.textContent = value;
+    item.appendChild(labelEl);
+    item.appendChild(valueEl);
+    serverApiContractListEl.appendChild(item);
+  });
 }
 function renderInputRouteList() {
   if (!inputRouteListEl) return;
@@ -842,6 +896,11 @@ copyCliHandoffGuideButton?.addEventListener("click", async () => {
 copyMcpServerConfigButton?.addEventListener("click", async () => {
   await navigator.clipboard?.writeText(MCP_SERVER_CONFIG);
   copyMcpServerConfigButton.textContent = copyFor(uiLanguage).mcpServerConfigCopied;
+});
+copyServerApiContractButton?.addEventListener("click", async () => {
+  const contract = copyFor(uiLanguage).serverApiContract.map(([label, value]) => `${label}: ${value}`).join("\n");
+  await navigator.clipboard?.writeText(contract);
+  copyServerApiContractButton.textContent = copyFor(uiLanguage).serverApiContractCopied;
 });
 saveButton?.addEventListener("click", async () => {
   const current = await readSettings();

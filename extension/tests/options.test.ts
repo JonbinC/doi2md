@@ -135,6 +135,17 @@ describe("extension options page", () => {
     expect(routeText).toContain("OAuth, campus network, cookies");
     expect(routeText).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
     expect(routeText).toContain("FastMCP");
+    expect(document.querySelector("#server-api-contract-card")).not.toBeNull();
+    expect(document.querySelector("#server-api-contract-title")?.textContent).toBe("Server API contract");
+    expect(document.querySelector("#server-api-contract-note")?.textContent).toContain("/api/v1 routes");
+    const serverApiText = document.querySelector("#server-api-contract-list")?.textContent || "";
+    expect(serverApiText).toContain("route");
+    expect(serverApiText).toContain("/api/v1/route");
+    expect(serverApiText).toContain("upload");
+    expect(serverApiText).toContain("/api/v1/tasks/upload");
+    expect(serverApiText).toContain("/api/v1/tasks/{task_id}/download/{artifact}");
+    expect(serverApiText).toContain("/api/v1/projects/{project_id}/tasks/{task_id}/import");
+    expect(serverApiText).toContain("/api/v1/projects/{project_id}/rag/query");
     expect(document.querySelector("#mcp-server-config-card")).not.toBeNull();
     expect(document.querySelector("#mcp-server-config-title")?.textContent).toBe("Agent MCP server");
     expect(document.querySelector("#mcp-server-config-note")?.textContent).toContain("mdtero mcp serve");
@@ -217,6 +228,25 @@ describe("extension options page", () => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json");
     });
     expect(buttons[1].textContent).toBe("Route copied.");
+  });
+
+  it("copies the shared server API contract from options", async () => {
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "unknown" } })) as any;
+
+    await loadOptionsModule();
+
+    (document.querySelector("#copy-server-api-contract") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("route: /api/v1/route"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("upload: /api/v1/tasks/upload"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("project_import: /api/v1/projects/{project_id}/tasks/{task_id}/import"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("rag_query: /api/v1/projects/{project_id}/rag/query"));
+    });
+    expect(document.querySelector("#copy-server-api-contract")?.textContent).toBe("API contract copied.");
   });
 
   it("copies a parseable MCP server config for local agents", async () => {
