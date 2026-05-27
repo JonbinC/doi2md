@@ -15,7 +15,7 @@ from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
-from .onboarding import build_academic_onboarding_summary, build_input_route_contract
+from .onboarding import GENERIC_RAG_QUERY_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, build_academic_onboarding_summary, build_input_route_contract
 from .projects import ProjectState, ensure_project
 from .rag_contract import ensure_rag_contract
 
@@ -312,6 +312,7 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
 
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
     rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
+    rag_query_command = commands.get("rag_query") or GENERIC_RAG_QUERY_COMMAND
     if not cfg.is_authenticated:
         return [WORKSTATION_SETUP_COMMAND, "mdtero doctor --json", HEADLESS_SETUP_COMMAND]
     if not project.papers:
@@ -319,13 +320,13 @@ def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], c
     if project.papers and any(paper.status in {"pending", "created"} and not paper.task_id for paper in project.papers):
         return [commands["parse_pending"], commands["refresh"]]
     if not project.server_project_id:
-        return [commands["bootstrap_rag"], "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        return [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", rag_build_command]
     if rag.get("server_status") == "ready":
-        return ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", commands["mcp_briefing"], commands["serve_mcp"]]
+        return ["mdtero rag status --json", rag_query_command, commands["mcp_briefing"], commands["serve_mcp"]]
     if rag.get("server_status") in {"not_ready", "partial"}:
-        return ["mdtero rag status --json", rag_build_command, "mdtero rag query \"<question>\" --build-if-needed --json"]
+        return [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", rag_build_command]
     if rag.get("ready_for_ingest_count", 0) > 0:
-        return [rag_build_command, "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        return [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", rag_build_command]
     return ["mdtero discover \"your topic\" --json", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"]
 
 
@@ -563,9 +564,10 @@ def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
         "mdtero project refresh --wait --timeout 300 --json",
-        "mdtero rag build --json",
+        ONE_COMMAND_RAG_BOOTSTRAP,
         "mdtero rag status --json",
-        "mdtero rag query \"<question>\" --build-if-needed --json",
+        "mdtero rag build --json",
+        GENERIC_RAG_QUERY_COMMAND,
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
         commands.get("serve_mcp") or "mdtero mcp serve",
     ]
@@ -605,8 +607,9 @@ def _launch_bundle_payload(
         "mdtero project ingest --json" if project.server_project_id else "mdtero rag build --json",
         *(rag.get("next_commands") if isinstance(rag.get("next_commands"), list) else []),
         commands.get("rag_status") or "mdtero rag status --json",
+        ONE_COMMAND_RAG_BOOTSTRAP,
+        commands.get("rag_query") or GENERIC_RAG_QUERY_COMMAND,
         commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json",
-        commands.get("rag_query") or 'mdtero rag query "<question>" --build-if-needed --json',
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
         commands.get("serve_mcp") or "mdtero mcp serve",
     ])
@@ -757,7 +760,8 @@ def _command_palette_payload(
         {"area": "Project", "use": "Download ready Markdown/ZIP", "command": commands.get("download_markdown")},
         {"area": "Zotero", "use": "Import Zotero metadata", "command": commands.get("zotero_import")},
         {"area": "Zotero", "use": "Sync Mdtero results back", "command": commands.get("zotero_sync")},
-        {"area": "RAG", "use": "Create/bind/import/build Voyage index", "command": rag_build_command},
+        {"area": "RAG", "use": "One-command Voyage bootstrap and query", "command": ONE_COMMAND_RAG_BOOTSTRAP},
+        {"area": "RAG", "use": "Create/bind/import/build Voyage index explicitly", "command": rag_build_command},
         {"area": "RAG", "use": "Check server RAG readiness", "command": commands.get("rag_status")},
         {"area": "RAG", "use": "Ask grounded project question", "command": commands.get("rag_query")},
         {"area": "MCP", "use": "Tool: submit_parse(input_value)", "command": "submit_parse"},

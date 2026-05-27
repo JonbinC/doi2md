@@ -23,7 +23,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --trace --wait --timeout 300 --json`
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
-- if extension capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`; after a successful parse, continue with `mdtero project ingest --json`, `mdtero rag query "<question>" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`; preserve `client_acquisition`, raw upload status, `reason_code`, `action_hint`, `next_commands`, and the MCP server startup contract in the handoff back to the user
+- if extension capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`; after a successful parse, continue with `mdtero rag query "What are the strongest findings?" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`; preserve `client_acquisition`, raw upload status, `reason_code`, `action_hint`, `next_commands`, and the MCP server startup contract in the handoff back to the user
 
 ## CLI Workflow
 
@@ -36,9 +36,9 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - submit a project queue: `mdtero project parse --wait --timeout 300 --json`
 - refresh project tasks: `mdtero project refresh --wait --timeout 300 --json`
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output --json`
-- bootstrap server-side Voyage RAG for the current project: `mdtero rag build --json`
-- optionally create or bind a server project explicitly: `mdtero project create-server --json` or `mdtero project link --server-project-id <id> --json`
-- optionally re-import succeeded parse tasks into the bound server project: `mdtero project ingest --json`
+- bootstrap server-side Voyage RAG and query from one command: `mdtero rag query "What are the strongest findings?" --build-if-needed --json`
+- use a reusable project question when automating: `mdtero rag query "<question>" --build-if-needed --json`
+- explicit recovery/debug commands remain available: `mdtero rag build --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
 - parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 300 --json`
 - continue from an extension handoff: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json`
@@ -49,8 +49,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - poll status: `mdtero status <task-id> --wait --timeout 300 --json`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`
 - translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json` or `mdtero translate <paper.md> --to zh-CN --wait --timeout 600 --json`
-- build server project RAG, automatically creating/binding/importing when needed: `mdtero rag build --json`
-- query server project RAG after build: `mdtero rag query "<question>" --build-if-needed --json`
+- query server project RAG, automatically creating/binding/importing/building when needed: `mdtero rag query "<question>" --build-if-needed --json`
 - print local agent context without starting a server: `mdtero mcp briefing --json`
 - serve project MCP context: `mdtero mcp serve`
 - detect or install agent skills: `mdtero agent detect --json`, `mdtero agent install --interactive`, or `mdtero agent install --target <target>`

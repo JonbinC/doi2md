@@ -87,8 +87,8 @@ mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
 mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json
 mdtero translate paper.md --to zh-CN --wait --timeout 600 --json
 mdtero rag status --json
-mdtero rag build --json
 mdtero rag query "What are the strongest findings?" --build-if-needed --json
+mdtero rag build --json
 mdtero smoke --json --timeout 600 --interval 2
 mdtero mcp briefing --json
 mdtero mcp serve
@@ -109,7 +109,7 @@ Validated in the current alpha:
 - discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; if Semantic Scholar is unavailable, `--json` reports `local_semantic_scholar_failure` and `discovery_fallback` so agents can continue with OpenAlex while preserving the reason code; use `mdtero discover "<query>" --interactive` to inspect results and multi-select papers into the local project queue, or `--add --select 1,3 --json` for scripts and agents
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests from parse task ids or local Markdown files
-- server-side Voyage RAG build/query; query JSON returns extractive `answer`, stable `citations`, raw `matches`, LlamaIndex-style `source_nodes`, an `evidence_pack.context_markdown`, `citation_contract.required_for_final_answer`, `reason_code`, and `next_commands` for agents
+- server-side Voyage RAG query/bootstrap; `mdtero rag query "What are the strongest findings?" --build-if-needed --json` creates or reuses the server project, imports completed Markdown, builds the backend Voyage index, and queries without asking the user to copy a server project id; query JSON returns extractive `answer`, stable `citations`, raw `matches`, LlamaIndex-style `source_nodes`, an `evidence_pack.context_markdown`, `citation_contract.required_for_final_answer`, `reason_code`, and `next_commands` for agents
 - local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, recommended next commands, and a structured `mcp_tool_plan` playbook that tells local agents when to call `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query`; `mdtero mcp briefing --json` also works in a directory before `project init` and returns initialization commands instead of a traceback
 - TUI dashboard command palette for copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands, with current next commands highlighted for workstation or local-agent handoff
 - Extension-to-CLI handoff for publisher challenge pages, campus-network/session-bound access, and browser-saved files keeps a full recovery plan visible to the user and local agent:
@@ -120,8 +120,7 @@ mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
 mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
-mdtero project ingest --json
-mdtero rag query "<question>" --build-if-needed --json
+mdtero rag query "What are the strongest findings?" --build-if-needed --json
 mdtero mcp briefing --json
 ```
 
@@ -148,7 +147,7 @@ The CLI, extension, dashboard, and MCP briefing expose this contract so browser 
 Known boundaries:
 
 - Zotero reverse sync is conservative: it creates Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
-- `mdtero rag build/query` talks to server-side Voyage RAG. `mdtero rag build` now bootstraps the server project when needed, imports succeeded parse tasks, and starts the backend Voyage build. `mdtero rag query --build-if-needed --json` can create, bind, import, build, and query from one agent-safe command, returning `answer`, `citations`, `matches`, `source_nodes`, `evidence_pack`, and `citation_contract`; `citation_contract.required_for_final_answer` tells agents to preserve `citations` and `source_nodes` in final answers. `mdtero project create-server` and `mdtero project ingest` remain available for explicit or recovery workflows.
+- `mdtero rag query --build-if-needed --json` is the primary server-side Voyage RAG path. It can create, bind, import, build, and query from one agent-safe command, returning `answer`, `citations`, `matches`, `source_nodes`, `evidence_pack`, and `citation_contract`; `citation_contract.required_for_final_answer` tells agents to preserve `citations` and `source_nodes` in final answers. `mdtero rag build`, `mdtero project create-server`, and `mdtero project ingest` remain available for explicit recovery/debug workflows.
 - GROBID is not a public product option. PDF parsing is MinerU-first on the backend, with internal fallback behavior owned by the service.
 
 ## Product Boundary
@@ -196,9 +195,9 @@ mdtero project status --json
 mdtero project import-bib references.bib --json
 mdtero project parse --wait --timeout 300 --json
 mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json
+mdtero rag query "这批论文的核心方法是什么？" --build-if-needed --json
 mdtero rag status --json
 mdtero rag build --json
-mdtero rag query "这批论文的核心方法是什么？" --build-if-needed --json
 mdtero zotero import --limit 20 --json
 mdtero zotero sync --json
 mdtero agent install --interactive
@@ -218,8 +217,7 @@ mdtero parse <doi-or-url> --trace --wait --timeout 300 --json
 mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
-mdtero project ingest --json
-mdtero rag query "<question>" --build-if-needed --json
+mdtero rag query "What are the strongest findings?" --build-if-needed --json
 mdtero mcp briefing --json
 ```
 
