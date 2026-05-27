@@ -3111,7 +3111,61 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["agents"]["next_commands"] == ["mdtero agent detect --json", "mdtero agent install --interactive"]
     assert payload["academic"]["discover_source"] == "server_openalex"
     assert payload["next_commands"][:2] == ["mdtero doctor --json", "mdtero config academic --json"]
+    checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
+    assert list(checklist) == [
+        "auth",
+        "academic_keys",
+        "discovery",
+        "project",
+        "parse",
+        "zotero",
+        "rag",
+        "mcp",
+        "agent_skills",
+    ]
+    assert checklist["auth"]["status"] == "complete"
+    assert checklist["auth"]["primary_command"] == "mdtero doctor --json"
+    assert checklist["academic_keys"]["status"] == "optional"
+    assert "https://dev.elsevier.com/apikey/manage" in checklist["academic_keys"]["links"]["elsevier_api_key"]
+    assert checklist["discovery"]["status"] == "server_openalex"
+    assert checklist["discovery"]["primary_command"] == "mdtero discover \"<topic>\" --limit 5 --interactive"
+    assert "space-bar multi-select" in checklist["discovery"]["action_hint"]
+    assert checklist["project"]["primary_command"] == "mdtero project init --name literature-review"
+    assert checklist["parse"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
+    assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in checklist["parse"]["secondary_commands"]
+    assert checklist["zotero"]["primary_command"] == "mdtero config zotero"
+    assert checklist["rag"]["primary_command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert "Voyage runs on the Mdtero backend" in checklist["rag"]["action_hint"]
+    assert checklist["agent_skills"]["status"] == "skipped_headless"
+    assert checklist["mcp"]["primary_command"] == "mdtero mcp briefing --json"
+    assert checklist["agent_skills"]["primary_command"] == "mdtero agent install --interactive"
+    assert checklist["rag"]["secondary_commands"] == ["mdtero rag build --json", "mdtero rag status --json"]
     assert any(group["title"] == "Server RAG and local agents" for group in payload["next_command_groups"])
+
+
+def test_setup_json_onboarding_uses_local_semantic_scholar_when_configured(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    cfg = load_config()
+    cfg.api_key = "mdt_live_saved"
+    cfg.academic.semantic_scholar_api_key = "s2-secret"
+    save_config(cfg)
+    monkeypatch.setattr(
+        "mdtero.agent.detect_target_status",
+        lambda *args, **kwargs: [],
+    )
+
+    assert cli.cmd_setup(type("Args", (), {"api_key": None, "json": True})()) == 0
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
+
+    assert "s2-secret" not in output
+    assert payload["academic"]["discover_source"] == "local_semantic_scholar"
+    assert checklist["academic_keys"]["status"] == "enhanced"
+    assert checklist["discovery"]["status"] == "local_semantic_scholar"
+    assert checklist["agent_skills"]["status"] == "not_detected"
 
 
 def test_setup_json_missing_auth_is_noninteractive(monkeypatch, tmp_path: Path, capsys):
