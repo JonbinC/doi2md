@@ -1,6 +1,7 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
 import { buildCliFileParseCommand } from "./lib/cli-handoff";
 import { runBrowserFileParseRequest } from "./lib/file-upload";
+import type { LocalFileArtifactKind } from "./lib/runtime";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
 import { readSettings, writeSettings } from "./lib/storage";
 
@@ -160,6 +161,6 @@ function formatSsotFailure(result: {
   return result.error || "Action sequence failed";
 }
 
-function buildFileParseCommand(filename?: string, artifactKind?: "pdf" | "epub") {
+function buildFileParseCommand(filename?: string, artifactKind?: LocalFileArtifactKind) {
   return buildCliFileParseCommand(filename, artifactKind);
 }
