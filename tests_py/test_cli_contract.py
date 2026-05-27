@@ -3892,24 +3892,54 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
             "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
             "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         ],
-        "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
-        "agent_instruction": "Preserve reason_code, action_hint, next_commands, task_id, preferred_artifact, and download_artifacts when moving between extension, CLI, and MCP tools.",
+        "visible_fields": ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "next_commands"],
+        "agent_instruction": "Preserve task_id, selected_provider, parser_strategy, client_acquisition, parse_outcome, reason_code, action_hint, preferred_artifact, download_artifacts, and next_commands when moving between extension, dashboard, CLI, and MCP tools.",
     }
+    assert briefing["dashboard_handoff_json"]["source"] == "dashboard_history_copy"
+    assert briefing["dashboard_handoff_json"]["first_mcp_tool"] == "task_status"
+    assert briefing["dashboard_handoff_json"]["tool_sequence"] == ["task_status", "download_artifact", "request_translation", "server_rag_status", "rag_query"]
+    assert briefing["dashboard_handoff_json"]["expected_fields"] == [
+        "task_id",
+        "task_kind",
+        "status",
+        "stage",
+        "input_summary",
+        "selected_provider",
+        "parser_strategy",
+        "client_acquisition",
+        "parse_outcome",
+        "preferred_artifact",
+        "download_artifacts",
+        "reason_code",
+        "action_hint",
+        "translation_attempts",
+        "next_commands",
+        "agent_instruction",
+    ]
+    assert "signed URLs" in briefing["dashboard_handoff_json"]["redaction_policy"]
     assert [step["step"] for step in briefing["handoff_protocol"]] == [
         "inspect_failure",
+        "consume_dashboard_handoff_json",
         "retry_source_capture",
         "download_or_translate",
         "build_or_query_rag",
     ]
     assert briefing["handoff_protocol"][0]["preserve_fields"] == [
         "task_id",
+        "selected_provider",
+        "parser_strategy",
+        "client_acquisition",
+        "parse_outcome",
         "reason_code",
         "action_hint",
-        "next_commands",
+        "preferred_artifact",
         "download_artifacts",
         "translation_attempts",
+        "next_commands",
     ]
-    assert briefing["handoff_protocol"][1]["commands"] == [
+    assert briefing["handoff_protocol"][1]["step"] == "consume_dashboard_handoff_json"
+    assert briefing["handoff_protocol"][1]["use"] == "task_status"
+    assert briefing["handoff_protocol"][2]["commands"] == [
         "mdtero config academic",
         "mdtero discover \"<topic>\" --limit 5 --interactive",
         "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
@@ -5264,7 +5294,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     ]
     assert "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources" in model["extension_handoff"]["cli_scope"]
     assert "publisher challenge or JavaScript verification page" in model["extension_handoff"]["handoff_triggers"]
-    assert model["extension_handoff"]["visible_fields"] == ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"]
+    assert model["extension_handoff"]["visible_fields"] == ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "next_commands"]
     assert model["input_routes"]["goal"] == "choose_shortest_markdown_path"
     assert model["input_routes"]["server_apis"]["upload"] == "/api/v1/tasks/upload"
     assert model["input_routes"]["server_apis"]["rag_query"] == "/api/v1/projects/{project_id}/rag/query"
@@ -7110,6 +7140,7 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
 
     for content in [combined_docs, combined_skills]:
         assert "mcp_tool_plan" in content
+        assert "dashboard_handoff_json" in content
         assert "project_init" in content
         assert "project_add" in content
         assert "submit_parse" in content
@@ -7127,7 +7158,9 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
     assert "success_signal" in combined_docs
     assert "本地 agent" in combined_docs
     assert "Use the `mcp_tool_plan` steps" in combined_skills
+    assert "copied task handoff JSON" in combined_skills
     assert "client_acquisition" in combined_skills
+    assert "parse_outcome" in combined_skills
     assert "readiness" in combined_skills
 
 

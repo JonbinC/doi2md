@@ -549,7 +549,7 @@ def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
             commands.get("extension_handoff_url") or commands.get("parse_doi_or_url") or "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
             commands.get("extension_handoff_file") or commands.get("parse_file") or "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         ],
-        "visible_fields": ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"],
+        "visible_fields": ["task_id", "selected_provider", "parser_strategy", "client_acquisition", "parse_outcome", "reason_code", "action_hint", "preferred_artifact", "download_artifacts", "next_commands"],
     }
 
 
