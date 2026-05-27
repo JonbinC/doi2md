@@ -20,7 +20,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - CLI JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
 - when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --timeout 300 --json` to inspect `client_acquisition` and final task state
-- local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --trace --wait --timeout 300 --json`
+- local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --trace --wait --timeout 600 --json`
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
 - if extension capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`; after a successful parse, continue with `mdtero rag query "What are the strongest findings?" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`; preserve `client_acquisition`, raw upload status, `reason_code`, `action_hint`, `next_commands`, and the MCP server startup contract in the handoff back to the user
@@ -40,7 +40,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - use a reusable project question when automating: `mdtero rag query "<question>" --build-if-needed --json`
 - explicit recovery/debug commands remain available: `mdtero rag build --wait --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
 - parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
-- parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 300 --json`
+- parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json`
 - continue from an extension handoff: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`
 - parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
 - search discovery: `mdtero discover "<query>" --json`

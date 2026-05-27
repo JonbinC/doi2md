@@ -1263,7 +1263,7 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3 --json" in output
     assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json" in output
     assert "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json" in compact_output
-    assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in output
+    assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in output
     assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in output
     assert "Browser extension handoff" in output
     assert "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json" in output
@@ -3220,7 +3220,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert "space-bar multi-select" in checklist["discovery"]["action_hint"]
     assert checklist["project"]["primary_command"] == "mdtero project init --name literature-review"
     assert checklist["parse"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
-    assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in checklist["parse"]["secondary_commands"]
+    assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in checklist["parse"]["secondary_commands"]
     assert checklist["zotero"]["primary_command"] == "mdtero config zotero"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert "Voyage runs on the Mdtero backend" in checklist["rag"]["action_hint"]
@@ -7308,7 +7308,7 @@ def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():
 
     for path in docs:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 300 --json" in content or "mdtero parse --file <path> --trace --wait --timeout 300 --json" in content
+        assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json" in content or "mdtero parse --file <path> --trace --wait --timeout 600 --json" in content
     for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
         content = path.read_text(encoding="utf-8")
         assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in content
