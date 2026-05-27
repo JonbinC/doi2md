@@ -41,6 +41,17 @@ const COPY = {
     cliOnboardingTitle: "CLI setup checklist",
     cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
     cliOnboardingPill: "Python / uv",
+    inputRouteTitle: "Input routes",
+    inputRouteNote: "Choose the shortest path to a Markdown artifact. The extension covers browser context; the CLI continues local files, RAG, MCP, and agent handoff.",
+    inputRoutePill: "Extension + CLI",
+    inputRouteCopy: "Copy",
+    inputRouteCopied: "Route copied.",
+    inputRoutes: [
+      ["DOI or URL", "fast smoke", "Use the CLI for DOI, arXiv, EuropePMC XML, or an open URL the backend route can recognize.", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
+      ["PDF / EPUB file", "upload", "Use direct file upload for local PDF, EPUB, XML, or HTML. PDFs go through the backend MinerU-first path.", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
+      ["Browser extension", "manual capture", "Use the extension when OAuth, campus network, cookies, or a selected PDF/EPUB matter, then hand off saved inputs to the CLI.", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
+      ["RAG / MCP", "after parse", "Build backend Voyage RAG from completed Markdown and expose the same project to local agents through FastMCP.", "mdtero rag query \"<question>\" --build-if-needed --json\nmdtero mcp briefing --json\nmdtero mcp serve"]
+    ],
     cliOnboardingItems: [
       ["Install", "uv tool install git+https://github.com/JonbinC/doi2md.git", "Install the public Python client; the extension never installs Python dependencies."],
       ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
@@ -121,6 +132,17 @@ const COPY = {
     cliOnboardingTitle: "CLI 配置清单",
     cliOnboardingNote: "Python 客户端负责本地抓取、项目队列、Zotero、后端 Voyage RAG、MCP 和 agent skill。",
     cliOnboardingPill: "Python / uv",
+    inputRouteTitle: "输入路径",
+    inputRouteNote: "按输入类型选择最短 Markdown 路径。扩展负责浏览器上下文；CLI 继续处理本地文件、RAG、MCP 和 agent 交接。",
+    inputRoutePill: "扩展 + CLI",
+    inputRouteCopy: "复制",
+    inputRouteCopied: "路径已复制。",
+    inputRoutes: [
+      ["DOI 或 URL", "快速冒烟", "DOI、arXiv、EuropePMC XML，或后端 route 能识别的开放 URL，优先走 CLI。", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
+      ["PDF / EPUB 文件", "上传", "本地 PDF、EPUB、XML 或 HTML 走直接上传。PDF 默认进入后端 MinerU-first 路径。", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
+      ["浏览器扩展", "人工抓取", "遇到 OAuth、校园网、cookie 或人工选择 PDF/EPUB 时用扩展，再把已保存输入交给 CLI。", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
+      ["RAG / MCP", "解析后", "基于完成的 Markdown 构建后端 Voyage RAG，并通过 FastMCP 交给本地 agent。", "mdtero rag query \"<question>\" --build-if-needed --json\nmdtero mcp briefing --json\nmdtero mcp serve"]
+    ],
     cliOnboardingItems: [
       ["安装", "uv tool install git+https://github.com/JonbinC/doi2md.git", "安装公开 Python 客户端；扩展不会安装 Python 依赖。"],
       ["鉴权", "mdtero setup", "工作站走网页登录 OAuth；可信无头服务器可走 API-key setup。"],
@@ -204,6 +226,10 @@ const cliOnboardingTitleEl = document.querySelector<HTMLHeadingElement>("#cli-on
 const cliOnboardingNoteEl = document.querySelector<HTMLParagraphElement>("#cli-onboarding-note");
 const cliOnboardingPillEl = document.querySelector<HTMLSpanElement>("#cli-onboarding-pill");
 const cliOnboardingListEl = document.querySelector<HTMLDivElement>("#cli-onboarding-list");
+const inputRouteTitleEl = document.querySelector<HTMLHeadingElement>("#input-route-title");
+const inputRouteNoteEl = document.querySelector<HTMLParagraphElement>("#input-route-note");
+const inputRoutePillEl = document.querySelector<HTMLSpanElement>("#input-route-pill");
+const inputRouteListEl = document.querySelector<HTMLDivElement>("#input-route-list");
 const connectionGuideTitleEl = document.querySelector<HTMLHeadingElement>("#connection-guide-title");
 const connectionGuideListEl = document.querySelector<HTMLDivElement>("#connection-guide-list");
 const setupStepAuthEl = document.querySelector<HTMLSpanElement>("#setup-step-auth");
@@ -335,6 +361,10 @@ function applyLanguage() {
   if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
   if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
   if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
+  if (inputRouteTitleEl) inputRouteTitleEl.textContent = copy.inputRouteTitle;
+  if (inputRouteNoteEl) inputRouteNoteEl.textContent = copy.inputRouteNote;
+  if (inputRoutePillEl) inputRoutePillEl.textContent = copy.inputRoutePill;
+  renderInputRouteList();
   renderCliOnboardingList();
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
@@ -345,6 +375,45 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+
+function renderInputRouteList() {
+  if (!inputRouteListEl) return;
+  const copy = copyFor(uiLanguage);
+  inputRouteListEl.textContent = "";
+  copy.inputRoutes.forEach(([title, status, detail, command]) => {
+    const row = document.createElement("div");
+    row.className = "input-route-item";
+    const header = document.createElement("div");
+    header.className = "input-route-header";
+    const titleEl = document.createElement("p");
+    titleEl.className = "onboarding-title";
+    titleEl.textContent = title;
+    const statusEl = document.createElement("span");
+    statusEl.className = "meta-pill input-route-status";
+    statusEl.textContent = status;
+    header.appendChild(titleEl);
+    header.appendChild(statusEl);
+    const detailEl = document.createElement("p");
+    detailEl.className = "meta-label";
+    detailEl.textContent = detail;
+    const commandEl = document.createElement("code");
+    commandEl.className = "onboarding-command";
+    commandEl.textContent = command;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost-chip input-route-copy";
+    button.textContent = copy.inputRouteCopy;
+    button.addEventListener("click", async () => {
+      await navigator.clipboard?.writeText(command);
+      button.textContent = copyFor(uiLanguage).inputRouteCopied;
+    });
+    row.appendChild(header);
+    row.appendChild(detailEl);
+    row.appendChild(commandEl);
+    row.appendChild(button);
+    inputRouteListEl.appendChild(row);
+  });
 }
 
 function renderCliOnboardingList() {

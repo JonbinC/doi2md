@@ -297,6 +297,7 @@ summary,
 .support-stack,
 .capability-config-grid,
 .guide-list,
+.input-route-list,
 .onboarding-list {
   display: grid;
   gap: 10px;
@@ -307,6 +308,7 @@ summary,
 .capability-config-card,
 .auth-website-panel,
 .guide-item,
+.input-route-item,
 .onboarding-item,
 .history-item,
 .recent-item {
@@ -319,8 +321,37 @@ summary,
 .capability-config-card,
 .auth-website-panel,
 .guide-item,
+.input-route-item,
 .onboarding-item {
   padding: 11px;
+}
+
+.input-route-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.input-route-item {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.input-route-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.input-route-status {
+  color: var(--secondary-foreground);
+  background: rgba(109, 57, 32, 0.06);
+  border-color: var(--border);
+}
+
+.input-route-copy {
+  width: 100%;
 }
 
 .guide-item {

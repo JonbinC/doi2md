@@ -310,6 +310,17 @@ var COPY = {
     cliOnboardingTitle: "CLI setup checklist",
     cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
     cliOnboardingPill: "Python / uv",
+    inputRouteTitle: "Input routes",
+    inputRouteNote: "Choose the shortest path to a Markdown artifact. The extension covers browser context; the CLI continues local files, RAG, MCP, and agent handoff.",
+    inputRoutePill: "Extension + CLI",
+    inputRouteCopy: "Copy",
+    inputRouteCopied: "Route copied.",
+    inputRoutes: [
+      ["DOI or URL", "fast smoke", "Use the CLI for DOI, arXiv, EuropePMC XML, or an open URL the backend route can recognize.", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
+      ["PDF / EPUB file", "upload", "Use direct file upload for local PDF, EPUB, XML, or HTML. PDFs go through the backend MinerU-first path.", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
+      ["Browser extension", "manual capture", "Use the extension when OAuth, campus network, cookies, or a selected PDF/EPUB matter, then hand off saved inputs to the CLI.", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
+      ["RAG / MCP", "after parse", "Build backend Voyage RAG from completed Markdown and expose the same project to local agents through FastMCP.", 'mdtero rag query "<question>" --build-if-needed --json\nmdtero mcp briefing --json\nmdtero mcp serve']
+    ],
     cliOnboardingItems: [
       ["Install", "uv tool install git+https://github.com/JonbinC/doi2md.git", "Install the public Python client; the extension never installs Python dependencies."],
       ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
@@ -389,6 +400,17 @@ var COPY = {
     cliOnboardingTitle: "CLI \u914D\u7F6E\u6E05\u5355",
     cliOnboardingNote: "Python \u5BA2\u6237\u7AEF\u8D1F\u8D23\u672C\u5730\u6293\u53D6\u3001\u9879\u76EE\u961F\u5217\u3001Zotero\u3001\u540E\u7AEF Voyage RAG\u3001MCP \u548C agent skill\u3002",
     cliOnboardingPill: "Python / uv",
+    inputRouteTitle: "\u8F93\u5165\u8DEF\u5F84",
+    inputRouteNote: "\u6309\u8F93\u5165\u7C7B\u578B\u9009\u62E9\u6700\u77ED Markdown \u8DEF\u5F84\u3002\u6269\u5C55\u8D1F\u8D23\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587\uFF1BCLI \u7EE7\u7EED\u5904\u7406\u672C\u5730\u6587\u4EF6\u3001RAG\u3001MCP \u548C agent \u4EA4\u63A5\u3002",
+    inputRoutePill: "\u6269\u5C55 + CLI",
+    inputRouteCopy: "\u590D\u5236",
+    inputRouteCopied: "\u8DEF\u5F84\u5DF2\u590D\u5236\u3002",
+    inputRoutes: [
+      ["DOI \u6216 URL", "\u5FEB\u901F\u5192\u70DF", "DOI\u3001arXiv\u3001EuropePMC XML\uFF0C\u6216\u540E\u7AEF route \u80FD\u8BC6\u522B\u7684\u5F00\u653E URL\uFF0C\u4F18\u5148\u8D70 CLI\u3002", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
+      ["PDF / EPUB \u6587\u4EF6", "\u4E0A\u4F20", "\u672C\u5730 PDF\u3001EPUB\u3001XML \u6216 HTML \u8D70\u76F4\u63A5\u4E0A\u4F20\u3002PDF \u9ED8\u8BA4\u8FDB\u5165\u540E\u7AEF MinerU-first \u8DEF\u5F84\u3002", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
+      ["\u6D4F\u89C8\u5668\u6269\u5C55", "\u4EBA\u5DE5\u6293\u53D6", "\u9047\u5230 OAuth\u3001\u6821\u56ED\u7F51\u3001cookie \u6216\u4EBA\u5DE5\u9009\u62E9 PDF/EPUB \u65F6\u7528\u6269\u5C55\uFF0C\u518D\u628A\u5DF2\u4FDD\u5B58\u8F93\u5165\u4EA4\u7ED9 CLI\u3002", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
+      ["RAG / MCP", "\u89E3\u6790\u540E", "\u57FA\u4E8E\u5B8C\u6210\u7684 Markdown \u6784\u5EFA\u540E\u7AEF Voyage RAG\uFF0C\u5E76\u901A\u8FC7 FastMCP \u4EA4\u7ED9\u672C\u5730 agent\u3002", 'mdtero rag query "<question>" --build-if-needed --json\nmdtero mcp briefing --json\nmdtero mcp serve']
+    ],
     cliOnboardingItems: [
       ["\u5B89\u88C5", "uv tool install git+https://github.com/JonbinC/doi2md.git", "\u5B89\u88C5\u516C\u5F00 Python \u5BA2\u6237\u7AEF\uFF1B\u6269\u5C55\u4E0D\u4F1A\u5B89\u88C5 Python \u4F9D\u8D56\u3002"],
       ["\u9274\u6743", "mdtero setup", "\u5DE5\u4F5C\u7AD9\u8D70\u7F51\u9875\u767B\u5F55 OAuth\uFF1B\u53EF\u4FE1\u65E0\u5934\u670D\u52A1\u5668\u53EF\u8D70 API-key setup\u3002"],
@@ -471,6 +493,10 @@ var cliOnboardingTitleEl = document.querySelector("#cli-onboarding-title");
 var cliOnboardingNoteEl = document.querySelector("#cli-onboarding-note");
 var cliOnboardingPillEl = document.querySelector("#cli-onboarding-pill");
 var cliOnboardingListEl = document.querySelector("#cli-onboarding-list");
+var inputRouteTitleEl = document.querySelector("#input-route-title");
+var inputRouteNoteEl = document.querySelector("#input-route-note");
+var inputRoutePillEl = document.querySelector("#input-route-pill");
+var inputRouteListEl = document.querySelector("#input-route-list");
 var connectionGuideTitleEl = document.querySelector("#connection-guide-title");
 var connectionGuideListEl = document.querySelector("#connection-guide-list");
 var setupStepAuthEl = document.querySelector("#setup-step-auth");
@@ -584,6 +610,10 @@ function applyLanguage() {
   if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
   if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
   if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
+  if (inputRouteTitleEl) inputRouteTitleEl.textContent = copy.inputRouteTitle;
+  if (inputRouteNoteEl) inputRouteNoteEl.textContent = copy.inputRouteNote;
+  if (inputRoutePillEl) inputRoutePillEl.textContent = copy.inputRoutePill;
+  renderInputRouteList();
   renderCliOnboardingList();
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
@@ -594,6 +624,44 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+function renderInputRouteList() {
+  if (!inputRouteListEl) return;
+  const copy = copyFor(uiLanguage);
+  inputRouteListEl.textContent = "";
+  copy.inputRoutes.forEach(([title, status, detail, command]) => {
+    const row = document.createElement("div");
+    row.className = "input-route-item";
+    const header = document.createElement("div");
+    header.className = "input-route-header";
+    const titleEl2 = document.createElement("p");
+    titleEl2.className = "onboarding-title";
+    titleEl2.textContent = title;
+    const statusEl = document.createElement("span");
+    statusEl.className = "meta-pill input-route-status";
+    statusEl.textContent = status;
+    header.appendChild(titleEl2);
+    header.appendChild(statusEl);
+    const detailEl = document.createElement("p");
+    detailEl.className = "meta-label";
+    detailEl.textContent = detail;
+    const commandEl = document.createElement("code");
+    commandEl.className = "onboarding-command";
+    commandEl.textContent = command;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost-chip input-route-copy";
+    button.textContent = copy.inputRouteCopy;
+    button.addEventListener("click", async () => {
+      await navigator.clipboard?.writeText(command);
+      button.textContent = copyFor(uiLanguage).inputRouteCopied;
+    });
+    row.appendChild(header);
+    row.appendChild(detailEl);
+    row.appendChild(commandEl);
+    row.appendChild(button);
+    inputRouteListEl.appendChild(row);
+  });
 }
 function renderCliOnboardingList() {
   if (!cliOnboardingListEl) return;

@@ -120,6 +120,21 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp serve");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("does not install Python dependencies");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("mdtero config academic");
+    expect(document.querySelector("#input-route-card")).not.toBeNull();
+    expect(document.querySelector("#input-route-title")?.textContent).toBe("Input routes");
+    expect(document.querySelector("#input-route-note")?.textContent).toContain("shortest path to a Markdown artifact");
+    expect(document.querySelector("#input-route-pill")?.textContent).toBe("Extension + CLI");
+    const routeText = document.querySelector("#input-route-list")?.textContent || "";
+    expect(routeText).toContain("DOI or URL");
+    expect(routeText).toContain("PDF / EPUB file");
+    expect(routeText).toContain("Browser extension");
+    expect(routeText).toContain("RAG / MCP");
+    expect(routeText).toContain("mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json");
+    expect(routeText).toContain("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json");
+    expect(routeText).toContain("backend MinerU-first path");
+    expect(routeText).toContain("OAuth, campus network, cookies");
+    expect(routeText).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
+    expect(routeText).toContain("FastMCP");
     expect(document.querySelector("#mcp-server-config-card")).not.toBeNull();
     expect(document.querySelector("#mcp-server-config-title")?.textContent).toBe("Agent MCP server");
     expect(document.querySelector("#mcp-server-config-note")?.textContent).toContain("mdtero mcp serve");
@@ -183,6 +198,25 @@ describe("extension options page", () => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp serve"));
     });
     expect(document.querySelector("#copy-cli-handoff-guide")?.textContent).toBe("CLI handoff copied.");
+  });
+
+  it("copies individual input route commands from options", async () => {
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "unknown" } })) as any;
+
+    await loadOptionsModule();
+
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".input-route-copy"));
+    expect(buttons).toHaveLength(4);
+    buttons[1].click();
+
+    await vi.waitFor(() => {
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json");
+    });
+    expect(buttons[1].textContent).toBe("Route copied.");
   });
 
   it("copies a parseable MCP server config for local agents", async () => {
