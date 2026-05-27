@@ -44,6 +44,7 @@ def build_dashboard_model(
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
     commands = build_agent_commands(root)["commands"]
     briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg, agent_root=agent_root)
+    dashboard_setup_handoff = _dashboard_setup_handoff_payload(briefing.get("dashboard_setup_handoff_json"))
     onboarding_checklist = briefing.get("onboarding_checklist") or []
     next_steps = _next_steps(cfg, project, rag, commands)
     command_palette = _command_palette_payload(
@@ -139,6 +140,7 @@ def build_dashboard_model(
             "briefing_command": commands["mcp_briefing"],
             "serve_command": commands["serve_mcp"],
             "primary_tool": "agent_briefing",
+            "dashboard_setup_handoff_json": dashboard_setup_handoff,
             "server": briefing.get("mcp_server"),
             "tools": briefing["mcp_tools"],
             "task_tools": _mcp_task_tools_payload(briefing["mcp_tools"]),
@@ -147,6 +149,7 @@ def build_dashboard_model(
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "extension_handoff": extension_handoff,
+        "dashboard_setup_handoff_json": dashboard_setup_handoff,
         "input_routes": input_routes,
         "onboarding_checklist": onboarding_checklist,
         "launch_summary": launch_summary,
@@ -171,6 +174,7 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
     return Group(
         _hero_panel(model),
         _onboarding_panel(model),
+        _dashboard_setup_handoff_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
         Columns([_rag_panel(model), _integration_panel(model)], equal=True, expand=True),
         _agent_playbook_panel(model),
@@ -525,6 +529,49 @@ def _agent_playbook_payload(playbook: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _dashboard_setup_handoff_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        payload = {}
+    auth_boundary = payload.get("auth_boundary") if isinstance(payload.get("auth_boundary"), dict) else {}
+    api_key = payload.get("api_key") if isinstance(payload.get("api_key"), dict) else {}
+    command_blocks = payload.get("command_blocks") if isinstance(payload.get("command_blocks"), dict) else {}
+    mcp = payload.get("mcp") if isinstance(payload.get("mcp"), dict) else {}
+    rag = payload.get("rag") if isinstance(payload.get("rag"), dict) else {}
+    next_commands = payload.get("next_commands") if isinstance(payload.get("next_commands"), list) else []
+    return {
+        "source": str(payload.get("source") or "dashboard_api_key_dialog"),
+        "purpose": str(payload.get("purpose") or "Continue CLI and MCP setup without exposing the one-time API key secret."),
+        "first_cli_command": str(payload.get("first_cli_command") or HEADLESS_SETUP_COMMAND),
+        "auth_boundary": {
+            "workstation": str(auth_boundary.get("workstation") or "Use browser OAuth with `mdtero setup` on a normal workstation."),
+            "headless": str(auth_boundary.get("headless") or "Use `mdtero setup --api-key --json` only on trusted headless shells."),
+            "secret_transport": str(auth_boundary.get("secret_transport") or "Paste the full secret only into the secure CLI prompt."),
+            "dashboard_secret_retention": str(auth_boundary.get("dashboard_secret_retention") or "The dashboard shows the full secret once, then only the prefix identifier."),
+        },
+        "api_key": {
+            "full_secret_shown_once": bool(api_key.get("full_secret_shown_once", True)),
+            "full_secret_included": bool(api_key.get("full_secret_included", False)),
+            "copy_secret_action": str(api_key.get("copy_secret_action") or "Use the dashboard Copy secret button, then paste only into the secure CLI prompt."),
+            "prefix_identifier_field": str(api_key.get("prefix_identifier_field") or "api_key.prefix_identifier"),
+        },
+        "next_commands": [str(command) for command in next_commands if str(command).strip()],
+        "command_blocks": {str(key): str(value) for key, value in command_blocks.items()},
+        "mcp": {
+            "first_tool": str(mcp.get("first_tool") or "agent_briefing"),
+            "startup_order": [str(command) for command in mcp.get("startup_order") or [] if str(command).strip()],
+            "expected_tools": [str(tool) for tool in mcp.get("expected_tools") or [] if str(tool).strip()],
+        },
+        "rag": {
+            "owner": str(rag.get("owner") or "backend_voyage"),
+            "local_voyage_key_required": bool(rag.get("local_voyage_key_required", False)),
+            "primary_command": str(rag.get("primary_command") or ONE_COMMAND_RAG_BOOTSTRAP),
+            "fallback_commands": [str(command) for command in rag.get("fallback_commands") or [] if str(command).strip()],
+        },
+        "redaction_policy": str(payload.get("redaction_policy") or "Do not print Mdtero API keys, provider keys, bearer tokens, signed URLs, OSS tokens, or Infisical tokens."),
+        "agent_instruction": str(payload.get("agent_instruction") or "Run doctor first, preserve reason_code/action_hint, and paste the API key only into the secure setup prompt."),
+    }
+
+
 def _extension_handoff_payload(commands: dict[str, str]) -> dict[str, Any]:
     command_plan = _extension_handoff_commands(commands)
     return {
@@ -586,6 +633,7 @@ def _launch_bundle_payload(
         commands.get("doctor") or "mdtero doctor --json",
         commands.get("setup") or WORKSTATION_SETUP_COMMAND,
         commands.get("login_api_key") or HEADLESS_SETUP_COMMAND,
+        commands.get("mcp_briefing") or "mdtero mcp briefing --json",
         commands.get("agent_detect") or "mdtero agent detect --json",
         commands.get("agent_install") or "mdtero agent install --interactive",
     ]
@@ -834,6 +882,26 @@ def _onboarding_panel(model: dict[str, Any]) -> Panel:
     if not checklist:
         table.add_row("Setup", "unknown", "mdtero setup --json")
     return Panel(table, title="Onboarding Checklist", border_style="magenta")
+
+
+def _dashboard_setup_handoff_panel(model: dict[str, Any]) -> Panel:
+    handoff = model.get("dashboard_setup_handoff_json") if isinstance(model.get("dashboard_setup_handoff_json"), dict) else {}
+    api_key = handoff.get("api_key") if isinstance(handoff.get("api_key"), dict) else {}
+    auth_boundary = handoff.get("auth_boundary") if isinstance(handoff.get("auth_boundary"), dict) else {}
+    rag = handoff.get("rag") if isinstance(handoff.get("rag"), dict) else {}
+    mcp = handoff.get("mcp") if isinstance(handoff.get("mcp"), dict) else {}
+    table = Table("Area", "Contract", expand=True)
+    table.add_row("Source", str(handoff.get("source") or "dashboard_api_key_dialog"))
+    table.add_row("First CLI command", str(handoff.get("first_cli_command") or HEADLESS_SETUP_COMMAND))
+    table.add_row("Secret boundary", "full_secret_included=false; paste the one-time API key only into the secure CLI prompt")
+    table.add_row("Dashboard retention", str(auth_boundary.get("dashboard_secret_retention") or "full secret shown once, prefix kept after close")[:140])
+    table.add_row("Copy action", str(api_key.get("copy_secret_action") or "Copy secret in dashboard, paste only into mdtero setup prompt")[:140])
+    table.add_row("Backend RAG", f"{rag.get('owner') or 'backend_voyage'}; local VOYAGE_API_KEY required: {rag.get('local_voyage_key_required', False)}")
+    table.add_row("MCP first tool", str(mcp.get("first_tool") or "agent_briefing"))
+    next_commands = handoff.get("next_commands") if isinstance(handoff.get("next_commands"), list) else []
+    if next_commands:
+        table.add_row("Next", str(next_commands[0])[:140])
+    return Panel(table, title="Dashboard Setup Handoff", border_style="green")
 
 
 def _account_panel(model: dict[str, Any]) -> Panel:
