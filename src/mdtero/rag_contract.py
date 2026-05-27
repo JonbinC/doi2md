@@ -38,6 +38,7 @@ def build_mcp_server_contract(payload: dict[str, Any]) -> dict[str, Any]:
             "request_translation",
             "rag_context",
             "server_rag_status",
+            "project_ingest",
             "server_rag_build",
             "rag_query",
             "agent_commands",

@@ -18,7 +18,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, _semantic_scholar_parse_url, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
+from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, ingest_project_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -4205,6 +4205,10 @@ def test_mcp_agent_briefing_tool_plan_guides_rag_preparation(tmp_path: Path):
     tool_plan = briefing["mcp_tool_plan"]
 
     assert any(step["step"] == "download_artifact" for step in tool_plan)
+    ingest_step = next(step for step in tool_plan if step["step"] == "ingest_project_documents")
+    assert ingest_step["tool"] == "project_ingest"
+    assert ingest_step["arguments"] == {"project_id": None}
+    assert "imported_count" in ingest_step["success_signal"]
     prepare_step = next(step for step in tool_plan if step["step"] == "prepare_rag")
     assert prepare_step["tool"] == "server_rag_status"
     assert "ready_for_query is false" in prepare_step["when"]
@@ -5217,6 +5221,7 @@ def test_mcp_server_rag_status_treats_needs_build_as_needs_build(tmp_path: Path)
     assert briefing["rag"]["agent_summary"]["readiness_status"] == "needs_build"
     assert "mdtero rag build --wait --json" in briefing["recommended_next_commands"]
     assert "server_rag_build" in briefing["mcp_tools"]
+    assert "project_ingest" in briefing["mcp_tools"]
     assert briefing["mcp_server"]["tools"] == [
         "agent_briefing",
         "project_init",
@@ -5228,6 +5233,7 @@ def test_mcp_server_rag_status_treats_needs_build_as_needs_build(tmp_path: Path)
         "download_artifact",
         "request_translation",
         "rag_context",
+        "project_ingest",
         "server_rag_status",
         "server_rag_build",
         "rag_query",
@@ -5277,6 +5283,105 @@ def test_mcp_server_rag_build_waits_until_ready(tmp_path: Path):
         ("build", "42"),
         ("status", "42"),
     ]
+
+
+def test_mcp_project_ingest_tool_creates_binds_and_imports(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    class FakeClient:
+        def list_projects(self):
+            calls.append(("list",))
+            return {"items": []}
+
+        def create_project(self, name, *, description=None):
+            calls.append(("create", name, description))
+            return {"id": "server-42", "name": name}
+
+        def import_task_to_project(self, project_id, task_id):
+            calls.append(("import", project_id, task_id))
+            return {"document_id": "doc-1", "import_status": "imported"}
+
+    payload = ingest_project_for_agent(tmp_path, client=FakeClient())
+    state = load_project(tmp_path)
+
+    assert payload["status"] == "succeeded"
+    assert payload["reason_code"] == "server_project_imported"
+    assert payload["server_project_id"] == "server-42"
+    assert payload["project_binding"]["created_server_project"] is True
+    assert payload["project_binding"]["bound_local_project"] is True
+    assert payload["imported_count"] == 1
+    assert payload["failed_count"] == 0
+    assert payload["items"] == [{"input": "10.1000/done", "task_id": "task-done", "result": {"document_id": "doc-1", "import_status": "imported"}}]
+    assert payload["next_commands"] == [
+        "mdtero rag status --json",
+        "mdtero rag build --wait --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
+        "mdtero mcp briefing --json",
+        "mdtero mcp serve",
+    ]
+    assert state.server_project_id == "server-42"
+    assert calls == [
+        ("list",),
+        ("create", "agent-demo", "Mdtero local project: agent-demo"),
+        ("import", "server-42", "task-done"),
+    ]
+
+
+def test_mcp_project_ingest_tool_does_not_create_server_project_without_succeeded_tasks(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/pending", status="pending"))
+
+    class FakeClient:
+        def list_projects(self):  # pragma: no cover - failure guard
+            raise AssertionError("empty ingest should not inspect server projects")
+
+        def create_project(self, name, *, description=None):  # pragma: no cover - failure guard
+            raise AssertionError("empty ingest should not create a server project")
+
+        def import_task_to_project(self, project_id, task_id):  # pragma: no cover - failure guard
+            raise AssertionError("empty ingest should not import tasks")
+
+    payload = ingest_project_for_agent(tmp_path, client=FakeClient())
+    state = load_project(tmp_path)
+
+    assert payload["status"] == "not_ready"
+    assert payload["reason_code"] == "no_succeeded_tasks"
+    assert payload["server_project_id"] is None
+    assert payload["imported_count"] == 0
+    assert payload["failed_count"] == 0
+    assert payload["project_binding"]["created_server_project"] is False
+    assert payload["project_binding"]["bound_local_project"] is False
+    assert "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json" in payload["next_commands"]
+    assert state.server_project_id is None
+
+
+def test_mcp_project_ingest_tool_reports_import_failures(tmp_path: Path):
+    init_project(tmp_path, name="agent-demo")
+    bind_server_project(tmp_path, "server-42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+
+    class FakeClient:
+        def import_task_to_project(self, project_id, task_id):
+            raise MdteroApiError({
+                "status_code": 404,
+                "reason_code": "project_import_missing",
+                "action_hint": "signed url token https://mineru.example/path?signature=secret should be redacted",
+            })
+
+    payload = ingest_project_for_agent(tmp_path, client=FakeClient())
+
+    assert payload["status"] == "failed"
+    assert payload["reason_code"] == "server_project_import_failed"
+    assert payload["imported_count"] == 0
+    assert payload["failed_count"] == 1
+    failure = payload["failures"][0]
+    assert failure["error_code"] == "server_project_import_unavailable"
+    assert failure["reason_code"] == "project_import_missing"
+    assert failure["http_status"] == 404
+    assert "POST /api/v1/projects/{id}/tasks/{task_id}/import" in failure["action_hint"]
+    assert "secret" not in json.dumps(payload).lower()
 
 
 def test_mcp_server_rag_build_binds_explicit_project_id_from_tool_plan(tmp_path: Path):

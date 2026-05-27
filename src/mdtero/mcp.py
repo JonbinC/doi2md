@@ -12,6 +12,24 @@ from .projects import PaperRecord, add_paper, bind_server_project, init_project,
 from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
 
+MCP_TOOLS = [
+    "agent_briefing",
+    "project_init",
+    "project_status",
+    "project_add",
+    "paper_context",
+    "submit_parse",
+    "task_status",
+    "download_artifact",
+    "request_translation",
+    "rag_context",
+    "project_ingest",
+    "server_rag_status",
+    "server_rag_build",
+    "rag_query",
+    "agent_commands",
+]
+
 
 def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
     root = project_root or Path.cwd()
@@ -1190,6 +1208,167 @@ def _bootstrap_server_rag_for_build(client: Any, root: Path, state: Any, command
     return project_id, bootstrap
 
 
+def ingest_project_for_agent(
+    project_root: Path | None = None,
+    *,
+    client: Any | None = None,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    state = _load_project_or_none(root)
+    commands = build_agent_commands(root)["commands"]
+    if state is None:
+        return redact_sensitive_payload({
+            "status": "not_ready",
+            "reason_code": "project_not_initialized",
+            "project": root.resolve().name,
+            "server_project_id": None,
+            "imported_count": 0,
+            "failed_count": 0,
+            "items": [],
+            "failures": [],
+            "action_hint": "Initialize a local Mdtero project before importing parsed tasks into backend Voyage RAG.",
+            "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
+        })
+
+    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    if not succeeded:
+        linked_project_id = str(project_id or state.server_project_id or "").strip() or None
+        return redact_sensitive_payload({
+            "status": "not_ready",
+            "reason_code": "no_succeeded_tasks",
+            "project": state.name,
+            "server_project_id": linked_project_id,
+            "local_ready_for_ingest_count": 0,
+            "local_paper_count": len(state.papers),
+            "imported_count": 0,
+            "failed_count": 0,
+            "items": [],
+            "failures": [],
+            "project_binding": {
+                "created_server_project": False,
+                "reused_server_project": False,
+                "bound_local_project": bool(state.server_project_id),
+            },
+            "action_hint": "Parse at least one paper successfully before importing documents into backend Voyage RAG.",
+            "next_commands": _rag_recovery_commands(commands),
+        })
+
+    active_client = client or MdteroClient()
+    explicit_project_id = str(project_id or "").strip()
+    linked_project_id = str(state.server_project_id or "").strip()
+    if explicit_project_id:
+        state, mismatch = _align_mcp_server_project_id(root, state, explicit_project_id, commands)
+        if mismatch is not None:
+            return redact_sensitive_payload(mismatch)
+        linked_project_id = explicit_project_id
+    if not linked_project_id:
+        try:
+            created, reused = _find_or_create_server_project_for_mcp(active_client, state.name, description=f"Mdtero local project: {state.name}")
+        except Exception as exc:
+            return redact_sensitive_payload(_bootstrap_failure_payload(state, commands, exc, reason_code="server_project_create_failed"))
+        linked_project_id = str(created.get("id") or "").strip() if isinstance(created, dict) else ""
+        if not linked_project_id:
+            return redact_sensitive_payload(_bootstrap_failure_payload(state, commands, RuntimeError("server_project_id_missing"), reason_code="server_project_id_missing"))
+        bind_server_project(root, linked_project_id)
+        state = load_project(root)
+        project_binding: dict[str, Any] = {"created_server_project": not reused, "reused_server_project": reused, "bound_local_project": True, "project": created}
+    else:
+        project_binding = {"created_server_project": False, "reused_server_project": False, "bound_local_project": True}
+
+    ingest = _import_succeeded_tasks_for_mcp(active_client, state, linked_project_id)
+    failures = ingest["failures"]
+    imported_count = int(ingest["imported_count"])
+    failed_count = int(ingest["failed_count"])
+    status = "failed" if failures else "succeeded"
+    reason_code = "server_project_import_failed" if failures else ("server_project_imported" if imported_count else "no_new_documents_imported")
+    action_hint = (
+        "Some succeeded parse tasks could not be imported into the server project. Report failures with reason_code/action_hint, then retry project_ingest or fix task ownership."
+        if failures
+        else "Succeeded parse tasks were imported into the backend project. Build or query server-side Voyage RAG next."
+    )
+    return redact_sensitive_payload({
+        "status": status,
+        "reason_code": reason_code,
+        "project": state.name,
+        "server_project_id": linked_project_id,
+        "local_ready_for_ingest_count": len(succeeded),
+        "local_paper_count": len(state.papers),
+        "project_binding": project_binding,
+        **ingest,
+        "action_hint": action_hint,
+        "next_commands": _dedupe_commands([
+            "mdtero rag status --json",
+            commands["rag_build"],
+            commands["rag_query"],
+            commands["mcp_briefing"],
+            commands["serve_mcp"],
+        ]),
+    })
+
+
+def _import_succeeded_tasks_for_mcp(client: Any, state: Any, project_id: str) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for paper in state.papers:
+        if paper.status != "succeeded" or not paper.task_id:
+            continue
+        try:
+            result = client.import_task_to_project(project_id, paper.task_id)
+        except Exception as exc:
+            failures.append(_project_ingest_failure_for_mcp(project_id, paper, exc))
+            continue
+        items.append({"input": paper.input, "task_id": paper.task_id, "result": result})
+    return {
+        "server_project_id": project_id,
+        "imported_count": len(items),
+        "failed_count": len(failures),
+        "items": items,
+        "failures": failures,
+    }
+
+
+def _project_ingest_failure_for_mcp(project_id: str, paper: Any, exc: Exception) -> dict[str, Any]:
+    detail = _rag_query_exception_detail(exc)
+    status_code = _exception_status_code(exc)
+    reason_code = str(detail.get("reason_code") or detail.get("error_code") or "server_project_import_failed")
+    error_code = "server_project_import_unavailable" if status_code == 404 else "server_project_import_failed"
+    action_hint = (
+        "The backend did not expose the project task import endpoint yet. Deploy POST /api/v1/projects/{id}/tasks/{task_id}/import, then retry project_ingest."
+        if status_code == 404
+        else str(detail.get("action_hint") or "Check the server project id, API key permissions, and task ownership, then retry project_ingest.")
+    )
+    payload = {
+        "input": paper.input,
+        "task_id": paper.task_id,
+        "status": "failed",
+        "error_code": error_code,
+        "reason_code": reason_code,
+        "http_status": status_code,
+        "error_type": exc.__class__.__name__,
+        "server_project_id": project_id,
+        "action_hint": action_hint,
+    }
+    if detail:
+        payload["detail"] = detail
+    return redact_sensitive_payload(payload)
+
+
+def _exception_status_code(exc: Exception) -> int | None:
+    payload = getattr(exc, "payload", None)
+    if isinstance(payload, dict):
+        value = payload.get("status_code") or payload.get("http_status")
+        if value is None and isinstance(payload.get("detail"), dict):
+            value = payload["detail"].get("status_code") or payload["detail"].get("http_status")
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+    response = getattr(exc, "response", None)
+    value = getattr(response, "status_code", None)
+    return int(value) if isinstance(value, int) else None
+
+
 def _wait_for_agent_rag_ready(client: Any, project_id: str, *, timeout: float, interval: float) -> dict[str, Any]:
     poll_interval = max(0.25, float(interval or 2.0))
     deadline = time.monotonic() + max(0.25, float(timeout or 300.0))
@@ -1267,6 +1446,9 @@ def _rag_recovery_commands(commands: dict[str, Any]) -> list[str]:
 
 
 def _rag_query_exception_detail(exc: Exception) -> dict[str, Any]:
+    payload = getattr(exc, "payload", None)
+    if isinstance(payload, dict):
+        return redact_sensitive_payload(payload)
     response = getattr(exc, "response", None)
     try:
         detail = response.json().get("detail") if response is not None else None
@@ -1565,22 +1747,7 @@ def build_agent_briefing(
         },
         "mcp_server": _mcp_server_payload(commands, root),
         "recommended_next_commands": recommended_next_commands,
-        "mcp_tools": [
-            "agent_briefing",
-            "project_init",
-            "project_status",
-            "project_add",
-            "paper_context",
-            "submit_parse",
-            "task_status",
-            "download_artifact",
-            "request_translation",
-            "rag_context",
-            "server_rag_status",
-            "server_rag_build",
-            "rag_query",
-            "agent_commands",
-        ],
+        "mcp_tools": MCP_TOOLS,
         "mcp_tool_plan": mcp_tool_plan,
         "agent_playbook": _build_agent_playbook(
             state=state,
@@ -1599,22 +1766,7 @@ def build_agent_briefing(
 
 
 def _mcp_server_payload(commands: dict[str, Any], root: Path) -> dict[str, Any]:
-    tools = [
-        "agent_briefing",
-        "project_init",
-        "project_status",
-        "project_add",
-        "paper_context",
-        "submit_parse",
-        "task_status",
-        "download_artifact",
-        "request_translation",
-        "rag_context",
-        "server_rag_status",
-        "server_rag_build",
-        "rag_query",
-        "agent_commands",
-    ]
+    tools = MCP_TOOLS
     serve_command = commands.get("serve_mcp", "mdtero mcp serve")
     briefing_command = commands.get("mcp_briefing", "mdtero mcp briefing --json")
     return {
@@ -1756,6 +1908,20 @@ def _build_mcp_tool_plan(
             "arguments": {"task_id_or_markdown_path": succeeded_task_id, "target_language": "zh-CN", "wait": True, "timeout": 600, "interval": 2},
             "success_signal": "final_task or result exposes translated_md.",
             "failure_fields": ["reason_code", "action_hint", "next_commands", "translation_attempts"],
+        })
+
+    readiness = server_rag.get("readiness") if isinstance(server_rag.get("readiness"), dict) else {}
+    if succeeded and not readiness.get("ready_for_query") and not readiness.get("provider_blocked"):
+        plan.append({
+            "step": "ingest_project_documents",
+            "tool": "project_ingest",
+            "purpose": "Import succeeded parse tasks into the bound or newly created backend project before building Voyage embeddings.",
+            "when": "ready_artifacts is non-empty and rag.agent_summary.ready_for_query is false.",
+            "arguments": {"project_id": server_rag.get("server_project_id") or None},
+            "success_signal": "status is succeeded and imported_count is greater than zero, or failures include reason_code/action_hint for each task.",
+            "next_on_success": "Call server_rag_build(wait=true), then rag_query(question) once readiness is true.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "failures"],
+            "next_commands": ["mdtero project ingest --json", commands["rag_build"], commands["rag_query"]],
         })
 
     rag_summary = server_rag.get("agent_summary") if isinstance(server_rag.get("agent_summary"), dict) else {}
@@ -2359,6 +2525,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def rag_context() -> dict:
         return build_rag_context(root)
+
+    @mcp.tool
+    def project_ingest(project_id: str | None = None) -> dict:
+        return ingest_project_for_agent(root, project_id=project_id)
 
     @mcp.tool
     def submit_parse(input_value: str, wait: bool = True, timeout: float = 300.0, interval: float = 2.0) -> dict:
