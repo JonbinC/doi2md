@@ -1,5 +1,5 @@
 const SENSITIVE_QUERY_KEYS =
-  "(api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
+  "(?:api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
 
 export function redactSensitiveText(value: unknown): string {
   const text = String(value ?? "");

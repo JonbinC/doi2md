@@ -410,6 +410,10 @@ export interface CliHandoffContext {
   status?: string;
   stage?: string;
   kind?: "parse" | "translate";
+  selectedProvider?: string;
+  parserStrategy?: string;
+  clientAcquisition?: string;
+  parseOutcome?: string;
   reasonCode?: string;
   actionHint?: string;
   preferredArtifact?: string;
@@ -530,7 +534,7 @@ export function formatCliHandoffClipboard(
     ...(parseHandoff
       ? [
           "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-          "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+          "Preserve task_id, selected_provider, parser_strategy, reason_code, action_hint, client_acquisition, parse_outcome, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
           "",
         ]
       : []),
@@ -557,9 +561,31 @@ export function buildTaskHandoffContext(
   task:
     | (Pick<
         TaskRecord,
-        "task_id" | "status" | "stage" | "task_kind" | "reason_code" | "action_hint" | "preferred_artifact" | "next_commands"
+        | "task_id"
+        | "status"
+        | "stage"
+        | "task_kind"
+        | "selected_provider"
+        | "parser_strategy"
+        | "client_acquisition"
+        | "parse_outcome"
+        | "reason_code"
+        | "action_hint"
+        | "preferred_artifact"
+        | "next_commands"
       > & {
-        result?: Pick<TaskResult, "preferred_artifact" | "download_artifacts" | "reason_code" | "action_hint" | "next_commands"> | null;
+        result?: Pick<
+          TaskResult,
+          | "preferred_artifact"
+          | "download_artifacts"
+          | "selected_provider"
+          | "parser_strategy"
+          | "client_acquisition"
+          | "parse_outcome"
+          | "reason_code"
+          | "action_hint"
+          | "next_commands"
+        > | null;
       })
     | null
     | undefined,
@@ -577,6 +603,10 @@ export function buildTaskHandoffContext(
     status: task?.status,
     stage: task?.stage,
     kind: task?.task_kind ?? kind,
+    selectedProvider: firstPresentString(task?.selected_provider, task?.result?.selected_provider),
+    parserStrategy: firstPresentString(task?.parser_strategy, task?.result?.parser_strategy),
+    clientAcquisition: summarizeObjectForHandoff(task?.client_acquisition || task?.result?.client_acquisition),
+    parseOutcome: summarizeObjectForHandoff(task?.parse_outcome || task?.result?.parse_outcome),
     reasonCode: task?.reason_code || task?.result?.reason_code || undefined,
     actionHint: task?.action_hint || task?.result?.action_hint || undefined,
     preferredArtifact: task?.preferred_artifact || task?.result?.preferred_artifact || undefined,
@@ -594,12 +624,37 @@ function formatHandoffContextLines(context?: CliHandoffContext | null): string[]
   appendContextLine(lines, "status", context.status);
   appendContextLine(lines, "stage", context.stage);
   appendContextLine(lines, "kind", context.kind);
+  appendContextLine(lines, "selected_provider", context.selectedProvider);
+  appendContextLine(lines, "parser_strategy", context.parserStrategy);
+  appendContextLine(lines, "client_acquisition", context.clientAcquisition);
+  appendContextLine(lines, "parse_outcome", context.parseOutcome);
   appendContextLine(lines, "reason_code", context.reasonCode);
   appendContextLine(lines, "action_hint", context.actionHint);
   appendContextLine(lines, "preferred_artifact", context.preferredArtifact);
   appendContextList(lines, "download_artifacts", context.downloadArtifacts);
   appendContextList(lines, "next_commands", context.nextCommands);
   return lines;
+}
+
+function firstPresentString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return undefined;
+}
+
+function summarizeObjectForHandoff(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([key, item]) => key.length > 0 && item !== null && item !== undefined && item !== "")
+    .slice(0, 12)
+    .map(([key, item]) => `${key}=${String(item)}`);
+  return entries.length ? entries.join(", ") : undefined;
 }
 
 function appendContextLine(lines: string[], label: string, value?: string | null) {
