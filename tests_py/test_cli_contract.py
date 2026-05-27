@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shlex
 import subprocess
 import tomllib
 import urllib.parse
@@ -64,6 +65,63 @@ def mock_doctor_remote_auth_ok(monkeypatch):
             "next_commands": ["mdtero setup", "mdtero setup --api-key --json"],
         },
     )
+
+
+CLI_COMMAND_PLACEHOLDERS = {
+    "<artifact>": "paper_md",
+    "<directory>": "./papers",
+    "<doi-or-url>": "10.48550/arXiv.1706.03762",
+    "<id>": "42",
+    "<name>": "demo",
+    "<paper.pdf|paper.epub|paper.html|paper.xml>": "paper.pdf",
+    "<paper.pdf|paper.html|paper.xml|paper.epub>": "paper.pdf",
+    "<path>": "paper.pdf",
+    "<question>": "What is indexed?",
+    "<refs.bib>": "refs.bib",
+    "<target>": "codex",
+    "<task-id>": "task-123",
+    "<task-id-or-markdown-file>": "task-123",
+    "<topic>": "thermal storage",
+}
+
+
+def assert_agent_cli_command_parses(command: str) -> None:
+    rendered = command.strip()
+    assert rendered.startswith("mdtero "), rendered
+    for placeholder, value in CLI_COMMAND_PLACEHOLDERS.items():
+        rendered = rendered.replace(placeholder, value)
+    parser = build_parser()
+    parser.parse_args(shlex.split(rendered)[1:])
+
+
+def assert_command_list_parses(commands: list[str]) -> None:
+    for command in commands:
+        if command.strip().startswith("mdtero "):
+            assert_agent_cli_command_parses(command)
+
+
+def assert_dashboard_model_commands_parse(model: dict) -> None:
+    assert_command_list_parses(model.get("next_steps") or [])
+    assert_command_list_parses(model.get("extension_handoff", {}).get("commands") or [])
+    assert_command_list_parses(model.get("extension_handoff", {}).get("primary_commands") or [])
+    assert_command_list_parses(model.get("handoff", {}).get("recommended_next_commands") or [])
+    assert_command_list_parses(model.get("mcp", {}).get("recommended_next_commands") or [])
+    assert_command_list_parses(model.get("dashboard_setup_handoff_json", {}).get("next_commands") or [])
+
+    command_values = list((model.get("commands") or {}).values())
+    assert_command_list_parses([str(command) for command in command_values])
+
+    for item in model.get("shortcuts") or []:
+        if isinstance(item, dict):
+            assert_command_list_parses([str(item.get("command") or "")])
+
+    for item in model.get("command_palette") or []:
+        if isinstance(item, dict):
+            assert_command_list_parses([str(item.get("command") or "")])
+
+    for group in model.get("launch_bundle", {}).get("groups") or []:
+        if isinstance(group, dict):
+            assert_command_list_parses([str(command) for command in group.get("commands") or []])
 
 
 def test_parser_exposes_next_gen_command_contract():
@@ -5297,6 +5355,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     init_project(tmp_path, name="tui-demo")
 
     model = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key=None), agent_root=tmp_path)
+    assert_dashboard_model_commands_parse(model)
 
     assert model["health"]["status"] == "needs_auth"
     assert model["health"]["headline"] == "Needs login"
@@ -5500,6 +5559,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
         "action_hint": "Build the server project index before querying.",
         "next_commands": ["mdtero rag build --wait --json", "mdtero rag status --json"],
     })
+    assert_dashboard_model_commands_parse(model)
     rendered = render_dashboard_text(model)
 
     assert model["academic"]["discover_source"] == "local Semantic Scholar"
@@ -5703,6 +5763,7 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
             "provider_configured": True,
         },
     )
+    assert_dashboard_model_commands_parse(model)
     rendered = render_dashboard_text(model)
 
     assert model["health"]["status"] == "ready"
