@@ -513,6 +513,7 @@ def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
+        commands.get("serve_mcp") or "mdtero mcp serve",
     ]
 
 

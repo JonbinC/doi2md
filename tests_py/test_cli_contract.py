@@ -3491,6 +3491,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
         "mdtero rag build --json",
         "mdtero rag status --json",
         "mdtero mcp briefing --json",
+        "mdtero mcp serve",
     ]
     assert commands["commands"]["parse_doi_or_url"] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
     assert commands["commands"]["parse_file"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
@@ -3625,6 +3626,7 @@ def test_mcp_project_bridge_contract_for_agents(tmp_path: Path):
     assert linked["server_project"]["provider"] == "voyage"
     assert linked["binding_source"] == "local_project_file"
     assert linked["bridge_commands"].count("mdtero rag status --json") == 2
+    assert linked["bridge_commands"][-1] == "mdtero mcp serve"
 
 
 def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_path: Path):
@@ -3720,7 +3722,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["project_bridge"]["status"] == "bound"
     assert briefing["project_bridge"]["server_project"]["id"] == "42"
     assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
-    assert briefing["project_bridge"]["bridge_commands"][-1] == "mdtero mcp briefing --json"
+    assert briefing["project_bridge"]["bridge_commands"][-2:] == ["mdtero mcp briefing --json", "mdtero mcp serve"]
     assert briefing["extension_handoff"] == {
         "purpose": "Use the browser extension for OAuth/session-aware page capture and the CLI/MCP tools for local files, campus-network fetches, status polling, downloads, translation, and RAG.",
         "browser_scope": [
@@ -3754,6 +3756,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
             "mdtero rag status --json",
             "mdtero rag query \"<question>\" --build-if-needed --json",
             "mdtero mcp briefing --json",
+            "mdtero mcp serve",
         ],
         "primary_commands": [
             "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
@@ -3790,6 +3793,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
+        "mdtero mcp serve",
     ]
     assert briefing["agents"]["detected_count"] == 1
     assert briefing["agents"]["installed_count"] == 0
@@ -3805,11 +3809,15 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "primary_tool": "agent_briefing",
         "tools": briefing["mcp_tools"],
         "agent_config_hint": {
-            "command": "mdtero",
-            "args": ["mcp", "serve"],
-            "working_directory": str(tmp_path.resolve()),
-            "skill_install_command": "mdtero agent install --interactive",
+            "mcpServers": {
+                "mdtero": {
+                    "command": "mdtero",
+                    "args": ["mcp", "serve"],
+                    "cwd": str(tmp_path.resolve()),
+                }
+            }
         },
+        "skill_install_command": "mdtero agent install --interactive",
         "action_hint": "Start this FastMCP stdio server from the local project root after running `mdtero mcp briefing --json`; agents should call `agent_briefing` before other tools.",
     }
     tool_plan = briefing["mcp_tool_plan"]
@@ -4869,11 +4877,15 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     assert model["mcp"]["server"]["transport"] == "stdio"
     assert model["mcp"]["server"]["agent_config_hint"] == {
-        "command": "mdtero",
-        "args": ["mcp", "serve"],
-        "working_directory": str(tmp_path.resolve()),
-        "skill_install_command": "mdtero agent install --interactive",
+        "mcpServers": {
+            "mdtero": {
+                "command": "mdtero",
+                "args": ["mcp", "serve"],
+                "cwd": str(tmp_path.resolve()),
+            }
+        }
     }
+    assert model["mcp"]["server"]["skill_install_command"] == "mdtero agent install --interactive"
     assert "agent_briefing" in model["mcp"]["tools"]
     assert [step["step"] for step in model["mcp"]["tool_plan"]] == ["brief", "inspect_project", "prepare_rag"]
     assert model["mcp"]["tool_plan"][0]["tool"] == "agent_briefing"
@@ -4903,6 +4915,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
+        "mdtero mcp serve",
     ]
     assert model["extension_handoff"]["primary_commands"] == [
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",

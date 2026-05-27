@@ -2010,7 +2010,7 @@ def _smoke_failure_next_commands(reason_code: str) -> list[str]:
     if reason_code in {"auth_missing", "authentication_required", "unauthorized", "forbidden"}:
         return ["mdtero setup --api-key --json", "mdtero doctor --json", "mdtero smoke --json --timeout 600 --interval 2"]
     if reason_code in {"rag_index_not_built", "project_has_no_chunks", "server_project_import_failed", "rag_failed"}:
-        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json"]
+        return ["mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
     if reason_code == "mcp_briefing_failed" or reason_code.startswith("mcp_briefing_missing_tools"):
         return ["mdtero mcp briefing --json", "mdtero rag status --json", "mdtero mcp serve"]
     if reason_code in {"parse_failed", "task_wait_timeout"}:

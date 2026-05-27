@@ -10,7 +10,44 @@ def ensure_rag_contract(payload: dict[str, Any]) -> dict[str, Any]:
     payload["next_best_action"] = build_rag_next_best_action(payload)
     payload.setdefault("agent_summary", build_rag_agent_summary(payload))
     payload.setdefault("agent_tool_plan", build_rag_agent_tool_plan(payload))
+    payload.setdefault("mcp_server", build_mcp_server_contract(payload))
     return payload
+
+
+def build_mcp_server_contract(payload: dict[str, Any]) -> dict[str, Any]:
+    root = str(payload.get("project_root") or payload.get("local_project_root") or "<local-mdtero-project-root>")
+    return {
+        "name": "mdtero",
+        "runtime": "FastMCP",
+        "transport": "stdio",
+        "serve_command": "mdtero mcp serve",
+        "briefing_command": "mdtero mcp briefing --json",
+        "startup_order": ["mdtero doctor --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
+        "primary_tool": "agent_briefing",
+        "tools": [
+            "agent_briefing",
+            "project_status",
+            "paper_context",
+            "submit_parse",
+            "task_status",
+            "download_artifact",
+            "request_translation",
+            "rag_context",
+            "server_rag_status",
+            "rag_query",
+            "agent_commands",
+        ],
+        "agent_config_hint": {
+            "mcpServers": {
+                "mdtero": {
+                    "command": "mdtero",
+                    "args": ["mcp", "serve"],
+                    "cwd": root,
+                }
+            }
+        },
+        "action_hint": "Start this FastMCP stdio server from the local project root after running `mdtero mcp briefing --json`; agents should call `agent_briefing` before other tools.",
+    }
 
 
 def build_rag_readiness(payload: dict[str, Any]) -> dict[str, Any]:
