@@ -3443,6 +3443,10 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert commands["commands"]["parse_batch"] == "mdtero parse --batch <directory> --wait --timeout 300 --json"
     assert commands["commands"]["doctor"] == "mdtero doctor --json"
     assert commands["commands"]["discover"] == "mdtero discover \"<topic>\" --interactive"
+    assert commands["commands"]["config_academic"] == "mdtero config academic"
+    assert commands["commands"]["config_academic_json"] == "mdtero config academic --json"
+    assert commands["commands"]["discover_interactive"] == "mdtero discover \"<topic>\" --limit 5 --interactive"
+    assert commands["commands"]["discover_add_selected"] == "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json"
     assert commands["commands"]["translate"] == "mdtero translate <task-id-or-markdown-file> --to zh-CN --wait --timeout 600 --json"
     assert commands["commands"]["zotero_import"] == "mdtero zotero import --json"
     assert commands["commands"]["agent_install"] == "mdtero agent install --interactive"
@@ -3526,7 +3530,9 @@ def test_mcp_project_status_guides_uninitialized_agent_workflows(tmp_path: Path)
     assert status["server_project_id"] is None
     assert status["next_commands"] == [
         "mdtero project init --name <name>",
-        "mdtero discover \"<topic>\" --interactive",
+        "mdtero config academic --json",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
@@ -3653,11 +3659,17 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
             "server task returns reason_code/action_hint/next_commands for recovery",
         ],
         "commands": [
+            "mdtero config academic",
+            "mdtero discover \"<topic>\" --limit 5 --interactive",
+            "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
             "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
             "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
             "mdtero status <task-id> --wait --timeout 300 --json",
             "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
             "mdtero project ingest --json",
+            "mdtero project refresh --wait --timeout 300 --json",
+            "mdtero rag build --json",
+            "mdtero rag status --json",
             "mdtero rag query \"<question>\" --build-if-needed --json",
             "mdtero mcp briefing --json",
         ],
@@ -3683,11 +3695,17 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "translation_attempts",
     ]
     assert briefing["handoff_protocol"][1]["commands"] == [
+        "mdtero config academic",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
     ]
@@ -4468,10 +4486,12 @@ def test_mcp_agent_briefing_guides_empty_projects(monkeypatch, tmp_path: Path):
     assert briefing["account"]["api_key_source"] == "missing"
     assert briefing["health"]["pending_count"] == 0
     assert briefing["health"]["rag_reason_code"] == "server_project_not_linked"
-    assert briefing["recommended_next_commands"][:5] == [
+    assert briefing["recommended_next_commands"][:7] == [
         "mdtero setup --api-key --json",
         "mdtero doctor --json",
-        "mdtero discover \"<topic>\" --interactive",
+        "mdtero config academic --json",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
@@ -4489,11 +4509,13 @@ def test_mcp_agent_briefing_guides_uninitialized_directories(monkeypatch, tmp_pa
     assert briefing["project"]["paper_count"] == 0
     assert briefing["health"]["rag_reason_code"] == "project_not_initialized"
     assert briefing["rag"]["reason_code"] == "project_not_initialized"
-    assert briefing["recommended_next_commands"][:6] == [
+    assert briefing["recommended_next_commands"][:8] == [
         "mdtero setup --api-key --json",
         "mdtero doctor --json",
         "mdtero project init --name <name>",
-        "mdtero discover \"<topic>\" --interactive",
+        "mdtero config academic --json",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
@@ -4511,8 +4533,10 @@ def test_mcp_project_status_guides_uninitialized_directories(tmp_path: Path):
     assert status["next_actions"]["commands"]["project_init_named"] == "mdtero project init --name <name>"
     assert commands["workflow"] == [
         "mdtero doctor --json",
+        "mdtero config academic --json",
         "mdtero project init --name <name>",
-        "mdtero discover \"<topic>\" --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
     ]
@@ -4718,16 +4742,27 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
         {"tool": "request_translation", "purpose": "Translate parse task or Markdown with provider-attempt diagnostics"},
         {"tool": "rag_query", "purpose": "Bootstrap/query server-side Voyage RAG with evidence pack"},
     ]
-    assert model["extension_handoff"]["commands"][0] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
-    assert model["extension_handoff"]["commands"][1] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json"
-    assert model["extension_handoff"]["commands"][2:] == [
+    assert model["extension_handoff"]["commands"][:5] == [
+        "mdtero config academic",
+        "mdtero discover \"<topic>\" --limit 5 --interactive",
+        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+    ]
+    assert model["extension_handoff"]["commands"][5:] == [
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
     ]
-    assert model["extension_handoff"]["primary_commands"] == model["extension_handoff"]["commands"][:2]
+    assert model["extension_handoff"]["primary_commands"] == [
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+    ]
     assert "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources" in model["extension_handoff"]["cli_scope"]
     assert "publisher challenge or JavaScript verification page" in model["extension_handoff"]["handoff_triggers"]
     assert model["extension_handoff"]["visible_fields"] == ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"]
