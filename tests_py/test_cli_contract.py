@@ -6849,6 +6849,24 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "failed_steps" in combined
 
 
+def test_public_readme_documents_shared_v1_api_contract():
+    repo_root = Path(__file__).resolve().parents[1]
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+
+    assert "Shared `/api/v1` server contract" in readme
+    assert "/api/v1/route" in readme
+    assert "/api/v1/tasks/parse" in readme
+    assert "/api/v1/tasks/upload" in readme
+    assert "/api/v1/tasks/{task_id}" in readme
+    assert "/api/v1/tasks/{task_id}/download/{artifact}" in readme
+    assert "/api/v1/projects/{project_id}/tasks/{task_id}/import" in readme
+    assert "/api/v1/projects/{project_id}/rag/build" in readme
+    assert "/api/v1/projects/{project_id}/rag/query" in readme
+    assert "The CLI, extension, dashboard, and MCP briefing expose this contract" in readme
+    assert "所有输入入口共用同一组 `/api/v1` 服务端契约" in readme
+    assert "CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract" in readme
+
+
 def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
     repo_root = Path(__file__).resolve().parents[1]
     combined_docs = "\n".join(
