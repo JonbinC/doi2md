@@ -33,6 +33,21 @@ const COPY = {
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
+    cliOnboardingTitle: "CLI setup checklist",
+    cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
+    cliOnboardingPill: "Python / uv",
+    cliOnboardingItems: [
+      ["Install", "uv tool install git+https://github.com/JonbinC/doi2md.git", "Install the public Python client; the extension never installs Python dependencies."],
+      ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
+      ["Checklist", "mdtero setup --json", "Return the same secret-safe onboarding checklist used by local agents."],
+      ["Academic keys", "mdtero config academic", "Optional academic resource keys stay in local CLI config."],
+      ["Discover", "mdtero discover \"<topic>\" --limit 5 --interactive", "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
+      ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
+      ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
+      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "Backend Voyage RAG is driven by the CLI project."],
+      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, and RAG readiness to local agents."],
+      ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
+    ],
     guideTitle: "Connection guide",
     setupStepAuth: "OAuth",
     setupStepParse: "Parse / Upload",
@@ -92,6 +107,21 @@ const COPY = {
     cliHandoffGuideBoundary: "扩展不安装 Python 依赖、不运行本地 helper，也不保存 Elsevier/Wiley/Semantic Scholar key；这些只留在本地 CLI 的 `mdtero config academic`。",
     copyCliHandoffGuide: "复制交接",
     cliHandoffGuideCopied: "CLI 交接已复制。",
+    cliOnboardingTitle: "CLI 配置清单",
+    cliOnboardingNote: "Python 客户端负责本地抓取、项目队列、Zotero、后端 Voyage RAG、MCP 和 agent skill。",
+    cliOnboardingPill: "Python / uv",
+    cliOnboardingItems: [
+      ["安装", "uv tool install git+https://github.com/JonbinC/doi2md.git", "安装公开 Python 客户端；扩展不会安装 Python 依赖。"],
+      ["鉴权", "mdtero setup", "工作站走网页登录 OAuth；可信无头服务器可走 API-key setup。"],
+      ["检查清单", "mdtero setup --json", "返回给本地 agent 使用的同一份 secret-safe onboarding checklist。"],
+      ["学术 key", "mdtero config academic", "学术资源 key 都是可选增强，只存在本地 CLI 配置。"],
+      ["发现", "mdtero discover \"<topic>\" --limit 5 --interactive", "有 Semantic Scholar 时走本地；否则走服务端 OpenAlex。"],
+      ["解析", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "保留 route、client_acquisition、reason_code、action_hint 和 artifacts。"],
+      ["文件上传", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "浏览器保存的文件或 publisher challenge 页面交给 CLI 继续。"],
+      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "后端 Voyage RAG 由 CLI 项目驱动。"],
+      ["MCP briefing", "mdtero mcp briefing --json", "把账户、项目、extension_handoff 和 RAG readiness 暴露给本地 agent。"],
+      ["Agent skill", "mdtero agent install --interactive", "动态检测 Codex、Claude、Gemini、Hermes、OpenCode，并用空格多选安装。"]
+    ],
     guideTitle: "连接引导",
     setupStepAuth: "网页登录",
     setupStepParse: "解析 / 上传",
@@ -153,6 +183,10 @@ const cliHandoffGuideNoteEl = document.querySelector<HTMLParagraphElement>("#cli
 const cliHandoffGuideBoundaryEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-guide-boundary");
 const cliHandoffGuideCommandEl = document.querySelector<HTMLElement>("#cli-handoff-guide-command");
 const copyCliHandoffGuideButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff-guide");
+const cliOnboardingTitleEl = document.querySelector<HTMLHeadingElement>("#cli-onboarding-title");
+const cliOnboardingNoteEl = document.querySelector<HTMLParagraphElement>("#cli-onboarding-note");
+const cliOnboardingPillEl = document.querySelector<HTMLSpanElement>("#cli-onboarding-pill");
+const cliOnboardingListEl = document.querySelector<HTMLDivElement>("#cli-onboarding-list");
 const connectionGuideTitleEl = document.querySelector<HTMLHeadingElement>("#connection-guide-title");
 const connectionGuideListEl = document.querySelector<HTMLDivElement>("#connection-guide-list");
 const setupStepAuthEl = document.querySelector<HTMLSpanElement>("#setup-step-auth");
@@ -260,6 +294,10 @@ function applyLanguage() {
   if (cliHandoffGuideBoundaryEl) cliHandoffGuideBoundaryEl.textContent = copy.cliHandoffGuideBoundary;
   if (cliHandoffGuideCommandEl) cliHandoffGuideCommandEl.textContent = CLI_HANDOFF_GUIDE_COMMAND;
   if (copyCliHandoffGuideButton) copyCliHandoffGuideButton.textContent = copy.copyCliHandoffGuide;
+  if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
+  if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
+  if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
+  renderCliOnboardingList();
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
   setStepText(setupStepParseEl, "2", copy.setupStepParse);
@@ -269,6 +307,36 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+
+function renderCliOnboardingList() {
+  if (!cliOnboardingListEl) return;
+  const copy = copyFor(uiLanguage);
+  cliOnboardingListEl.textContent = "";
+  copy.cliOnboardingItems.forEach(([title, command, detail], index) => {
+    const row = document.createElement("div");
+    row.className = "onboarding-item";
+    const icon = document.createElement("span");
+    icon.className = "guide-index";
+    icon.textContent = String(index + 1);
+    const body = document.createElement("div");
+    body.className = "onboarding-body";
+    const heading = document.createElement("p");
+    heading.className = "onboarding-title";
+    heading.textContent = title;
+    const commandEl = document.createElement("code");
+    commandEl.className = "onboarding-command";
+    commandEl.textContent = command;
+    const detailEl = document.createElement("p");
+    detailEl.className = "meta-label";
+    detailEl.textContent = detail;
+    body.appendChild(heading);
+    body.appendChild(commandEl);
+    body.appendChild(detailEl);
+    row.appendChild(icon);
+    row.appendChild(body);
+    cliOnboardingListEl.appendChild(row);
+  });
 }
 
 function setStepText(element: HTMLSpanElement | null, index: string, label: string) {

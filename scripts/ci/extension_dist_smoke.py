@@ -59,6 +59,9 @@ POPUP_REQUIRED_MARKERS = (
 OPTIONS_REQUIRED_MARKERS = (
     "Website sign-in",
     "Connection guide",
+    "CLI setup checklist",
+    "mdtero setup --json",
+    "mdtero agent install --interactive",
     "Website OAuth is connected",
     "browser capture, upload, translation, and download settings",
 )

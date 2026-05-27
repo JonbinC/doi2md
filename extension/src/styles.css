@@ -296,7 +296,8 @@ summary,
 
 .support-stack,
 .capability-config-grid,
-.guide-list {
+.guide-list,
+.onboarding-list {
   display: grid;
   gap: 10px;
   margin-top: 10px;
@@ -306,6 +307,7 @@ summary,
 .capability-config-card,
 .auth-website-panel,
 .guide-item,
+.onboarding-item,
 .history-item,
 .recent-item {
   border: 1px solid var(--border);
@@ -316,7 +318,8 @@ summary,
 .support-group,
 .capability-config-card,
 .auth-website-panel,
-.guide-item {
+.guide-item,
+.onboarding-item {
   padding: 11px;
 }
 
@@ -325,6 +328,41 @@ summary,
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 9px;
+}
+
+.onboarding-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.onboarding-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.onboarding-title {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.onboarding-command {
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(47, 26, 18, 0.04);
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .guide-index {
