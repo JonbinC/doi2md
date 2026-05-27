@@ -6,7 +6,7 @@ from typing import Any
 from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config
-from .onboarding import build_academic_onboarding_summary, build_onboarding_checklist
+from .onboarding import build_academic_onboarding_summary, build_input_route_contract, build_onboarding_checklist
 from .projects import PaperRecord, add_paper, bind_server_project, init_project, load_project, paper_from_submission, paper_to_document, project_documents, project_path, update_task
 from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
@@ -1339,6 +1339,7 @@ def build_agent_briefing(
             agent_detection_skipped=False,
         ),
         "project_bridge": build_project_bridge(root),
+        "input_routes": build_input_route_contract(),
         "extension_handoff": _extension_handoff_payload(commands),
         "handoff_protocol": _agent_handoff_protocol(commands),
         "agents": {
@@ -1458,7 +1459,7 @@ def _build_mcp_tool_plan(
             "purpose": "Read the account, local project, server RAG, installed agent skills, and recommended next commands before using other Mdtero tools.",
             "when": "Always call this first in a new agent session or after a failed Mdtero action.",
             "arguments": {},
-            "success_signal": "Payload includes project, account, health, rag, project_bridge, extension_handoff, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
+            "success_signal": "Payload includes project, account, health, rag, project_bridge, input_routes, extension_handoff, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
             "failure_fields": ["reason_code", "action_hint", "next_commands"],
         },
         {
