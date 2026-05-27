@@ -1,12 +1,8 @@
 name: Public CLI and Extension CI
 
 on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
+  # Forgejo Actions is the private CI entrypoint during migration. This
+  # GitHub workflow remains manual-only for rollback/public ecosystem checks.
   workflow_dispatch:
 
 permissions:
