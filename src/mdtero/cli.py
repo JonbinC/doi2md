@@ -2513,7 +2513,7 @@ def _project_create_server_failure(state: Any, exc: Exception, *, project: dict[
         "http_status": status_code,
         "error_type": exc.__class__.__name__,
         "action_hint": action_hint,
-        "next_commands": ["mdtero doctor --json", "mdtero project create-server --json", "mdtero rag build --json", "mdtero rag status --json"],
+        "next_commands": ["mdtero doctor --json", "mdtero project create-server --json", ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --json"],
     }
     if project is not None:
         payload["server_response"] = project

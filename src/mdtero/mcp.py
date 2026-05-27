@@ -1885,7 +1885,7 @@ def _server_rag_action_hint(status: dict[str, Any], commands: dict[str, Any]) ->
     if readiness.get("needs_build") or readiness.get("next_step") == "build":
         return server_hint or f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to build or refresh the server-side Voyage index and query the project."
     if readiness.get("needs_ingest") or readiness.get("next_step") == "ingest":
-        return server_hint or "Import succeeded parse tasks with `mdtero project ingest --json`, then run `mdtero rag build --json`."
+        return server_hint or f"Import succeeded parse tasks with `mdtero project ingest --json`, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can build backend Voyage RAG and query in one step."
     return server_hint or f"Check server-side Voyage RAG status, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` if the project is not query-ready."
 
 
