@@ -2066,7 +2066,7 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
         "auth_boundary": {
             "workstation": "Use browser OAuth with `mdtero setup` for a normal Mac or desktop workstation.",
             "headless": "Use `mdtero setup --api-key --json` only for trusted headless servers or agent sessions; paste the one-time secret only when the CLI prompts for it.",
-            "secret_transport": "Copy the full API key secret separately from the dashboard dialog. This JSON intentionally does not include the secret value.",
+            "secret_transport": "Copy the full API key secret separately from the dashboard dialog, then paste it only into the secure CLI prompt. This JSON intentionally does not include the secret value.",
             "dashboard_secret_retention": "The full secret is shown once. After the dialog closes the dashboard only shows the prefix identifier.",
         },
         "api_key": {

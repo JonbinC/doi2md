@@ -5299,6 +5299,19 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["rag"]["reason_code"] == "no_succeeded_tasks"
     assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
+    setup_handoff = model["dashboard_setup_handoff_json"]
+    assert model["mcp"]["dashboard_setup_handoff_json"] == setup_handoff
+    assert setup_handoff["source"] == "dashboard_api_key_dialog"
+    assert setup_handoff["first_cli_command"] == "mdtero setup --api-key --json"
+    assert setup_handoff["api_key"]["full_secret_shown_once"] is True
+    assert setup_handoff["api_key"]["full_secret_included"] is False
+    assert "secure CLI prompt" in setup_handoff["auth_boundary"]["secret_transport"]
+    assert setup_handoff["rag"]["owner"] == "backend_voyage"
+    assert setup_handoff["rag"]["local_voyage_key_required"] is False
+    assert setup_handoff["mcp"]["first_tool"] == "agent_briefing"
+    assert "mdtero mcp briefing --json" in setup_handoff["next_commands"]
+    assert "mdtero mcp serve" in setup_handoff["next_commands"]
+    assert "VOYAGE_API_KEY" not in str(setup_handoff)
     assert model["mcp"]["server"]["transport"] == "stdio"
     assert model["mcp"]["server"]["agent_config_hint"] == {
         "mcpServers": {
@@ -5386,7 +5399,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["launch_bundle"]["copy_hint"] == "Copy one group into a terminal or agent prompt; commands are ordered and JSON-first where possible."
     launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
     assert list(launch_groups) == ["Setup", "Parse", "Project", "RAG + MCP", "Extension handoff"]
-    assert launch_groups["Setup"]["commands"][:3] == ["mdtero doctor --json", "mdtero setup", "mdtero setup --api-key --json"]
+    assert launch_groups["Setup"]["commands"][:4] == ["mdtero doctor --json", "mdtero setup", "mdtero setup --api-key --json", "mdtero mcp briefing --json"]
     assert "mdtero agent detect --json" in launch_groups["Setup"]["commands"]
     assert "mdtero agent install --interactive" in launch_groups["Setup"]["commands"]
     assert "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json" in launch_groups["Parse"]["commands"]
@@ -5530,6 +5543,11 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Mdtero Control Console" in output
     assert "Launch path" in output
     assert "build_rag" in output
+    assert "Dashboard Setup Handoff" in output
+    assert "dashboard_api_key_dialog" in output
+    assert "full_secret_included=false" in output
+    assert "secure CLI prompt" in output
+    assert "backend_voyage" in output
     assert "Readiness" in output
     assert "Onboarding Checklist" in output
     assert "Results ready" in output
