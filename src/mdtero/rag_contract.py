@@ -7,6 +7,7 @@ def ensure_rag_contract(payload: dict[str, Any]) -> dict[str, Any]:
     """Backfill the shared server/CLI/MCP RAG readiness contract."""
 
     payload.setdefault("readiness", build_rag_readiness(payload))
+    payload["next_best_action"] = build_rag_next_best_action(payload)
     payload.setdefault("agent_summary", build_rag_agent_summary(payload))
     payload.setdefault("agent_tool_plan", build_rag_agent_tool_plan(payload))
     return payload
@@ -105,6 +106,59 @@ def build_rag_agent_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "match_count": readiness.get("match_count", 0),
         "next_commands": _next_commands(payload),
     }
+
+
+def build_rag_next_best_action(payload: dict[str, Any]) -> dict[str, Any]:
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else build_rag_readiness(payload)
+    reason_code = str(payload.get("reason_code") or "unknown").strip() or "unknown"
+    next_commands = _next_commands(payload)
+    primary_command = next_commands[0] if next_commands else "mdtero rag status --json"
+    if readiness.get("provider_blocked"):
+        action = "check_backend_provider"
+        scope = "backend_operations"
+        hint = "Backend Voyage RAG is blocked; users should wait for backend provider configuration rather than setting a local Voyage key."
+    elif readiness.get("ready_for_query"):
+        action = "query"
+        scope = "user_or_agent"
+        hint = "RAG is ready; ask a grounded project question and preserve answer, citations, source_nodes, and evidence_pack."
+    elif readiness.get("needs_build"):
+        action = "build"
+        scope = "user_or_agent"
+        hint = "Imported chunks exist but embeddings are incomplete; build or rebuild server-side Voyage RAG before querying."
+    elif readiness.get("needs_ingest"):
+        action = "ingest"
+        scope = "user_or_agent"
+        hint = "Import succeeded parse Markdown artifacts into the bound server project before building RAG."
+    else:
+        action = "inspect_status"
+        scope = "user_or_agent"
+        hint = "Inspect project and server RAG status before choosing parse, ingest, build, or query."
+    primary_command = _primary_command_for_action(action, next_commands, fallback=primary_command)
+    return {
+        "action": action,
+        "scope": scope,
+        "reason_code": reason_code,
+        "readiness_status": readiness.get("readiness_status"),
+        "next_step": readiness.get("next_step"),
+        "primary_command": primary_command,
+        "action_hint": hint,
+        "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
+    }
+
+
+def _primary_command_for_action(action: str, commands: list[str], *, fallback: str) -> str:
+    prefixes = {
+        "check_backend_provider": ("mdtero rag status",),
+        "query": ("mdtero rag query",),
+        "build": ("mdtero rag build",),
+        "ingest": ("mdtero project ingest",),
+        "inspect_status": ("mdtero rag status", "mdtero project status"),
+    }.get(action, ())
+    for prefix in prefixes:
+        for command in commands:
+            if command.startswith(prefix):
+                return command
+    return fallback
 
 
 def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
