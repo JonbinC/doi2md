@@ -62,6 +62,15 @@ def build_dashboard_model(
         next_steps=next_steps,
         extension_handoff=extension_handoff,
     )
+    launch_summary = _launch_summary_payload(
+        cfg=cfg,
+        project=project,
+        rag=rag,
+        detected_agent_count=len(detected_agents),
+        installed_agent_count=len(installed_agents),
+        launch_bundle=launch_bundle,
+        next_steps=next_steps,
+    )
     handoff = {
         "ready_artifacts": briefing["ready_artifacts"],
         "blocked_items": briefing["blocked_items"],
@@ -138,6 +147,7 @@ def build_dashboard_model(
         },
         "extension_handoff": extension_handoff,
         "onboarding_checklist": onboarding_checklist,
+        "launch_summary": launch_summary,
         "launch_bundle": launch_bundle,
         "handoff": handoff,
         "command_palette": command_palette,
@@ -633,6 +643,79 @@ def _launch_bundle_payload(
     }
 
 
+def _launch_summary_payload(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    detected_agent_count: int,
+    installed_agent_count: int,
+    launch_bundle: dict[str, Any],
+    next_steps: list[str],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "id": "auth",
+            "label": "Auth",
+            "ready": cfg.is_authenticated,
+            "detail": cfg.api_key_source if cfg.is_authenticated else "run mdtero setup",
+        },
+        {
+            "id": "project",
+            "label": "Project",
+            "ready": bool(project.papers),
+            "detail": f"{len(project.papers)} paper(s)" if project.papers else "add DOI, file, BibTeX, or Zotero items",
+        },
+        {
+            "id": "results",
+            "label": "Parsed results",
+            "ready": any(paper.status == "succeeded" for paper in project.papers),
+            "detail": f"{sum(1 for paper in project.papers if paper.status == 'succeeded')} succeeded",
+        },
+        {
+            "id": "rag",
+            "label": "Backend RAG",
+            "ready": bool(rag.get("server_status") == "ready" or (project.server_project_id and rag.get("ready"))),
+            "detail": str(rag.get("server_status") or rag.get("reason_code") or "not linked"),
+        },
+        {
+            "id": "agents",
+            "label": "Agent skills",
+            "ready": bool(detected_agent_count and installed_agent_count >= detected_agent_count),
+            "detail": f"{installed_agent_count}/{detected_agent_count} installed" if detected_agent_count else "no workspace detected",
+        },
+    ]
+    ready_count = sum(1 for item in checks if item["ready"])
+    total_count = len(checks)
+    blocked = [item for item in checks if not item["ready"]]
+    primary_group = str(launch_bundle.get("primary_group") or "Setup")
+    if not cfg.is_authenticated:
+        primary_path = "authenticate"
+    elif not project.papers:
+        primary_path = "discover_or_parse"
+    elif not any(paper.status == "succeeded" for paper in project.papers):
+        primary_path = "parse_queue"
+    elif rag.get("server_status") == "ready":
+        primary_path = "query_rag_or_serve_mcp"
+    else:
+        primary_path = "build_rag"
+    return {
+        "readiness_score": round(ready_count / total_count, 2),
+        "ready_count": ready_count,
+        "total_count": total_count,
+        "primary_path": primary_path,
+        "primary_group": primary_group,
+        "primary_next_command": next_steps[0] if next_steps else "mdtero doctor --json",
+        "blocked_checks": blocked,
+        "checks": checks,
+        "recommended_flow": _dedupe_commands([
+            "mdtero setup" if not cfg.is_authenticated else "mdtero doctor --json",
+            *(next_steps[:3]),
+            "mdtero mcp briefing --json",
+        ]),
+    }
+
+
 def _dedupe_commands(commands: list[Any]) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
@@ -705,12 +788,19 @@ def _command_palette_payload(
 
 def _hero_panel(model: dict[str, Any]) -> Panel:
     health = model["health"]
+    launch = model.get("launch_summary") if isinstance(model.get("launch_summary"), dict) else {}
     grid = Table.grid(expand=True)
     grid.add_column(ratio=2)
     grid.add_column(ratio=3)
     grid.add_row(Text(str(health["headline"]), style="bold"), str(health["detail"]))
     grid.add_row("Primary next command", str(health["primary_next_command"]))
     grid.add_row("Status code", str(health["status"]))
+    if launch:
+        grid.add_row("Launch path", str(launch.get("primary_path") or "-"))
+        grid.add_row("Readiness", f"{launch.get('ready_count', 0)}/{launch.get('total_count', 0)} checks ({launch.get('readiness_score', 0):.0%})")
+        blocked = launch.get("blocked_checks") if isinstance(launch.get("blocked_checks"), list) else []
+        if blocked:
+            grid.add_row("Needs", ", ".join(str(item.get("label") or item.get("id") or "-") for item in blocked[:4]))
 
     cards = Table.grid(expand=True)
     cards.add_column(ratio=1)
