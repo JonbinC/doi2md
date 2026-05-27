@@ -164,7 +164,7 @@ def build_rag_next_best_action(payload: dict[str, Any]) -> dict[str, Any]:
     elif readiness.get("needs_build"):
         action = "build"
         scope = "user_or_agent"
-        hint = "Imported chunks exist but embeddings are incomplete; build or rebuild server-side Voyage RAG before querying."
+        hint = "Imported chunks exist but embeddings are incomplete; prefer the one-command RAG bootstrap query so the CLI can build backend Voyage RAG and query without a separate server project id step."
     elif readiness.get("needs_ingest"):
         action = "ingest"
         scope = "user_or_agent"
@@ -205,7 +205,7 @@ def _primary_command_for_action(action: str, commands: list[str], *, fallback: s
     prefixes = {
         "check_backend_provider": ("mdtero rag status",),
         "query": ("mdtero rag query",),
-        "build": ("mdtero rag build",),
+        "build": ("mdtero rag query", "mdtero rag build"),
         "ingest": ("mdtero project ingest",),
         "inspect_status": ("mdtero rag status", "mdtero project status"),
     }.get(action, ())
@@ -276,12 +276,12 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         })
     elif needs_build:
         plan.append({
-            "step": "build_rag_index",
-            "tool": "rag_build",
-            "purpose": "Create or refresh server-side Voyage embeddings for imported project chunks.",
+            "step": "bootstrap_rag_query",
+            "tool": "rag_query",
+            "purpose": "Run the one-command RAG bootstrap query; the CLI can build backend Voyage embeddings when needed, then return grounded evidence.",
             "when": "readiness.needs_build is true or reason_code is rag_index_not_built/rag_index_partial.",
             "arguments": {"project_id": project_id},
-            "success_signal": "readiness.ready_for_query is true and reason_code is indexed.",
+            "success_signal": "reason_code is rag_query_succeeded/no_matches, or readiness.ready_for_query becomes true after the build-if-needed path.",
             "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
             "next_commands": next_commands,
         })
