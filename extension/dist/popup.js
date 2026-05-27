@@ -442,6 +442,41 @@ function getSourceArtifactKeys(result) {
   const artifactKeys = getArtifactKeys(result);
   return SOURCE_ORDER.filter((key) => artifactKeys.includes(key));
 }
+function getTaskProcessingSummary(task, language = "en") {
+  const result = task?.result;
+  const provider = firstPresentString(task?.selected_provider, result?.selected_provider);
+  const strategy = firstPresentString(task?.parser_strategy, result?.parser_strategy);
+  const acquisition = summarizeClientAcquisition(task?.client_acquisition || result?.client_acquisition);
+  const outcome = summarizeParseOutcome(task?.parse_outcome || result?.parse_outcome);
+  const reason = firstPresentString(task?.reason_code, result?.reason_code);
+  const actionHint = firstPresentString(task?.action_hint, result?.action_hint);
+  const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
+  const artifacts = summarizeDownloadArtifacts(result);
+  const lines = [];
+  if (provider || strategy) {
+    const value = [provider, strategy].filter(Boolean).join(" \xB7 ");
+    lines.push(language === "zh" ? `\u5904\u7406\u8DEF\u5F84\uFF1A${value}` : `Processing path: ${value}`);
+  }
+  if (acquisition) {
+    lines.push(language === "zh" ? `\u672C\u5730/\u6D4F\u89C8\u5668\u6293\u53D6\uFF1A${acquisition}` : `Acquisition: ${acquisition}`);
+  }
+  if (outcome) {
+    lines.push(language === "zh" ? `\u89E3\u6790\u7ED3\u679C\uFF1A${outcome}` : `Outcome: ${outcome}`);
+  }
+  if (preferredArtifact) {
+    lines.push(language === "zh" ? `\u9996\u9009\u4EA7\u7269\uFF1A${preferredArtifact}` : `Preferred artifact: ${preferredArtifact}`);
+  }
+  if (artifacts) {
+    lines.push(language === "zh" ? `\u53EF\u4E0B\u8F7D\uFF1A${artifacts}` : `Downloads: ${artifacts}`);
+  }
+  if (reason) {
+    lines.push(language === "zh" ? `\u539F\u56E0\uFF1A${reason}` : `Reason: ${reason}`);
+  }
+  if (actionHint) {
+    lines.push(language === "zh" ? `\u4E0B\u4E00\u6B65\uFF1A${redactSensitiveText(actionHint)}` : `Next: ${redactSensitiveText(actionHint)}`);
+  }
+  return lines.map(redactSensitiveText).filter(Boolean);
+}
 function getDownloadLabel(artifactKey, language = "en") {
   if (language === "zh") {
     if (artifactKey === "paper_md") {
@@ -787,6 +822,38 @@ function firstPresentString(...values) {
   }
   return void 0;
 }
+function summarizeClientAcquisition(value) {
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const record = value;
+  const source = firstPresentString(record.source);
+  const artifactKind = firstPresentString(record.artifact_kind, record.kind);
+  const statusCode = firstPresentString(record.status_code);
+  const contentType = firstPresentString(record.content_type);
+  const parts = [source, artifactKind, statusCode ? `HTTP ${statusCode}` : void 0, contentType].filter(Boolean);
+  return parts.length ? parts.join(" \xB7 ") : summarizeObjectForHandoff(value);
+}
+function summarizeParseOutcome(value) {
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const record = value;
+  const outcome = firstPresentString(record.outcome_code, record.outcome, record.status);
+  const reason = firstPresentString(record.reason_code);
+  const parts = [outcome, reason].filter(Boolean);
+  return parts.length ? parts.join(" \xB7 ") : summarizeObjectForHandoff(value);
+}
+function summarizeDownloadArtifacts(result) {
+  const listed = (result?.download_artifacts ?? []).map((artifact) => {
+    const name = firstPresentString(artifact.artifact);
+    const filename = firstPresentString(artifact.filename);
+    return [name, filename].filter(Boolean).join(": ");
+  }).filter(Boolean);
+  const keyed = Object.entries(result?.artifacts ?? {}).map(([artifact, descriptor]) => [artifact, descriptor?.filename].filter(Boolean).join(": ")).filter(Boolean);
+  const artifacts = Array.from(/* @__PURE__ */ new Set([...listed, ...keyed]));
+  return artifacts.length ? artifacts.join("; ") : void 0;
+}
 function summarizeObjectForHandoff(value) {
   if (!value || typeof value !== "object") {
     return void 0;
@@ -994,6 +1061,8 @@ var translateLanguageLabelEl = document.querySelector("#translate-language-label
 var translateButton = document.querySelector("#translate-button");
 var translateLanguageEl = document.querySelector("#translate-language");
 var resultEl = document.querySelector("#result");
+var taskSummaryEl = document.querySelector("#task-summary");
+var taskSummaryListEl = document.querySelector("#task-summary-list");
 var cliHandoffEl = document.querySelector("#cli-handoff");
 var cliHandoffNoteEl = document.querySelector("#cli-handoff-note");
 var cliHandoffCommandEl = document.querySelector("#cli-handoff-command");
@@ -1031,6 +1100,19 @@ function setResult(message) {
   if (resultEl) {
     resultEl.textContent = message;
   }
+}
+function setTaskSummary(lines) {
+  if (!taskSummaryEl || !taskSummaryListEl) {
+    return;
+  }
+  taskSummaryListEl.innerHTML = "";
+  const visibleLines = (lines ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 7);
+  taskSummaryEl.hidden = visibleLines.length === 0;
+  visibleLines.forEach((line) => {
+    const item = document.createElement("li");
+    item.textContent = line;
+    taskSummaryListEl.appendChild(item);
+  });
 }
 function setWorkflowStep(element, state) {
   if (!element) return;
@@ -1470,6 +1552,7 @@ async function pollTask(taskId, kind) {
   }
   const task = response.result;
   if (task.status === "failed") {
+    setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     setResult(
       getTaskFailureText(
         task,
@@ -1510,6 +1593,7 @@ async function pollTask(taskId, kind) {
     setResult(
       getActionStatusText(kind === "parse" ? "running_parse" : "running_translate", uiLanguage)
     );
+    setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     window.setTimeout(() => {
       void pollTask(taskId, kind);
     }, 1500);
@@ -1526,6 +1610,7 @@ async function pollTask(taskId, kind) {
     };
   }
   setCliHandoff(null);
+  setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
   renderArtifacts(task);
   await persistPopupState(task);
   await renderRecentTasks();
@@ -1665,6 +1750,7 @@ function setLocalFileName(filename) {
 async function submitLocalFile(file, artifactKind) {
   currentInput = file.name;
   detectedPageContext = null;
+  setTaskSummary(null);
   setLocalFileName(file.name);
   isParsing = true;
   updateWorkflowState();
@@ -1706,6 +1792,7 @@ parseButton?.addEventListener("click", async () => {
     return;
   }
   currentInput = input;
+  setTaskSummary(null);
   isParsing = true;
   updateWorkflowState();
   renderActionButtons();

@@ -639,6 +639,32 @@ button:disabled {
   font-weight: 550;
 }
 
+.task-summary {
+  margin-top: 9px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: var(--radius-md);
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.task-summary[hidden] {
+  display: none;
+}
+
+.task-summary ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.task-summary li {
+  color: var(--secondary-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .cli-handoff {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

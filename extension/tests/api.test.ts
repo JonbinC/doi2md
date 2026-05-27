@@ -203,6 +203,7 @@ describe("createApiClient", () => {
     expect(route.action_sequence).toEqual(["server_parse"]);
     expect(route.server_entrypoint).toBe("/api/v1/tasks/parse");
     expect(route.upload_entrypoint).toBe("/api/v1/tasks/upload");
+    expect(route.client_command).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
   });
 
   it("uploads raw artifact payloads through the v1 upload route", async () => {
