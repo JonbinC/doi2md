@@ -10,11 +10,13 @@ function normalizeCliHandoffCommand(command) {
   if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
     return trimmed;
   }
+  const isFileParse = /^mdtero\s+parse\s+--file\b/.test(trimmed);
+  const timeout = isFileParse ? 600 : 300;
   const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
   const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
   const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
   const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --timeout 300 --json`;
+  return `${withoutWait} --trace --wait --timeout ${timeout} --json`;
 }
 function buildCliParseCommand(input) {
   const normalized = String(input || "").trim();
@@ -30,7 +32,7 @@ function buildCliFileParseCommand(filename, artifactKind) {
   const normalized = String(filename || "").trim();
   const extension = inferFileExtension(normalized, artifactKind);
   const path = normalized || `paper.${extension}`;
-  return `mdtero parse --file ${shellQuote(path)} --trace --wait --timeout 300 --json`;
+  return `mdtero parse --file ${shellQuote(path)} --trace --wait --timeout 600 --json`;
 }
 function inferFileExtension(filename, artifactKind) {
   const normalized = String(filename || "").trim().toLowerCase();
@@ -665,7 +667,7 @@ var PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero project refresh --wait --timeout 300 --json",
   'mdtero rag query "What are the strongest findings?" --build-if-needed --json',
   "mdtero rag status --json",
-  "mdtero rag build --json",
+  "mdtero rag build --wait --json",
   'mdtero rag query "<question>" --build-if-needed --json',
   "mdtero mcp briefing --json",
   "mdtero mcp serve"
@@ -682,13 +684,13 @@ function buildCliHandoffCommandPlan(primaryCommand, planCommands) {
   const projectRefreshCommands = commands.filter((command) => command === "mdtero project refresh --wait --timeout 300 --json");
   const ragBootstrapCommands = commands.filter((command) => command === PARSE_HANDOFF_FOLLOWUPS[4]);
   const ragStatusCommands = commands.filter((command) => command === "mdtero rag status --json");
-  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --json");
+  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --wait --json");
   const ragQueryCommands = commands.filter((command) => /^mdtero\s+rag\s+query\b/.test(command));
   const genericRagQueryCommands = ragQueryCommands.filter((command) => command !== PARSE_HANDOFF_FOLLOWUPS[4]);
   const mcpBriefingCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
   const mcpServeCommands = commands.filter((command) => command === "mdtero mcp serve");
   const otherCommands = commands.filter(
-    (command) => command !== primary && !/^mdtero\s+status\b/.test(command) && !/^mdtero\s+download\b/.test(command) && command !== "mdtero project ingest --json" && command !== "mdtero project refresh --wait --timeout 300 --json" && command !== "mdtero rag build --json" && command !== "mdtero rag status --json" && !/^mdtero\s+rag\s+query\b/.test(command) && command !== "mdtero mcp briefing --json" && command !== "mdtero mcp serve"
+    (command) => command !== primary && !/^mdtero\s+status\b/.test(command) && !/^mdtero\s+download\b/.test(command) && command !== "mdtero project ingest --json" && command !== "mdtero project refresh --wait --timeout 300 --json" && command !== "mdtero rag build --wait --json" && command !== "mdtero rag status --json" && !/^mdtero\s+rag\s+query\b/.test(command) && command !== "mdtero mcp briefing --json" && command !== "mdtero mcp serve"
   );
   return normalizeCommandList([
     primary,
@@ -728,6 +730,7 @@ function formatCliHandoffClipboard(primaryCommand, planCommands, context) {
       "Agent handoff:",
       "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
       "- Start `mdtero mcp serve` from the local project root when the agent needs live FastMCP stdio tools.",
+      "- When `mcp_tool_plan` says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`.",
       '- Use `mdtero rag query "<question>" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.',
       "- Preserve `citation_contract.required_for_final_answer`; final RAG answers must keep `citations` and `source_nodes` alongside the prose answer."
     ] : []

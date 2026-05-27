@@ -420,8 +420,8 @@ describe("getCliHandoffNote", () => {
   });
 
   it("explains file-upload command placeholders separately", () => {
-    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json", "en")).toContain("replace the path");
-    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json", "zh")).toContain("文件路径");
+    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json", "en")).toContain("replace the path");
+    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json", "zh")).toContain("文件路径");
   });
 
   it("redacts sensitive URLs and provider secrets from task failure text", () => {
@@ -522,7 +522,7 @@ describe("getDownloadFailureText", () => {
       primaryCommand: "mdtero status task-123 --wait --timeout 300 --json",
       commands: [
         "mdtero status task-123 --wait --timeout 300 --json",
-        "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+        "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
       ],
       source: "backend_task",
       kind: "parse"
@@ -533,7 +533,7 @@ describe("getDownloadFailureText", () => {
       actionHint: "Inspect task status before retrying.",
       nextCommands: [
         "mdtero status task-123 --wait --timeout 300 --json",
-        "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+        "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
       ]
     });
   });
@@ -589,7 +589,7 @@ describe("getTaskFailureText", () => {
         "en"
       )
     ).toBe(
-      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
     );
   });
 
@@ -695,7 +695,7 @@ describe("getTaskFailureText", () => {
 
   it("selects the first non-empty next command for CLI handoff", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
-    expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
+    expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json");
     expect(firstNextCommand(null)).toBe("");
   });
 
@@ -720,7 +720,7 @@ describe("getTaskFailureText", () => {
           next_commands: [
             "mdtero parse --file paper.pdf --json",
             "mdtero status task-123 --wait --timeout 300 --json",
-            "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+            "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
           ],
           result: {
             next_commands: ["mdtero doctor --json"]
@@ -730,9 +730,9 @@ describe("getTaskFailureText", () => {
         "parse"
       )
     ).toEqual({
-      primaryCommand: "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+      primaryCommand: "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
       commands: [
-        "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+        "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
         "mdtero status task-123 --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
@@ -781,7 +781,7 @@ describe("getTaskFailureText", () => {
       "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
       "",
       "Run these commands in order:",
-      "1. mdtero parse --file paper.pdf --trace --wait --timeout 300 --json",
+      "1. mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
       "2. mdtero status task-123 --wait --timeout 300 --json",
       "3. mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
       "4. mdtero project ingest --json",
@@ -796,6 +796,7 @@ describe("getTaskFailureText", () => {
       "Agent handoff:",
       "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
       "- Start `mdtero mcp serve` from the local project root when the agent needs live FastMCP stdio tools.",
+      "- When `mcp_tool_plan` says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`.",
       "- Use `mdtero rag query \"<question>\" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.",
       "- Preserve `citation_contract.required_for_final_answer`; final RAG answers must keep `citations` and `source_nodes` alongside the prose answer."
     ].join("\n"));
@@ -930,7 +931,7 @@ describe("getTaskFailureText", () => {
 describe("normalizeCliHandoffCommand", () => {
   it("keeps parse handoffs aligned with the wait-first CLI contract", () => {
     expect(normalizeCliHandoffCommand("mdtero parse 10.1000/demo --json")).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
-    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --timeout 300 --json")).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 300 --json");
+    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --timeout 300 --json")).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json");
     expect(normalizeCliHandoffCommand("mdtero rag status --json")).toBe("mdtero rag status --json");
   });
 });
@@ -957,25 +958,25 @@ describe("buildCliParseCommand", () => {
 describe("buildCliFileParseCommand", () => {
   it("builds terminal handoff commands for failed local file uploads", () => {
     expect(buildCliFileParseCommand("paper.pdf", "pdf")).toBe(
-      "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+      "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("paper.epub", "epub")).toBe(
-      "mdtero parse --file paper.epub --trace --wait --timeout 300 --json"
+      "mdtero parse --file paper.epub --trace --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("fulltext.xml", "xml")).toBe(
-      "mdtero parse --file fulltext.xml --trace --wait --timeout 300 --json"
+      "mdtero parse --file fulltext.xml --trace --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("paper.html", "html")).toBe(
-      "mdtero parse --file paper.html --trace --wait --timeout 300 --json"
+      "mdtero parse --file paper.html --trace --wait --timeout 600 --json"
     );
   });
 
   it("quotes shell-sensitive local filenames and uses stable placeholders", () => {
     expect(buildCliFileParseCommand("My Paper's Draft.pdf", "pdf")).toBe(
-      "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 300 --json"
+      "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("", "epub")).toBe(
-      "mdtero parse --file paper.epub --trace --wait --timeout 300 --json"
+      "mdtero parse --file paper.epub --trace --wait --timeout 600 --json"
     );
   });
 });

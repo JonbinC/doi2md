@@ -292,7 +292,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "upload timed out",
-        nextCommand: "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 300 --json"
+        nextCommand: "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 600 --json"
       });
     });
   });
@@ -323,7 +323,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "upload timed out",
-        nextCommand: "mdtero parse --file fulltext.xml --trace --wait --timeout 300 --json"
+        nextCommand: "mdtero parse --file fulltext.xml --trace --wait --timeout 600 --json"
       });
     });
   });
