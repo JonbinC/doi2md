@@ -3635,6 +3635,16 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["rag"]["agent_summary"]["provider_state"] == "configured"
     assert briefing["rag"]["agent_summary"]["provider_configured"] is True
     assert briefing["rag"]["agent_summary"]["embedding_model"] == "voyage-test"
+    assert briefing["rag"]["next_best_action"] == {
+        "action": "query",
+        "scope": "user_or_agent",
+        "reason_code": "indexed",
+        "readiness_status": "ready",
+        "next_step": "query",
+        "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
+        "action_hint": "RAG is ready; ask a grounded project question and preserve answer, citations, source_nodes, and evidence_pack.",
+        "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
+    }
     assert briefing["project_bridge"]["status"] == "bound"
     assert briefing["project_bridge"]["server_project"]["id"] == "42"
     assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
@@ -4636,6 +4646,16 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "match_count": 0,
         "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
     }
+    assert status["next_best_action"] == {
+        "action": "query",
+        "scope": "user_or_agent",
+        "reason_code": "indexed",
+        "readiness_status": "ready",
+        "next_step": "query",
+        "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
+        "action_hint": "RAG is ready; ask a grounded project question and preserve answer, citations, source_nodes, and evidence_pack.",
+        "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
+    }
     assert status["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
 
@@ -4667,6 +4687,8 @@ def test_mcp_server_rag_status_treats_needs_build_as_waiting(tmp_path: Path):
     assert status["readiness"]["next_step"] == "build"
     assert status["agent_summary"]["readiness_status"] == "waiting"
     assert status["agent_summary"]["next_step"] == "build"
+    assert status["next_best_action"]["action"] == "build"
+    assert status["next_best_action"]["primary_command"] == "mdtero rag build --json"
     assert status["next_commands"][:3] == ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     assert "Build the server project index" in status["action_hint"]
     assert briefing["health"]["rag_reason_code"] == "rag_index_not_built"
@@ -4696,6 +4718,9 @@ def test_mcp_server_rag_status_treats_voyage_not_configured_as_blocked(tmp_path:
     assert status["readiness"]["provider_blocked"] is True
     assert status["readiness"]["next_step"] == "check_backend_rag_provider"
     assert status["agent_summary"]["readiness_status"] == "blocked"
+    assert status["next_best_action"]["action"] == "check_backend_provider"
+    assert status["next_best_action"]["scope"] == "backend_operations"
+    assert status["next_best_action"]["primary_command"] == "mdtero rag status --json"
     assert "VOYAGE_API_KEY" not in status.get("action_hint", "")
 
 

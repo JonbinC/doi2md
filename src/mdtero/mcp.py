@@ -1215,6 +1215,7 @@ def build_agent_briefing(
             "server_project_id": server_rag.get("server_project_id"),
             "status": server_rag.get("status"),
             "reason_code": server_rag.get("reason_code"),
+            "next_best_action": server_rag.get("next_best_action"),
             "agent_summary": server_rag.get("agent_summary"),
             "action_hint": server_rag.get("action_hint"),
             "next_commands": server_rag.get("next_commands", []),
