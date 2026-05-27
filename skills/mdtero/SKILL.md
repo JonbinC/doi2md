@@ -7,7 +7,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 ## Quick Start
 
-1. During alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
+1. Install the Python runtime with `uv tool install mdtero`; if PyPI propagation lags during alpha testing, use `uv tool install git+https://github.com/JonbinC/doi2md.git` as the temporary fallback
 2. Run `mdtero setup`
 3. Use `mdtero setup --api-key --json` when the environment is headless
 4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; use its `next_commands` before guessing recovery steps
@@ -73,11 +73,12 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `request_translation(task_id_or_markdown_path, target_language="zh-CN", wait=False)`: request backend translation for a completed parse task or local Markdown file and return provider-attempt diagnostics when translation fails
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
+- `project_ingest(project_id=None)`: import succeeded parse tasks into the bound or newly created backend project before building Voyage embeddings; preserve per-task `failures` with `reason_code` and `action_hint`
 - `server_rag_build(wait=true)`: build backend Voyage RAG for the bound project and wait until `status_after_build.ready_for_query` is true before querying
 - `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. Preserve `citation_contract.required_for_final_answer` and keep its required `citations` plus `source_nodes` in the final answer. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
-Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, `server_rag_build`, and `rag_query`. When the plan says `build_rag_index`, call `server_rag_build(wait=true)` first, then call `rag_query(question)` only after readiness is true. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, or `readiness` before retrying.
+Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `project_ingest`, `server_rag_status`, `server_rag_build`, and `rag_query`. When the plan says `ingest_project_documents`, call `project_ingest(project_id=None)` first; when it says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, `failures`, or `readiness` before retrying.
 
 If `agent_briefing` includes `dashboard_handoff_json`, use its `expected_fields`, `validation_step`, and `tool_sequence` as the contract for dashboard-to-agent continuation. The copied JSON should already redact signed URLs, bearer/API keys, OSS tokens, and Mdtero secrets; do not request unredacted credentials in chat.
 
@@ -97,5 +98,5 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 ## Verification Rule
 
 - do not treat installation as complete until `mdtero doctor --json` reports `authenticated: true` and an API key source
-- if `mdtero` is missing during alpha, install the Python runtime with `uv tool install git+https://github.com/JonbinC/doi2md.git`
+- if `mdtero` is missing, install the Python runtime with `uv tool install mdtero`; during alpha, fall back to `uv tool install git+https://github.com/JonbinC/doi2md.git` only if the PyPI package is unavailable
 - if a task fails, report `reason_code` and the server action hint before retrying
