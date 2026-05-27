@@ -32,6 +32,34 @@ export interface UploadedParseTaskPayload {
   sourceInput?: string;
 }
 
+export class MdteroApiError extends Error {
+  readonly status: number;
+  readonly reasonCode?: string;
+  readonly actionHint?: string;
+  readonly nextCommands: string[];
+
+  constructor(
+    message: string,
+    params: {
+      status: number;
+      reasonCode?: string;
+      actionHint?: string;
+      nextCommands?: string[];
+    }
+  ) {
+    super(message);
+    this.name = "MdteroApiError";
+    this.status = params.status;
+    this.reasonCode = params.reasonCode;
+    this.actionHint = params.actionHint;
+    this.nextCommands = params.nextCommands ?? [];
+  }
+}
+
+export function isMdteroApiError(error: unknown): error is MdteroApiError {
+  return error instanceof MdteroApiError;
+}
+
 function buildFulltextUploadBody(params: {
   file: Blob;
   filename: string;
@@ -61,7 +89,14 @@ function fallbackArtifactFilename(artifact: string, preferredFilename?: string |
   return `${artifact}.bin`;
 }
 
-async function readErrorDetail(response: Response): Promise<string> {
+type ParsedErrorDetail = {
+  message: string;
+  reasonCode?: string;
+  actionHint?: string;
+  nextCommands: string[];
+};
+
+async function readErrorDetail(response: Response): Promise<ParsedErrorDetail> {
   const payload = await response
     .clone()
     .json()
@@ -69,16 +104,16 @@ async function readErrorDetail(response: Response): Promise<string> {
   return describeErrorPayload(payload);
 }
 
-function describeErrorPayload(payload: unknown): string {
+function describeErrorPayload(payload: unknown): ParsedErrorDetail {
   if (!payload || typeof payload !== "object") {
-    return "";
+    return { message: "", nextCommands: [] };
   }
   const detail = (payload as { detail?: unknown }).detail;
   if (typeof detail === "string" && detail.trim()) {
-    return detail.trim();
+    return { message: redactSensitiveText(detail.trim()), nextCommands: [] };
   }
   if (!detail || typeof detail !== "object") {
-    return "";
+    return { message: "", nextCommands: [] };
   }
   const parts: string[] = [];
   const record = detail as Record<string, unknown>;
@@ -94,7 +129,12 @@ function describeErrorPayload(payload: unknown): string {
   } else if (nextCommands.length > 1) {
     parts.push(`Commands: ${nextCommands.map((command, index) => `${index + 1}. ${command}`).join(" ")}`);
   }
-  return redactSensitiveText(parts.join(" "));
+  return {
+    message: redactSensitiveText(parts.join(" ")),
+    reasonCode: reasonCode || undefined,
+    actionHint: actionHint ? redactSensitiveText(actionHint) : undefined,
+    nextCommands
+  };
 }
 
 function nextCommandsFromErrorDetail(value: unknown): string[] {
@@ -149,7 +189,12 @@ export function createApiClient(
     });
     if (!response.ok) {
       const detail = await readErrorDetail(response);
-      throw new Error(detail || `API request failed: ${response.status}`);
+      throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {
+        status: response.status,
+        reasonCode: detail.reasonCode,
+        actionHint: detail.actionHint,
+        nextCommands: detail.nextCommands
+      });
     }
     return response;
   }
@@ -288,7 +333,12 @@ export function createRouterSSOTClient(
 
     if (!response.ok) {
       const detail = await readErrorDetail(response);
-      throw new Error(detail || `API request failed: ${response.status}`);
+      throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {
+        status: response.status,
+        reasonCode: detail.reasonCode,
+        actionHint: detail.actionHint,
+        nextCommands: detail.nextCommands
+      });
     }
 
     return response;

@@ -417,6 +417,43 @@ export interface CliHandoffContext {
   nextCommands?: string[];
 }
 
+export type ApiErrorLike = Error & {
+  reasonCode?: string;
+  actionHint?: string;
+  nextCommands?: string[];
+};
+
+export function buildApiErrorCliHandoffPlan(
+  error: unknown,
+  input?: string | null,
+  kind: "parse" | "translate" = "parse"
+): CliHandoffPlan {
+  if (!error || typeof error !== "object") {
+    return buildTaskFailureCliHandoffPlan(null, input, kind);
+  }
+  const nextCommands = Array.isArray((error as ApiErrorLike).nextCommands)
+    ? (error as ApiErrorLike).nextCommands
+    : [];
+  return buildTaskFailureCliHandoffPlan({ next_commands: nextCommands }, input, kind);
+}
+
+export function buildApiErrorHandoffContext(error: unknown, kind: "parse" | "translate"): CliHandoffContext | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const apiError = error as ApiErrorLike;
+  const nextCommands = Array.isArray(apiError.nextCommands) ? apiError.nextCommands : [];
+  if (!apiError.reasonCode && !apiError.actionHint && nextCommands.length === 0) {
+    return null;
+  }
+  return {
+    kind,
+    reasonCode: apiError.reasonCode,
+    actionHint: apiError.actionHint,
+    nextCommands: normalizeCommandList(nextCommands),
+  };
+}
+
 const PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",

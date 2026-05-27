@@ -21,6 +21,8 @@ import {
   getResultWarningText,
   getTaskFailureText,
   getTaskFailureCliHandoff,
+  buildApiErrorCliHandoffPlan,
+  buildApiErrorHandoffContext,
   buildTaskFailureCliHandoffPlan,
   buildTaskHandoffContext,
   buildCliHandoffCommandPlan,
@@ -504,6 +506,36 @@ describe("getDownloadFailureText", () => {
 
   it("localizes empty download failures to the existing fallback", () => {
     expect(getDownloadFailureText(null, "下载失败，请重试。", "zh")).toBe("下载失败，请重试。");
+  });
+
+  it("turns structured download errors into CLI handoff plans", () => {
+    const error = Object.assign(new Error("Artifact unavailable"), {
+      reasonCode: "artifact_not_available",
+      actionHint: "Inspect task status before retrying.",
+      nextCommands: [
+        "mdtero status task-123 --wait --timeout 300 --json",
+        "mdtero parse --file paper.pdf --json"
+      ]
+    });
+
+    expect(buildApiErrorCliHandoffPlan(error, "paper.pdf", "parse")).toEqual({
+      primaryCommand: "mdtero status task-123 --wait --timeout 300 --json",
+      commands: [
+        "mdtero status task-123 --wait --timeout 300 --json",
+        "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+      ],
+      source: "backend_task",
+      kind: "parse"
+    });
+    expect(buildApiErrorHandoffContext(error, "parse")).toEqual({
+      kind: "parse",
+      reasonCode: "artifact_not_available",
+      actionHint: "Inspect task status before retrying.",
+      nextCommands: [
+        "mdtero status task-123 --wait --timeout 300 --json",
+        "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+      ]
+    });
   });
 });
 

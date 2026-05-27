@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TaskRecord } from "@mdtero/shared";
-import { createApiClient, createRouterSSOTClient } from "../src/lib/api";
+import { MdteroApiError, createApiClient, createRouterSSOTClient, isMdteroApiError } from "../src/lib/api";
 
 describe("createApiClient", () => {
   beforeEach(() => {
@@ -324,6 +324,53 @@ describe("createApiClient", () => {
     await expect(client.downloadArtifact("task-123", "paper_md")).rejects.toThrow(
       "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
     );
+  });
+
+  it("preserves structured error metadata for extension handoff", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: {
+            error_message: "Artifact is not available for this failed task.",
+            reason_code: "artifact_not_available",
+            action_hint: "Inspect task status, then retry parse from the CLI.",
+            next_commands: [
+              "mdtero status task-123 --wait --timeout 300 --json",
+              "mdtero parse --file paper.pdf --json"
+            ]
+          }
+        }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    let caught: unknown;
+    try {
+      await client.downloadArtifact("task-123", "paper_md");
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(MdteroApiError);
+    expect(isMdteroApiError(caught)).toBe(true);
+    expect((caught as MdteroApiError).status).toBe(404);
+    expect((caught as MdteroApiError).reasonCode).toBe("artifact_not_available");
+    expect((caught as MdteroApiError).actionHint).toBe("Inspect task status, then retry parse from the CLI.");
+    expect((caught as MdteroApiError).nextCommands).toEqual([
+      "mdtero status task-123 --wait --timeout 300 --json",
+      "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+    ]);
   });
 
   it("preserves multi-step backend next commands in extension error handoff", async () => {

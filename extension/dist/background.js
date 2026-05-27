@@ -63,6 +63,16 @@ function redactSensitiveText(value) {
 }
 
 // src/lib/api.ts
+var MdteroApiError = class extends Error {
+  constructor(message, params) {
+    super(message);
+    this.name = "MdteroApiError";
+    this.status = params.status;
+    this.reasonCode = params.reasonCode;
+    this.actionHint = params.actionHint;
+    this.nextCommands = params.nextCommands ?? [];
+  }
+};
 function buildFulltextUploadBody(params) {
   const body = new FormData();
   body.set("paper_file", params.file, params.filename);
@@ -91,14 +101,14 @@ async function readErrorDetail(response) {
 }
 function describeErrorPayload(payload) {
   if (!payload || typeof payload !== "object") {
-    return "";
+    return { message: "", nextCommands: [] };
   }
   const detail = payload.detail;
   if (typeof detail === "string" && detail.trim()) {
-    return detail.trim();
+    return { message: redactSensitiveText(detail.trim()), nextCommands: [] };
   }
   if (!detail || typeof detail !== "object") {
-    return "";
+    return { message: "", nextCommands: [] };
   }
   const parts = [];
   const record = detail;
@@ -114,7 +124,12 @@ function describeErrorPayload(payload) {
   } else if (nextCommands.length > 1) {
     parts.push(`Commands: ${nextCommands.map((command, index) => `${index + 1}. ${command}`).join(" ")}`);
   }
-  return redactSensitiveText(parts.join(" "));
+  return {
+    message: redactSensitiveText(parts.join(" ")),
+    reasonCode: reasonCode || void 0,
+    actionHint: actionHint ? redactSensitiveText(actionHint) : void 0,
+    nextCommands
+  };
 }
 function nextCommandsFromErrorDetail(value) {
   if (!Array.isArray(value)) {
@@ -160,7 +175,12 @@ function createApiClient(getSettings) {
     });
     if (!response.ok) {
       const detail = await readErrorDetail(response);
-      throw new Error(detail || `API request failed: ${response.status}`);
+      throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {
+        status: response.status,
+        reasonCode: detail.reasonCode,
+        actionHint: detail.actionHint,
+        nextCommands: detail.nextCommands
+      });
     }
     return response;
   }
@@ -285,7 +305,12 @@ function createRouterSSOTClient(getSettings) {
     }
     if (!response.ok) {
       const detail = await readErrorDetail(response);
-      throw new Error(detail || `API request failed: ${response.status}`);
+      throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {
+        status: response.status,
+        reasonCode: detail.reasonCode,
+        actionHint: detail.actionHint,
+        nextCommands: detail.nextCommands
+      });
     }
     return response;
   }
