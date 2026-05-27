@@ -459,8 +459,9 @@ const PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
   "mdtero project ingest --json",
   "mdtero project refresh --wait --timeout 300 --json",
-  "mdtero rag build --json",
+  "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
   "mdtero rag status --json",
+  "mdtero rag build --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
   "mdtero mcp briefing --json",
   "mdtero mcp serve",
@@ -476,9 +477,11 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
   const downloadCommands = commands.filter((command) => /^mdtero\s+download\b/.test(command));
   const ingestCommands = commands.filter((command) => command === "mdtero project ingest --json");
   const projectRefreshCommands = commands.filter((command) => command === "mdtero project refresh --wait --timeout 300 --json");
-  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --json");
+  const ragBootstrapCommands = commands.filter((command) => command === PARSE_HANDOFF_FOLLOWUPS[4]);
   const ragStatusCommands = commands.filter((command) => command === "mdtero rag status --json");
+  const ragBuildCommands = commands.filter((command) => command === "mdtero rag build --json");
   const ragQueryCommands = commands.filter((command) => /^mdtero\s+rag\s+query\b/.test(command));
+  const genericRagQueryCommands = ragQueryCommands.filter((command) => command !== PARSE_HANDOFF_FOLLOWUPS[4]);
   const mcpBriefingCommands = commands.filter((command) => command === "mdtero mcp briefing --json");
   const mcpServeCommands = commands.filter((command) => command === "mdtero mcp serve");
   const otherCommands = commands.filter(
@@ -500,11 +503,12 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
     ...(downloadCommands.length ? downloadCommands : [PARSE_HANDOFF_FOLLOWUPS[1]]),
     ...(ingestCommands.length ? ingestCommands : [PARSE_HANDOFF_FOLLOWUPS[2]]),
     ...(projectRefreshCommands.length ? projectRefreshCommands : [PARSE_HANDOFF_FOLLOWUPS[3]]),
-    ...(ragBuildCommands.length ? ragBuildCommands : [PARSE_HANDOFF_FOLLOWUPS[4]]),
+    ...(ragBootstrapCommands.length ? ragBootstrapCommands : [PARSE_HANDOFF_FOLLOWUPS[4]]),
     ...(ragStatusCommands.length ? ragStatusCommands : [PARSE_HANDOFF_FOLLOWUPS[5]]),
-    ...(ragQueryCommands.length ? ragQueryCommands : [PARSE_HANDOFF_FOLLOWUPS[6]]),
-    ...(mcpBriefingCommands.length ? mcpBriefingCommands : [PARSE_HANDOFF_FOLLOWUPS[7]]),
-    ...(mcpServeCommands.length ? mcpServeCommands : [PARSE_HANDOFF_FOLLOWUPS[8]]),
+    ...(ragBuildCommands.length ? ragBuildCommands : [PARSE_HANDOFF_FOLLOWUPS[6]]),
+    ...(genericRagQueryCommands.length ? genericRagQueryCommands : [PARSE_HANDOFF_FOLLOWUPS[7]]),
+    ...(mcpBriefingCommands.length ? mcpBriefingCommands : [PARSE_HANDOFF_FOLLOWUPS[8]]),
+    ...(mcpServeCommands.length ? mcpServeCommands : [PARSE_HANDOFF_FOLLOWUPS[9]]),
     ...otherCommands,
   ]);
 }
