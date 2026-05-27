@@ -1261,7 +1261,7 @@ def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
     assert "mdtero project init --name literature-review" in output
     assert "mdtero discover \"graph neural networks\" --limit 5 --interactive" in output
     assert "mdtero discover \"graph neural networks\" --limit 5 --add --select 1,3 --json" in output
-    assert "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json" in output
+    assert "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json" in output
     assert "mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json" in compact_output
     assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in output
     assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in output
@@ -4730,7 +4730,7 @@ def test_mcp_rag_query_build_if_needed_guides_projects_without_succeeded_tasks(t
     assert payload["answer"] is None
     assert payload["local_ready_for_ingest_count"] == 0
     assert payload["next_commands"] == [
-        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
             "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
@@ -4755,7 +4755,7 @@ def test_mcp_rag_query_build_if_needed_guides_bound_projects_without_succeeded_t
     assert payload["answer"] is None
     assert payload["local_ready_for_ingest_count"] == 0
     assert payload["next_commands"] == [
-        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
             "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
@@ -5299,7 +5299,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert checklist["agent_skills"]["status"] == "not_detected"
     assert model["project"]["name"] == "tui-demo"
     assert model["rag"]["reason_code"] == "no_succeeded_tasks"
-    assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
+    assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert model["mcp"]["primary_tool"] == "agent_briefing"
     setup_handoff = model["dashboard_setup_handoff_json"]
     assert model["mcp"]["dashboard_setup_handoff_json"] == setup_handoff
@@ -5761,7 +5761,7 @@ def test_rag_build_guides_empty_projects_before_creating_server_project(monkeypa
     assert "Parse at least one paper successfully" in payload["action_hint"]
     assert "arXiv smoke DOI" in payload["action_hint"]
     assert payload["next_commands"] == [
-        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
         "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
@@ -5789,7 +5789,7 @@ def test_rag_query_build_if_needed_guides_empty_projects_before_creating_server_
     assert payload["reason_code"] == "no_succeeded_tasks"
     assert payload["question"] == "What is indexed?"
     assert payload["answer"] is None
-    assert payload["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
+    assert payload["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert payload["next_commands"][1] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
     assert payload["next_commands"][2] == "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json"
 

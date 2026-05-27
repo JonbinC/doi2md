@@ -1258,7 +1258,7 @@ def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Except
 
 def _rag_recovery_commands(commands: dict[str, Any]) -> list[str]:
     return [
-        "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+        "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
         commands["parse_file"],
         commands["extension_handoff_url"],
         commands["refresh"],
@@ -2105,7 +2105,7 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
             "project_rag_smoke": "\n".join([
                 str(commands.get("doctor") or "mdtero doctor --json"),
                 "mdtero project init --name literature-review",
-                "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+                "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
                 str(commands.get("refresh") or "mdtero project refresh --wait --timeout 300 --json"),
                 ONE_COMMAND_RAG_BOOTSTRAP,
                 str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
