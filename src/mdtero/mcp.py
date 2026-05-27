@@ -196,6 +196,7 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
         commands["rag_build"],
         commands["rag_status"],
         commands["mcp_briefing"],
+        commands["serve_mcp"],
     ]
     if state is None:
         status = "not_initialized"
@@ -1322,11 +1323,15 @@ def _mcp_server_payload(commands: dict[str, Any], root: Path) -> dict[str, Any]:
         "primary_tool": "agent_briefing",
         "tools": tools,
         "agent_config_hint": {
-            "command": "mdtero",
-            "args": ["mcp", "serve"],
-            "working_directory": str(root.resolve()),
-            "skill_install_command": commands.get("agent_install", "mdtero agent install --interactive"),
+            "mcpServers": {
+                "mdtero": {
+                    "command": "mdtero",
+                    "args": ["mcp", "serve"],
+                    "cwd": str(root.resolve()),
+                }
+            }
         },
+        "skill_install_command": commands.get("agent_install", "mdtero agent install --interactive"),
         "action_hint": "Start this FastMCP stdio server from the local project root after running `mdtero mcp briefing --json`; agents should call `agent_briefing` before other tools.",
     }
 
@@ -1519,6 +1524,7 @@ def _extension_handoff_commands(commands: dict[str, Any]) -> list[str]:
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
         str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
+        str(commands.get("serve_mcp") or "mdtero mcp serve"),
     ]
 
 
@@ -1529,7 +1535,7 @@ def _agent_handoff_protocol(commands: dict[str, Any]) -> list[dict[str, Any]]:
             "use": "task_status",
             "when": "A parse, upload, translation, or RAG step failed or timed out.",
             "preserve_fields": ["task_id", "reason_code", "action_hint", "next_commands", "download_artifacts", "translation_attempts"],
-            "next_commands": ["mdtero status <task-id> --json", commands.get("mcp_briefing", "mdtero mcp briefing --json")],
+            "next_commands": ["mdtero status <task-id> --json", commands.get("mcp_briefing", "mdtero mcp briefing --json"), commands.get("serve_mcp", "mdtero mcp serve")],
         },
         {
             "step": "retry_source_capture",

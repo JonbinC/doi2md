@@ -689,7 +689,8 @@ describe("getTaskFailureText", () => {
         "mdtero rag build --json",
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
-        "mdtero mcp briefing --json"
+        "mdtero mcp briefing --json",
+        "mdtero mcp serve"
       ],
       source: "backend_task",
       kind: "parse"
@@ -706,7 +707,8 @@ describe("getTaskFailureText", () => {
       "mdtero rag build --json",
       "mdtero rag status --json",
       "mdtero rag query \"<question>\" --build-if-needed --json",
-      "mdtero mcp briefing --json"
+      "mdtero mcp briefing --json",
+      "mdtero mcp serve"
     ]);
 
     expect(buildCliHandoffCommandPlan("mdtero rag status --json")).toEqual(["mdtero rag status --json"]);
@@ -735,9 +737,11 @@ describe("getTaskFailureText", () => {
       "7. mdtero rag status --json",
       "8. mdtero rag query \"<question>\" --build-if-needed --json",
       "9. mdtero mcp briefing --json",
+      "10. mdtero mcp serve",
       "",
       "Agent handoff:",
       "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
+      "- Start `mdtero mcp serve` from the local project root when the agent needs live FastMCP stdio tools.",
       "- Use `mdtero rag query \"<question>\" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one."
     ].join("\n"));
 
@@ -785,7 +789,8 @@ describe("getTaskFailureText", () => {
         "mdtero rag build --json",
         "mdtero rag status --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
-        "mdtero mcp briefing --json"
+        "mdtero mcp briefing --json",
+        "mdtero mcp serve"
       ]
     });
   });
