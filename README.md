@@ -130,6 +130,21 @@ mdtero mcp briefing --json
 - agent-facing JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents; keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible, but do not use agent prompts as long-term secret storage
 - agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode
 
+Shared `/api/v1` server contract for every intake surface:
+
+| Purpose | Route |
+| --- | --- |
+| Route planning | `/api/v1/route` |
+| DOI/URL parse task | `/api/v1/tasks/parse` |
+| PDF/EPUB/XML/HTML upload | `/api/v1/tasks/upload` |
+| Task status | `/api/v1/tasks/{task_id}` |
+| Artifact download | `/api/v1/tasks/{task_id}/download/{artifact}` |
+| Import parsed Markdown into a server project | `/api/v1/projects/{project_id}/tasks/{task_id}/import` |
+| Build backend Voyage RAG | `/api/v1/projects/{project_id}/rag/build` |
+| Query backend Voyage RAG | `/api/v1/projects/{project_id}/rag/query` |
+
+The CLI, extension, dashboard, and MCP briefing expose this contract so browser capture, CLI retry, raw upload, task polling, download, project import, and backend Voyage RAG handoff stay aligned.
+
 Known boundaries:
 
 - Zotero reverse sync is conservative: it creates Mdtero result notes/tags for succeeded Zotero-origin parse tasks with known Zotero item keys; it does not rewrite Zotero bibliographic metadata.
@@ -209,3 +224,5 @@ mdtero mcp briefing --json
 ```
 
 这样 `client_acquisition`、raw upload、状态轮询、`reason_code`、`action_hint`、`download_artifacts` 和 `next_commands` 仍然对本地 agent 可见。
+
+所有输入入口共用同一组 `/api/v1` 服务端契约：`/api/v1/route`、`/api/v1/tasks/parse`、`/api/v1/tasks/upload`、`/api/v1/tasks/{task_id}`、`/api/v1/tasks/{task_id}/download/{artifact}`、`/api/v1/projects/{project_id}/tasks/{task_id}/import`、`/api/v1/projects/{project_id}/rag/build` 和 `/api/v1/projects/{project_id}/rag/query`。CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract，保证浏览器抓取、CLI 重试、raw upload、任务轮询、下载、项目导入和后端 Voyage RAG 交接保持一致。
