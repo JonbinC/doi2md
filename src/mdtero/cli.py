@@ -55,7 +55,7 @@ SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
 SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
 API_KEY_PROMPT_SENTINEL = "__mdtero_prompt_for_api_key__"
 RAG_STATUS_COMMAND = "mdtero rag status --json"
-RAG_BUILD_COMMAND = "mdtero rag build --json"
+RAG_BUILD_COMMAND = "mdtero rag build --wait --json"
 RAG_INGEST_COMMAND = "mdtero project ingest --json"
 RAG_MCP_BRIEFING_COMMAND = "mdtero mcp briefing --json"
 RAG_MCP_SERVE_COMMAND = "mdtero mcp serve"
@@ -891,13 +891,13 @@ def _doctor_project_payload(root: Path, *, server_rag_status: dict[str, Any] | N
             rag_status = str(server_rag_status.get("status") or "check")
         rag_next = [str(command) for command in server_rag_status.get("next_commands") or ["mdtero rag status --json"]]
     elif state.server_project_id and ready_for_ingest:
-        rag_next = ["mdtero project ingest --json", ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --json"]
+        rag_next = ["mdtero project ingest --json", ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --wait --json"]
         rag_status = "check"
     elif state.server_project_id:
         rag_next = ["mdtero project parse --wait --timeout 300 --json", "mdtero project ingest --json"]
         rag_status = "needs_papers"
     elif ready_for_ingest:
-        rag_next = [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        rag_next = [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --wait --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
         rag_status = "not_linked"
     else:
         rag_next = ["mdtero discover \"<topic>\" --interactive", "mdtero project parse --wait --timeout 300 --json"]
@@ -2554,7 +2554,7 @@ def _project_create_server_failure(state: Any, exc: Exception, *, project: dict[
         "http_status": status_code,
         "error_type": exc.__class__.__name__,
         "action_hint": action_hint,
-        "next_commands": ["mdtero doctor --json", "mdtero project create-server --json", ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --json"],
+        "next_commands": ["mdtero doctor --json", "mdtero project create-server --json", ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --wait --json"],
     }
     if project is not None:
         payload["server_response"] = project

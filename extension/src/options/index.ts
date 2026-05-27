@@ -301,7 +301,7 @@ const CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero project refresh --wait --timeout 300 --json",
   ONE_COMMAND_RAG_BOOTSTRAP,
   "mdtero rag status --json",
-  "mdtero rag build --json",
+  "mdtero rag build --wait --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
   "# Preserve citation_contract.required_for_final_answer: final RAG answers keep citations and source_nodes.",
   "mdtero mcp briefing --json",

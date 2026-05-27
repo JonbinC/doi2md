@@ -311,7 +311,7 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
 
 
 def _next_steps(cfg: MdteroConfig, project: ProjectState, rag: dict[str, Any], commands: dict[str, str]) -> list[str]:
-    rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
+    rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --wait --json"
     rag_query_command = commands.get("rag_query") or GENERIC_RAG_QUERY_COMMAND
     if not cfg.is_authenticated:
         return [WORKSTATION_SETUP_COMMAND, "mdtero doctor --json", HEADLESS_SETUP_COMMAND]
@@ -566,7 +566,7 @@ def _extension_handoff_commands(commands: dict[str, str]) -> list[str]:
         "mdtero project refresh --wait --timeout 300 --json",
         ONE_COMMAND_RAG_BOOTSTRAP,
         "mdtero rag status --json",
-        "mdtero rag build --json",
+        "mdtero rag build --wait --json",
         GENERIC_RAG_QUERY_COMMAND,
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
         commands.get("serve_mcp") or "mdtero mcp serve",
@@ -609,7 +609,7 @@ def _launch_bundle_payload(
         *(rag.get("next_commands") if isinstance(rag.get("next_commands"), list) else []),
         commands.get("rag_status") or "mdtero rag status --json",
         commands.get("rag_query") or GENERIC_RAG_QUERY_COMMAND,
-        commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json",
+        commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --wait --json",
         commands.get("mcp_briefing") or "mdtero mcp briefing --json",
         commands.get("serve_mcp") or "mdtero mcp serve",
     ])
@@ -742,7 +742,7 @@ def _command_palette_payload(
     next_steps: list[str],
 ) -> list[dict[str, Any]]:
     next_step_set = set(next_steps)
-    rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --json"
+    rag_build_command = commands.get("rag_build") or commands.get("bootstrap_rag") or "mdtero rag build --wait --json"
     rows = [
         {
             "area": "Setup",
