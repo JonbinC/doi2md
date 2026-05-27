@@ -29,7 +29,7 @@ const COPY = {
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
     cliHandoffGuideTitle: "Extension + CLI handoff",
-    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI.",
+    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents.",
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
@@ -41,6 +41,7 @@ const COPY = {
     guideSignedOut: [
       "Open website OAuth and complete sign-in at mdtero.com/auth.",
       "Return to this popup after the trusted auth bridge connects your account.",
+      "Optionally install the Python CLI with `uv tool install git+https://github.com/JonbinC/doi2md.git`, then run `mdtero setup` for workstation OAuth.",
       "Parse the current paper page or upload a local PDF/EPUB from the popup.",
       "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
     ],
@@ -87,7 +88,7 @@ const COPY = {
     websiteAuthTitle: "官网登录",
     websiteAuthNote: "扩展统一打开 mdtero.com/auth 登录。请在官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
     cliHandoffGuideTitle: "扩展 + CLI 交接",
-    cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续。",
+    cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续；`mdtero setup --json` 会返回给 agent 使用的 onboarding checklist。",
     cliHandoffGuideBoundary: "扩展不安装 Python 依赖、不运行本地 helper，也不保存 Elsevier/Wiley/Semantic Scholar key；这些只留在本地 CLI 的 `mdtero config academic`。",
     copyCliHandoffGuide: "复制交接",
     cliHandoffGuideCopied: "CLI 交接已复制。",
@@ -99,6 +100,7 @@ const COPY = {
     guideSignedOut: [
       "打开网页登录，并在 mdtero.com/auth 完成授权。",
       "受信任 auth bridge 连接账户后，回到扩展弹窗继续。",
+      "可选安装 Python CLI：`uv tool install git+https://github.com/JonbinC/doi2md.git`，再运行 `mdtero setup` 走工作站 OAuth。",
       "在弹窗解析当前论文页、粘贴 DOI，或上传本地 PDF/EPUB。",
       "任务完成后下载 Markdown、ZIP、源文件或译文。"
     ],
@@ -172,6 +174,9 @@ const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
 
 const CLI_HANDOFF_GUIDE_COMMAND = [
+  "uv tool install git+https://github.com/JonbinC/doi2md.git",
+  "mdtero setup",
+  "mdtero setup --json",
   "mdtero doctor --json",
   "mdtero config academic",
   "mdtero discover \"<topic>\" --limit 5 --interactive",
