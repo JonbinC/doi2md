@@ -254,7 +254,7 @@ describe("getSecondaryArtifactKeys", () => {
 });
 
 describe("getSourceArtifactKeys", () => {
-  it("surfaces pdf and xml in a dedicated source-files section", () => {
+  it("surfaces PDF, EPUB, HTML, and XML in a dedicated source-files section", () => {
     expect(
       getSourceArtifactKeys({
         preferred_artifact: "paper_bundle",
@@ -269,6 +269,16 @@ describe("getSourceArtifactKeys", () => {
             filename: "tang2026simulation.pdf",
             media_type: "application/pdf"
           },
+          paper_epub: {
+            path: "/tmp/tang2026simulation.epub",
+            filename: "tang2026simulation.epub",
+            media_type: "application/epub+zip"
+          },
+          paper_html: {
+            path: "/tmp/tang2026simulation.html",
+            filename: "tang2026simulation.html",
+            media_type: "text/html"
+          },
           paper_xml: {
             path: "/tmp/tang2026simulation.xml",
             filename: "tang2026simulation.xml",
@@ -276,7 +286,7 @@ describe("getSourceArtifactKeys", () => {
           }
         }
       })
-    ).toEqual(["paper_pdf", "paper_xml"]);
+    ).toEqual(["paper_pdf", "paper_epub", "paper_html", "paper_xml"]);
   });
 
   it("surfaces source files from v1 download_artifacts", () => {
@@ -284,10 +294,19 @@ describe("getSourceArtifactKeys", () => {
       getSourceArtifactKeys({
         download_artifacts: [
           { artifact: "paper_pdf", filename: "source.pdf" },
+          { artifact: "paper_epub", filename: "source.epub" },
+          { artifact: "paper_html", filename: "source.html" },
           { artifact: "paper_xml", filename: "source.xml" }
         ]
       })
-    ).toEqual(["paper_pdf", "paper_xml"]);
+    ).toEqual(["paper_pdf", "paper_epub", "paper_html", "paper_xml"]);
+  });
+
+  it("labels EPUB and HTML source downloads explicitly", () => {
+    expect(getDownloadLabel("paper_epub", "en")).toBe("Download EPUB");
+    expect(getDownloadLabel("paper_html", "en")).toBe("Download HTML");
+    expect(getDownloadLabel("paper_epub", "zh")).toBe("下载 EPUB");
+    expect(getDownloadLabel("paper_html", "zh")).toBe("下载 HTML");
   });
 });
 
