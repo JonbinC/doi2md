@@ -10,7 +10,7 @@ Mdtero turns papers into reusable Markdown research packages.
 
 This repository is the public home for the active launch surfaces:
 
-- Python runtime CLI/TUI package `mdtero`, installed from GitHub for the current alpha
+- Python runtime CLI/TUI package `mdtero`, installed with `uv tool install mdtero`
 - browser extension for OAuth login, DOI/current-page parse, PDF/EPUB upload, translation, polling, and download
 - packaged agent skill bundle installed by the Python CLI with `mdtero agent install`
 
@@ -19,11 +19,11 @@ The old npm installer runtime has been retired from this repository. Skill insta
 ## Quick Start
 
 ```bash
-uv tool install git+https://github.com/JonbinC/doi2md.git
+uv tool install mdtero
 mdtero setup
 ```
 
-After the PyPI handoff, the stable install command will be `uv tool install mdtero`. Until then, use the GitHub install above so you get the tested `0.2.0a9` Python client instead of an unrelated package name collision.
+The stable public install command is `uv tool install mdtero`. If PyPI propagation lags during alpha testing, use `uv tool install git+https://github.com/JonbinC/doi2md.git` as the temporary fallback so you get the tested `0.2.0a9` Python client.
 
 `mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. When it finds existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, or `~/.opencode` directories, it can multi-select and install the Mdtero skill during onboarding. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives.
 
@@ -174,10 +174,11 @@ npm --prefix extension run build
 
 ## 中文说明
 
-Mdtero 当前公开主线是 Python/uv 客户端、浏览器扩展和 agent skill。alpha 阶段请从 GitHub 安装：
+Mdtero 当前公开主线是 Python/uv 客户端、浏览器扩展和 agent skill。默认从 PyPI 安装，alpha 期间如果 PyPI 同步滞后再用 GitHub fallback：
 
 ```bash
-uv tool install git+https://github.com/JonbinC/doi2md.git
+uv tool install mdtero
+# fallback: uv tool install git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 mdtero doctor
 mdtero doctor --json
