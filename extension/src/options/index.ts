@@ -11,6 +11,8 @@ import {
   type UiLanguage
 } from "../lib/storage";
 
+const ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json';
+
 const COPY = {
   en: {
     title: "Mdtero Extension",
@@ -29,7 +31,7 @@ const COPY = {
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
     cliHandoffGuideTitle: "Extension + CLI handoff",
-    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents.",
+    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents. After one parse succeeds, use one-command RAG bootstrap instead of hand-copying a server project id.",
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
@@ -64,7 +66,7 @@ const COPY = {
       ["DOI or URL", "fast smoke", "Use the CLI for DOI, arXiv, EuropePMC XML, or an open URL the backend route can recognize.", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
       ["PDF / EPUB file", "upload", "Use direct file upload for local PDF, EPUB, XML, or HTML. PDFs go through the backend MinerU-first path.", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
       ["Browser extension", "manual capture", "Use the extension when OAuth, campus network, cookies, or a selected PDF/EPUB matter, then hand off saved inputs to the CLI.", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
-      ["RAG / MCP", "after parse", "Build backend Voyage RAG from completed Markdown and expose the same project to local agents through FastMCP.", "mdtero rag query \"<question>\" --build-if-needed --json\nmdtero mcp briefing --json\nmdtero mcp serve"]
+      ["RAG / MCP", "after parse", "Build backend Voyage RAG from completed Markdown and expose the same project to local agents through FastMCP. The bootstrap query creates or reuses the server project, binds it locally, imports Markdown, builds RAG, and queries without asking you to copy a server project id.", `${ONE_COMMAND_RAG_BOOTSTRAP}\nmdtero mcp briefing --json\nmdtero mcp serve`]
     ],
     cliOnboardingItems: [
       ["Install", "uv tool install git+https://github.com/JonbinC/doi2md.git", "Install the public Python client; the extension never installs Python dependencies."],
@@ -74,7 +76,7 @@ const COPY = {
       ["Discover", "mdtero discover \"<topic>\" --limit 5 --interactive", "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
       ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
       ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
-      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "Backend Voyage RAG is driven by the CLI project; citation_contract requires final answers to preserve citations and source_nodes."],
+      ["RAG", ONE_COMMAND_RAG_BOOTSTRAP, "Backend Voyage RAG is driven by the CLI project. This one command can create or bind the server project, import succeeded Markdown, build Voyage RAG, and query with citations; citation_contract requires final answers to preserve citations and source_nodes."],
       ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, RAG readiness, and citation_contract to local agents."],
       ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
       ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
@@ -134,7 +136,7 @@ const COPY = {
     websiteAuthTitle: "官网登录",
     websiteAuthNote: "扩展统一打开 mdtero.com/auth 登录。请在官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
     cliHandoffGuideTitle: "扩展 + CLI 交接",
-    cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续；`mdtero setup --json` 会返回给 agent 使用的 onboarding checklist。",
+    cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续；`mdtero setup --json` 会返回给 agent 使用的 onboarding checklist。已有一次成功解析后，用一条命令 RAG bootstrap，不要手工复制 server project id。",
     cliHandoffGuideBoundary: "扩展不安装 Python 依赖、不运行本地 helper，也不保存 Elsevier/Wiley/Semantic Scholar key；这些只留在本地 CLI 的 `mdtero config academic`。",
     copyCliHandoffGuide: "复制交接",
     cliHandoffGuideCopied: "CLI 交接已复制。",
@@ -169,7 +171,7 @@ const COPY = {
       ["DOI 或 URL", "快速冒烟", "DOI、arXiv、EuropePMC XML，或后端 route 能识别的开放 URL，优先走 CLI。", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
       ["PDF / EPUB 文件", "上传", "本地 PDF、EPUB、XML 或 HTML 走直接上传。PDF 默认进入后端 MinerU-first 路径。", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
       ["浏览器扩展", "人工抓取", "遇到 OAuth、校园网、cookie 或人工选择 PDF/EPUB 时用扩展，再把已保存输入交给 CLI。", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
-      ["RAG / MCP", "解析后", "基于完成的 Markdown 构建后端 Voyage RAG，并通过 FastMCP 交给本地 agent。", "mdtero rag query \"<question>\" --build-if-needed --json\nmdtero mcp briefing --json\nmdtero mcp serve"]
+      ["RAG / MCP", "解析后", "基于完成的 Markdown 构建后端 Voyage RAG，并通过 FastMCP 交给本地 agent。Bootstrap 查询会创建或复用服务端项目、写入本地绑定、导入 Markdown、构建 RAG 并查询，不需要你手工复制 server project id。", `${ONE_COMMAND_RAG_BOOTSTRAP}\nmdtero mcp briefing --json\nmdtero mcp serve`]
     ],
     cliOnboardingItems: [
       ["安装", "uv tool install git+https://github.com/JonbinC/doi2md.git", "安装公开 Python 客户端；扩展不会安装 Python 依赖。"],
@@ -179,7 +181,7 @@ const COPY = {
       ["发现", "mdtero discover \"<topic>\" --limit 5 --interactive", "有 Semantic Scholar 时走本地；否则走服务端 OpenAlex。"],
       ["解析", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "保留 route、client_acquisition、reason_code、action_hint 和 artifacts。"],
       ["文件上传", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "浏览器保存的文件或 publisher challenge 页面交给 CLI 继续。"],
-      ["RAG", "mdtero rag query \"<question>\" --build-if-needed --json", "后端 Voyage RAG 由 CLI 项目驱动；citation_contract 要求最终回答保留 citations 和 source_nodes。"],
+      ["RAG", ONE_COMMAND_RAG_BOOTSTRAP, "后端 Voyage RAG 由 CLI 项目驱动。这一条命令可以创建或绑定服务端项目、导入成功 Markdown、构建 Voyage RAG，并带引用查询；citation_contract 要求最终回答保留 citations 和 source_nodes。"],
       ["MCP briefing", "mdtero mcp briefing --json", "把账户、项目、extension_handoff、RAG readiness 和 citation_contract 暴露给本地 agent。"],
       ["MCP 服务", "mdtero mcp serve", "在本地项目根目录运行 FastMCP stdio server，给 agent 提供上下文工具。"],
       ["Agent skill", "mdtero agent install --interactive", "动态检测 Codex、Claude、Gemini、Hermes、OpenCode，并用空格多选安装。"]
@@ -297,6 +299,7 @@ const CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero project ingest --json",
   "mdtero project parse --wait --timeout 300 --json",
   "mdtero project refresh --wait --timeout 300 --json",
+  ONE_COMMAND_RAG_BOOTSTRAP,
   "mdtero rag build --json",
   "mdtero rag status --json",
   "mdtero rag query \"<question>\" --build-if-needed --json",
