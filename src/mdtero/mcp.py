@@ -233,7 +233,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
     }
     recovery_commands: dict[str, Any] = {
         "create_server_project": "mdtero project create-server --json",
-        "bind_server_project": "mdtero project link --server-project-id <id>",
+        "bind_server_project": "mdtero project link --server-project-id <id> --json",
     }
     if state is None:
         commands["project_init_named"] = "mdtero project init --name <name>"
@@ -586,7 +586,7 @@ def _align_mcp_server_project_id(root: Path, state: Any, project_id: str | None,
             "server_project_id": local_project_id,
             "requested_server_project_id": explicit_project_id,
             "action_hint": "The MCP plan requested a different server project than the local project is bound to. Inspect both ids before rebinding so RAG does not mix project contexts.",
-            "next_commands": [commands["rag_status"], f"mdtero project link-server {explicit_project_id}", commands["mcp_briefing"]],
+            "next_commands": [commands["rag_status"], f"mdtero project link --server-project-id {explicit_project_id} --json", commands["mcp_briefing"]],
         }
     if local_project_id == explicit_project_id:
         return state, None

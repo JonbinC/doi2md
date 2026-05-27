@@ -3642,6 +3642,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert commands["commands"]["mcp_briefing"] == "mdtero mcp briefing --json"
     assert commands["commands"]["serve_mcp"] == "mdtero mcp serve"
     assert commands["recovery_commands"]["create_server_project"] == "mdtero project create-server --json"
+    assert commands["recovery_commands"]["bind_server_project"] == "mdtero project link --server-project-id <id> --json"
     assert commands["workflow"] == [
         "mdtero doctor --json",
         "mdtero project parse --wait --timeout 300 --json",
@@ -5244,7 +5245,7 @@ def test_mcp_server_rag_build_rejects_conflicting_explicit_project_id(tmp_path: 
     assert payload["reason_code"] == "server_project_id_mismatch"
     assert payload["server_project_id"] == "local-42"
     assert payload["requested_server_project_id"] == "plan-99"
-    assert "mdtero project link-server plan-99" in payload["next_commands"]
+    assert "mdtero project link --server-project-id plan-99 --json" in payload["next_commands"]
     assert state.server_project_id == "local-42"
 
 
