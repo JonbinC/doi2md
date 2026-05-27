@@ -199,6 +199,7 @@ describe("createApiClient", () => {
     const route = await client.fetchRoutePlan({ input: "10.1000/demo" }) as any;
 
     expect(route.route_planner_fallback).toBe(true);
+    expect(route.input_value).toBe("10.1000/demo");
     expect(route.acquisition_mode).toBe("server_parse");
     expect(route.action_sequence).toEqual(["server_parse"]);
     expect(route.server_entrypoint).toBe("/api/v1/tasks/parse");
