@@ -9,7 +9,7 @@ import { redactSensitiveText } from "../lib/redact";
 import { isSupportedPaperPage } from "../lib/supported-page";
 
 const SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"] as const;
-const SOURCE_ORDER = ["paper_pdf", "paper_xml"] as const;
+const SOURCE_ORDER = ["paper_pdf", "paper_epub", "paper_html", "paper_xml"] as const;
 
 function getArtifactKeys(result?: TaskResult | null): string[] {
   const keyed = Object.keys(result?.artifacts ?? {});
@@ -129,6 +129,12 @@ export function getDownloadLabel(artifactKey: string, language: UiLanguage = "en
     if (artifactKey === "paper_pdf") {
       return "下载 PDF";
     }
+    if (artifactKey === "paper_epub") {
+      return "下载 EPUB";
+    }
+    if (artifactKey === "paper_html") {
+      return "下载 HTML";
+    }
     if (artifactKey === "paper_xml") {
       return "下载 XML";
     }
@@ -145,6 +151,12 @@ export function getDownloadLabel(artifactKey: string, language: UiLanguage = "en
   }
   if (artifactKey === "paper_pdf") {
     return "Download PDF";
+  }
+  if (artifactKey === "paper_epub") {
+    return "Download EPUB";
+  }
+  if (artifactKey === "paper_html") {
+    return "Download HTML";
   }
   if (artifactKey === "paper_xml") {
     return "Download XML";

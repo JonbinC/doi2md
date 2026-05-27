@@ -412,7 +412,7 @@ function isSupportedPaperPage(url) {
 
 // src/popup/task-view.ts
 var SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"];
-var SOURCE_ORDER = ["paper_pdf", "paper_xml"];
+var SOURCE_ORDER = ["paper_pdf", "paper_epub", "paper_html", "paper_xml"];
 function getArtifactKeys(result) {
   const keyed = Object.keys(result?.artifacts ?? {});
   const listed = (result?.download_artifacts ?? []).map((artifact) => String(artifact.artifact || "").trim()).filter((artifact) => artifact.length > 0);
@@ -491,6 +491,12 @@ function getDownloadLabel(artifactKey, language = "en") {
     if (artifactKey === "paper_pdf") {
       return "\u4E0B\u8F7D PDF";
     }
+    if (artifactKey === "paper_epub") {
+      return "\u4E0B\u8F7D EPUB";
+    }
+    if (artifactKey === "paper_html") {
+      return "\u4E0B\u8F7D HTML";
+    }
     if (artifactKey === "paper_xml") {
       return "\u4E0B\u8F7D XML";
     }
@@ -507,6 +513,12 @@ function getDownloadLabel(artifactKey, language = "en") {
   }
   if (artifactKey === "paper_pdf") {
     return "Download PDF";
+  }
+  if (artifactKey === "paper_epub") {
+    return "Download EPUB";
+  }
+  if (artifactKey === "paper_html") {
+    return "Download HTML";
   }
   if (artifactKey === "paper_xml") {
     return "Download XML";
