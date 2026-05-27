@@ -691,6 +691,7 @@ def test_wait_commands_accept_timeout_and_interval_flags():
     project_parse_args = parser.parse_args(["project", "parse", "--wait", "--timeout", "9", "--interval", "2.5"])
     project_refresh_args = parser.parse_args(["project", "refresh", "--wait", "--timeout", "11", "--interval", "3.5"])
     translate_args = parser.parse_args(["translate", "parse-1", "--wait", "--timeout", "13", "--interval", "4.5"])
+    rag_build_args = parser.parse_args(["rag", "build", "--wait", "--timeout", "15", "--interval", "1.25"])
     rag_query_args = parser.parse_args(["rag", "query", "What changed?", "--build-if-needed", "--timeout", "17", "--interval", "2"])
 
     assert parse_args.timeout == 5
@@ -703,6 +704,9 @@ def test_wait_commands_accept_timeout_and_interval_flags():
     assert project_refresh_args.interval == 3.5
     assert translate_args.timeout == 13
     assert translate_args.interval == 4.5
+    assert rag_build_args.wait is True
+    assert rag_build_args.timeout == 15
+    assert rag_build_args.interval == 1.25
     assert rag_query_args.timeout == 17
     assert rag_query_args.interval == 2
 
@@ -6010,6 +6014,51 @@ def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch,
         ("create", "local-demo", "Mdtero local project: local-demo"),
         ("import", "42", "task-done"),
         ("build", "42"),
+    ]
+
+
+def test_rag_build_wait_polls_until_ready(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    calls = []
+
+    def fake_create(self, name, *, description=None):
+        calls.append(("create", name, description))
+        return {"id": 42, "name": name}
+
+    def fake_import(self, project_id, task_id):
+        calls.append(("import", project_id, task_id))
+        return {"document_id": "doc-1", "import_status": "imported"}
+
+    def fake_build(self, project_id):
+        calls.append(("build", project_id))
+        return {"status": "queued", "reason_code": "rag_build_queued"}
+
+    def fake_status(self, project_id):
+        calls.append(("status", project_id))
+        return {"status": "ready", "reason_code": "indexed", "chunk_count": 6}
+
+    monkeypatch.setattr(MdteroClient, "create_project", fake_create)
+    monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import)
+    monkeypatch.setattr(MdteroClient, "rag_build", fake_build)
+    monkeypatch.setattr(MdteroClient, "rag_status", fake_status)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_rag_build(type("Args", (), {"project_id": None, "wait": True, "timeout": 1, "interval": 0.01, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "queued"
+    assert payload["reason_code"] == "rag_build_queued"
+    assert payload["status_after_build"]["status"] == "ready"
+    assert payload["status_after_build"]["reason_code"] == "indexed"
+    assert payload["server_project_id"] == "42"
+    assert calls == [
+        ("create", "local-demo", "Mdtero local project: local-demo"),
+        ("import", "42", "task-done"),
+        ("build", "42"),
+        ("status", "42"),
     ]
 
 

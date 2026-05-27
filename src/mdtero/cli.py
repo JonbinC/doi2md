@@ -199,6 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
     rag_sub = rag.add_subparsers(dest="rag_command")
     rag_build = _cmd(rag_sub, "build", "Request server-side project RAG build.", cmd_rag_build)
     rag_build.add_argument("--project-id")
+    rag_build.add_argument("--wait", action="store_true", help="Poll RAG status until the backend build is query-ready or times out.")
+    _add_wait_options(rag_build)
     rag_build.add_argument("--json", action="store_true")
     rag_query = _cmd(rag_sub, "query", "Query server-side project RAG.", cmd_rag_query)
     rag_query.add_argument("question")
@@ -1854,6 +1856,15 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
     result.setdefault("server_project_id", project_id)
     result.setdefault("bootstrap", bootstrap)
     result.setdefault("ingest", ingest)
+    if getattr(_args, "wait", False):
+        status_after_build = _wait_for_rag_ready(client, project_id, args=_args)
+        result.setdefault("status_after_build", status_after_build)
+        if _rag_status_payload_is_ready(status_after_build):
+            result.setdefault("status", status_after_build.get("status", "ready"))
+            result.setdefault("reason_code", status_after_build.get("reason_code", "indexed"))
+        else:
+            result.setdefault("action_hint", "RAG build was submitted, but it did not become query-ready within the local wait timeout. Poll `mdtero rag status --json`, then retry `mdtero rag query \"<question>\" --build-if-needed --json`.")
+            result.setdefault("next_commands", [RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND])
     _print_result(redact_sensitive_payload(result), json_output=_args.json)
     return 0
 
