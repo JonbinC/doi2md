@@ -26,7 +26,9 @@ def build_mcp_server_contract(payload: dict[str, Any]) -> dict[str, Any]:
         "primary_tool": "agent_briefing",
         "tools": [
             "agent_briefing",
+            "project_init",
             "project_status",
+            "project_add",
             "paper_context",
             "submit_parse",
             "task_status",

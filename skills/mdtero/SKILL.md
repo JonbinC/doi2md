@@ -63,7 +63,9 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 
 - `agent_briefing`: one-call account status, project health, ready downloads, blocked items, RAG status, and recommended next commands
 - Agent-facing recommended commands include `--json` where supported. Prefer those exact commands over human-readable variants when automating workflows.
+- `project_init(name=None)`: create the local `.mdtero/project.json` project state from MCP so an agent can start project mode without dropping back to shell commands
 - `project_status`: current project name, server project id, paper statuses, and next actions
+- `project_add(input_value, title=None, doi=None, source="mcp")`: add a DOI, URL, or local file target to the project queue before calling `submit_parse` or `mdtero project parse`
 - `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
 - `submit_parse(input_value, wait=False)`: submit a DOI/URL/file handoff through the same route-aware CLI path and update the local project record; use this when the agent should start work without asking the user to copy a terminal command
 - `task_status(task_id, wait=False)`: poll a parse or translation task, sync the local project state, and return `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, and `next_commands`
@@ -74,7 +76,7 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
-Use the `mcp_tool_plan` steps to choose between `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, and `rag_query`. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, or `readiness` before retrying.
+Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, and `rag_query`. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, or `readiness` before retrying.
 
 Prefer MCP tools for multi-step agent work when `mdtero mcp serve` is already running. Prefer CLI commands when the user is reading along in a terminal, when a file path must be selected manually, or when browser-extension handoff copy should remain visible to the user.
 

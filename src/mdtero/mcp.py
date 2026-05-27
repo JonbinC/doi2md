@@ -7,7 +7,7 @@ from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config
 from .onboarding import build_academic_onboarding_summary, build_onboarding_checklist
-from .projects import add_paper, bind_server_project, load_project, paper_from_submission, paper_to_document, project_documents, project_path, update_task
+from .projects import PaperRecord, add_paper, bind_server_project, init_project, load_project, paper_from_submission, paper_to_document, project_documents, project_path, update_task
 from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
 
@@ -106,6 +106,89 @@ def build_paper_context(input_or_task_id: str, project_root: Path | None = None)
             payload["recommended_commands"] = _paper_commands(paper)
             return redact_sensitive_payload(payload)
     return {"error": "paper_not_found", "input_or_task_id": input_or_task_id}
+
+
+def initialize_project_for_agent(name: str | None = None, project_root: Path | None = None) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    cleaned_name = str(name or "").strip() or root.resolve().name
+    existed = project_path(root).exists()
+    try:
+        path = init_project(root, name=cleaned_name)
+        state = load_project(root)
+    except Exception as exc:
+        return _agent_tool_exception_payload(
+            exc,
+            reason_code="project_init_failed",
+            action_hint="Local project initialization failed. Check directory permissions and retry from the project root.",
+            next_commands=["mdtero project init --name <name>", "mdtero doctor --json"],
+            extra={"project": cleaned_name, "root": str(root.resolve())},
+        )
+    commands = build_agent_commands(root)["commands"]
+    return redact_sensitive_payload({
+        "status": "ready",
+        "reason_code": "project_already_initialized" if existed else "project_initialized",
+        "project": state.name,
+        "root": str(root.resolve()),
+        "project_file": str(path),
+        "server_project_id": state.server_project_id,
+        "paper_count": len(state.papers),
+        "action_hint": "Local Mdtero project is initialized. Add DOI/URL/file targets, then parse and build server-side Voyage RAG.",
+        "next_commands": _dedupe_commands([
+            commands["project_status"],
+            commands["discover_interactive"],
+            commands["discover_add_selected"],
+            commands["project_add"],
+            commands["parse_doi_or_url"],
+            commands["mcp_briefing"],
+        ]),
+        "project_status": build_project_status(root),
+    })
+
+
+def add_project_item_for_agent(input_value: str, project_root: Path | None = None, *, title: str | None = None, doi: str | None = None, source: str = "mcp") -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    cleaned_input = str(input_value or "").strip()
+    commands = build_agent_commands(root)["commands"]
+    if not cleaned_input:
+        return {
+            "status": "failed",
+            "reason_code": "project_item_input_required",
+            "action_hint": "Provide a DOI, URL, or local file path before adding an item to the Mdtero project.",
+            "next_commands": [commands["project_add"], commands["discover_interactive"], commands["parse_file"]],
+        }
+    try:
+        existed = False
+        existing = _load_project_or_none(root)
+        if existing is not None:
+            existed = any(paper.input == cleaned_input for paper in existing.papers)
+        state = add_paper(root, PaperRecord(input=cleaned_input, title=title, doi=doi, source=source or "mcp"))
+    except Exception as exc:
+        return _agent_tool_exception_payload(
+            exc,
+            reason_code="project_item_add_failed",
+            action_hint="Could not add this item to the local project. Initialize the project or check directory permissions, then retry.",
+            next_commands=[commands.get("project_init_named", "mdtero project init --name <name>"), commands["project_add"], commands["mcp_briefing"]],
+            extra={"input": cleaned_input, "root": str(root.resolve())},
+        )
+    return redact_sensitive_payload({
+        "status": "queued",
+        "reason_code": "project_item_replaced" if existed else "project_item_added",
+        "input": cleaned_input,
+        "title": title,
+        "doi": doi,
+        "source": source or "mcp",
+        "project": state.name,
+        "server_project_id": state.server_project_id,
+        "paper_count": len(state.papers),
+        "action_hint": "Item is in the local parse queue. Submit it with submit_parse or `mdtero project parse --wait --timeout 300 --json`.",
+        "next_commands": _dedupe_commands([
+            commands["parse_pending"],
+            commands["refresh"],
+            commands["rag_build"],
+            commands["mcp_briefing"],
+        ]),
+        "project_status": build_project_status(root),
+    })
 
 
 def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
@@ -1269,7 +1352,9 @@ def build_agent_briefing(
         "recommended_next_commands": _dedupe_commands(next_commands),
         "mcp_tools": [
             "agent_briefing",
+            "project_init",
             "project_status",
+            "project_add",
             "paper_context",
             "submit_parse",
             "task_status",
@@ -1296,7 +1381,9 @@ def build_agent_briefing(
 def _mcp_server_payload(commands: dict[str, Any], root: Path) -> dict[str, Any]:
     tools = [
         "agent_briefing",
+        "project_init",
         "project_status",
+        "project_add",
         "paper_context",
         "submit_parse",
         "task_status",
@@ -1371,12 +1458,22 @@ def _build_mcp_tool_plan(
     if state is None:
         plan.append({
             "step": "initialize_project",
-            "tool": "agent_commands",
-            "purpose": "No MCP tool creates a local project yet; return the CLI command bundle and ask the user or agent shell to initialize it.",
+            "tool": "project_init",
+            "purpose": "Create the local `.mdtero/project.json` project state from MCP so an agent can start project mode without falling back to shell commands.",
             "when": "project.initialized is false or reason_code is project_not_initialized.",
-            "arguments": {},
-            "success_signal": "Use commands.project_init_named, then rerun agent_briefing.",
+            "arguments": {"name": "<name>"},
+            "success_signal": "reason_code is project_initialized/project_already_initialized and project_file points to `.mdtero/project.json`; then rerun agent_briefing.",
             "next_commands": [commands.get("project_init_named", "mdtero project init --name <name>"), commands["project_add"], commands["parse_doi_or_url"]],
+            "failure_fields": ["reason_code", "action_hint", "next_commands"],
+        })
+        plan.append({
+            "step": "add_first_project_item",
+            "tool": "project_add",
+            "purpose": "Add the first DOI, URL, or local file target to the newly initialized local project queue.",
+            "when": "After project_init succeeds and the user or discovery result provides a concrete DOI/URL/file input.",
+            "arguments": {"input_value": "<doi-or-url-or-file>"},
+            "success_signal": "reason_code is project_item_added/project_item_replaced and project_status.pending_count increases.",
+            "next_commands": [commands["parse_pending"], commands["refresh"], commands["rag_build"]],
             "failure_fields": ["reason_code", "action_hint", "next_commands"],
         })
         return redact_sensitive_payload(plan)
@@ -1702,6 +1799,14 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def project_status() -> dict:
         return build_project_status(root)
+
+    @mcp.tool
+    def project_init(name: str | None = None) -> dict:
+        return initialize_project_for_agent(name, root)
+
+    @mcp.tool
+    def project_add(input_value: str, title: str | None = None, doi: str | None = None, source: str = "mcp") -> dict:
+        return add_project_item_for_agent(input_value, root, title=title, doi=doi, source=source)
 
     @mcp.tool
     def paper_context(input_or_task_id: str) -> dict:
