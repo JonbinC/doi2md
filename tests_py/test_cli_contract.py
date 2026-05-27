@@ -6681,6 +6681,8 @@ def test_public_docs_describe_rag_answer_citation_contract():
     assert "matches" in combined
     assert "source_nodes" in combined
     assert "evidence_pack.context_markdown" in combined
+    assert "citation_contract.required_for_final_answer" in combined
+    assert "preserve `citations` plus `source_nodes`" in combined
     assert "next_commands" in combined
     assert "primary_failure" in combined
     assert "failed_steps" in combined
@@ -6707,6 +6709,7 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
         assert "request_translation" in content
         assert "server_rag_status" in content
         assert "rag_query" in content
+        assert "citation_contract.required_for_final_answer" in content
         assert "failure_fields" in content
         assert "reason_code" in content
         assert "action_hint" in content

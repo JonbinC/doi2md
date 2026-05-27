@@ -176,6 +176,6 @@ mdtero zotero sync --json
 mdtero mcp serve
 ```
 
-当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations` 和 `matches`，TUI/MCP 会显示 agent skill 的 detected/installed/pending 状态，`mdtero mcp briefing --json` 会返回 `mcp_tool_plan`，指导本地 agent 按状态调用 `project_init`、`project_add`、`submit_parse`、`task_status`、`download_artifact`、`request_translation`、`server_rag_status` 或 `rag_query`。agent skill 安装走 Python CLI，不再依赖 npm。
+当前已经验证 DOI 解析、PDF 上传解析、项目管理、BibTeX 导入、Zotero 导入、Zotero 成功任务 note/tag 反向同步、下载、后端 Voyage RAG 绑定/导入/build/query、agent skill 安装和 MCP 本地上下文。RAG query 会返回 `answer`、`citations`、`matches`、`source_nodes`、`evidence_pack.context_markdown` 和 `citation_contract.required_for_final_answer`；最终回答必须保留 `citations` 和 `source_nodes`。TUI/MCP 会显示 agent skill 的 detected/installed/pending 状态，`mdtero mcp briefing --json` 会返回 `mcp_tool_plan`，指导本地 agent 按状态调用 `project_init`、`project_add`、`submit_parse`、`task_status`、`download_artifact`、`request_translation`、`server_rag_status` 或 `rag_query`。agent skill 安装走 Python CLI，不再依赖 npm。
 `mdtero smoke --json` 可用于上线后复测：它会创建独立项目目录，跑 discovery、DOI 解析、状态等待、下载、服务端 Voyage RAG build/status/query，并给本地 agent 返回结构化失败原因。
 CLI JSON 和 MCP payload 会在返回给本地 agent 前清理 signed MinerU/OSS URL、Bearer/API-key header、Mdtero API key 和常见 token query 参数，但保留 `reason_code`、`action_hint`、`next_commands` 和证据字段。

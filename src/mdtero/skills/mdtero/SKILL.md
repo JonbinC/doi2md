@@ -73,7 +73,7 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `request_translation(task_id_or_markdown_path, target_language="zh-CN", wait=False)`: request backend translation for a completed parse task or local Markdown file and return provider-attempt diagnostics when translation fails
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
-- `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
+- `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. Preserve `citation_contract.required_for_final_answer` and keep its required `citations` plus `source_nodes` in the final answer. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
 Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, and `rag_query`. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, or `readiness` before retrying.
@@ -87,7 +87,7 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 - prefer Markdown first
 - treat PDF as input, not as the normal output
 - use fallback bundles only when the workflow truly needs image or asset files
-- keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, RAG `answer` / `citations` / `source_nodes` / `evidence_pack`, `next_commands`, and download artifact names visible in handoffs
+- keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, RAG `answer` / `citations` / `source_nodes` / `evidence_pack` / `citation_contract`, `next_commands`, and download artifact names visible in handoffs
 
 ## Verification Rule
 
