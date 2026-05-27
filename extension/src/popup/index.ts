@@ -34,6 +34,7 @@ import {
   getResultWarningText,
   getSavedResultSummary,
   getUsageStatusText,
+  getTaskProcessingSummary,
   getTaskFailureText,
   buildCliHandoffCommandPlan,
   buildApiErrorCliHandoffPlan,
@@ -201,6 +202,8 @@ const translateLanguageLabelEl = document.querySelector<HTMLLabelElement>("#tran
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-button");
 const translateLanguageEl = document.querySelector<HTMLSelectElement>("#translate-language");
 const resultEl = document.querySelector<HTMLParagraphElement>("#result");
+const taskSummaryEl = document.querySelector<HTMLDivElement>("#task-summary");
+const taskSummaryListEl = document.querySelector<HTMLUListElement>("#task-summary-list");
 const cliHandoffEl = document.querySelector<HTMLDivElement>("#cli-handoff");
 const cliHandoffNoteEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-note");
 const cliHandoffCommandEl = document.querySelector<HTMLElement>("#cli-handoff-command");
@@ -249,6 +252,20 @@ function setResult(message: string) {
   if (resultEl) {
     resultEl.textContent = message;
   }
+}
+
+function setTaskSummary(lines?: string[] | null) {
+  if (!taskSummaryEl || !taskSummaryListEl) {
+    return;
+  }
+  taskSummaryListEl.innerHTML = "";
+  const visibleLines = (lines ?? []).map((line) => line.trim()).filter(Boolean).slice(0, 7);
+  taskSummaryEl.hidden = visibleLines.length === 0;
+  visibleLines.forEach((line) => {
+    const item = document.createElement("li");
+    item.textContent = line;
+    taskSummaryListEl.appendChild(item);
+  });
 }
 
 type WorkflowState = "pending" | "active" | "done";
@@ -729,6 +746,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
 
   const task = response.result as TaskRecord;
   if (task.status === "failed") {
+    setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     setResult(
       getTaskFailureText(
         task,
@@ -770,6 +788,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     setResult(
       getActionStatusText(kind === "parse" ? "running_parse" : "running_translate", uiLanguage)
     );
+    setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     window.setTimeout(() => {
       void pollTask(taskId, kind);
     }, 1500);
@@ -787,6 +806,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     };
   }
   setCliHandoff(null);
+  setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
   renderArtifacts(task);
   await persistPopupState(task);
   await renderRecentTasks();
@@ -948,6 +968,7 @@ function setLocalFileName(filename?: string) {
 async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) {
   currentInput = file.name;
   detectedPageContext = null;
+  setTaskSummary(null);
   setLocalFileName(file.name);
   isParsing = true;
   updateWorkflowState();
@@ -996,6 +1017,7 @@ parseButton?.addEventListener("click", async () => {
   }
 
   currentInput = input;
+  setTaskSummary(null);
   isParsing = true;
   updateWorkflowState();
   renderActionButtons();
