@@ -31,6 +31,10 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
 ]
 
 
+ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json'
+GENERIC_RAG_QUERY_COMMAND = 'mdtero rag query "<question>" --build-if-needed --json'
+
+
 def build_input_route_contract() -> dict[str, Any]:
     """Canonical local input routes shared by setup JSON, TUI, extension, and agents."""
     return {
@@ -91,11 +95,12 @@ def build_input_route_contract() -> dict[str, Any]:
                 "label": "RAG / MCP after parse",
                 "status": "after_parse",
                 "best_for": ["completed Markdown", "project synthesis", "local agent context", "citation-preserving answers"],
-                "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
+                "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
                 "next_commands": [
                     "mdtero project ingest --json",
                     "mdtero rag build --json",
                     "mdtero rag status --json",
+                    GENERIC_RAG_QUERY_COMMAND,
                     "mdtero mcp briefing --json",
                     "mdtero mcp serve",
                 ],
@@ -225,9 +230,9 @@ def build_onboarding_checklist(
             "id": "rag",
             "title": "Build backend Voyage RAG",
             "status": "ready_after_parse",
-            "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
-            "secondary_commands": ["mdtero rag build --json", "mdtero rag status --json"],
-            "action_hint": "Voyage runs on the Mdtero backend; no local RAG provider key is required.",
+            "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
+            "secondary_commands": [GENERIC_RAG_QUERY_COMMAND, "mdtero rag status --json", "mdtero rag build --json"],
+            "action_hint": "Voyage runs on the Mdtero backend; no local RAG provider key or manual server project id is required.",
         },
         {
             "id": "mcp",
@@ -318,9 +323,10 @@ def build_next_step_command_groups() -> list[dict[str, Any]]:
         (
             "Server RAG and local agents",
             [
-                "mdtero rag build --json",
+                ONE_COMMAND_RAG_BOOTSTRAP,
                 "mdtero rag status --json",
-                "mdtero rag query \"What are the key claims and methods?\" --build-if-needed --json",
+                "mdtero rag build --json",
+                GENERIC_RAG_QUERY_COMMAND,
                 "mdtero mcp briefing --json",
                 "mdtero mcp serve",
                 "mdtero agent install --interactive",
