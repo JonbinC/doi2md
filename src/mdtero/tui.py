@@ -15,7 +15,7 @@ from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
-from .onboarding import build_academic_onboarding_summary
+from .onboarding import build_academic_onboarding_summary, build_input_route_contract
 from .projects import ProjectState, ensure_project
 from .rag_contract import ensure_rag_contract
 
@@ -71,6 +71,7 @@ def build_dashboard_model(
         launch_bundle=launch_bundle,
         next_steps=next_steps,
     )
+    input_routes = build_input_route_contract()
     handoff = {
         "ready_artifacts": briefing["ready_artifacts"],
         "blocked_items": briefing["blocked_items"],
@@ -146,6 +147,7 @@ def build_dashboard_model(
             "recommended_next_commands": briefing["recommended_next_commands"],
         },
         "extension_handoff": extension_handoff,
+        "input_routes": input_routes,
         "onboarding_checklist": onboarding_checklist,
         "launch_summary": launch_summary,
         "launch_bundle": launch_bundle,

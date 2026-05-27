@@ -3148,6 +3148,22 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["checks"]["fastmcp"]["capability"] == "local MCP server for agents"
     assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
     assert payload["academic"]["discover_source"] == "server_openalex"
+    assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
+    assert [route["id"] for route in payload["input_routes"]["routes"]] == [
+        "doi_or_url",
+        "file_upload",
+        "browser_extension_handoff",
+        "rag_mcp_after_parse",
+    ]
+    route_by_id = {route["id"]: route for route in payload["input_routes"]["routes"]}
+    assert route_by_id["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
+    assert route_by_id["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
+    assert "MinerU-first" in route_by_id["file_upload"]["action_hint"]
+    assert "website OAuth" in route_by_id["browser_extension_handoff"]["best_for"]
+    assert "publisher challenge" in route_by_id["browser_extension_handoff"]["best_for"]
+    assert route_by_id["rag_mcp_after_parse"]["primary_command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert "citations" in route_by_id["rag_mcp_after_parse"]["evidence_fields"]
+    assert payload["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
     assert payload["next_commands"][:2] == ["mdtero doctor --json", "mdtero config academic --json"]
     checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
     assert list(checklist) == [
@@ -3204,6 +3220,7 @@ def test_setup_json_onboarding_uses_local_semantic_scholar_when_configured(monke
 
     assert "s2-secret" not in output
     assert payload["academic"]["discover_source"] == "local_semantic_scholar"
+    assert payload["input_routes"]["routes"][0]["id"] == "doi_or_url"
     assert checklist["academic_keys"]["status"] == "enhanced"
     assert checklist["discovery"]["status"] == "local_semantic_scholar"
     assert checklist["agent_skills"]["status"] == "not_detected"
@@ -5055,6 +5072,15 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert "curl_cffi route acquisition for planned HTML/XML/EPUB/PDF sources" in model["extension_handoff"]["cli_scope"]
     assert "publisher challenge or JavaScript verification page" in model["extension_handoff"]["handoff_triggers"]
     assert model["extension_handoff"]["visible_fields"] == ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"]
+    assert model["input_routes"]["goal"] == "choose_shortest_markdown_path"
+    input_routes = {route["id"]: route for route in model["input_routes"]["routes"]}
+    assert input_routes["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
+    assert input_routes["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
+    assert "backend MinerU-first" in input_routes["file_upload"]["action_hint"]
+    assert input_routes["browser_extension_handoff"]["status"] == "manual_capture"
+    assert "website OAuth" in input_routes["browser_extension_handoff"]["best_for"]
+    assert input_routes["rag_mcp_after_parse"]["evidence_fields"] == ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"]
+    assert model["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
     assert model["agents"]["detect_command"] == "mdtero agent detect --json"
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
