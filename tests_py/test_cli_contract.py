@@ -3795,6 +3795,16 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["project_bridge"]["server_project"]["id"] == "42"
     assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
     assert briefing["project_bridge"]["bridge_commands"][-2:] == ["mdtero mcp briefing --json", "mdtero mcp serve"]
+    assert briefing["input_routes"]["goal"] == "choose_shortest_markdown_path"
+    input_routes = {route["id"]: route for route in briefing["input_routes"]["routes"]}
+    assert list(input_routes) == ["doi_or_url", "file_upload", "browser_extension_handoff", "rag_mcp_after_parse"]
+    assert input_routes["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
+    assert input_routes["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
+    assert "backend MinerU-first" in input_routes["file_upload"]["action_hint"]
+    assert "website OAuth" in input_routes["browser_extension_handoff"]["best_for"]
+    assert "publisher challenge" in input_routes["browser_extension_handoff"]["best_for"]
+    assert input_routes["rag_mcp_after_parse"]["evidence_fields"] == ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"]
+    assert briefing["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
     assert briefing["extension_handoff"] == {
         "purpose": "Use the browser extension for OAuth/session-aware page capture and the CLI/MCP tools for local files, campus-network fetches, status polling, downloads, translation, and RAG.",
         "browser_scope": [
@@ -3893,6 +3903,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "action_hint": "Start this FastMCP stdio server from the local project root after running `mdtero mcp briefing --json`; agents should call `agent_briefing` before other tools.",
     }
     tool_plan = briefing["mcp_tool_plan"]
+    assert "input_routes" in tool_plan[0]["success_signal"]
     assert "extension_handoff" in tool_plan[0]["success_signal"]
     assert "handoff_protocol" in tool_plan[0]["success_signal"]
     assert [step["tool"] for step in tool_plan][:2] == ["agent_briefing", "project_status"]
