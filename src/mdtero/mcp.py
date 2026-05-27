@@ -5,7 +5,8 @@ from typing import Any
 
 from .agent import detect_target_status
 from .client import MdteroClient
-from .config import MdteroConfig, load_config
+from .config import MdteroConfig, config_path, load_config
+from .onboarding import build_academic_onboarding_summary, build_onboarding_checklist
 from .projects import add_paper, bind_server_project, load_project, paper_from_submission, paper_to_document, project_documents, project_path, update_task
 from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
@@ -1150,6 +1151,19 @@ def build_agent_briefing(
     detected_agents = [agent for agent in agent_status if agent.detected]
     installed_agents = [agent for agent in agent_status if agent.installed]
     pending_agent_installs = [agent for agent in agent_status if agent.detected and not agent.installed]
+    agent_status_payload = [
+        {
+            "target": agent.target,
+            "label": agent.label,
+            "detected": agent.detected,
+            "installed": agent.installed,
+            "install_command": agent.install_command,
+            "selection_index": agent.selection_index,
+        }
+        for agent in agent_status
+    ]
+    academic = build_academic_onboarding_summary(config, path=config_path(), saved=False)
+    headless = config.api_key_source == "MDTERO_API_KEY"
 
     papers = state.papers if state is not None else []
     pending = [paper for paper in papers if paper.status in {"pending", "created"} and not paper.task_id]
@@ -1220,6 +1234,13 @@ def build_agent_briefing(
             "action_hint": server_rag.get("action_hint"),
             "next_commands": server_rag.get("next_commands", []),
         },
+        "onboarding_checklist": build_onboarding_checklist(
+            authenticated=config.is_authenticated,
+            headless=headless,
+            academic=academic,
+            agent_status=agent_status_payload,
+            agent_detection_skipped=False,
+        ),
         "project_bridge": build_project_bridge(root),
         "extension_handoff": _extension_handoff_payload(commands),
         "handoff_protocol": _agent_handoff_protocol(commands),

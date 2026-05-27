@@ -3699,6 +3699,24 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "action_hint": "RAG is ready; ask a grounded project question and preserve answer, citations, source_nodes, and evidence_pack.",
         "preserve_fields": ["reason_code", "action_hint", "next_commands", "readiness", "agent_summary", "download_artifacts"],
     }
+    checklist = {item["id"]: item for item in briefing["onboarding_checklist"]}
+    assert list(checklist) == [
+        "auth",
+        "academic_keys",
+        "discovery",
+        "project",
+        "parse",
+        "zotero",
+        "rag",
+        "mcp",
+        "agent_skills",
+    ]
+    assert checklist["auth"]["status"] == "complete"
+    assert checklist["discovery"]["status"] == "server_openalex"
+    assert checklist["rag"]["primary_command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert "Mdtero backend" in checklist["rag"]["action_hint"]
+    assert "VOYAGE_API_KEY" not in checklist["rag"]["action_hint"]
+    assert checklist["agent_skills"]["status"] == "needs_selection"
     assert briefing["project_bridge"]["status"] == "bound"
     assert briefing["project_bridge"]["server_project"]["id"] == "42"
     assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
@@ -4804,6 +4822,30 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["health"]["primary_next_command"] == "mdtero setup"
     assert model["account"]["auth_hint"] == "mdtero setup"
     assert model["account"]["authenticated"] is False
+    checklist = {item["id"]: item for item in model["onboarding_checklist"]}
+    assert list(checklist) == [
+        "auth",
+        "academic_keys",
+        "discovery",
+        "project",
+        "parse",
+        "zotero",
+        "rag",
+        "mcp",
+        "agent_skills",
+    ]
+    assert checklist["auth"] == {
+        "id": "auth",
+        "title": "Authenticate",
+        "status": "needs_action",
+        "primary_command": "mdtero setup",
+        "action_hint": "Browser OAuth is preferred on workstations; API-key setup is for trusted headless servers and agents.",
+    }
+    assert checklist["parse"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
+    assert checklist["rag"]["primary_command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert "VOYAGE_API_KEY" not in checklist["rag"]["action_hint"]
+    assert checklist["mcp"]["primary_command"] == "mdtero mcp briefing --json"
+    assert checklist["agent_skills"]["status"] == "not_detected"
     assert model["project"]["name"] == "tui-demo"
     assert model["rag"]["reason_code"] == "no_succeeded_tasks"
     assert model["rag"]["next_commands"][0] == "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
@@ -4981,6 +5023,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     console.print(rendered)
     output = console.export_text()
     assert "Mdtero Control Console" in output
+    assert "Onboarding Checklist" in output
     assert "Results ready" in output
     assert "Agent Handoff" in output
     assert "Agent skills" in output
