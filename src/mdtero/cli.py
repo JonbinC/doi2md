@@ -99,6 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     smoke.add_argument("--skip-download", action="store_true")
     smoke.add_argument("--skip-translate", action="store_true")
     smoke.add_argument("--skip-rag", action="store_true")
+    smoke.add_argument("--wait", action="store_true", help="Accepted for copy-paste consistency; smoke already waits for parse, translation, and RAG steps.")
     _add_wait_options(smoke)
     smoke.add_argument("--json", action="store_true")
 

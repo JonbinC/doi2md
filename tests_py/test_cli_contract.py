@@ -71,17 +71,22 @@ CLI_COMMAND_PLACEHOLDERS = {
     "<artifact>": "paper_md",
     "<directory>": "./papers",
     "<doi-or-url>": "10.48550/arXiv.1706.03762",
+    "<doi-or-current-page-url>": "10.48550/arXiv.1706.03762",
     "<id>": "42",
     "<name>": "demo",
     "<paper.pdf|paper.epub|paper.html|paper.xml>": "paper.pdf",
     "<paper.pdf|paper.html|paper.xml|paper.epub>": "paper.pdf",
     "<path>": "paper.pdf",
+    "<parse-task-id>": "parse-task-123",
     "<question>": "What is indexed?",
     "<refs.bib>": "refs.bib",
+    "<saved-browser-artifact.pdf|epub|html|xml>": "paper.pdf",
     "<target>": "codex",
     "<task-id>": "task-123",
+    "<task-id-or-paper.md>": "task-123",
     "<task-id-or-markdown-file>": "task-123",
     "<topic>": "thermal storage",
+    "<translation-task-id>": "translation-task-123",
 }
 
 
@@ -124,6 +129,24 @@ def assert_dashboard_model_commands_parse(model: dict) -> None:
             assert_command_list_parses([str(command) for command in group.get("commands") or []])
 
 
+def assert_onboarding_payload_commands_parse(payload: dict) -> None:
+    assert_command_list_parses([str(command) for command in payload.get("next_commands") or []])
+    for group in payload.get("next_command_groups") or []:
+        if isinstance(group, dict):
+            assert_command_list_parses([str(command) for command in group.get("commands") or []])
+    for item in payload.get("onboarding_checklist") or []:
+        if not isinstance(item, dict):
+            continue
+        assert_command_list_parses([str(item.get("primary_command") or "")])
+        assert_command_list_parses([str(command) for command in item.get("secondary_commands") or []])
+    input_routes = payload.get("input_routes") if isinstance(payload.get("input_routes"), dict) else {}
+    for route in input_routes.get("routes") or []:
+        if not isinstance(route, dict):
+            continue
+        assert_command_list_parses([str(route.get("primary_command") or "")])
+        assert_command_list_parses([str(command) for command in route.get("next_commands") or []])
+
+
 def test_parser_exposes_next_gen_command_contract():
     parser = build_parser()
     help_text = parser.format_help()
@@ -148,6 +171,7 @@ def test_smoke_parser_accepts_deploy_ready_options():
         "What is indexed?",
         "--translate-to",
         "zh-CN",
+        "--wait",
         "--timeout",
         "5",
         "--interval",
@@ -161,6 +185,7 @@ def test_smoke_parser_accepts_deploy_ready_options():
     assert args.workdir == Path("/tmp/mdtero-smoke")
     assert args.timeout == 5
     assert args.interval == 0.5
+    assert args.wait is True
     assert args.translate_to == "zh-CN"
     assert args.skip_download is True
     assert args.json is True
@@ -3237,6 +3262,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     output = capsys.readouterr().out
     payload = json.loads(output)
     cfg = load_config()
+    assert_onboarding_payload_commands_parse(payload)
 
     assert cfg.api_key == "mdt_live_json_secret"
     assert "mdt_live_json_secret" not in output
@@ -3341,6 +3367,7 @@ def test_setup_json_onboarding_uses_local_semantic_scholar_when_configured(monke
     output = capsys.readouterr().out
     payload = json.loads(output)
     checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
+    assert_onboarding_payload_commands_parse(payload)
 
     assert "s2-secret" not in output
     assert payload["academic"]["discover_source"] == "local_semantic_scholar"
@@ -3359,6 +3386,7 @@ def test_setup_json_missing_auth_is_noninteractive(monkeypatch, tmp_path: Path, 
 
     assert cli.cmd_setup(type("Args", (), {"api_key": None, "json": True})()) == 1
     payload = json.loads(capsys.readouterr().out)
+    assert_onboarding_payload_commands_parse(payload)
 
     assert payload["status"] == "missing_auth"
     assert payload["reason_code"] == "auth_missing"
