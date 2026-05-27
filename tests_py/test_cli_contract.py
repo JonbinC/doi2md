@@ -3554,7 +3554,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["next_commands"] == [
         "mdtero project parse --wait --timeout 300 --json",
         "mdtero project refresh --wait --timeout 300 --json",
-        "mdtero rag build --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
     ]
     assert status["next_actions"]["commands"]["mcp_briefing"] == "mdtero mcp briefing --json"
     assert status["project_bridge"]["status"] == "bound"
@@ -3563,9 +3563,10 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert status["project_bridge"]["bridge_commands"] == [
         "mdtero doctor --json",
         "mdtero project status --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "mdtero rag status --json",
         "mdtero rag build --json",
-        "mdtero rag status --json",
+        "mdtero rag query \"<question>\" --build-if-needed --json",
         "mdtero mcp briefing --json",
         "mdtero mcp serve",
     ]
@@ -3602,6 +3603,7 @@ def test_mcp_project_status_exposes_agent_rag_workflow(tmp_path: Path):
     assert rag["project_bridge"]["binding_source"] == "local_project_file"
     assert rag["next_commands"] == [
         "mdtero project ingest --json",
+        "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "mdtero rag status --json",
         "mdtero rag build --json",
         "mdtero rag query \"<question>\" --build-if-needed --json",
@@ -3702,7 +3704,8 @@ def test_mcp_project_bridge_contract_for_agents(tmp_path: Path):
     assert linked["server_project"]["id"] == "server-42"
     assert linked["server_project"]["provider"] == "voyage"
     assert linked["binding_source"] == "local_project_file"
-    assert linked["bridge_commands"].count("mdtero rag status --json") == 2
+    assert linked["bridge_commands"].count("mdtero rag status --json") == 1
+    assert linked["bridge_commands"][2] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert linked["bridge_commands"][-1] == "mdtero mcp serve"
 
 
@@ -4430,15 +4433,15 @@ def test_rag_contract_agent_tool_plan_guides_build_when_index_is_missing():
         "reason_code": "rag_index_not_built",
         "selected_provider": "voyage",
         "summary": {"chunk_count": 3, "embedded_count": 0, "pending_embedding_count": 3},
-        "next_commands": ["mdtero rag build --json", "mdtero rag status --json"],
+        "next_commands": ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json"],
     })
 
     plan_steps = {step["step"]: step for step in payload["agent_tool_plan"]}
 
     assert payload["readiness"]["needs_build"] is True
-    assert plan_steps["build_rag_index"]["tool"] == "rag_build"
-    assert plan_steps["build_rag_index"]["arguments"] == {"project_id": "<project-id>"}
-    assert plan_steps["build_rag_index"]["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json"]
+    assert plan_steps["bootstrap_rag_query"]["tool"] == "rag_query"
+    assert plan_steps["bootstrap_rag_query"]["arguments"] == {"project_id": "<project-id>"}
+    assert plan_steps["bootstrap_rag_query"]["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json"]
     assert "query_rag" not in plan_steps
 
 
@@ -4970,7 +4973,7 @@ def test_mcp_server_rag_status_treats_needs_build_as_waiting(tmp_path: Path):
     assert status["agent_summary"]["readiness_status"] == "waiting"
     assert status["agent_summary"]["next_step"] == "build"
     assert status["next_best_action"]["action"] == "build"
-    assert status["next_best_action"]["primary_command"] == "mdtero rag build --json"
+    assert status["next_best_action"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert status["next_commands"][:3] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --json"]
     assert "Build the server project index" in status["action_hint"]
     assert briefing["health"]["rag_reason_code"] == "rag_index_not_built"
@@ -5593,7 +5596,7 @@ def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, t
     assert "mdtero rag build" in output
     assert "mdtero rag status --json" in output
     assert "Agent plan" in output
-    assert "build_rag_index -> rag_build" in output
+    assert "bootstrap_rag_query -> rag_query" in output
 
 
 def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, capsys):
@@ -5621,7 +5624,7 @@ def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, 
     assert payload["server_project_id"] == "99"
     assert payload["summary"]["pending_embedding_count"] == 2
     assert payload["agent_tool_plan"][0]["step"] == "inspect_rag_status"
-    assert any(step["step"] == "build_rag_index" for step in payload["agent_tool_plan"])
+    assert any(step["step"] == "bootstrap_rag_query" and step["tool"] == "rag_query" for step in payload["agent_tool_plan"])
 
 
 def test_rag_status_unavailable_json_includes_actionable_next_commands(monkeypatch, tmp_path: Path, capsys):

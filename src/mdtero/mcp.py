@@ -59,13 +59,13 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
     elif pending:
         status = "pending"
         reason_code = "project_has_pending_items"
-        action_hint = "Submit pending papers, refresh task status, then build or query server-side Voyage RAG."
-        next_commands = [commands["commands"]["parse_pending"], commands["commands"]["refresh"], commands["commands"]["rag_build"]]
+        action_hint = "Submit pending papers, refresh task status, then use the one-command RAG bootstrap query."
+        next_commands = [commands["commands"]["parse_pending"], commands["commands"]["refresh"], ONE_COMMAND_RAG_BOOTSTRAP]
     elif succeeded:
         status = "ready"
         reason_code = "project_ready_for_rag"
-        action_hint = "Project has succeeded parse tasks. Ingest/build/query server-side Voyage RAG or expose context through MCP."
-        next_commands = [commands["commands"].get("ingest_for_rag", "mdtero project ingest --json"), commands["commands"]["rag_build"], commands["commands"]["rag_query"], commands["commands"]["mcp_briefing"]]
+        action_hint = "Project has succeeded parse tasks. Ingest completed Markdown, then use the one-command RAG bootstrap query or expose context through MCP."
+        next_commands = [commands["commands"].get("ingest_for_rag", "mdtero project ingest --json"), ONE_COMMAND_RAG_BOOTSTRAP, commands["commands"]["rag_status"], commands["commands"]["mcp_briefing"]]
     else:
         status = "empty"
         reason_code = "project_empty"
@@ -223,6 +223,7 @@ def build_agent_commands(project_root: Path | None = None) -> dict[str, Any]:
         "zotero_sync": "mdtero zotero sync --json",
         "rag_status": "mdtero rag status --json",
         "rag_build": "mdtero rag build --json",
+        "bootstrap_rag": ONE_COMMAND_RAG_BOOTSTRAP,
         "rag_query": "mdtero rag query \"<question>\" --build-if-needed --json",
         "mcp_briefing": "mdtero mcp briefing --json",
         "serve_mcp": "mdtero mcp serve",
@@ -275,9 +276,10 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
     bridge_commands = [
         commands["doctor"],
         commands["project_status"],
+        ONE_COMMAND_RAG_BOOTSTRAP,
         commands["rag_status"],
         commands["rag_build"],
-        commands["rag_status"],
+        commands["rag_query"],
         commands["mcp_briefing"],
         commands["serve_mcp"],
     ]
@@ -312,6 +314,7 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
             next_commands = _dedupe_commands([
                 commands["project_status"],
                 commands.get("ingest_for_rag", "mdtero project ingest --json"),
+                ONE_COMMAND_RAG_BOOTSTRAP,
                 commands["rag_status"],
                 commands["rag_build"],
                 commands["mcp_briefing"],
@@ -395,6 +398,7 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
         action_hint = "Local project has succeeded parse tasks and a linked server project. Ingest or refresh server-side Voyage RAG, then query through CLI or MCP."
         next_commands = [
             commands.get("ingest_for_rag", "mdtero project ingest --json"),
+            ONE_COMMAND_RAG_BOOTSTRAP,
             commands["rag_status"],
             commands["rag_build"],
             commands["rag_query"],
@@ -465,7 +469,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
             "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side Voyage RAG, and query without a manual server project id.",
-            "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["rag_build"]],
+            "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["rag_build"], commands["rag_query"]],
             "project_bridge": build_project_bridge(root),
         }
 
