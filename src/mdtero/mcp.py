@@ -1540,6 +1540,7 @@ def build_agent_briefing(
         "project_bridge": build_project_bridge(root),
         "input_routes": build_input_route_contract(),
         "extension_handoff": _extension_handoff_payload(commands),
+        "dashboard_setup_handoff_json": _dashboard_setup_handoff_json_payload(commands),
         "dashboard_handoff_json": _dashboard_handoff_json_payload(commands),
         "handoff_protocol": _agent_handoff_protocol(commands),
         "agents": {
@@ -1661,7 +1662,7 @@ def _build_mcp_tool_plan(
             "purpose": "Read the account, local project, server RAG, installed agent skills, and recommended next commands before using other Mdtero tools.",
             "when": "Always call this first in a new agent session or after a failed Mdtero action.",
             "arguments": {},
-            "success_signal": "Payload includes project, account, health, rag, project_bridge, input_routes, extension_handoff, dashboard_handoff_json, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
+            "success_signal": "Payload includes project, account, health, rag, project_bridge, input_routes, extension_handoff, dashboard_setup_handoff_json, dashboard_handoff_json, handoff_protocol, recommended_next_commands, and this mcp_tool_plan.",
             "failure_fields": ["reason_code", "action_hint", "next_commands"],
         },
         {
@@ -1886,6 +1887,7 @@ def _build_agent_playbook(
             "download_artifact returned a local path",
             "rag_query returned evidence_pack.context_markdown plus citations and source_nodes",
             "mcp_server.startup_order can be followed and agent_briefing is the primary tool",
+            "dashboard_setup_handoff_json preserves the auth boundary without including the one-time API key secret",
         ],
         "preserve_fields": [
             "task_id",
@@ -2056,6 +2058,80 @@ def _dashboard_handoff_json_payload(commands: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str, Any]:
+    setup_command = str(commands.get("login_api_key") or "mdtero setup --api-key --json")
+    return {
+        "source": "dashboard_api_key_dialog",
+        "purpose": "Continue Mdtero CLI, backend Voyage RAG, and FastMCP setup from a newly created dashboard API key without placing the one-time secret in shell history.",
+        "auth_boundary": {
+            "workstation": "Use browser OAuth with `mdtero setup` for a normal Mac or desktop workstation.",
+            "headless": "Use `mdtero setup --api-key --json` only for trusted headless servers or agent sessions; paste the one-time secret only when the CLI prompts for it.",
+            "secret_transport": "Copy the full API key secret separately from the dashboard dialog. This JSON intentionally does not include the secret value.",
+            "dashboard_secret_retention": "The full secret is shown once. After the dialog closes the dashboard only shows the prefix identifier.",
+        },
+        "api_key": {
+            "prefix_identifier_field": "api_key.prefix_identifier",
+            "full_secret_shown_once": True,
+            "full_secret_included": False,
+            "copy_secret_action": "Use the dashboard Copy secret button, then paste only into the secure CLI prompt.",
+        },
+        "first_cli_command": setup_command,
+        "next_commands": _dedupe_commands([
+            setup_command,
+            str(commands.get("doctor") or "mdtero doctor --json"),
+            str(commands.get("agent_detect") or "mdtero agent detect --json"),
+            str(commands.get("agent_install") or "mdtero agent install --interactive"),
+            str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
+            str(commands.get("serve_mcp") or "mdtero mcp serve"),
+            ONE_COMMAND_RAG_BOOTSTRAP,
+            "mdtero smoke --json --timeout 600 --interval 2",
+        ]),
+        "command_blocks": {
+            "workstation_oauth": "\n".join([
+                "uv tool install git+https://github.com/JonbinC/doi2md.git",
+                str(commands.get("setup") or "mdtero setup"),
+                "mdtero setup --json",
+                str(commands.get("doctor") or "mdtero doctor --json"),
+            ]),
+            "headless_agent": "\n".join([
+                "# Copy the one-time secret from the dashboard first. This command asks for it securely and avoids shell history.",
+                setup_command,
+                str(commands.get("agent_detect") or "mdtero agent detect --json"),
+                str(commands.get("agent_install") or "mdtero agent install --interactive"),
+                str(commands.get("doctor") or "mdtero doctor --json"),
+                str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
+                str(commands.get("serve_mcp") or "mdtero mcp serve"),
+            ]),
+            "project_rag_smoke": "\n".join([
+                str(commands.get("doctor") or "mdtero doctor --json"),
+                "mdtero project init --name literature-review",
+                "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json",
+                str(commands.get("refresh") or "mdtero project refresh --wait --timeout 300 --json"),
+                ONE_COMMAND_RAG_BOOTSTRAP,
+                str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
+                str(commands.get("serve_mcp") or "mdtero mcp serve"),
+            ]),
+            "full_launch_smoke": "\n".join([
+                str(commands.get("doctor") or "mdtero doctor --json"),
+                "mdtero smoke --json --timeout 600 --interval 2",
+            ]),
+        },
+        "mcp": {
+            "first_tool": "agent_briefing",
+            "startup_order": [str(commands.get("doctor") or "mdtero doctor --json"), str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"), str(commands.get("serve_mcp") or "mdtero mcp serve")],
+            "expected_tools": ["agent_briefing", "project_status", "project_add", "server_rag_status", "server_rag_build", "rag_query"],
+        },
+        "rag": {
+            "owner": "backend_voyage",
+            "local_voyage_key_required": False,
+            "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
+            "fallback_commands": [str(commands.get("rag_status") or "mdtero rag status --json"), str(commands.get("rag_build") or "mdtero rag build --wait --json"), GENERIC_RAG_QUERY_COMMAND],
+        },
+        "redaction_policy": "Do not print or store Mdtero API key secrets, provider API keys, bearer tokens, signed URLs, OSS tokens, or Infisical tokens in prompts, logs, MCP output, or CI.",
+        "agent_instruction": "Run doctor first, follow next_commands, preserve reason_code/action_hint fields, and ask the user to paste the one-time API key only into the secure mdtero setup prompt if authentication is missing.",
+    }
+
+
 def _extension_handoff_commands(commands: dict[str, Any]) -> list[str]:
     return [
         str(commands.get("config_academic") or "mdtero config academic"),
@@ -2078,6 +2154,14 @@ def _extension_handoff_commands(commands: dict[str, Any]) -> list[str]:
 
 def _agent_handoff_protocol(commands: dict[str, Any]) -> list[dict[str, Any]]:
     return [
+        {
+            "step": "consume_dashboard_setup_handoff_json",
+            "use": "agent_commands",
+            "when": "The dashboard API key dialog provides setup handoff JSON after creating a one-time key.",
+            "preserve_fields": ["source", "auth_boundary", "api_key.full_secret_included", "first_cli_command", "next_commands", "mcp", "rag", "redaction_policy"],
+            "commands": [commands.get("login_api_key", "mdtero setup --api-key --json"), commands.get("doctor", "mdtero doctor --json"), commands.get("mcp_briefing", "mdtero mcp briefing --json")],
+            "success_signal": "full_secret_included is false; user pasted the one-time secret only into the secure CLI prompt; doctor reports authenticated.",
+        },
         {
             "step": "inspect_failure",
             "use": "task_status",
