@@ -3109,11 +3109,18 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["headless"] is True
     assert payload["agents"]["detection_skipped"] is True
     assert payload["agents"]["next_commands"] == ["mdtero agent detect --json", "mdtero agent install --interactive"]
+    assert payload["dependencies"]["install_command"] == "uv tool install --upgrade git+https://github.com/JonbinC/doi2md.git"
+    assert payload["dependencies"]["doctor_command"] == "mdtero doctor --json"
+    assert payload["dependencies"]["checks"]["curl_cffi"]["import_name"] == "curl_cffi.requests"
+    assert payload["dependencies"]["checks"]["curl_cffi"]["capability"] == "local publisher route acquisition"
+    assert payload["dependencies"]["checks"]["fastmcp"]["capability"] == "local MCP server for agents"
+    assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
     assert payload["academic"]["discover_source"] == "server_openalex"
     assert payload["next_commands"][:2] == ["mdtero doctor --json", "mdtero config academic --json"]
     checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
     assert list(checklist) == [
         "auth",
+        "local_dependencies",
         "academic_keys",
         "discovery",
         "project",
@@ -3125,6 +3132,8 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     ]
     assert checklist["auth"]["status"] == "complete"
     assert checklist["auth"]["primary_command"] == "mdtero doctor --json"
+    assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
+    assert checklist["local_dependencies"]["status"] in {"ready", "needs_install"}
     assert checklist["academic_keys"]["status"] == "optional"
     assert "https://dev.elsevier.com/apikey/manage" in checklist["academic_keys"]["links"]["elsevier_api_key"]
     assert checklist["discovery"]["status"] == "server_openalex"
@@ -3716,6 +3725,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     checklist = {item["id"]: item for item in briefing["onboarding_checklist"]}
     assert list(checklist) == [
         "auth",
+        "local_dependencies",
         "academic_keys",
         "discovery",
         "project",
@@ -3726,6 +3736,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "agent_skills",
     ]
     assert checklist["auth"]["status"] == "complete"
+    assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
     assert checklist["discovery"]["status"] == "server_openalex"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
     assert "Mdtero backend" in checklist["rag"]["action_hint"]
@@ -4929,6 +4940,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     checklist = {item["id"]: item for item in model["onboarding_checklist"]}
     assert list(checklist) == [
         "auth",
+        "local_dependencies",
         "academic_keys",
         "discovery",
         "project",
@@ -4945,6 +4957,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
         "primary_command": "mdtero setup",
         "action_hint": "Browser OAuth is preferred on workstations; API-key setup is for trusted headless servers and agents.",
     }
+    assert checklist["local_dependencies"]["status"] in {"ready", "needs_install"}
+    assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
     assert checklist["parse"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
     assert "VOYAGE_API_KEY" not in checklist["rag"]["action_hint"]
@@ -6365,6 +6379,7 @@ def test_public_script_surface_is_ci_only():
     repo_root = Path(__file__).resolve().parents[1]
     expected = {
         "scripts/ci/extension_dist_smoke.py",
+        "scripts/ci/forgejo-remote-doctor.sh",
         "scripts/ci/forgejo_workflow_policy.py",
         "scripts/ci/private_platform_preflight.sh",
         "scripts/ci/release_gate.sh",
@@ -6484,8 +6499,7 @@ def test_public_private_platform_preflight_is_non_secret_and_non_deploying():
 
     assert "MDTERO_FORGEJO_REMOTE:-forgejo" in preflight
     assert "http://100.97.234.105:3020/*" in preflight
-    assert "embeds credentials; remove them" in preflight
-    assert "GIT_TERMINAL_PROMPT=0 git ls-remote --heads" in preflight
+    assert "scripts/ci/forgejo-remote-doctor.sh" in preflight
     assert '"$python_bin" scripts/ci/secret_guard.py' in preflight
     assert '"$python_bin" scripts/ci/forgejo_workflow_policy.py' in preflight
     assert "npm --prefix extension test -- --run" in preflight

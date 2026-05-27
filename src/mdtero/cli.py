@@ -535,6 +535,7 @@ def _cmd_setup_json(_args: argparse.Namespace) -> int:
 
 def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool, saved_config: bool) -> dict[str, Any]:
     academic = _academic_config_summary(cfg, path=config_path(), saved=False)
+    dependencies = _local_dependency_summary()
     agent_status: list[dict[str, Any]] = []
     agent_detection_skipped = bool(headless)
     if not agent_detection_skipped:
@@ -567,6 +568,7 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             "discover_source": academic["discover_source"],
             "application_links": academic["application_links"],
         },
+        "dependencies": dependencies,
         "agents": {
             "detection_skipped": agent_detection_skipped,
             "status": agent_status,
@@ -587,9 +589,49 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             authenticated=cfg.is_authenticated,
             headless=headless,
             academic=academic,
+            dependencies=dependencies,
             agent_status=agent_status,
             agent_detection_skipped=agent_detection_skipped,
         ),
+    }
+
+
+def _local_dependency_summary() -> dict[str, Any]:
+    modules = {
+        "curl_cffi": {
+            "import_name": "curl_cffi.requests",
+            "capability": "local publisher route acquisition",
+        },
+        "fastmcp": {
+            "import_name": "fastmcp",
+            "capability": "local MCP server for agents",
+        },
+        "pyzotero": {
+            "import_name": "pyzotero",
+            "capability": "Zotero import and sync",
+        },
+    }
+    checks: dict[str, Any] = {}
+    missing: list[str] = []
+    for name, meta in modules.items():
+        import_name = str(meta["import_name"])
+        try:
+            available = importlib.util.find_spec(import_name) is not None
+        except (ImportError, AttributeError, ValueError):
+            available = False
+        checks[name] = {
+            "status": "ok" if available else "missing",
+            "import_name": import_name,
+            "capability": meta["capability"],
+        }
+        if not available:
+            missing.append(name)
+    return {
+        "ready": not missing,
+        "missing": missing,
+        "checks": checks,
+        "install_command": "uv tool install --upgrade git+https://github.com/JonbinC/doi2md.git",
+        "doctor_command": "mdtero doctor --json",
     }
 
 
