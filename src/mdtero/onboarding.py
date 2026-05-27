@@ -31,6 +31,72 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
 ]
 
 
+def build_input_route_contract() -> dict[str, Any]:
+    """Canonical local input routes shared by setup JSON, TUI, extension, and agents."""
+    return {
+        "schema_version": "2026-05-27",
+        "goal": "choose_shortest_markdown_path",
+        "routes": [
+            {
+                "id": "doi_or_url",
+                "label": "DOI or URL",
+                "status": "fast_smoke",
+                "best_for": ["DOI", "arXiv", "EuropePMC XML", "open HTML/XML URL"],
+                "primary_command": "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json",
+                "next_commands": [
+                    "mdtero status <task-id> --wait --timeout 300 --json",
+                    "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
+                ],
+                "evidence_fields": ["route", "client_acquisition", "reason_code", "action_hint", "download_artifacts"],
+                "action_hint": "Use this for a single DOI or URL when the backend route can recognize the source. Keep trace JSON for agents.",
+            },
+            {
+                "id": "file_upload",
+                "label": "PDF / EPUB / XML / HTML file",
+                "status": "upload",
+                "best_for": ["local PDF", "local EPUB", "saved XML", "saved HTML"],
+                "primary_command": "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
+                "next_commands": [
+                    "mdtero status <task-id> --wait --timeout 600 --json",
+                    "mdtero download <task-id> paper_bundle --output-dir ./mdtero-output --json",
+                ],
+                "evidence_fields": ["selected_provider", "parser_strategy", "reason_code", "download_artifacts"],
+                "action_hint": "Use direct upload for local user files. PDFs use the backend MinerU-first path; EPUB/XML/HTML bypass browser capture when already saved.",
+            },
+            {
+                "id": "browser_extension_handoff",
+                "label": "Browser extension handoff",
+                "status": "manual_capture",
+                "best_for": ["website OAuth", "campus network", "logged-in browser session", "publisher challenge", "human-selected PDF/EPUB"],
+                "primary_command": "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json",
+                "next_commands": [
+                    "mdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json",
+                    "mdtero mcp briefing --json",
+                ],
+                "evidence_fields": ["client_acquisition", "reason_code", "action_hint", "next_commands"],
+                "action_hint": "Start in the extension when browser state matters, then hand the DOI, URL, or saved artifact back to the CLI/MCP path.",
+            },
+            {
+                "id": "rag_mcp_after_parse",
+                "label": "RAG / MCP after parse",
+                "status": "after_parse",
+                "best_for": ["completed Markdown", "project synthesis", "local agent context", "citation-preserving answers"],
+                "primary_command": "mdtero rag query \"<question>\" --build-if-needed --json",
+                "next_commands": [
+                    "mdtero project ingest --json",
+                    "mdtero rag build --json",
+                    "mdtero rag status --json",
+                    "mdtero mcp briefing --json",
+                    "mdtero mcp serve",
+                ],
+                "evidence_fields": ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"],
+                "action_hint": "Build backend Voyage RAG from succeeded Markdown artifacts, then expose the same local project context through FastMCP.",
+            },
+        ],
+        "separate_smoke_required": ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"],
+    }
+
+
 def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: bool) -> dict[str, Any]:
     configured = {
         "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
@@ -62,6 +128,7 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
             "mdtero smoke --json",
             "mdtero mcp briefing --json",
         ],
+        "input_routes": build_input_route_contract(),
         "next_command_groups": build_next_step_command_groups(),
     }
 

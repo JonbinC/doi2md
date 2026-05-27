@@ -19,7 +19,7 @@ from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
-from .onboarding import ACADEMIC_OPTIONS, build_academic_onboarding_summary, build_next_step_command_groups, build_onboarding_checklist
+from .onboarding import ACADEMIC_OPTIONS, build_academic_onboarding_summary, build_input_route_contract, build_next_step_command_groups, build_onboarding_checklist
 from .projects import (
     PaperRecord,
     add_paper,
@@ -577,6 +577,7 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             "installed_count": sum(1 for item in agent_status if item["installed"]),
             "next_commands": ["mdtero agent detect --json", "mdtero agent install --interactive"],
         },
+        "input_routes": build_input_route_contract(),
         "next_commands": [
             "mdtero doctor --json",
             "mdtero config academic --json",
