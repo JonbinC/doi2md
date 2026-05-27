@@ -110,6 +110,24 @@ describe("createFileParseMessage", () => {
       artifactKind: "epub"
     });
   });
+
+  it("keeps raw XML/HTML local file parse messages available for extension handoff contracts", () => {
+    const xml = new File(["<article />"], "fulltext.xml", { type: "application/xml" });
+    const html = new File(["<article></article>"], "paper.html", { type: "text/html" });
+
+    expect(createFileParseMessage(xml, "xml")).toMatchObject({
+      type: "mdtero.parse.file.request",
+      filename: "fulltext.xml",
+      mediaType: "application/xml",
+      artifactKind: "xml"
+    });
+    expect(createFileParseMessage(html, "html")).toMatchObject({
+      type: "mdtero.parse.file.request",
+      filename: "paper.html",
+      mediaType: "text/html",
+      artifactKind: "html"
+    });
+  });
 });
 
 describe("getPreferredArtifactKey", () => {
@@ -868,6 +886,12 @@ describe("buildCliFileParseCommand", () => {
     );
     expect(buildCliFileParseCommand("paper.epub", "epub")).toBe(
       "mdtero parse --file paper.epub --trace --wait --timeout 300 --json"
+    );
+    expect(buildCliFileParseCommand("fulltext.xml", "xml")).toBe(
+      "mdtero parse --file fulltext.xml --trace --wait --timeout 300 --json"
+    );
+    expect(buildCliFileParseCommand("paper.html", "html")).toBe(
+      "mdtero parse --file paper.html --trace --wait --timeout 300 --json"
     );
   });
 

@@ -1,3 +1,5 @@
+import type { LocalFileArtifactKind } from "./runtime";
+
 interface ParseClientLike {
   createUploadedParseTask(payload: {
     paperFile: Blob;
@@ -9,7 +11,7 @@ interface ParseClientLike {
 interface BrowserFileMessage {
   file: Blob;
   filename?: string;
-  artifactKind?: "pdf" | "epub";
+  artifactKind?: LocalFileArtifactKind;
 }
 
 export async function runBrowserFileParseRequest(

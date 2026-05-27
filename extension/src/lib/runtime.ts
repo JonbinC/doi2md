@@ -3,7 +3,7 @@ export interface ParsePageContext {
   tabUrl?: string;
 }
 
-export type LocalFileArtifactKind = "pdf" | "epub";
+export type LocalFileArtifactKind = "pdf" | "epub" | "html" | "xml";
 
 export function createSsotParseMessage(input: string, pageContext?: ParsePageContext) {
   const message: {

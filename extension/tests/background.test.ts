@@ -297,6 +297,37 @@ describe("extension background routing", () => {
     });
   });
 
+  it("returns an XML-aware CLI handoff when raw local upload submission fails", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    createUploadedParseTask.mockRejectedValueOnce(new Error("upload timed out"));
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.file.request",
+        file: new File(["<article />"], "fulltext.xml", { type: "application/xml" }),
+        filename: "fulltext.xml",
+        mediaType: "application/xml",
+        artifactKind: "xml"
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: false,
+        error: "upload timed out",
+        nextCommand: "mdtero parse --file fulltext.xml --trace --wait --timeout 300 --json"
+      });
+    });
+  });
+
   it("executes SSOT source-first routes through raw artifact upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
