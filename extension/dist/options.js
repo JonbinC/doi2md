@@ -282,6 +282,21 @@ var COPY = {
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
+    cliOnboardingTitle: "CLI setup checklist",
+    cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
+    cliOnboardingPill: "Python / uv",
+    cliOnboardingItems: [
+      ["Install", "uv tool install git+https://github.com/JonbinC/doi2md.git", "Install the public Python client; the extension never installs Python dependencies."],
+      ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
+      ["Checklist", "mdtero setup --json", "Return the same secret-safe onboarding checklist used by local agents."],
+      ["Academic keys", "mdtero config academic", "Optional academic resource keys stay in local CLI config."],
+      ["Discover", 'mdtero discover "<topic>" --limit 5 --interactive', "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
+      ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
+      ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
+      ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "Backend Voyage RAG is driven by the CLI project."],
+      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, and RAG readiness to local agents."],
+      ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
+    ],
     guideTitle: "Connection guide",
     setupStepAuth: "OAuth",
     setupStepParse: "Parse / Upload",
@@ -340,6 +355,21 @@ var COPY = {
     cliHandoffGuideBoundary: "\u6269\u5C55\u4E0D\u5B89\u88C5 Python \u4F9D\u8D56\u3001\u4E0D\u8FD0\u884C\u672C\u5730 helper\uFF0C\u4E5F\u4E0D\u4FDD\u5B58 Elsevier/Wiley/Semantic Scholar key\uFF1B\u8FD9\u4E9B\u53EA\u7559\u5728\u672C\u5730 CLI \u7684 `mdtero config academic`\u3002",
     copyCliHandoffGuide: "\u590D\u5236\u4EA4\u63A5",
     cliHandoffGuideCopied: "CLI \u4EA4\u63A5\u5DF2\u590D\u5236\u3002",
+    cliOnboardingTitle: "CLI \u914D\u7F6E\u6E05\u5355",
+    cliOnboardingNote: "Python \u5BA2\u6237\u7AEF\u8D1F\u8D23\u672C\u5730\u6293\u53D6\u3001\u9879\u76EE\u961F\u5217\u3001Zotero\u3001\u540E\u7AEF Voyage RAG\u3001MCP \u548C agent skill\u3002",
+    cliOnboardingPill: "Python / uv",
+    cliOnboardingItems: [
+      ["\u5B89\u88C5", "uv tool install git+https://github.com/JonbinC/doi2md.git", "\u5B89\u88C5\u516C\u5F00 Python \u5BA2\u6237\u7AEF\uFF1B\u6269\u5C55\u4E0D\u4F1A\u5B89\u88C5 Python \u4F9D\u8D56\u3002"],
+      ["\u9274\u6743", "mdtero setup", "\u5DE5\u4F5C\u7AD9\u8D70\u7F51\u9875\u767B\u5F55 OAuth\uFF1B\u53EF\u4FE1\u65E0\u5934\u670D\u52A1\u5668\u53EF\u8D70 API-key setup\u3002"],
+      ["\u68C0\u67E5\u6E05\u5355", "mdtero setup --json", "\u8FD4\u56DE\u7ED9\u672C\u5730 agent \u4F7F\u7528\u7684\u540C\u4E00\u4EFD secret-safe onboarding checklist\u3002"],
+      ["\u5B66\u672F key", "mdtero config academic", "\u5B66\u672F\u8D44\u6E90 key \u90FD\u662F\u53EF\u9009\u589E\u5F3A\uFF0C\u53EA\u5B58\u5728\u672C\u5730 CLI \u914D\u7F6E\u3002"],
+      ["\u53D1\u73B0", 'mdtero discover "<topic>" --limit 5 --interactive', "\u6709 Semantic Scholar \u65F6\u8D70\u672C\u5730\uFF1B\u5426\u5219\u8D70\u670D\u52A1\u7AEF OpenAlex\u3002"],
+      ["\u89E3\u6790", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "\u4FDD\u7559 route\u3001client_acquisition\u3001reason_code\u3001action_hint \u548C artifacts\u3002"],
+      ["\u6587\u4EF6\u4E0A\u4F20", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "\u6D4F\u89C8\u5668\u4FDD\u5B58\u7684\u6587\u4EF6\u6216 publisher challenge \u9875\u9762\u4EA4\u7ED9 CLI \u7EE7\u7EED\u3002"],
+      ["RAG", 'mdtero rag query "<question>" --build-if-needed --json', "\u540E\u7AEF Voyage RAG \u7531 CLI \u9879\u76EE\u9A71\u52A8\u3002"],
+      ["MCP briefing", "mdtero mcp briefing --json", "\u628A\u8D26\u6237\u3001\u9879\u76EE\u3001extension_handoff \u548C RAG readiness \u66B4\u9732\u7ED9\u672C\u5730 agent\u3002"],
+      ["Agent skill", "mdtero agent install --interactive", "\u52A8\u6001\u68C0\u6D4B Codex\u3001Claude\u3001Gemini\u3001Hermes\u3001OpenCode\uFF0C\u5E76\u7528\u7A7A\u683C\u591A\u9009\u5B89\u88C5\u3002"]
+    ],
     guideTitle: "\u8FDE\u63A5\u5F15\u5BFC",
     setupStepAuth: "\u7F51\u9875\u767B\u5F55",
     setupStepParse: "\u89E3\u6790 / \u4E0A\u4F20",
@@ -400,6 +430,10 @@ var cliHandoffGuideNoteEl = document.querySelector("#cli-handoff-guide-note");
 var cliHandoffGuideBoundaryEl = document.querySelector("#cli-handoff-guide-boundary");
 var cliHandoffGuideCommandEl = document.querySelector("#cli-handoff-guide-command");
 var copyCliHandoffGuideButton = document.querySelector("#copy-cli-handoff-guide");
+var cliOnboardingTitleEl = document.querySelector("#cli-onboarding-title");
+var cliOnboardingNoteEl = document.querySelector("#cli-onboarding-note");
+var cliOnboardingPillEl = document.querySelector("#cli-onboarding-pill");
+var cliOnboardingListEl = document.querySelector("#cli-onboarding-list");
 var connectionGuideTitleEl = document.querySelector("#connection-guide-title");
 var connectionGuideListEl = document.querySelector("#connection-guide-list");
 var setupStepAuthEl = document.querySelector("#setup-step-auth");
@@ -490,6 +524,10 @@ function applyLanguage() {
   if (cliHandoffGuideBoundaryEl) cliHandoffGuideBoundaryEl.textContent = copy.cliHandoffGuideBoundary;
   if (cliHandoffGuideCommandEl) cliHandoffGuideCommandEl.textContent = CLI_HANDOFF_GUIDE_COMMAND;
   if (copyCliHandoffGuideButton) copyCliHandoffGuideButton.textContent = copy.copyCliHandoffGuide;
+  if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
+  if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
+  if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
+  renderCliOnboardingList();
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
   setStepText(setupStepParseEl, "2", copy.setupStepParse);
@@ -499,6 +537,35 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
+}
+function renderCliOnboardingList() {
+  if (!cliOnboardingListEl) return;
+  const copy = copyFor(uiLanguage);
+  cliOnboardingListEl.textContent = "";
+  copy.cliOnboardingItems.forEach(([title, command, detail], index) => {
+    const row = document.createElement("div");
+    row.className = "onboarding-item";
+    const icon = document.createElement("span");
+    icon.className = "guide-index";
+    icon.textContent = String(index + 1);
+    const body = document.createElement("div");
+    body.className = "onboarding-body";
+    const heading = document.createElement("p");
+    heading.className = "onboarding-title";
+    heading.textContent = title;
+    const commandEl = document.createElement("code");
+    commandEl.className = "onboarding-command";
+    commandEl.textContent = command;
+    const detailEl = document.createElement("p");
+    detailEl.className = "meta-label";
+    detailEl.textContent = detail;
+    body.appendChild(heading);
+    body.appendChild(commandEl);
+    body.appendChild(detailEl);
+    row.appendChild(icon);
+    row.appendChild(body);
+    cliOnboardingListEl.appendChild(row);
+  });
 }
 function setStepText(element, index, label) {
   if (!element) return;

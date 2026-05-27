@@ -119,6 +119,24 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp briefing --json");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("does not install Python dependencies");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("mdtero config academic");
+    expect(document.querySelector("#cli-onboarding-title")?.textContent).toBe("CLI setup checklist");
+    expect(document.querySelector("#cli-onboarding-note")?.textContent).toContain("local acquisition");
+    expect(document.querySelector("#cli-onboarding-pill")?.textContent).toBe("Python / uv");
+    const checklistText = document.querySelector("#cli-onboarding-list")?.textContent || "";
+    expect(checklistText).toContain("uv tool install git+https://github.com/JonbinC/doi2md.git");
+    expect(checklistText).toContain("mdtero setup");
+    expect(checklistText).toContain("mdtero setup --json");
+    expect(checklistText).toContain("mdtero config academic");
+    expect(checklistText).toContain("mdtero discover \"<topic>\" --limit 5 --interactive");
+    expect(checklistText).toContain("mdtero parse <doi-or-url> --trace --wait --timeout 300 --json");
+    expect(checklistText).toContain("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json");
+    expect(checklistText).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
+    expect(checklistText).toContain("mdtero agent install --interactive");
+    expect(checklistText).toContain("Backend Voyage RAG is driven by the CLI project");
+    expect(checklistText).toContain("mdtero mcp briefing --json");
+    expect(checklistText).toContain("RAG readiness to local agents");
+    expect(checklistText).not.toContain("native helper");
+    expect(checklistText).not.toContain("publisher API");
     expect(document.querySelector("#password-input")).toBeNull();
     expect(document.querySelector("#code-input")).toBeNull();
   });
@@ -171,6 +189,7 @@ describe("extension options page", () => {
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Website OAuth is connected");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("Open history below");
     expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("current-page parse");
+    expect(document.querySelector("#cli-onboarding-list")?.textContent).toContain("mdtero mcp briefing");
     expect(document.querySelector("#publisher-capability-groups")).toBeNull();
   });
 
