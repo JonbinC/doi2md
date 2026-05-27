@@ -3149,6 +3149,16 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
     assert payload["academic"]["discover_source"] == "server_openalex"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
+    assert payload["input_routes"]["server_apis"] == {
+        "route": "/api/v1/route",
+        "parse": "/api/v1/tasks/parse",
+        "upload": "/api/v1/tasks/upload",
+        "status": "/api/v1/tasks/{task_id}",
+        "download": "/api/v1/tasks/{task_id}/download/{artifact}",
+        "project_import": "/api/v1/projects/{project_id}/tasks/{task_id}/import",
+        "rag_build": "/api/v1/projects/{project_id}/rag/build",
+        "rag_query": "/api/v1/projects/{project_id}/rag/query",
+    }
     assert [route["id"] for route in payload["input_routes"]["routes"]] == [
         "doi_or_url",
         "file_upload",
@@ -3796,6 +3806,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["project_bridge"]["local_project_name_is_server_project_id"] is False
     assert briefing["project_bridge"]["bridge_commands"][-2:] == ["mdtero mcp briefing --json", "mdtero mcp serve"]
     assert briefing["input_routes"]["goal"] == "choose_shortest_markdown_path"
+    assert briefing["input_routes"]["server_apis"]["route"] == "/api/v1/route"
+    assert briefing["input_routes"]["server_apis"]["project_import"] == "/api/v1/projects/{project_id}/tasks/{task_id}/import"
     input_routes = {route["id"]: route for route in briefing["input_routes"]["routes"]}
     assert list(input_routes) == ["doi_or_url", "file_upload", "browser_extension_handoff", "rag_mcp_after_parse"]
     assert input_routes["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
@@ -5084,6 +5096,8 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert "publisher challenge or JavaScript verification page" in model["extension_handoff"]["handoff_triggers"]
     assert model["extension_handoff"]["visible_fields"] == ["client_acquisition", "reason_code", "action_hint", "download_artifacts", "next_commands"]
     assert model["input_routes"]["goal"] == "choose_shortest_markdown_path"
+    assert model["input_routes"]["server_apis"]["upload"] == "/api/v1/tasks/upload"
+    assert model["input_routes"]["server_apis"]["rag_query"] == "/api/v1/projects/{project_id}/rag/query"
     input_routes = {route["id"]: route for route in model["input_routes"]["routes"]}
     assert input_routes["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert input_routes["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"

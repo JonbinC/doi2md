@@ -36,6 +36,16 @@ def build_input_route_contract() -> dict[str, Any]:
     return {
         "schema_version": "2026-05-27",
         "goal": "choose_shortest_markdown_path",
+        "server_apis": {
+            "route": "/api/v1/route",
+            "parse": "/api/v1/tasks/parse",
+            "upload": "/api/v1/tasks/upload",
+            "status": "/api/v1/tasks/{task_id}",
+            "download": "/api/v1/tasks/{task_id}/download/{artifact}",
+            "project_import": "/api/v1/projects/{project_id}/tasks/{task_id}/import",
+            "rag_build": "/api/v1/projects/{project_id}/rag/build",
+            "rag_query": "/api/v1/projects/{project_id}/rag/query",
+        },
         "routes": [
             {
                 "id": "doi_or_url",
