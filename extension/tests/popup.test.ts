@@ -778,7 +778,7 @@ describe("getTaskFailureText", () => {
       "# Mdtero CLI handoff",
       "",
       "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-      "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      "Preserve task_id, selected_provider, parser_strategy, reason_code, action_hint, client_acquisition, parse_outcome, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
       "",
       "Run these commands in order:",
       "1. mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
@@ -811,6 +811,18 @@ describe("getTaskFailureText", () => {
         status: "failed",
         stage: "failed",
         task_kind: "parse",
+        selected_provider: "mineru_precision",
+        parser_strategy: "mineru_precision_ast",
+        client_acquisition: {
+          source: "curl_cffi",
+          artifact_kind: "pdf",
+          status_code: 200,
+          url: "https://oss.example.com/paper.pdf?token=secret-token"
+        },
+        parse_outcome: {
+          outcome_code: "fulltext_rejected",
+          reason_code: "client_acquisition_challenge_page"
+        },
         reason_code: "client_acquisition_challenge_page",
         action_hint: "Use browser upload or CLI curl_cffi; Bearer secret-token",
         preferred_artifact: "paper_md",
@@ -833,6 +845,10 @@ describe("getTaskFailureText", () => {
 
     expect(text).toContain("Failure context for agent:");
     expect(text).toContain("- task_id: task-failed-1");
+    expect(text).toContain("- selected_provider: mineru_precision");
+    expect(text).toContain("- parser_strategy: mineru_precision_ast");
+    expect(text).toContain("- client_acquisition: source=curl_cffi, artifact_kind=pdf, status_code=200, url=https://oss.example.com/paper.pdf?token=[redacted]");
+    expect(text).toContain("- parse_outcome: outcome_code=fulltext_rejected, reason_code=client_acquisition_challenge_page");
     expect(text).toContain("- reason_code: client_acquisition_challenge_page");
     expect(text).toContain("- action_hint: Use browser upload or CLI curl_cffi; Bearer [redacted]");
     expect(text).toContain("- download_artifacts: paper_md: paper.md; paper_bundle: paper.zip");

@@ -126,6 +126,10 @@ export interface TaskResult {
   preferred_artifact?: string;
   artifacts?: Record<string, TaskArtifactDescriptor>;
   download_artifacts?: TaskDownloadArtifactDescriptor[];
+  selected_provider?: string | null;
+  parser_strategy?: string | null;
+  parse_outcome?: Record<string, unknown> | null;
+  client_acquisition?: Record<string, unknown> | null;
   reason_code?: string | null;
   action_hint?: string | null;
   next_commands?: string[];
@@ -157,6 +161,10 @@ export interface TaskRecord {
   progress_percent?: number | null;
   created_at: string;
   result?: TaskResult | null;
+  selected_provider?: string | null;
+  parser_strategy?: string | null;
+  parse_outcome?: Record<string, unknown> | null;
+  client_acquisition?: Record<string, unknown> | null;
   reason_code?: string | null;
   action_hint?: string | null;
   error_code?: string | null;

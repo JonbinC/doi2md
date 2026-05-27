@@ -49,7 +49,7 @@ function inferFileExtension(filename, artifactKind) {
 }
 
 // src/lib/redact.ts
-var SENSITIVE_QUERY_KEYS = "(api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
+var SENSITIVE_QUERY_KEYS = "(?:api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
 function redactSensitiveText(value) {
   const text = String(value ?? "");
   if (!text) {

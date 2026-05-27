@@ -49,7 +49,7 @@ function inferFileExtension(filename, artifactKind) {
 }
 
 // src/lib/redact.ts
-var SENSITIVE_QUERY_KEYS = "(api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
+var SENSITIVE_QUERY_KEYS = "(?:api[_-]?key|access[_-]?token|security-token|x-oss-security-token|signature|x-amz-signature|x-amz-credential|ossaccesskeyid|expires|token)";
 function redactSensitiveText(value) {
   const text = String(value ?? "");
   if (!text) {
@@ -719,7 +719,7 @@ function formatCliHandoffClipboard(primaryCommand, planCommands, context) {
     "",
     ...parseHandoff ? [
       "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-      "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      "Preserve task_id, selected_provider, parser_strategy, reason_code, action_hint, client_acquisition, parse_outcome, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
       ""
     ] : [],
     ...contextLines.length ? ["Failure context for agent:", ...contextLines, ""] : [],
@@ -747,6 +747,10 @@ function buildTaskHandoffContext(task, kind) {
     status: task?.status,
     stage: task?.stage,
     kind: task?.task_kind ?? kind,
+    selectedProvider: firstPresentString(task?.selected_provider, task?.result?.selected_provider),
+    parserStrategy: firstPresentString(task?.parser_strategy, task?.result?.parser_strategy),
+    clientAcquisition: summarizeObjectForHandoff(task?.client_acquisition || task?.result?.client_acquisition),
+    parseOutcome: summarizeObjectForHandoff(task?.parse_outcome || task?.result?.parse_outcome),
     reasonCode: task?.reason_code || task?.result?.reason_code || void 0,
     actionHint: task?.action_hint || task?.result?.action_hint || void 0,
     preferredArtifact: task?.preferred_artifact || task?.result?.preferred_artifact || void 0,
@@ -763,12 +767,32 @@ function formatHandoffContextLines(context) {
   appendContextLine(lines, "status", context.status);
   appendContextLine(lines, "stage", context.stage);
   appendContextLine(lines, "kind", context.kind);
+  appendContextLine(lines, "selected_provider", context.selectedProvider);
+  appendContextLine(lines, "parser_strategy", context.parserStrategy);
+  appendContextLine(lines, "client_acquisition", context.clientAcquisition);
+  appendContextLine(lines, "parse_outcome", context.parseOutcome);
   appendContextLine(lines, "reason_code", context.reasonCode);
   appendContextLine(lines, "action_hint", context.actionHint);
   appendContextLine(lines, "preferred_artifact", context.preferredArtifact);
   appendContextList(lines, "download_artifacts", context.downloadArtifacts);
   appendContextList(lines, "next_commands", context.nextCommands);
   return lines;
+}
+function firstPresentString(...values) {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return void 0;
+}
+function summarizeObjectForHandoff(value) {
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const entries = Object.entries(value).filter(([key, item]) => key.length > 0 && item !== null && item !== void 0 && item !== "").slice(0, 12).map(([key, item]) => `${key}=${String(item)}`);
+  return entries.length ? entries.join(", ") : void 0;
 }
 function appendContextLine(lines, label, value) {
   const normalized = redactSensitiveText(String(value || "").trim());
