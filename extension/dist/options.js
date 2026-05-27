@@ -278,7 +278,7 @@ var COPY = {
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
     cliHandoffGuideTitle: "Extension + CLI handoff",
-    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI.",
+    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents.",
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
@@ -290,6 +290,7 @@ var COPY = {
     guideSignedOut: [
       "Open website OAuth and complete sign-in at mdtero.com/auth.",
       "Return to this popup after the trusted auth bridge connects your account.",
+      "Optionally install the Python CLI with `uv tool install git+https://github.com/JonbinC/doi2md.git`, then run `mdtero setup` for workstation OAuth.",
       "Parse the current paper page or upload a local PDF/EPUB from the popup.",
       "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
     ],
@@ -335,7 +336,7 @@ var COPY = {
     websiteAuthTitle: "\u5B98\u7F51\u767B\u5F55",
     websiteAuthNote: "\u6269\u5C55\u7EDF\u4E00\u6253\u5F00 mdtero.com/auth \u767B\u5F55\u3002\u8BF7\u5728\u5B98\u7F51\u5B8C\u6210\u767B\u5F55\uFF0C\u53D7\u4FE1\u4EFB auth bridge \u4F1A\u628A token \u4EA4\u56DE\u6269\u5C55\u3002",
     cliHandoffGuideTitle: "\u6269\u5C55 + CLI \u4EA4\u63A5",
-    cliHandoffGuideNote: "\u6269\u5C55\u8D1F\u8D23\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587\u3001\u5F53\u524D\u9875\u89E3\u6790\u3001PDF/EPUB \u4E0A\u4F20\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002\u9047\u5230 publisher challenge\u3001\u6821\u56ED\u7F51\u767B\u5F55\u6001\u6216\u7528\u6237\u5DF2\u4FDD\u5B58\u6587\u4EF6\u65F6\uFF0C\u4EA4\u7ED9 Python CLI \u7EE7\u7EED\u3002",
+    cliHandoffGuideNote: "\u6269\u5C55\u8D1F\u8D23\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587\u3001\u5F53\u524D\u9875\u89E3\u6790\u3001PDF/EPUB \u4E0A\u4F20\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002\u9047\u5230 publisher challenge\u3001\u6821\u56ED\u7F51\u767B\u5F55\u6001\u6216\u7528\u6237\u5DF2\u4FDD\u5B58\u6587\u4EF6\u65F6\uFF0C\u4EA4\u7ED9 Python CLI \u7EE7\u7EED\uFF1B`mdtero setup --json` \u4F1A\u8FD4\u56DE\u7ED9 agent \u4F7F\u7528\u7684 onboarding checklist\u3002",
     cliHandoffGuideBoundary: "\u6269\u5C55\u4E0D\u5B89\u88C5 Python \u4F9D\u8D56\u3001\u4E0D\u8FD0\u884C\u672C\u5730 helper\uFF0C\u4E5F\u4E0D\u4FDD\u5B58 Elsevier/Wiley/Semantic Scholar key\uFF1B\u8FD9\u4E9B\u53EA\u7559\u5728\u672C\u5730 CLI \u7684 `mdtero config academic`\u3002",
     copyCliHandoffGuide: "\u590D\u5236\u4EA4\u63A5",
     cliHandoffGuideCopied: "CLI \u4EA4\u63A5\u5DF2\u590D\u5236\u3002",
@@ -347,6 +348,7 @@ var COPY = {
     guideSignedOut: [
       "\u6253\u5F00\u7F51\u9875\u767B\u5F55\uFF0C\u5E76\u5728 mdtero.com/auth \u5B8C\u6210\u6388\u6743\u3002",
       "\u53D7\u4FE1\u4EFB auth bridge \u8FDE\u63A5\u8D26\u6237\u540E\uFF0C\u56DE\u5230\u6269\u5C55\u5F39\u7A97\u7EE7\u7EED\u3002",
+      "\u53EF\u9009\u5B89\u88C5 Python CLI\uFF1A`uv tool install git+https://github.com/JonbinC/doi2md.git`\uFF0C\u518D\u8FD0\u884C `mdtero setup` \u8D70\u5DE5\u4F5C\u7AD9 OAuth\u3002",
       "\u5728\u5F39\u7A97\u89E3\u6790\u5F53\u524D\u8BBA\u6587\u9875\u3001\u7C98\u8D34 DOI\uFF0C\u6216\u4E0A\u4F20\u672C\u5730 PDF/EPUB\u3002",
       "\u4EFB\u52A1\u5B8C\u6210\u540E\u4E0B\u8F7D Markdown\u3001ZIP\u3001\u6E90\u6587\u4EF6\u6216\u8BD1\u6587\u3002"
     ],
@@ -415,6 +417,9 @@ var refreshHistoryBtn = document.querySelector("#refresh-history");
 var client = createApiClient(readSettings);
 var uiLanguage = "en";
 var CLI_HANDOFF_GUIDE_COMMAND = [
+  "uv tool install git+https://github.com/JonbinC/doi2md.git",
+  "mdtero setup",
+  "mdtero setup --json",
   "mdtero doctor --json",
   "mdtero config academic",
   'mdtero discover "<topic>" --limit 5 --interactive',

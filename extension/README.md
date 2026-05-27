@@ -33,6 +33,18 @@ Tokens, email, and UI language are stored in browser local storage. Local PDF/EP
 
 The extension does not use native messaging or a local helper process. When browser capture is blocked by a challenge page, campus-network dependency, or logged-in session state, the popup shows a CLI handoff command instead of trying to bypass the page inside the extension.
 
+## CLI Handoff
+
+When browser context is not enough, install the Python client and let its setup checklist guide the local workflow:
+
+```bash
+uv tool install git+https://github.com/JonbinC/doi2md.git
+mdtero setup
+mdtero setup --json
+```
+
+`mdtero setup --json` returns a secret-safe onboarding checklist for local agents: website OAuth or trusted headless auth, optional academic keys, Semantic Scholar versus OpenAlex discovery, project creation, DOI/file/batch parsing, Zotero intake, backend Voyage RAG, FastMCP briefing/serve, and interactive agent skill install.
+
 ## 中文版
 
 Mdtero 浏览器扩展只保留主线能力：登录、当前页/DOI 解析、PDF/EPUB 上传、任务轮询、翻译和下载。解析、MinerU PDF 处理、打包、额度和翻译都由后端完成；扩展不内置 Python 依赖，也不暴露 GROBID 引擎选择。

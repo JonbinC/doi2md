@@ -156,6 +156,18 @@ describe("workspace", () => {
     expect(styles).toContain(".hero { background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 250, 244, 0.88)), linear-gradient(135deg, rgba(109, 57, 32, 0.06), transparent 52%);");
   });
 
+  it("keeps extension-to-CLI onboarding aligned with the Python setup checklist", () => {
+    const optionsSource = readFileSync(resolve("src/options/index.ts"), "utf-8");
+
+    expect(optionsSource).toContain("uv tool install git+https://github.com/JonbinC/doi2md.git");
+    expect(optionsSource).toContain("mdtero setup");
+    expect(optionsSource).toContain("mdtero setup --json");
+    expect(optionsSource).toContain("onboarding checklist");
+    expect(optionsSource).toContain("mdtero config academic");
+    expect(optionsSource).toContain("mdtero mcp briefing --json");
+    expect(optionsSource).not.toContain("mdtero setup --api-key <key>");
+  });
+
   it("keeps popup workflow steps stateful for OAuth, parse, translate, and download", () => {
     const popupSource = readFileSync(resolve("src/popup/index.ts"), "utf-8");
 

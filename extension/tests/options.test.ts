@@ -98,7 +98,11 @@ describe("extension options page", () => {
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("upload a local PDF/EPUB");
     expect(document.querySelector("#cli-handoff-guide-title")?.textContent).toBe("Extension + CLI handoff");
     expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("publisher challenge");
+    expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("mdtero setup --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero doctor --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("uv tool install git+https://github.com/JonbinC/doi2md.git");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero setup");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero setup --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero config academic");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero discover \"<topic>\" --limit 5 --interactive");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json");
@@ -131,6 +135,8 @@ describe("extension options page", () => {
     (document.querySelector("#copy-cli-handoff-guide") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero doctor --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("uv tool install git+https://github.com/JonbinC/doi2md.git"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero setup --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero config academic"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero project ingest --json"));
