@@ -11,9 +11,18 @@ WORKFLOW_DIR = REPO_ROOT / ".forgejo" / "workflows"
 FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("push-trigger", re.compile(r"^\s{2}push\s*:", re.MULTILINE)),
     ("pull-request-trigger", re.compile(r"^\s{2}pull_request\s*:", re.MULTILINE)),
+    ("schedule-trigger", re.compile(r"^\s{2}schedule\s*:", re.MULTILINE)),
     ("embedded-pat", re.compile(r"PERSONAL_ACCESS_TOKEN|PAT\s*=")),
     ("admin-password", re.compile(r"ADMIN_PASSWORD|admin_password")),
     ("secret-assignment", re.compile(r"(?:INFISICAL_TOKEN|MDTERO_API_KEY|VERCEL_TOKEN)\s*=")),
+)
+
+GITHUB_ROLLBACK_FORBIDDEN_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("push-trigger", re.compile(r"^\s{2}push\s*:", re.MULTILINE)),
+    ("pull-request-trigger", re.compile(r"^\s{2}pull_request\s*:", re.MULTILINE)),
+    ("schedule-trigger", re.compile(r"^\s{2}schedule\s*:", re.MULTILINE)),
+    ("embedded-pat", re.compile(r"PERSONAL_ACCESS_TOKEN|PAT\s*=")),
+    ("admin-password", re.compile(r"ADMIN_PASSWORD|admin_password")),
 )
 
 
@@ -62,10 +71,27 @@ def check_workflow(path: Path) -> list[str]:
     return failures
 
 
+def check_github_rollback_workflow(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    failures: list[str] = []
+    if "workflow_dispatch:" not in text:
+        failures.append("missing workflow_dispatch")
+    if not workflow_dispatch_only(text):
+        failures.append("not workflow_dispatch-only")
+    for rule_name, pattern in GITHUB_ROLLBACK_FORBIDDEN_PATTERNS:
+        if pattern.search(text):
+            failures.append(rule_name)
+    return failures
+
+
 def check_all(repo_root: Path = REPO_ROOT) -> dict[str, list[str]]:
     failures: dict[str, list[str]] = {}
     for path in workflow_files(repo_root / ".forgejo" / "workflows"):
         issues = check_workflow(path)
+        if issues:
+            failures[str(path.relative_to(repo_root))] = issues
+    for path in workflow_files(repo_root / ".github" / "workflows"):
+        issues = check_github_rollback_workflow(path)
         if issues:
             failures[str(path.relative_to(repo_root))] = issues
     return failures
@@ -74,7 +100,7 @@ def check_all(repo_root: Path = REPO_ROOT) -> dict[str, list[str]]:
 def main() -> int:
     failures = check_all()
     if not failures:
-        print("Forgejo workflow policy passed: manual linux-small workflows list secret names and avoid auto triggers.")
+        print("Forgejo workflow policy passed: Forgejo workflows are manual linux-small secret-listing checks, and GitHub workflows remain manual rollback-only.")
         return 0
     print("Forgejo workflow policy failed:", file=sys.stderr)
     for path, issues in failures.items():
