@@ -86,6 +86,38 @@ describe("createApiClient", () => {
     expect(artifact.mediaType).toBe("text/markdown");
   });
 
+  it("falls back to source artifact filenames for EPUB and HTML downloads", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response("epub", {
+          status: 200,
+          headers: { "Content-Type": "application/epub+zip" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response("<article></article>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" }
+        })
+      );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const epub = await client.downloadArtifact("task-123", "paper_epub");
+    const html = await client.downloadArtifact("task-123", "paper_html");
+
+    expect(epub.filename).toBe("paper.epub");
+    expect(epub.mediaType).toBe("application/epub+zip");
+    expect(html.filename).toBe("paper.html");
+    expect(html.mediaType).toBe("text/html");
+  });
+
   it("prefers task artifact metadata filenames when download headers omit one", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(

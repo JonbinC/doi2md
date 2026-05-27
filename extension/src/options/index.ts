@@ -114,6 +114,8 @@ const COPY = {
       paper_bundle: "ZIP",
       translated_md: "Translation",
       paper_pdf: "PDF",
+      paper_epub: "EPUB",
+      paper_html: "HTML",
       paper_xml: "XML"
     },
     historyRefresh: "Refresh",
@@ -219,6 +221,8 @@ const COPY = {
       paper_bundle: "压缩包",
       translated_md: "译文",
       paper_pdf: "PDF",
+      paper_epub: "EPUB",
+      paper_html: "HTML",
       paper_xml: "XML"
     },
     historyRefresh: "刷新",
