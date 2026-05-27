@@ -60,6 +60,11 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="cli-handoff-guide-card"');
     expect(optionsHtml).toContain('id="cli-handoff-guide-command"');
     expect(optionsHtml).toContain('id="copy-cli-handoff-guide"');
+    expect(optionsHtml).toContain('id="mcp-server-config-card"');
+    expect(optionsHtml).toContain('id="mcp-server-config-command"');
+    expect(optionsHtml).toContain('id="copy-mcp-server-config"');
+    expect(optionsHtml).toContain('FastMCP');
+    expect(optionsHtml).toContain('stdio');
     expect(optionsHtml).toContain('id="setup-step-auth"');
     expect(optionsHtml).toContain('Parse / Upload');
     expect(optionsHtml).toContain('Translate');
@@ -165,6 +170,9 @@ describe("workspace", () => {
     expect(optionsSource).toContain("onboarding checklist");
     expect(optionsSource).toContain("mdtero config academic");
     expect(optionsSource).toContain("mdtero mcp briefing --json");
+    expect(optionsSource).toContain("mdtero mcp serve");
+    expect(optionsSource).toContain("mcpServers");
+    expect(optionsSource).toContain("<local-mdtero-project-root>");
     expect(optionsSource).not.toContain("mdtero setup --api-key <key>");
   });
 

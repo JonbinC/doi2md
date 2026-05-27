@@ -6478,8 +6478,14 @@ def test_extension_dist_smoke_script_covers_shipping_mv3_bundle(tmp_path: Path):
     }), encoding="utf-8")
     (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff mdtero parse", encoding="utf-8")
     (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
-    (dist / "options.html").write_text("Website sign-in Connection guide Website OAuth is connected", encoding="utf-8")
-    (dist / "options.js").write_text("browser capture, upload, translation, and download settings", encoding="utf-8")
+    (dist / "options.html").write_text(
+        "Website sign-in Connection guide CLI setup checklist Website OAuth is connected FastMCP stdio mcpServers",
+        encoding="utf-8",
+    )
+    (dist / "options.js").write_text(
+        "browser capture, upload, translation, and download settings mdtero setup --json mdtero agent install --interactive mdtero mcp serve",
+        encoding="utf-8",
+    )
 
     payload = run_smoke(dist)
 

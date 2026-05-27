@@ -117,8 +117,20 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag status --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero rag query \"<question>\" --build-if-needed --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp briefing --json");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp serve");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("does not install Python dependencies");
     expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("mdtero config academic");
+    expect(document.querySelector("#mcp-server-config-card")).not.toBeNull();
+    expect(document.querySelector("#mcp-server-config-title")?.textContent).toBe("Agent MCP server");
+    expect(document.querySelector("#mcp-server-config-note")?.textContent).toContain("mdtero mcp serve");
+    expect(document.querySelector("#mcp-server-config-meta")?.textContent).toContain("FastMCP");
+    expect(document.querySelector("#mcp-server-config-meta")?.textContent).toContain("stdio");
+    const mcpConfig = JSON.parse(document.querySelector("#mcp-server-config-command")?.textContent || "{}");
+    expect(mcpConfig.mcpServers.mdtero).toEqual({
+      command: "mdtero",
+      args: ["mcp", "serve"],
+      cwd: "<local-mdtero-project-root>",
+    });
     expect(document.querySelector("#cli-onboarding-title")?.textContent).toBe("CLI setup checklist");
     expect(document.querySelector("#cli-onboarding-note")?.textContent).toContain("local acquisition");
     expect(document.querySelector("#cli-onboarding-pill")?.textContent).toBe("Python / uv");
@@ -134,6 +146,8 @@ describe("extension options page", () => {
     expect(checklistText).toContain("mdtero agent install --interactive");
     expect(checklistText).toContain("Backend Voyage RAG is driven by the CLI project");
     expect(checklistText).toContain("mdtero mcp briefing --json");
+    expect(checklistText).toContain("mdtero mcp serve");
+    expect(checklistText).toContain("FastMCP stdio server");
     expect(checklistText).toContain("RAG readiness to local agents");
     expect(checklistText).not.toContain("native helper");
     expect(checklistText).not.toContain("publisher API");
@@ -163,8 +177,31 @@ describe("extension options page", () => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag status --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero rag query \"<question>\" --build-if-needed --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp briefing --json"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero mcp serve"));
     });
     expect(document.querySelector("#copy-cli-handoff-guide")?.textContent).toBe("CLI handoff copied.");
+  });
+
+  it("copies a parseable MCP server config for local agents", async () => {
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    globalThis.chrome = createChromeMock(async () => ({ result: { state: "unknown" } })) as any;
+
+    await loadOptionsModule();
+
+    (document.querySelector("#copy-mcp-server-config") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('"mcpServers"'));
+    });
+    const copied = vi.mocked(window.navigator.clipboard.writeText).mock.calls.at(-1)?.[0] as string;
+    expect(JSON.parse(copied).mcpServers.mdtero).toEqual({
+      command: "mdtero",
+      args: ["mcp", "serve"],
+      cwd: "<local-mdtero-project-root>",
+    });
+    expect(document.querySelector("#copy-mcp-server-config")?.textContent).toBe("MCP config copied.");
   });
 
   it("shows signed-in usage and empty history messaging when the account has no tasks", async () => {
