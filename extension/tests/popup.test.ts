@@ -22,6 +22,7 @@ import {
   getTaskFailureText,
   getTaskFailureCliHandoff,
   buildTaskFailureCliHandoffPlan,
+  buildTaskHandoffContext,
   buildCliHandoffCommandPlan,
   formatCliHandoffClipboard,
   firstNextCommand,
@@ -764,6 +765,43 @@ describe("getTaskFailureText", () => {
     ].join("\n"));
 
     expect(formatCliHandoffClipboard("mdtero rag status --json", [])).toBe("mdtero rag status --json");
+  });
+
+  it("includes sanitized failed-task context in parse handoffs for local agents", () => {
+    const context = buildTaskHandoffContext(
+      {
+        task_id: "task-failed-1",
+        status: "failed",
+        stage: "failed",
+        task_kind: "parse",
+        reason_code: "client_acquisition_challenge_page",
+        action_hint: "Use browser upload or CLI curl_cffi; Bearer secret-token",
+        preferred_artifact: "paper_md",
+        next_commands: ["mdtero parse https://example.org/paper --json"],
+        result: {
+          download_artifacts: [
+            { artifact: "paper_md", filename: "paper.md" },
+            { artifact: "paper_bundle", filename: "paper.zip" }
+          ]
+        }
+      },
+      "parse"
+    );
+
+    const text = formatCliHandoffClipboard(
+      "mdtero parse https://example.org/paper --json",
+      ["mdtero parse https://example.org/paper --json"],
+      context
+    );
+
+    expect(text).toContain("Failure context for agent:");
+    expect(text).toContain("- task_id: task-failed-1");
+    expect(text).toContain("- reason_code: client_acquisition_challenge_page");
+    expect(text).toContain("- action_hint: Use browser upload or CLI curl_cffi; Bearer [redacted]");
+    expect(text).toContain("- download_artifacts: paper_md: paper.md; paper_bundle: paper.zip");
+    expect(text).toContain("mdtero mcp briefing --json");
+    expect(text).toContain("mdtero mcp serve");
+    expect(text).not.toContain("secret-token");
   });
 
   it("keeps non-parse multi-step handoffs concise", () => {
