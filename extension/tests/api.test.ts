@@ -322,7 +322,7 @@ describe("createApiClient", () => {
     );
 
     await expect(client.downloadArtifact("task-123", "paper_md")).rejects.toThrow(
-      "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+      "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
     );
   });
 
@@ -369,7 +369,7 @@ describe("createApiClient", () => {
     expect((caught as MdteroApiError).actionHint).toBe("Inspect task status, then retry parse from the CLI.");
     expect((caught as MdteroApiError).nextCommands).toEqual([
       "mdtero status task-123 --wait --timeout 300 --json",
-      "mdtero parse --file paper.pdf --trace --wait --timeout 300 --json"
+      "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
     ]);
   });
 

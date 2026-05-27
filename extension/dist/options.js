@@ -4,11 +4,13 @@ function normalizeCliHandoffCommand(command) {
   if (!trimmed || !/^mdtero\s+parse\b/.test(trimmed)) {
     return trimmed;
   }
+  const isFileParse = /^mdtero\s+parse\s+--file\b/.test(trimmed);
+  const timeout = isFileParse ? 600 : 300;
   const withoutTraceOnly = trimmed.replace(/\s+--trace(?!\S)/g, "");
   const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
   const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
   const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --timeout 300 --json`;
+  return `${withoutWait} --trace --wait --timeout ${timeout} --json`;
 }
 
 // src/lib/redact.ts
@@ -299,7 +301,7 @@ var COPY = {
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
     cliHandoffGuideTitle: "Extension + CLI handoff",
-    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents. After one parse succeeds, use one-command RAG bootstrap instead of hand-copying a server project id.",
+    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents. After one parse succeeds, use one-command RAG bootstrap instead of hand-copying a server project id; MCP agents should follow `mcp_tool_plan` and call `server_rag_build(wait=true)` before `rag_query` when a build is needed.",
     cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
@@ -345,9 +347,9 @@ mdtero mcp serve`]
       ["Academic keys", "mdtero config academic", "Optional academic resource keys stay in local CLI config."],
       ["Discover", 'mdtero discover "<topic>" --limit 5 --interactive', "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
       ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
-      ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "Continue from browser-saved files or challenged publisher pages."],
+      ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json", "Continue from browser-saved files or challenged publisher pages; PDF/MinerU tasks can take longer than DOI route checks."],
       ["RAG", ONE_COMMAND_RAG_BOOTSTRAP, "Backend Voyage RAG is driven by the CLI project. This one command can create or bind the server project, import succeeded Markdown, build Voyage RAG, and query with citations; citation_contract requires final answers to preserve citations and source_nodes."],
-      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, RAG readiness, and citation_contract to local agents."],
+      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, RAG readiness, citation_contract, and the mcp_tool_plan steps including server_rag_build(wait=true) before rag_query."],
       ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
       ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
     ],
@@ -405,7 +407,7 @@ mdtero mcp serve`]
     websiteAuthTitle: "\u5B98\u7F51\u767B\u5F55",
     websiteAuthNote: "\u6269\u5C55\u7EDF\u4E00\u6253\u5F00 mdtero.com/auth \u767B\u5F55\u3002\u8BF7\u5728\u5B98\u7F51\u5B8C\u6210\u767B\u5F55\uFF0C\u53D7\u4FE1\u4EFB auth bridge \u4F1A\u628A token \u4EA4\u56DE\u6269\u5C55\u3002",
     cliHandoffGuideTitle: "\u6269\u5C55 + CLI \u4EA4\u63A5",
-    cliHandoffGuideNote: "\u6269\u5C55\u8D1F\u8D23\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587\u3001\u5F53\u524D\u9875\u89E3\u6790\u3001PDF/EPUB \u4E0A\u4F20\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002\u9047\u5230 publisher challenge\u3001\u6821\u56ED\u7F51\u767B\u5F55\u6001\u6216\u7528\u6237\u5DF2\u4FDD\u5B58\u6587\u4EF6\u65F6\uFF0C\u4EA4\u7ED9 Python CLI \u7EE7\u7EED\uFF1B`mdtero setup --json` \u4F1A\u8FD4\u56DE\u7ED9 agent \u4F7F\u7528\u7684 onboarding checklist\u3002\u5DF2\u6709\u4E00\u6B21\u6210\u529F\u89E3\u6790\u540E\uFF0C\u7528\u4E00\u6761\u547D\u4EE4 RAG bootstrap\uFF0C\u4E0D\u8981\u624B\u5DE5\u590D\u5236 server project id\u3002",
+    cliHandoffGuideNote: "\u6269\u5C55\u8D1F\u8D23\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587\u3001\u5F53\u524D\u9875\u89E3\u6790\u3001PDF/EPUB \u4E0A\u4F20\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002\u9047\u5230 publisher challenge\u3001\u6821\u56ED\u7F51\u767B\u5F55\u6001\u6216\u7528\u6237\u5DF2\u4FDD\u5B58\u6587\u4EF6\u65F6\uFF0C\u4EA4\u7ED9 Python CLI \u7EE7\u7EED\uFF1B`mdtero setup --json` \u4F1A\u8FD4\u56DE\u7ED9 agent \u4F7F\u7528\u7684 onboarding checklist\u3002\u5DF2\u6709\u4E00\u6B21\u6210\u529F\u89E3\u6790\u540E\uFF0C\u7528\u4E00\u6761\u547D\u4EE4 RAG bootstrap\uFF0C\u4E0D\u8981\u624B\u5DE5\u590D\u5236 server project id\uFF1BMCP agent \u5E94\u6309 `mcp_tool_plan`\uFF0C\u9700\u8981\u6784\u5EFA\u65F6\u5148\u8C03\u7528 `server_rag_build(wait=true)`\uFF0C\u518D\u8C03\u7528 `rag_query`\u3002",
     cliHandoffGuideBoundary: "\u6269\u5C55\u4E0D\u5B89\u88C5 Python \u4F9D\u8D56\u3001\u4E0D\u8FD0\u884C\u672C\u5730 helper\uFF0C\u4E5F\u4E0D\u4FDD\u5B58 Elsevier/Wiley/Semantic Scholar key\uFF1B\u8FD9\u4E9B\u53EA\u7559\u5728\u672C\u5730 CLI \u7684 `mdtero config academic`\u3002",
     copyCliHandoffGuide: "\u590D\u5236\u4EA4\u63A5",
     cliHandoffGuideCopied: "CLI \u4EA4\u63A5\u5DF2\u590D\u5236\u3002",
@@ -451,9 +453,9 @@ mdtero mcp serve`]
       ["\u5B66\u672F key", "mdtero config academic", "\u5B66\u672F\u8D44\u6E90 key \u90FD\u662F\u53EF\u9009\u589E\u5F3A\uFF0C\u53EA\u5B58\u5728\u672C\u5730 CLI \u914D\u7F6E\u3002"],
       ["\u53D1\u73B0", 'mdtero discover "<topic>" --limit 5 --interactive', "\u6709 Semantic Scholar \u65F6\u8D70\u672C\u5730\uFF1B\u5426\u5219\u8D70\u670D\u52A1\u7AEF OpenAlex\u3002"],
       ["\u89E3\u6790", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "\u4FDD\u7559 route\u3001client_acquisition\u3001reason_code\u3001action_hint \u548C artifacts\u3002"],
-      ["\u6587\u4EF6\u4E0A\u4F20", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json", "\u6D4F\u89C8\u5668\u4FDD\u5B58\u7684\u6587\u4EF6\u6216 publisher challenge \u9875\u9762\u4EA4\u7ED9 CLI \u7EE7\u7EED\u3002"],
+      ["\u6587\u4EF6\u4E0A\u4F20", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json", "\u6D4F\u89C8\u5668\u4FDD\u5B58\u7684\u6587\u4EF6\u6216 publisher challenge \u9875\u9762\u4EA4\u7ED9 CLI \u7EE7\u7EED\uFF1BPDF/MinerU \u4EFB\u52A1\u901A\u5E38\u6BD4 DOI route \u68C0\u67E5\u66F4\u6162\u3002"],
       ["RAG", ONE_COMMAND_RAG_BOOTSTRAP, "\u540E\u7AEF Voyage RAG \u7531 CLI \u9879\u76EE\u9A71\u52A8\u3002\u8FD9\u4E00\u6761\u547D\u4EE4\u53EF\u4EE5\u521B\u5EFA\u6216\u7ED1\u5B9A\u670D\u52A1\u7AEF\u9879\u76EE\u3001\u5BFC\u5165\u6210\u529F Markdown\u3001\u6784\u5EFA Voyage RAG\uFF0C\u5E76\u5E26\u5F15\u7528\u67E5\u8BE2\uFF1Bcitation_contract \u8981\u6C42\u6700\u7EC8\u56DE\u7B54\u4FDD\u7559 citations \u548C source_nodes\u3002"],
-      ["MCP briefing", "mdtero mcp briefing --json", "\u628A\u8D26\u6237\u3001\u9879\u76EE\u3001extension_handoff\u3001RAG readiness \u548C citation_contract \u66B4\u9732\u7ED9\u672C\u5730 agent\u3002"],
+      ["MCP briefing", "mdtero mcp briefing --json", "\u628A\u8D26\u6237\u3001\u9879\u76EE\u3001extension_handoff\u3001RAG readiness\u3001citation_contract \u548C mcp_tool_plan \u4EA4\u7ED9\u672C\u5730 agent\uFF0C\u5305\u62EC\u5728 rag_query \u524D\u8C03\u7528 server_rag_build(wait=true)\u3002"],
       ["MCP \u670D\u52A1", "mdtero mcp serve", "\u5728\u672C\u5730\u9879\u76EE\u6839\u76EE\u5F55\u8FD0\u884C FastMCP stdio server\uFF0C\u7ED9 agent \u63D0\u4F9B\u4E0A\u4E0B\u6587\u5DE5\u5177\u3002"],
       ["Agent skill", "mdtero agent install --interactive", "\u52A8\u6001\u68C0\u6D4B Codex\u3001Claude\u3001Gemini\u3001Hermes\u3001OpenCode\uFF0C\u5E76\u7528\u7A7A\u683C\u591A\u9009\u5B89\u88C5\u3002"]
     ],
@@ -559,7 +561,7 @@ var CLI_HANDOFF_GUIDE_COMMAND = [
   'mdtero discover "<topic>" --limit 5 --interactive',
   'mdtero discover "<topic>" --limit 5 --add --select 1,3 --json',
   "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-  "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 300 --json",
+  "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
   "mdtero project ingest --json",
@@ -567,8 +569,9 @@ var CLI_HANDOFF_GUIDE_COMMAND = [
   "mdtero project refresh --wait --timeout 300 --json",
   ONE_COMMAND_RAG_BOOTSTRAP,
   "mdtero rag status --json",
-  "mdtero rag build --json",
+  "mdtero rag build --wait --json",
   'mdtero rag query "<question>" --build-if-needed --json',
+  "# MCP agents: if mcp_tool_plan says build_rag_index, call server_rag_build(wait=true), then rag_query(question).",
   "# Preserve citation_contract.required_for_final_answer: final RAG answers keep citations and source_nodes.",
   "mdtero mcp briefing --json",
   "mdtero mcp serve"

@@ -545,6 +545,7 @@ export function formatCliHandoffClipboard(
           "Agent handoff:",
           "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
           "- Start `mdtero mcp serve` from the local project root when the agent needs live FastMCP stdio tools.",
+          "- When `mcp_tool_plan` says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`.",
           "- Use `mdtero rag query \"<question>\" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.",
           "- Preserve `citation_contract.required_for_final_answer`; final RAG answers must keep `citations` and `source_nodes` alongside the prose answer.",
         ]
