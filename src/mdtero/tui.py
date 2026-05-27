@@ -17,6 +17,7 @@ from .config import MdteroConfig, config_path, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
 from .onboarding import build_academic_onboarding_summary
 from .projects import ProjectState, ensure_project
+from .rag_contract import ensure_rag_contract
 
 WORKSTATION_SETUP_COMMAND = "mdtero setup"
 HEADLESS_SETUP_COMMAND = "mdtero setup --api-key --json"
@@ -274,6 +275,13 @@ def _tui_rag_payload(local_rag: dict[str, Any], server_project_id: str | None, *
         payload["action_hint"] = str(server_status["action_hint"])
     if next_commands:
         payload["next_commands"] = next_commands
+    ensure_rag_contract(server_status)
+    citation_contract = server_status.get("citation_contract") if isinstance(server_status.get("citation_contract"), dict) else {}
+    if citation_contract:
+        payload["citation_contract"] = citation_contract
+        required_fields = citation_contract.get("required_for_final_answer") if isinstance(citation_contract.get("required_for_final_answer"), list) else []
+        if required_fields:
+            payload["citation_rule"] = f"Final answers preserve {', '.join(str(field) for field in required_fields)}"
     payload["server_agent_summary"] = {
         "status": payload.get("server_status"),
         "reason_code": payload.get("server_reason_code"),
@@ -743,6 +751,8 @@ def _rag_panel(model: dict[str, Any]) -> Panel:
             table.add_row("Model", str(rag.get("embedding_model")))
         if rag.get("action_hint"):
             table.add_row("Hint", str(rag.get("action_hint"))[:120])
+        if rag.get("citation_rule"):
+            table.add_row("Evidence rule", str(rag.get("citation_rule"))[:120])
         next_commands = rag.get("next_commands") if isinstance(rag.get("next_commands"), list) else []
         if next_commands:
             table.add_row("Next", str(next_commands[0])[:120])

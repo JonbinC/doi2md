@@ -5067,6 +5067,8 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["rag"]["embedding_model"] == "voyage-4"
     assert model["rag"]["action_hint"] == "Build the server project index before querying."
     assert model["rag"]["next_commands"] == ["mdtero rag build --json", "mdtero rag status --json"]
+    assert model["rag"]["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
+    assert model["rag"]["citation_rule"] == "Final answers preserve citations, source_nodes"
     assert model["rag"]["server_agent_summary"] == {
         "status": "not_ready",
         "reason_code": "rag_index_not_built",
@@ -5135,6 +5137,8 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "voyage-4" in output
     assert "Build the server project index before" in output
     assert "querying" in output
+    assert "Evidence rule" in output
+    assert "Final answers preserve citations, source_nodes" in output
     assert "submit_parse" in output
     assert "task_status" in output
     assert "download_artifact" in output
@@ -5239,6 +5243,8 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
     assert model["rag"]["provider_state"] == "configured"
     assert model["rag"]["provider_configured"] is True
     assert model["rag"]["embedding_model"] == "voyage-test"
+    assert model["rag"]["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
+    assert model["rag"]["citation_rule"] == "Final answers preserve citations, source_nodes"
     assert model["rag"]["server_agent_summary"]["embedding_model"] == "voyage-test"
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
     assert model["mcp"]["briefing_command"] == "mdtero mcp briefing --json"
@@ -5646,6 +5652,9 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     assert "Answer" in output
     assert "[1] Coating improves corrosion resistance." in output
     assert "Corrosion Paper:3-4 · 10.1000/rag" in output
+    assert "Citation contract" in output
+    assert "Final answers must preserve: citations, source_nodes" in output
+    assert "Use source_nodes and citations as grounded evidence" in output
     assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
     assert "Agent plan" in output
