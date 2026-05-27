@@ -658,12 +658,13 @@ function buildCliHandoffCommandPlan(primaryCommand, planCommands) {
     ...otherCommands
   ]);
 }
-function formatCliHandoffClipboard(primaryCommand, planCommands) {
+function formatCliHandoffClipboard(primaryCommand, planCommands, context) {
   const commands = buildCliHandoffCommandPlan(primaryCommand, planCommands);
   if (commands.length <= 1) {
     return commands[0] || "";
   }
   const parseHandoff = /^mdtero\s+parse\b/.test(commands[0] || "");
+  const contextLines = parseHandoff ? formatHandoffContextLines(context) : [];
   return [
     "# Mdtero CLI handoff",
     "",
@@ -672,6 +673,7 @@ function formatCliHandoffClipboard(primaryCommand, planCommands) {
       "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
       ""
     ] : [],
+    ...contextLines.length ? ["Failure context for agent:", ...contextLines, ""] : [],
     "Run these commands in order:",
     ...commands.map((command, index) => `${index + 1}. ${command}`),
     ...parseHandoff ? [
@@ -682,6 +684,52 @@ function formatCliHandoffClipboard(primaryCommand, planCommands) {
       '- Use `mdtero rag query "<question>" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.'
     ] : []
   ].join("\n");
+}
+function buildTaskHandoffContext(task, kind) {
+  const downloadArtifacts = (task?.result?.download_artifacts ?? []).map((artifact) => {
+    const name = String(artifact.artifact || "").trim();
+    const filename = String(artifact.filename || "").trim();
+    return [name, filename].filter(Boolean).join(": ");
+  }).filter(Boolean);
+  return {
+    taskId: task?.task_id,
+    status: task?.status,
+    stage: task?.stage,
+    kind: task?.task_kind ?? kind,
+    reasonCode: task?.reason_code || task?.result?.reason_code || void 0,
+    actionHint: task?.action_hint || task?.result?.action_hint || void 0,
+    preferredArtifact: task?.preferred_artifact || task?.result?.preferred_artifact || void 0,
+    downloadArtifacts,
+    nextCommands: normalizeCommandList([...task?.next_commands ?? [], ...task?.result?.next_commands ?? []])
+  };
+}
+function formatHandoffContextLines(context) {
+  if (!context) {
+    return [];
+  }
+  const lines = [];
+  appendContextLine(lines, "task_id", context.taskId);
+  appendContextLine(lines, "status", context.status);
+  appendContextLine(lines, "stage", context.stage);
+  appendContextLine(lines, "kind", context.kind);
+  appendContextLine(lines, "reason_code", context.reasonCode);
+  appendContextLine(lines, "action_hint", context.actionHint);
+  appendContextLine(lines, "preferred_artifact", context.preferredArtifact);
+  appendContextList(lines, "download_artifacts", context.downloadArtifacts);
+  appendContextList(lines, "next_commands", context.nextCommands);
+  return lines;
+}
+function appendContextLine(lines, label, value) {
+  const normalized = redactSensitiveText(String(value || "").trim());
+  if (normalized) {
+    lines.push(`- ${label}: ${normalized}`);
+  }
+}
+function appendContextList(lines, label, values) {
+  const normalized = normalizeCommandList(values).map(redactSensitiveText);
+  if (normalized.length) {
+    lines.push(`- ${label}: ${normalized.join("; ")}`);
+  }
 }
 function buildTaskFailureCliHandoffPlan(task, input, kind = "parse") {
   const taskCommands = normalizeCommandList(task?.next_commands);
@@ -897,6 +945,7 @@ var hasDownloadableArtifact = false;
 var detectedPageContext = null;
 var currentBridgeStatus = null;
 var currentCliHandoffCommands = [];
+var currentCliHandoffContext = null;
 function copyFor(language) {
   return COPY[language];
 }
@@ -921,7 +970,7 @@ function updateWorkflowState() {
   setWorkflowStep(workflowTranslateEl, hasTranslatedArtifact ? "done" : isTranslating || hasParsedArtifact ? "active" : "pending");
   setWorkflowStep(workflowDownloadEl, hasDownloadableArtifact ? "done" : hasParsedArtifact || hasTranslatedArtifact ? "active" : "pending");
 }
-function setCliHandoff(input, commandOverride, planCommands) {
+function setCliHandoff(input, commandOverride, planCommands, context) {
   const commands = normalizeHandoffCommands(planCommands);
   const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
   const handoffCommands = command ? buildCliHandoffCommandPlan(command, commands) : [];
@@ -932,6 +981,7 @@ function setCliHandoff(input, commandOverride, planCommands) {
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
   currentCliHandoffCommands = handoffCommands;
+  currentCliHandoffContext = context ?? null;
   renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
@@ -956,7 +1006,7 @@ async function copyCliHandoff() {
   if (!command) {
     return;
   }
-  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands));
+  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands, currentCliHandoffContext));
   setResult(getCurrentCopy().cliCommandCopied);
 }
 function setStatus(message) {
@@ -1345,7 +1395,12 @@ async function pollTask(taskId, kind) {
     );
     const failureHandoffPlan = buildTaskFailureCliHandoffPlan(task, currentInput, kind);
     if (failureHandoffPlan.primaryCommand) {
-      setCliHandoff(currentInput, failureHandoffPlan.primaryCommand, failureHandoffPlan.commands);
+      setCliHandoff(
+        currentInput,
+        failureHandoffPlan.primaryCommand,
+        failureHandoffPlan.commands,
+        buildTaskHandoffContext(task, kind)
+      );
     } else {
       setCliHandoff(null);
     }

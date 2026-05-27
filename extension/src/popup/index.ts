@@ -37,7 +37,9 @@ import {
   getTaskFailureText,
   buildCliHandoffCommandPlan,
   buildTaskFailureCliHandoffPlan,
+  buildTaskHandoffContext,
   formatCliHandoffClipboard,
+  type CliHandoffContext,
   getDownloadFailureText,
   buildCliParseCommand,
   buildCliFileParseCommand,
@@ -231,6 +233,7 @@ let hasDownloadableArtifact = false;
 let detectedPageContext: { tabId: number; tabUrl?: string; detectedInput: string } | null = null;
 let currentBridgeStatus: { state?: string | null; runnerState?: string | null } | null = null;
 let currentCliHandoffCommands: string[] = [];
+let currentCliHandoffContext: CliHandoffContext | null = null;
 
 function copyFor(language: UiLanguage) {
   return COPY[language];
@@ -263,7 +266,12 @@ function updateWorkflowState() {
   setWorkflowStep(workflowDownloadEl, hasDownloadableArtifact ? "done" : hasParsedArtifact || hasTranslatedArtifact ? "active" : "pending");
 }
 
-function setCliHandoff(input?: string | null, commandOverride?: string | null, planCommands?: string[] | null) {
+function setCliHandoff(
+  input?: string | null,
+  commandOverride?: string | null,
+  planCommands?: string[] | null,
+  context?: CliHandoffContext | null
+) {
   const commands = normalizeHandoffCommands(planCommands);
   const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
   const handoffCommands = command ? buildCliHandoffCommandPlan(command, commands) : [];
@@ -274,6 +282,7 @@ function setCliHandoff(input?: string | null, commandOverride?: string | null, p
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
   currentCliHandoffCommands = handoffCommands;
+  currentCliHandoffContext = context ?? null;
   renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
@@ -301,7 +310,7 @@ async function copyCliHandoff() {
   if (!command) {
     return;
   }
-  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands));
+  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands, currentCliHandoffContext));
   setResult(getCurrentCopy().cliCommandCopied);
 }
 
@@ -718,7 +727,12 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     );
     const failureHandoffPlan = buildTaskFailureCliHandoffPlan(task, currentInput, kind);
     if (failureHandoffPlan.primaryCommand) {
-      setCliHandoff(currentInput, failureHandoffPlan.primaryCommand, failureHandoffPlan.commands);
+      setCliHandoff(
+        currentInput,
+        failureHandoffPlan.primaryCommand,
+        failureHandoffPlan.commands,
+        buildTaskHandoffContext(task, kind)
+      );
     } else {
       setCliHandoff(null);
     }

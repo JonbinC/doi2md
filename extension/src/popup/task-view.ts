@@ -405,6 +405,18 @@ export interface CliHandoffPlan {
   kind: "parse" | "translate";
 }
 
+export interface CliHandoffContext {
+  taskId?: string;
+  status?: string;
+  stage?: string;
+  kind?: "parse" | "translate";
+  reasonCode?: string;
+  actionHint?: string;
+  preferredArtifact?: string;
+  downloadArtifacts?: string[];
+  nextCommands?: string[];
+}
+
 const PARSE_HANDOFF_FOLLOWUPS = [
   "mdtero status <task-id> --wait --timeout 300 --json",
   "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
@@ -460,12 +472,17 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
   ]);
 }
 
-export function formatCliHandoffClipboard(primaryCommand: string, planCommands?: string[] | null): string {
+export function formatCliHandoffClipboard(
+  primaryCommand: string,
+  planCommands?: string[] | null,
+  context?: CliHandoffContext | null
+): string {
   const commands = buildCliHandoffCommandPlan(primaryCommand, planCommands);
   if (commands.length <= 1) {
     return commands[0] || "";
   }
   const parseHandoff = /^mdtero\s+parse\b/.test(commands[0] || "");
+  const contextLines = parseHandoff ? formatHandoffContextLines(context) : [];
   return [
     "# Mdtero CLI handoff",
     "",
@@ -475,6 +492,9 @@ export function formatCliHandoffClipboard(primaryCommand: string, planCommands?:
           "Preserve task_id, reason_code, action_hint, client_acquisition, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
           "",
         ]
+      : []),
+    ...(contextLines.length
+      ? ["Failure context for agent:", ...contextLines, ""]
       : []),
     "Run these commands in order:",
     ...commands.map((command, index) => `${index + 1}. ${command}`),
@@ -488,6 +508,69 @@ export function formatCliHandoffClipboard(primaryCommand: string, planCommands?:
         ]
       : []),
   ].join("\n");
+}
+
+export function buildTaskHandoffContext(
+  task:
+    | (Pick<
+        TaskRecord,
+        "task_id" | "status" | "stage" | "task_kind" | "reason_code" | "action_hint" | "preferred_artifact" | "next_commands"
+      > & {
+        result?: Pick<TaskResult, "preferred_artifact" | "download_artifacts" | "reason_code" | "action_hint" | "next_commands"> | null;
+      })
+    | null
+    | undefined,
+  kind: "parse" | "translate"
+): CliHandoffContext {
+  const downloadArtifacts = (task?.result?.download_artifacts ?? [])
+    .map((artifact) => {
+      const name = String(artifact.artifact || "").trim();
+      const filename = String(artifact.filename || "").trim();
+      return [name, filename].filter(Boolean).join(": ");
+    })
+    .filter(Boolean);
+  return {
+    taskId: task?.task_id,
+    status: task?.status,
+    stage: task?.stage,
+    kind: task?.task_kind ?? kind,
+    reasonCode: task?.reason_code || task?.result?.reason_code || undefined,
+    actionHint: task?.action_hint || task?.result?.action_hint || undefined,
+    preferredArtifact: task?.preferred_artifact || task?.result?.preferred_artifact || undefined,
+    downloadArtifacts,
+    nextCommands: normalizeCommandList([...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]),
+  };
+}
+
+function formatHandoffContextLines(context?: CliHandoffContext | null): string[] {
+  if (!context) {
+    return [];
+  }
+  const lines: string[] = [];
+  appendContextLine(lines, "task_id", context.taskId);
+  appendContextLine(lines, "status", context.status);
+  appendContextLine(lines, "stage", context.stage);
+  appendContextLine(lines, "kind", context.kind);
+  appendContextLine(lines, "reason_code", context.reasonCode);
+  appendContextLine(lines, "action_hint", context.actionHint);
+  appendContextLine(lines, "preferred_artifact", context.preferredArtifact);
+  appendContextList(lines, "download_artifacts", context.downloadArtifacts);
+  appendContextList(lines, "next_commands", context.nextCommands);
+  return lines;
+}
+
+function appendContextLine(lines: string[], label: string, value?: string | null) {
+  const normalized = redactSensitiveText(String(value || "").trim());
+  if (normalized) {
+    lines.push(`- ${label}: ${normalized}`);
+  }
+}
+
+function appendContextList(lines: string[], label: string, values?: string[] | null) {
+  const normalized = normalizeCommandList(values).map(redactSensitiveText);
+  if (normalized.length) {
+    lines.push(`- ${label}: ${normalized.join("; ")}`);
+  }
 }
 
 export function buildTaskFailureCliHandoffPlan(
