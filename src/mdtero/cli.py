@@ -888,13 +888,13 @@ def _doctor_project_payload(root: Path, *, server_rag_status: dict[str, Any] | N
             rag_status = str(server_rag_status.get("status") or "check")
         rag_next = [str(command) for command in server_rag_status.get("next_commands") or ["mdtero rag status --json"]]
     elif state.server_project_id and ready_for_ingest:
-        rag_next = ["mdtero project ingest --json", "mdtero rag status --json", "mdtero rag build --json"]
+        rag_next = ["mdtero project ingest --json", ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --json"]
         rag_status = "check"
     elif state.server_project_id:
         rag_next = ["mdtero project parse --wait --timeout 300 --json", "mdtero project ingest --json"]
         rag_status = "needs_papers"
     elif ready_for_ingest:
-        rag_next = ["mdtero rag build --json", "mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
+        rag_next = [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", "mdtero rag build --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
         rag_status = "not_linked"
     else:
         rag_next = ["mdtero discover \"<topic>\" --interactive", "mdtero project parse --wait --timeout 300 --json"]
