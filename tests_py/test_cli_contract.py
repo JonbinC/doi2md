@@ -17,7 +17,7 @@ from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
 from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
-from mdtero.mcp import build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
+from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_status, download_artifact_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
 from mdtero.tui import MdteroTui, build_dashboard_model, render_dashboard_text
 from mdtero.projects import (
@@ -3875,12 +3875,49 @@ def test_mcp_agent_briefing_tool_plan_handles_uninitialized_project(tmp_path: Pa
     briefing = build_agent_briefing(tmp_path, config=MdteroConfig(api_key="key"))
     tool_plan = briefing["mcp_tool_plan"]
 
-    assert [step["step"] for step in tool_plan] == ["brief", "inspect_project", "initialize_project"]
-    assert tool_plan[-1]["tool"] == "agent_commands"
-    assert tool_plan[-1]["next_commands"] == [
+    assert [step["step"] for step in tool_plan] == ["brief", "inspect_project", "initialize_project", "add_first_project_item"]
+    assert tool_plan[-2]["tool"] == "project_init"
+    assert tool_plan[-2]["arguments"] == {"name": "<name>"}
+    assert "falling back to shell commands" in tool_plan[-2]["purpose"]
+    assert tool_plan[-2]["next_commands"] == [
         "mdtero project init --name <name>",
         "mdtero project add <doi-or-url> --json",
         "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+    ]
+    assert tool_plan[-1]["tool"] == "project_add"
+    assert tool_plan[-1]["arguments"] == {"input_value": "<doi-or-url-or-file>"}
+    assert tool_plan[-1]["next_commands"] == [
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+    ]
+
+
+def test_mcp_project_init_and_add_tools_start_project_mode(tmp_path: Path):
+    init_payload = initialize_project_for_agent("agent-demo", tmp_path)
+
+    assert init_payload["status"] == "ready"
+    assert init_payload["reason_code"] == "project_initialized"
+    assert init_payload["project"] == "agent-demo"
+    assert init_payload["project_file"].endswith(".mdtero/project.json")
+    assert init_payload["project_status"]["status"] == "empty"
+    assert "mdtero project status --json" in init_payload["next_commands"]
+
+    add_payload = add_project_item_for_agent("10.48550/arXiv.1706.03762", tmp_path, title="Attention Is All You Need", doi="10.48550/arXiv.1706.03762")
+    state = load_project(tmp_path)
+
+    assert add_payload["status"] == "queued"
+    assert add_payload["reason_code"] == "project_item_added"
+    assert add_payload["paper_count"] == 1
+    assert add_payload["project_status"]["pending_count"] == 1
+    assert add_payload["next_commands"] == [
+        "mdtero project parse --wait --timeout 300 --json",
+        "mdtero project refresh --wait --timeout 300 --json",
+        "mdtero rag build --json",
+        "mdtero mcp briefing --json",
+    ]
+    assert [(paper.input, paper.title, paper.doi, paper.source, paper.status) for paper in state.papers] == [
+        ("10.48550/arXiv.1706.03762", "Attention Is All You Need", "10.48550/arXiv.1706.03762", "mcp", "pending")
     ]
 
 
@@ -6637,6 +6674,8 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
 
     for content in [combined_docs, combined_skills]:
         assert "mcp_tool_plan" in content
+        assert "project_init" in content
+        assert "project_add" in content
         assert "submit_parse" in content
         assert "task_status" in content
         assert "download_artifact" in content
