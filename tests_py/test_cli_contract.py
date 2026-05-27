@@ -7220,6 +7220,8 @@ jobs:
 name: Bad
 on:
   push:
+  schedule:
+    - cron: "0 0 * * *"
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -7236,6 +7238,8 @@ jobs:
         "missing secret-name listing step",
         "missing Forgejo secret-name summary",
         "push-trigger",
+        "schedule-trigger",
+        "cron-trigger",
         "admin-credential",
     ]
 
