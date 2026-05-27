@@ -37,6 +37,7 @@ def build_mcp_server_contract(payload: dict[str, Any]) -> dict[str, Any]:
             "request_translation",
             "rag_context",
             "server_rag_status",
+            "server_rag_build",
             "rag_query",
             "agent_commands",
         ],
@@ -276,14 +277,24 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         })
     elif needs_build:
         plan.append({
-            "step": "bootstrap_rag_query",
-            "tool": "rag_query",
-            "purpose": "Run the one-command RAG bootstrap query; the CLI can build backend Voyage embeddings when needed, then return grounded evidence.",
+            "step": "build_rag_index",
+            "tool": "server_rag_build",
+            "purpose": "Build backend Voyage embeddings through the local FastMCP wrapper and wait until the server project is query-ready.",
             "when": "readiness.needs_build is true or reason_code is rag_index_not_built/rag_index_partial.",
-            "arguments": {"project_id": project_id},
-            "success_signal": "reason_code is rag_query_succeeded/no_matches, or readiness.ready_for_query becomes true after the build-if-needed path.",
+            "arguments": {"project_id": project_id, "wait": True, "timeout": 300, "interval": 2},
+            "success_signal": "status_after_build.ready_for_query is true, or readiness.ready_for_query becomes true after build polling.",
             "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
             "next_commands": next_commands,
+        })
+        plan.append({
+            "step": "query_after_build",
+            "tool": "rag_query",
+            "purpose": "Ask the first grounded project question after server_rag_build reports readiness.",
+            "when": "server_rag_build.status_after_build.ready_for_query is true.",
+            "arguments": {"project_id": project_id, "question": "<project question>", "limit": 5},
+            "success_signal": "reason_code is rag_query_succeeded/no_matches and evidence_pack plus citations are present.",
+            "failure_fields": ["reason_code", "action_hint", "next_commands", "readiness"],
+            "next_commands": ["mdtero rag query \"<question>\" --build-if-needed --json"],
         })
 
     if ready_for_query or status == "succeeded" or reason_code in {"indexed", "rag_query_succeeded", "ok", "no_matches"}:
