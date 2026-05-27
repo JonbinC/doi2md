@@ -308,9 +308,10 @@ export function createRouterSSOTClient(
     });
 
     if (response.status === 404 && path === "/api/v1/route") {
+      const routeInput = (init?.body && routeInputFromBody(init.body)) || "<doi-or-url>";
       return new Response(JSON.stringify({
         input_kind: "unknown",
-        input_value: "",
+        input_value: routeInput,
         top_connector: "server_parse",
         route_kind: "server",
         acquisition_mode: "server_parse",
@@ -324,7 +325,7 @@ export function createRouterSSOTClient(
         action_hint: "The backend route planner is not available; submit the DOI or URL directly to /api/v1/tasks/parse.",
         server_entrypoint: "/api/v1/tasks/parse",
         upload_entrypoint: "/api/v1/tasks/upload",
-        client_command: normalizeCliHandoffCommand(`mdtero parse ${shellQuoteRouteInput((init?.body && routeInputFromBody(init.body)) || "<doi-or-url>")}`),
+        client_command: normalizeCliHandoffCommand(`mdtero parse ${shellQuoteRouteInput(routeInput)}`),
         route_planner_fallback: true
       }), {
         status: 200,
