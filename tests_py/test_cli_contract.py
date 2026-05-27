@@ -2672,6 +2672,7 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
                 "preferred_artifact": "paper_md",
                 "selected_provider": "arxiv",
                 "parser_strategy": "html_arxiv",
+                "client_acquisition": {"source": "curl_cffi", "artifact_kind": "html"},
                 "parse_outcome": {"outcome_code": "fulltext_accepted"},
                 "download_artifacts": {"paper_md": {"filename": "paper.md"}},
             },
@@ -2689,6 +2690,7 @@ def test_waited_parse_final_task_is_enriched_without_success_error_noise(monkeyp
     assert payload["result"]["preferred_artifact"] == "paper_md"
     assert payload["selected_provider"] == "arxiv"
     assert payload["parser_strategy"] == "html_arxiv"
+    assert payload["client_acquisition"] == {"source": "curl_cffi", "artifact_kind": "html"}
     assert payload["parse_outcome"] == {"outcome_code": "fulltext_accepted"}
     assert payload["download_artifacts"] == {"paper_md": {"filename": "paper.md"}}
     assert payload["preferred_artifact"] == "paper_md"
