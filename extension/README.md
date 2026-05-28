@@ -38,9 +38,15 @@ The extension does not use native messaging or a local helper process. When brow
 When browser context is not enough, install the Python client and let its setup checklist guide the local workflow:
 
 ```bash
-uv tool install git+https://github.com/JonbinC/doi2md.git
+uv tool install mdtero
 mdtero setup
 mdtero setup --json
+```
+
+If the current alpha has not propagated to PyPI yet, use the GitHub fallback temporarily:
+
+```bash
+uv tool install git+https://github.com/JonbinC/doi2md.git
 ```
 
 `mdtero setup --json` returns a secret-safe onboarding checklist for local agents: website OAuth or trusted headless auth, optional academic keys, Semantic Scholar versus OpenAlex discovery, project creation, DOI/file/batch parsing, Zotero intake, backend Voyage RAG, FastMCP briefing/serve, and interactive agent skill install.
@@ -56,4 +62,4 @@ Mdtero 浏览器扩展只保留主线能力：登录、当前页/DOI 解析、PD
 3. 等待任务完成后下载 `paper_md` 或 `paper_bundle`。
 4. 需要中文版本时，对成功任务发起翻译并下载翻译后的 Markdown。
 
-如果需要项目管理、BibTeX/Zotero 导入、RAG、MCP 或 agent skill，请使用 Python CLI：`uv tool install git+https://github.com/JonbinC/doi2md.git`。
+如果需要项目管理、BibTeX/Zotero 导入、RAG、MCP 或 agent skill，请使用 Python CLI：`uv tool install mdtero`。如果当前 alpha 还没同步到 PyPI，可临时使用 GitHub fallback：`uv tool install git+https://github.com/JonbinC/doi2md.git`。
