@@ -286,6 +286,8 @@ async function writeSettings(next) {
 
 // src/options/index.ts
 var ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json';
+var CLI_INSTALL_COMMAND = "uv tool install mdtero";
+var CLI_GITHUB_FALLBACK_COMMAND = "uv tool install git+https://github.com/JonbinC/doi2md.git";
 var COPY = {
   en: {
     title: "Mdtero Extension",
@@ -343,7 +345,7 @@ mdtero mcp briefing --json
 mdtero mcp serve`]
     ],
     cliOnboardingItems: [
-      ["Install", "uv tool install git+https://github.com/JonbinC/doi2md.git", "Install the public Python client; the extension never installs Python dependencies."],
+      ["Install", CLI_INSTALL_COMMAND, `Install the public Python client from PyPI. If the alpha has not propagated yet, use ${CLI_GITHUB_FALLBACK_COMMAND} as a temporary fallback; the extension never installs Python dependencies.`],
       ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
       ["Checklist", "mdtero setup --json", "Return the same secret-safe onboarding checklist used by local agents."],
       ["Academic keys", "mdtero config academic", "Optional academic resource keys stay in local CLI config."],
@@ -363,7 +365,7 @@ mdtero mcp serve`]
     guideSignedOut: [
       "Open website OAuth and complete sign-in at mdtero.com/auth.",
       "Return to this popup after the trusted auth bridge connects your account.",
-      "Optionally install the Python CLI with `uv tool install git+https://github.com/JonbinC/doi2md.git`, then run `mdtero setup` for workstation OAuth.",
+      `Optionally install the Python CLI with \`${CLI_INSTALL_COMMAND}\`; if PyPI has not propagated yet, use \`${CLI_GITHUB_FALLBACK_COMMAND}\` as a temporary fallback. Then run \`mdtero setup\` for workstation OAuth.`,
       "Parse the current paper page or upload a local PDF/EPUB from the popup.",
       "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
     ],
@@ -451,7 +453,7 @@ mdtero mcp briefing --json
 mdtero mcp serve`]
     ],
     cliOnboardingItems: [
-      ["\u5B89\u88C5", "uv tool install git+https://github.com/JonbinC/doi2md.git", "\u5B89\u88C5\u516C\u5F00 Python \u5BA2\u6237\u7AEF\uFF1B\u6269\u5C55\u4E0D\u4F1A\u5B89\u88C5 Python \u4F9D\u8D56\u3002"],
+      ["\u5B89\u88C5", CLI_INSTALL_COMMAND, `\u4ECE PyPI \u5B89\u88C5\u516C\u5F00 Python \u5BA2\u6237\u7AEF\uFF1B\u5982\u679C alpha \u8FD8\u6CA1\u540C\u6B65\uFF0C\u53EF\u4E34\u65F6\u4F7F\u7528 ${CLI_GITHUB_FALLBACK_COMMAND}\u3002\u6269\u5C55\u4E0D\u4F1A\u5B89\u88C5 Python \u4F9D\u8D56\u3002`],
       ["\u9274\u6743", "mdtero setup", "\u5DE5\u4F5C\u7AD9\u8D70\u7F51\u9875\u767B\u5F55 OAuth\uFF1B\u53EF\u4FE1\u65E0\u5934\u670D\u52A1\u5668\u53EF\u8D70 API-key setup\u3002"],
       ["\u68C0\u67E5\u6E05\u5355", "mdtero setup --json", "\u8FD4\u56DE\u7ED9\u672C\u5730 agent \u4F7F\u7528\u7684\u540C\u4E00\u4EFD secret-safe onboarding checklist\u3002"],
       ["\u5B66\u672F key", "mdtero config academic", "\u5B66\u672F\u8D44\u6E90 key \u90FD\u662F\u53EF\u9009\u589E\u5F3A\uFF0C\u53EA\u5B58\u5728\u672C\u5730 CLI \u914D\u7F6E\u3002"],
@@ -471,7 +473,7 @@ mdtero mcp serve`]
     guideSignedOut: [
       "\u6253\u5F00\u7F51\u9875\u767B\u5F55\uFF0C\u5E76\u5728 mdtero.com/auth \u5B8C\u6210\u6388\u6743\u3002",
       "\u53D7\u4FE1\u4EFB auth bridge \u8FDE\u63A5\u8D26\u6237\u540E\uFF0C\u56DE\u5230\u6269\u5C55\u5F39\u7A97\u7EE7\u7EED\u3002",
-      "\u53EF\u9009\u5B89\u88C5 Python CLI\uFF1A`uv tool install git+https://github.com/JonbinC/doi2md.git`\uFF0C\u518D\u8FD0\u884C `mdtero setup` \u8D70\u5DE5\u4F5C\u7AD9 OAuth\u3002",
+      `\u53EF\u9009\u5B89\u88C5 Python CLI\uFF1A\`${CLI_INSTALL_COMMAND}\`\uFF1B\u5982\u679C PyPI \u8FD8\u6CA1\u540C\u6B65\uFF0C\u53EF\u4E34\u65F6\u7528 \`${CLI_GITHUB_FALLBACK_COMMAND}\`\u3002\u518D\u8FD0\u884C \`mdtero setup\` \u8D70\u5DE5\u4F5C\u7AD9 OAuth\u3002`,
       "\u5728\u5F39\u7A97\u89E3\u6790\u5F53\u524D\u8BBA\u6587\u9875\u3001\u7C98\u8D34 DOI\uFF0C\u6216\u4E0A\u4F20\u672C\u5730 PDF/EPUB\u3002",
       "\u4EFB\u52A1\u5B8C\u6210\u540E\u4E0B\u8F7D Markdown\u3001ZIP\u3001\u6E90\u6587\u4EF6\u6216\u8BD1\u6587\u3002"
     ],
@@ -559,7 +561,8 @@ var refreshHistoryBtn = document.querySelector("#refresh-history");
 var client = createApiClient(readSettings);
 var uiLanguage = "en";
 var CLI_HANDOFF_GUIDE_COMMAND = [
-  "uv tool install git+https://github.com/JonbinC/doi2md.git",
+  CLI_INSTALL_COMMAND,
+  `# fallback if PyPI has not propagated: ${CLI_GITHUB_FALLBACK_COMMAND}`,
   "mdtero setup",
   "mdtero setup --json",
   "mdtero doctor --json",

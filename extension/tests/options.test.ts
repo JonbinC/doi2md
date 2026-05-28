@@ -103,7 +103,8 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("server project id");
     expect(document.querySelector("#cli-handoff-guide-note")?.textContent).toContain("server_rag_build(wait=true)");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero doctor --json");
-    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("uv tool install git+https://github.com/JonbinC/doi2md.git");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("uv tool install mdtero");
+    expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("fallback if PyPI has not propagated: uv tool install git+https://github.com/JonbinC/doi2md.git");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero setup");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero setup --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero config academic");
@@ -166,6 +167,8 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-onboarding-note")?.textContent).toContain("local acquisition");
     expect(document.querySelector("#cli-onboarding-pill")?.textContent).toBe("Python / uv");
     const checklistText = document.querySelector("#cli-onboarding-list")?.textContent || "";
+    expect(checklistText).toContain("uv tool install mdtero");
+    expect(checklistText).toContain("If the alpha has not propagated yet");
     expect(checklistText).toContain("uv tool install git+https://github.com/JonbinC/doi2md.git");
     expect(checklistText).toContain("mdtero setup");
     expect(checklistText).toContain("mdtero setup --json");
@@ -201,7 +204,8 @@ describe("extension options page", () => {
     (document.querySelector("#copy-cli-handoff-guide") as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero doctor --json"));
-      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("uv tool install git+https://github.com/JonbinC/doi2md.git"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("uv tool install mdtero"));
+      expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("fallback if PyPI has not propagated: uv tool install git+https://github.com/JonbinC/doi2md.git"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero setup --json"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero config academic"));
       expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json"));
