@@ -13,7 +13,7 @@ describe("extension manifest", () => {
       action?: { default_popup?: string; default_icon?: Record<string, string> };
       options_page?: string;
       icons?: Record<string, string>;
-      content_scripts?: Array<{ matches?: string[]; js?: string[] }>;
+      content_scripts?: Array<{ matches?: string[]; js?: string[]; run_at?: string }>;
     };
 
     expect(manifest.permissions).toEqual(["storage", "downloads", "tabs"]);
@@ -40,6 +40,7 @@ describe("extension manifest", () => {
       "https://*.mdtero.com/*"
     ]);
     expect(manifest.content_scripts?.[0]?.js).toEqual(["dist/content.js"]);
+    expect(manifest.content_scripts?.[0]?.run_at).toBe("document_start");
     expect(manifest.content_scripts?.[1]?.matches).toEqual([
       "*://*.arxiv.org/*",
       "*://*.dl.acm.org/*",
@@ -57,6 +58,7 @@ describe("extension manifest", () => {
       "*://*.tandfonline.com/*"
     ]);
     expect(manifest.content_scripts?.[1]?.js).toEqual(["dist/content.js"]);
+    expect(manifest.content_scripts?.[1]?.run_at).toBe("document_idle");
     expect(manifest.background?.service_worker).toBe("dist/background.js");
     expect(manifest.action?.default_popup).toBe("dist/popup.html");
     expect(manifest.options_page).toBe("dist/options.html");

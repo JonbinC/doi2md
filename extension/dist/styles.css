@@ -33,6 +33,11 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 380px;
+  min-height: 600px;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -50,7 +55,10 @@ body {
 
 .panel-popup {
   width: 380px;
+  height: 600px;
+  min-height: 600px;
   max-width: 100vw;
+  overflow: hidden;
 }
 
 .panel-options {
@@ -70,7 +78,8 @@ body {
 }
 
 .panel-popup .shell {
-  max-height: min(600px, 100vh);
+  height: 600px;
+  max-height: 600px;
   overflow-y: auto;
 }
 

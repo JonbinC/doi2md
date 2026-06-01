@@ -146,8 +146,9 @@ describe("workspace", () => {
 
     expect(popupHtml).toContain('class="panel panel-popup"');
     expect(optionsHtml).toContain('class="panel panel-options"');
-    expect(styles).toContain(".panel-popup { width: 380px; max-width: 100vw; }");
-    expect(styles).toContain(".panel-popup .shell { max-height: min(600px, 100vh); overflow-y: auto; }");
+    expect(styles).toContain("html { min-width: 380px; min-height: 600px; }");
+    expect(styles).toContain(".panel-popup { width: 380px; height: 600px; min-height: 600px; max-width: 100vw; overflow: hidden; }");
+    expect(styles).toContain(".panel-popup .shell { height: 600px; max-height: 600px; overflow-y: auto; }");
     expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
     expect(styles).toContain('.workflow-strip span[data-state="active"]');
     expect(styles).toContain('.workflow-strip span[data-state="done"]');
