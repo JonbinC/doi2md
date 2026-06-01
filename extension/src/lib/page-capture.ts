@@ -38,6 +38,19 @@ export type XmlFetchResult =
       failureMessage: string;
     };
 
+export type HtmlFetchResult =
+  | {
+      ok: true;
+      payloadText: string;
+      payloadName: "paper.html";
+      sourceUrl: string;
+    }
+  | {
+      ok: false;
+      failureCode: "artifact_download_missing";
+      failureMessage: string;
+    };
+
 export type PageCaptureResult =
   | {
       ok: true;
@@ -366,7 +379,7 @@ export function buildPageCaptureResult(input: PageCaptureInput): PageCaptureResu
   const lowered = sanitizedHtml.toLowerCase();
   const rawLowered = html.toLowerCase();
   const hasMetadataSignals = hasAnyMarker(lowered, METADATA_MARKERS);
-  const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS) || lowered.includes("abstract");
+  const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS);
   const hasPdfEmbedShellSignals = hasAnyMarker(rawLowered, PDF_SHELL_MARKERS);
   const hasPdfDownloadOnlySignals = hasAnyMarker(rawLowered, PDF_DOWNLOAD_LINK_MARKERS);
   const hasArticleSignals = hasMetadataSignals && hasBodySignals;
@@ -450,6 +463,48 @@ export async function fetchXmlArtifact(candidateUrls: string[]): Promise<XmlFetc
     ok: false,
     failureCode: "artifact_download_missing",
     failureMessage: "Browser page context could not download an XML payload."
+  };
+}
+
+export async function fetchHtmlArtifact(candidateUrls: string[]): Promise<HtmlFetchResult> {
+  let lastFailure = "Browser page context could not download a usable HTML payload.";
+
+  for (const candidate of candidateUrls.map((item) => String(item || "").trim()).filter(Boolean)) {
+    try {
+      const response = await fetch(candidate, {
+        credentials: "include",
+        headers: {
+          Accept: "text/html,application/xhtml+xml,*/*;q=0.8"
+        }
+      });
+      if (!response.ok) {
+        lastFailure = `Browser page context could not download the HTML artifact (${response.status}).`;
+        continue;
+      }
+      const text = await response.text();
+      const capture = buildPageCaptureResult({
+        url: response.url || candidate,
+        title: "",
+        html: text
+      });
+      if (capture.ok) {
+        return {
+          ok: true,
+          payloadText: capture.html,
+          payloadName: capture.payloadName,
+          sourceUrl: capture.sourceUrl
+        };
+      }
+      lastFailure = capture.failureMessage;
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  return {
+    ok: false,
+    failureCode: "artifact_download_missing",
+    failureMessage: lastFailure
   };
 }
 

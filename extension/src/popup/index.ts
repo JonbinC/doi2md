@@ -74,7 +74,7 @@ const COPY = {
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF uploads are parsed by the Mdtero backend automatically.",
+    fileIntakeNote: "Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
@@ -134,7 +134,7 @@ const COPY = {
     inputLabel: "DOI 或实时页面",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "本地文件入口",
-    fileIntakeNote: "如果你手里已经有 PDF 或 EPUB，也可以继续走同一条 Markdown 解析链。PDF 会自动使用内置解析栈。",
+    fileIntakeNote: "如果你手里已经有 PDF、EPUB 或保存的 HTML 页面，也可以继续走同一条 Markdown 解析链。上传后由后端自动解析。",
     pickPdfButton: "选择 PDF",
     pickEpubButton: "选择 EPUB",
     fileNameEmpty: "尚未选择本地文件。",
@@ -193,6 +193,7 @@ const fileIntakeTitleEl = document.querySelector<HTMLParagraphElement>("#file-in
 const fileIntakeNoteEl = document.querySelector<HTMLParagraphElement>("#file-intake-note");
 const pickPdfButton = document.querySelector<HTMLButtonElement>("#pick-pdf-button");
 const pickEpubButton = document.querySelector<HTMLButtonElement>("#pick-epub-button");
+const pickHtmlButton = document.querySelector<HTMLButtonElement>("#pick-html-button");
 const localFileInputEl = document.querySelector<HTMLInputElement>("#local-file-input");
 const localFileNameEl = document.querySelector<HTMLParagraphElement>("#local-file-name");
 const parseButton = document.querySelector<HTMLButtonElement>("#parse-button");
@@ -1151,15 +1152,31 @@ pickEpubButton?.addEventListener("click", () => {
   localFileInputEl.click();
 });
 
+pickHtmlButton?.addEventListener("click", () => {
+  if (!localFileInputEl) {
+    return;
+  }
+  localFileInputEl.accept = ".html,.htm,text/html,application/xhtml+xml";
+  localFileInputEl.dataset.artifactKind = "html";
+  localFileInputEl.click();
+});
+
 localFileInputEl?.addEventListener("change", () => {
   const file = localFileInputEl.files?.[0];
-  const artifactKind = localFileInputEl.dataset.artifactKind === "epub" ? "epub" : "pdf";
+  const artifactKind = resolveLocalFileArtifactKind(localFileInputEl.dataset.artifactKind);
   if (!file) {
     return;
   }
   void submitLocalFile(file, artifactKind);
   localFileInputEl.value = "";
 });
+
+function resolveLocalFileArtifactKind(value?: string): LocalFileArtifactKind {
+  if (value === "epub" || value === "html" || value === "xml") {
+    return value;
+  }
+  return "pdf";
+}
 
 languageToggleEl?.addEventListener("click", async () => {
   uiLanguage = uiLanguage === "en" ? "zh" : "en";

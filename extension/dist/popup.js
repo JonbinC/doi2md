@@ -949,7 +949,7 @@ var COPY = {
     inputLabel: "DOI or live page",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF or EPUB. PDF uploads are parsed by the Mdtero backend automatically.",
+    fileIntakeNote: "Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
     fileNameEmpty: "No local file selected.",
@@ -1008,7 +1008,7 @@ var COPY = {
     inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
     inputPlaceholder: "10.1016/...",
     fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
-    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF \u6216 EPUB\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002PDF \u4F1A\u81EA\u52A8\u4F7F\u7528\u5185\u7F6E\u89E3\u6790\u6808\u3002",
+    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF\u3001EPUB \u6216\u4FDD\u5B58\u7684 HTML \u9875\u9762\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002\u4E0A\u4F20\u540E\u7531\u540E\u7AEF\u81EA\u52A8\u89E3\u6790\u3002",
     pickPdfButton: "\u9009\u62E9 PDF",
     pickEpubButton: "\u9009\u62E9 EPUB",
     fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
@@ -1066,6 +1066,7 @@ var fileIntakeTitleEl = document.querySelector("#file-intake-title");
 var fileIntakeNoteEl = document.querySelector("#file-intake-note");
 var pickPdfButton = document.querySelector("#pick-pdf-button");
 var pickEpubButton = document.querySelector("#pick-epub-button");
+var pickHtmlButton = document.querySelector("#pick-html-button");
 var localFileInputEl = document.querySelector("#local-file-input");
 var localFileNameEl = document.querySelector("#local-file-name");
 var parseButton = document.querySelector("#parse-button");
@@ -1924,15 +1925,29 @@ pickEpubButton?.addEventListener("click", () => {
   localFileInputEl.dataset.artifactKind = "epub";
   localFileInputEl.click();
 });
+pickHtmlButton?.addEventListener("click", () => {
+  if (!localFileInputEl) {
+    return;
+  }
+  localFileInputEl.accept = ".html,.htm,text/html,application/xhtml+xml";
+  localFileInputEl.dataset.artifactKind = "html";
+  localFileInputEl.click();
+});
 localFileInputEl?.addEventListener("change", () => {
   const file = localFileInputEl.files?.[0];
-  const artifactKind = localFileInputEl.dataset.artifactKind === "epub" ? "epub" : "pdf";
+  const artifactKind = resolveLocalFileArtifactKind(localFileInputEl.dataset.artifactKind);
   if (!file) {
     return;
   }
   void submitLocalFile(file, artifactKind);
   localFileInputEl.value = "";
 });
+function resolveLocalFileArtifactKind(value) {
+  if (value === "epub" || value === "html" || value === "xml") {
+    return value;
+  }
+  return "pdf";
+}
 languageToggleEl?.addEventListener("click", async () => {
   uiLanguage = uiLanguage === "en" ? "zh" : "en";
   const current = await readSettings();

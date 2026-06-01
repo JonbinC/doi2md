@@ -194,6 +194,37 @@ describe("extension background routing", () => {
     });
   });
 
+  it("routes local HTML uploads through the v1 upload endpoint", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      createFileParseMessage(new File(["<html><article>Full text</article></html>"], "paper.html", { type: "text/html" }), "html"),
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(() => {
+      expect(createUploadedParseTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paperFile: expect.any(Blob),
+          filename: "paper.html",
+          sourceInput: "paper.html"
+        })
+      );
+      expect(createRawUploadTask).not.toHaveBeenCalled();
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-legacy", status: "queued" }
+      });
+    });
+  });
+
   it("translates by server markdown path when legacy artifacts expose one", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
@@ -350,7 +381,8 @@ describe("extension background routing", () => {
           connector: "wiley_tdm",
           priority: 1,
           access: "licensed",
-          format: "html"
+          format: "html",
+          html_url: "https://onlinelibrary.wiley.com/doi/full/10.1000/demo"
         }
       ]
     });
@@ -389,6 +421,10 @@ describe("extension background routing", () => {
         input: "10.1000/demo",
         page_url: "https://onlinelibrary.wiley.com/doi/full/10.1000/demo",
         page_title: "Captured paper"
+      });
+      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        type: "mdtero.fetch_html.request",
+        candidateUrls: ["https://onlinelibrary.wiley.com/doi/full/10.1000/demo"],
       });
       expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
         type: "mdtero.capture_current_tab.request",

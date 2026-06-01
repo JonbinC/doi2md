@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import {
   buildPageCaptureResult,
   extractXmlCandidateUrls,
+  fetchHtmlArtifact,
   fetchXmlArtifact,
   downloadEpubArtifact,
   isLikelyChallengeOrLoginShell
@@ -144,6 +145,59 @@ describe("downloadEpubArtifact", () => {
         ok: false,
         failureCode: "artifact_download_missing",
         failureMessage: "Browser page context could not download the EPUB artifact (403)."
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("fetchHtmlArtifact", () => {
+  it("downloads and validates full-text HTML through the page context", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      expect(init?.credentials).toBe("include");
+      return {
+        ok: true,
+        url: "https://publisher.example/full",
+        text: async () => `
+          <html>
+            <head><meta name="citation_doi" content="10.1000/demo" /></head>
+            <body><main><article class="article-body">Full text</article></main></body>
+          </html>
+        `
+      } as Response;
+    }) as typeof fetch;
+
+    try {
+      const result = await fetchHtmlArtifact(["https://publisher.example/full"]);
+      expect(result).toMatchObject({
+        ok: true,
+        payloadName: "paper.html",
+        sourceUrl: "https://publisher.example/full"
+      });
+      if (result.ok) {
+        expect(result.payloadText).toContain("Full text");
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("rejects abstract-only or challenge HTML payloads", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      url: "https://publisher.example/challenge",
+      text: async () => "<html><title>Just a moment...</title><body>Checking if the site connection is secure</body></html>"
+    }) as Response) as typeof fetch;
+
+    try {
+      const result = await fetchHtmlArtifact(["https://publisher.example/challenge"]);
+      expect(result).toEqual({
+        ok: false,
+        failureCode: "artifact_download_missing",
+        failureMessage: "Page loaded but did not expose article content."
       });
     } finally {
       globalThis.fetch = originalFetch;

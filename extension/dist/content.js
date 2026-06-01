@@ -317,7 +317,7 @@ ${html}`);
   const lowered = sanitizedHtml.toLowerCase();
   const rawLowered = html.toLowerCase();
   const hasMetadataSignals = hasAnyMarker(lowered, METADATA_MARKERS);
-  const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS) || lowered.includes("abstract");
+  const hasBodySignals = hasAnyMarker(lowered, BODY_MARKERS);
   const hasPdfEmbedShellSignals = hasAnyMarker(rawLowered, PDF_SHELL_MARKERS);
   const hasPdfDownloadOnlySignals = hasAnyMarker(rawLowered, PDF_DOWNLOAD_LINK_MARKERS);
   const hasArticleSignals = hasMetadataSignals && hasBodySignals;
@@ -396,6 +396,45 @@ async function fetchXmlArtifact(candidateUrls) {
     failureMessage: "Browser page context could not download an XML payload."
   };
 }
+async function fetchHtmlArtifact(candidateUrls) {
+  let lastFailure = "Browser page context could not download a usable HTML payload.";
+  for (const candidate of candidateUrls.map((item) => String(item || "").trim()).filter(Boolean)) {
+    try {
+      const response = await fetch(candidate, {
+        credentials: "include",
+        headers: {
+          Accept: "text/html,application/xhtml+xml,*/*;q=0.8"
+        }
+      });
+      if (!response.ok) {
+        lastFailure = `Browser page context could not download the HTML artifact (${response.status}).`;
+        continue;
+      }
+      const text = await response.text();
+      const capture = buildPageCaptureResult({
+        url: response.url || candidate,
+        title: "",
+        html: text
+      });
+      if (capture.ok) {
+        return {
+          ok: true,
+          payloadText: capture.html,
+          payloadName: capture.payloadName,
+          sourceUrl: capture.sourceUrl
+        };
+      }
+      lastFailure = capture.failureMessage;
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return {
+    ok: false,
+    failureCode: "artifact_download_missing",
+    failureMessage: lastFailure
+  };
+}
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -470,6 +509,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       (error) => sendResponse({
         ok: true,
         xml: {
+          ok: false,
+          failureCode: "artifact_download_missing",
+          failureMessage: error.message
+        }
+      })
+    );
+    return true;
+  }
+  if (message?.type === "mdtero.fetch_html.request") {
+    const candidates = Array.isArray(message.candidateUrls) ? message.candidateUrls.map((item) => String(item || "")).filter(Boolean) : [];
+    fetchHtmlArtifact(candidates).then((html) => sendResponse({ ok: true, html })).catch(
+      (error) => sendResponse({
+        ok: true,
+        html: {
           ok: false,
           failureCode: "artifact_download_missing",
           failureMessage: error.message

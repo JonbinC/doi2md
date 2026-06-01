@@ -97,6 +97,48 @@ describe("executeAction", () => {
     });
   });
 
+  it("fetches planned HTML candidates before falling back to current-tab capture", async () => {
+    const chromeStub = {
+      tabs: {
+        sendMessage: vi.fn().mockResolvedValue({
+          ok: true,
+          html: {
+            ok: true,
+            payloadText: "<html><article>Fetched full text</article></html>",
+            payloadName: "paper.html",
+            sourceUrl: "https://example.org/full",
+          },
+        }),
+      },
+    };
+    vi.stubGlobal("chrome", chromeStub);
+
+    const result = await executeAction(
+      "fetch_browser_source",
+      {
+        input: "10.1000/demo",
+        tabId: 42,
+      },
+      {
+        top_connector: "publisher_html",
+        acquisition_candidates: [
+          {
+            connector: "publisher_html",
+            html_url: "https://example.org/full",
+          },
+        ],
+      }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.html");
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: "mdtero.fetch_html.request",
+      candidateUrls: ["https://example.org/full"],
+    });
+    await expect(result.rawArtifact?.text()).resolves.toContain("Fetched full text");
+  });
+
   it("quotes shell-sensitive URL handoff commands when browser capture fails", async () => {
     const chromeStub = {
       tabs: {
