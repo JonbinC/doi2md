@@ -2026,10 +2026,11 @@ def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(mo
     acquired_path = tmp_path / "paper.html"
     acquired_path.write_text("<html><body><article>Demo</article></body></html>", encoding="utf-8")
 
-    def fake_acquire(route_arg, input_arg, *, timeout):
+    def fake_acquire(route_arg, input_arg, *, timeout, config=None):
         assert route_arg is route
         assert input_arg == "10.1000/demo"
         assert timeout == 45.0
+        assert config is not None
         return AcquiredArtifact(
             url="https://example.test/paper",
             path=acquired_path,
@@ -2064,7 +2065,7 @@ def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(mo
 
 
 def test_acquisition_failure_returns_agent_friendly_error(monkeypatch):
-    def fake_acquire(route_arg, input_arg, *, timeout):
+    def fake_acquire(route_arg, input_arg, *, timeout, config=None):
         raise AcquisitionError("client_acquisition_fetch_failed", "Upload the PDF manually.", diagnostics={"attempts": []})
 
     monkeypatch.setattr("mdtero.client.acquire_from_route", fake_acquire)
@@ -2082,11 +2083,11 @@ def test_acquisition_failure_returns_agent_friendly_error(monkeypatch):
 def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
     calls = []
 
-    def fake_cffi(url, *, artifact_kind, timeout):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None):
         calls.append(("curl_cffi", url, artifact_kind, timeout))
         raise AcquisitionError("client_curl_cffi_http_error", "403", diagnostics={"status_code": 403})
 
-    def fake_httpx(url, *, artifact_kind, timeout):
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None):
         calls.append(("httpx", url, artifact_kind, timeout))
         return AcquiredArtifact(url=url, path=Path("/tmp/demo.html"), artifact_kind=artifact_kind, source="httpx", status_code=200, content_type="text/html")
 
@@ -2110,14 +2111,14 @@ def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
 
 
 def test_acquire_from_route_rejects_challenge_pages(monkeypatch):
-    def fake_cffi(url, *, artifact_kind, timeout):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None):
         raise AcquisitionError(
             "client_acquisition_challenge_page",
             "challenge",
             diagnostics={"url": url, "source": "curl_cffi", "content_type": "text/html"},
         )
 
-    def fake_httpx(url, *, artifact_kind, timeout):
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None):
         raise AcquisitionError(
             "client_acquisition_challenge_page",
             "challenge",
@@ -2152,11 +2153,61 @@ def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
     assert should_acquire_locally({"action_sequence": [], "requires_raw_upload": False}, "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML") is True
 
 
+def test_elsevier_xml_route_uses_local_acquisition_when_academic_key_is_configured():
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+    config = MdteroConfig(academic=AcademicKeys(elsevier_api_key="elsevier-secret"))
+
+    assert should_acquire_locally(route, "10.1016/j.energy.2026.140192") is False
+    assert should_acquire_locally(route, "10.1016/j.energy.2026.140192", config=config) is True
+
+
+def test_elsevier_xml_acquisition_sends_local_api_key(monkeypatch, tmp_path: Path):
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+    config = MdteroConfig(academic=AcademicKeys(elsevier_api_key="elsevier-secret"))
+    acquired_path = tmp_path / "paper.xml"
+    acquired_path.write_text("<article />", encoding="utf-8")
+    seen_headers = {}
+
+    def fake_fetch(url, *, artifact_kind, timeout, extra_headers=None):
+        seen_headers.update(extra_headers or {})
+        return AcquiredArtifact(
+            url=url,
+            path=acquired_path,
+            artifact_kind=artifact_kind,
+            source="curl_cffi",
+            status_code=200,
+            content_type="text/xml",
+        )
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_fetch)
+
+    artifact = acquire_from_route(route, "10.1016/j.energy.2026.140192", config=config)
+
+    assert artifact.artifact_kind == "xml"
+    assert seen_headers == {"X-ELS-APIKey": "elsevier-secret"}
+
+
 def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_server_parse(monkeypatch, tmp_path: Path):
     acquired_path = tmp_path / "paper.xml"
     acquired_path.write_text("<article><front><article-meta /></front></article>", encoding="utf-8")
 
-    def fake_acquire(route_arg, input_arg, *, timeout):
+    def fake_acquire(route_arg, input_arg, *, timeout, config=None):
         assert route_arg["route_kind"] == "server_parse"
         assert input_arg.endswith("/fullTextXML")
         return AcquiredArtifact(
@@ -2201,11 +2252,11 @@ def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_serve
 def test_mdpi_url_candidates_prefer_epub_before_page_fetch(monkeypatch):
     calls = []
 
-    def fake_cffi(url, *, artifact_kind, timeout):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None):
         calls.append((url, artifact_kind))
         raise AcquisitionError("client_acquisition_challenge_page", "challenge")
 
-    def fake_httpx(url, *, artifact_kind, timeout):
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None):
         raise AcquisitionError("client_httpx_http_error", "403")
 
     monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
