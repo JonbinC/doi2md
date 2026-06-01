@@ -628,6 +628,25 @@ async function executeFetchBrowserSource(context, routePlan) {
       nextCommand: buildCliParseCommand(context.input)
     };
   }
+  const htmlCandidateUrls = pickHtmlCandidateUrls(routePlan);
+  if (htmlCandidateUrls.length > 0) {
+    try {
+      const response = await chrome.tabs.sendMessage(context.tabId, {
+        type: "mdtero.fetch_html.request",
+        candidateUrls: htmlCandidateUrls
+      });
+      const html = response?.html;
+      if (response?.ok && html?.ok && html.payloadText) {
+        return {
+          success: true,
+          rawArtifact: new Blob([html.payloadText], { type: "text/html" }),
+          filename: html.payloadName || "paper.html",
+          sourceDoi: inferSourceDoi(context.input)
+        };
+      }
+    } catch {
+    }
+  }
   return executeCaptureCurrentTabHtml(context);
 }
 function inferSourceDoi(input) {
@@ -657,6 +676,19 @@ function pickEpubCandidate(routePlan) {
   const candidates = routePlan.acquisition_candidates || [];
   const topConnector = String(routePlan.top_connector || "").trim();
   return candidates.find((candidate) => candidate.connector === topConnector && candidate.epub_url) || candidates.find((candidate) => candidate.epub_url);
+}
+function pickHtmlCandidateUrls(routePlan) {
+  const candidates = routePlan.acquisition_candidates || [];
+  const topConnector = String(routePlan.top_connector || "").trim();
+  const urls = [
+    ...candidates.filter((candidate) => candidate.connector === topConnector).flatMap((candidate) => [candidate.html_url, candidate.url]),
+    ...candidates.flatMap((candidate) => [candidate.html_url, candidate.url])
+  ];
+  return Array.from(
+    new Set(
+      urls.map((url) => String(url || "").trim()).filter((url) => /^https?:\/\//i.test(url))
+    )
+  );
 }
 function base64ToBytes(payloadBase64) {
   const decoded = globalThis.atob(payloadBase64);

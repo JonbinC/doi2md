@@ -244,6 +244,8 @@ async function executeFetchOaRepository(
 async function executeFetchBrowserSource(
   context: ActionContext,
   routePlan: {
+    top_connector?: string;
+    user_message?: string;
     acquisition_candidates?: AcquisitionCandidate[];
   }
 ): Promise<ActionResult> {
@@ -256,6 +258,27 @@ async function executeFetchBrowserSource(
       error: "This source requires browser capture. Open the article page and retry.",
       nextCommand: buildCliParseCommand(context.input),
     };
+  }
+
+  const htmlCandidateUrls = pickHtmlCandidateUrls(routePlan);
+  if (htmlCandidateUrls.length > 0) {
+    try {
+      const response = await chrome.tabs.sendMessage(context.tabId, {
+        type: "mdtero.fetch_html.request",
+        candidateUrls: htmlCandidateUrls,
+      });
+      const html = response?.html;
+      if (response?.ok && html?.ok && html.payloadText) {
+        return {
+          success: true,
+          rawArtifact: new Blob([html.payloadText], { type: "text/html" }),
+          filename: html.payloadName || "paper.html",
+          sourceDoi: inferSourceDoi(context.input),
+        };
+      }
+    } catch {
+      // Fall back to current-tab capture below.
+    }
   }
 
   // Delegate to current tab capture
@@ -299,6 +322,27 @@ function pickEpubCandidate(routePlan: {
   return (
     candidates.find((candidate) => candidate.connector === topConnector && candidate.epub_url) ||
     candidates.find((candidate) => candidate.epub_url)
+  );
+}
+
+function pickHtmlCandidateUrls(routePlan: {
+  top_connector?: string;
+  acquisition_candidates?: AcquisitionCandidate[];
+}): string[] {
+  const candidates = routePlan.acquisition_candidates || [];
+  const topConnector = String(routePlan.top_connector || "").trim();
+  const urls = [
+    ...candidates
+      .filter((candidate) => candidate.connector === topConnector)
+      .flatMap((candidate) => [candidate.html_url, candidate.url]),
+    ...candidates.flatMap((candidate) => [candidate.html_url, candidate.url]),
+  ];
+  return Array.from(
+    new Set(
+      urls
+        .map((url) => String(url || "").trim())
+        .filter((url) => /^https?:\/\//i.test(url))
+    )
   );
 }
 

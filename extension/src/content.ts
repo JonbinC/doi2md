@@ -1,5 +1,5 @@
 import { detectPaperInput } from "./lib/detect";
-import { buildPageCaptureResult, downloadEpubArtifact, extractXmlCandidateUrls, fetchXmlArtifact } from "./lib/page-capture";
+import { buildPageCaptureResult, downloadEpubArtifact, extractXmlCandidateUrls, fetchHtmlArtifact, fetchXmlArtifact } from "./lib/page-capture";
 import { shouldAcceptMdteroAuthMessage } from "./lib/auth-bridge";
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -31,6 +31,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({
           ok: true,
           xml: {
+            ok: false,
+            failureCode: "artifact_download_missing",
+            failureMessage: error.message
+          }
+        })
+      );
+    return true;
+  }
+
+  if (message?.type === "mdtero.fetch_html.request") {
+    const candidates = Array.isArray(message.candidateUrls)
+      ? message.candidateUrls.map((item) => String(item || "")).filter(Boolean)
+      : [];
+    fetchHtmlArtifact(candidates)
+      .then((html) => sendResponse({ ok: true, html }))
+      .catch((error: Error) =>
+        sendResponse({
+          ok: true,
+          html: {
             ok: false,
             failureCode: "artifact_download_missing",
             failureMessage: error.message
