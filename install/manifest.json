@@ -3,6 +3,7 @@
   "manifestUrl": "https://mdtero.com/install/manifest.json",
   "installGuideUrl": "https://api.mdtero.com/skills/install.md",
   "installScriptUrl": "https://mdtero.com/install.sh",
+  "extensionBetaZipUrl": "https://mdtero.com/downloads/mdtero-extension-beta.zip",
   "quickInstallCommand": "uv tool install mdtero && mdtero setup",
   "alphaFallbackInstallCommand": "uv tool install git+https://github.com/JonbinC/doi2md.git",
   "cliCommand": "mdtero",

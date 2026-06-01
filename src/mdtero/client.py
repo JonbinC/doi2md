@@ -58,8 +58,8 @@ class MdteroClient:
 
     def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
         route = self.route(input_value)
-        if should_acquire_locally(route, input_value):
-            artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0))
+        if should_acquire_locally(route, input_value, config=self.config):
+            artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0), config=self.config)
             acquisition = artifact.to_dict()
             try:
                 result = self.upload_acquired(artifact, source_input=input_value)

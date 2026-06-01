@@ -71,7 +71,7 @@ class AcquisitionError(RuntimeError):
         }
 
 
-def should_acquire_locally(route: dict[str, Any], input_value: str) -> bool:
+def should_acquire_locally(route: dict[str, Any], input_value: str, *, config: Any | None = None) -> bool:
     if _is_direct_local_artifact_url(input_value):
         return True
     if route.get("legacy_fallback") or route.get("route_planner_fallback"):
@@ -81,6 +81,8 @@ def should_acquire_locally(route: dict[str, Any], input_value: str) -> bool:
     actions = {str(action) for action in route.get("action_sequence") or []}
     local_actions = {"fetch_remote_html", "fetch_epub_asset", "fetch_structured_xml", "fallback_pdf_parse"}
     if actions.intersection(local_actions) and _candidate_urls(route, input_value):
+        return True
+    if "fetch_elsevier_xml" in actions and _elsevier_api_key(config) and _candidate_urls(route, input_value):
         return True
     return False
 
@@ -92,7 +94,7 @@ def _is_direct_local_artifact_url(input_value: str) -> bool:
     return bool(_direct_artifact_kind_from_url(value) or _infer_mdpi_epub_url(value))
 
 
-def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: float = 45.0) -> AcquiredArtifact:
+def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: float = 45.0, config: Any | None = None) -> AcquiredArtifact:
     candidates = _candidate_urls(route, input_value)
     if not candidates:
         raise AcquisitionError(
@@ -107,12 +109,13 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
         if not url:
             continue
         artifact_kind = _artifact_kind(candidate, route, url)
+        extra_headers = _credential_headers(route, candidate, url, config=config)
         try:
-            return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout)
+            return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers)
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "curl_cffi", **exc.to_dict()})
         try:
-            return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout)
+            return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers)
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "httpx", **exc.to_dict()})
 
@@ -129,6 +132,22 @@ def curl_cffi_available() -> bool:
     except Exception:
         return False
     return True
+
+
+def _credential_headers(route: dict[str, Any], candidate: dict[str, str], url: str, *, config: Any | None) -> dict[str, str]:
+    connector = str(candidate.get("connector") or "").lower()
+    actions = {str(action) for action in route.get("action_sequence") or []}
+    host = urllib.parse.urlparse(url).netloc.lower()
+    if ("fetch_elsevier_xml" in actions or connector == "elsevier_article_retrieval_api" or host == "api.elsevier.com"):
+        key = _elsevier_api_key(config)
+        if key:
+            return {"X-ELS-APIKey": key}
+    return {}
+
+
+def _elsevier_api_key(config: Any | None) -> str:
+    academic = getattr(config, "academic", None)
+    return str(getattr(academic, "elsevier_api_key", "") or "").strip()
 
 
 def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, str]]:
@@ -199,7 +218,7 @@ def _artifact_kind(candidate: dict[str, str], route: dict[str, Any], url: str) -
         return "epub"
     if "fallback_pdf_parse" in actions or ".pdf" in lowered or "/pdf" in lowered:
         return "pdf"
-    if "fetch_structured_xml" in actions or "jats" in route_kind or ".xml" in lowered or "fulltextxml" in lowered:
+    if "fetch_structured_xml" in actions or "fetch_elsevier_xml" in actions or "jats" in route_kind or ".xml" in lowered or "fulltextxml" in lowered:
         return "xml"
     return "html"
 
@@ -221,7 +240,7 @@ def _direct_artifact_kind_from_url(url: str) -> str:
     return ""
 
 
-def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> AcquiredArtifact:
+def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float, extra_headers: dict[str, str] | None = None) -> AcquiredArtifact:
     try:
         from curl_cffi import requests as curl_requests
     except Exception as exc:
@@ -238,7 +257,7 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> Ac
                     url,
                     timeout=timeout,
                     allow_redirects=True,
-                    headers=_fetch_headers(url=url, artifact_kind=artifact_kind),
+                    headers=_fetch_headers(url=url, artifact_kind=artifact_kind, extra_headers=extra_headers),
                 )
                 response = _follow_meta_refresh_once(
                     session,
@@ -246,6 +265,7 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> Ac
                     base_url=url,
                     timeout=timeout,
                     artifact_kind=artifact_kind,
+                    extra_headers=extra_headers,
                 )
         except Exception as exc:
             errors.append({"profile": profile, "error": exc.__class__.__name__})
@@ -261,9 +281,9 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float) -> Ac
     )
 
 
-def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float) -> AcquiredArtifact:
+def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float, extra_headers: dict[str, str] | None = None) -> AcquiredArtifact:
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers(url=url, artifact_kind=artifact_kind)) as client:
+        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers(url=url, artifact_kind=artifact_kind, extra_headers=extra_headers)) as client:
             response = client.get(url)
     except Exception as exc:
         raise AcquisitionError(
@@ -294,7 +314,7 @@ def _artifact_from_response(response: Any, *, url: str, artifact_kind: str, sour
     return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source=source, status_code=response.status_code, content_type=content_type)
 
 
-def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, timeout: float, artifact_kind: str) -> Any:
+def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, timeout: float, artifact_kind: str, extra_headers: dict[str, str] | None = None) -> Any:
     content_type = str(response.headers.get("content-type") or "").lower()
     if "html" not in content_type:
         return response
@@ -308,7 +328,7 @@ def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, tim
         target,
         timeout=timeout,
         allow_redirects=True,
-        headers=_fetch_headers(url=target, artifact_kind=artifact_kind, referer=base_url),
+        headers=_fetch_headers(url=target, artifact_kind=artifact_kind, referer=base_url, extra_headers=extra_headers),
     )
 
 
@@ -354,7 +374,7 @@ def _validate_payload(content: bytes, *, url: str, expected_kind: str, content_t
         )
 
 
-def _fetch_headers(*, url: str, artifact_kind: str, referer: str | None = None) -> dict[str, str]:
+def _fetch_headers(*, url: str, artifact_kind: str, referer: str | None = None, extra_headers: dict[str, str] | None = None) -> dict[str, str]:
     headers = {
         "Accept": _accept_header(artifact_kind),
         "Accept-Language": "en-US,en;q=0.9",
@@ -364,6 +384,8 @@ def _fetch_headers(*, url: str, artifact_kind: str, referer: str | None = None) 
         headers["Referer"] = referer
     elif _infer_mdpi_epub_url(url):
         headers["Referer"] = url.rsplit("/", 1)[0] if url.rstrip("/").endswith("/epub") else url
+    if extra_headers:
+        headers.update({key: value for key, value in extra_headers.items() if value})
     return headers
 
 
