@@ -1518,6 +1518,32 @@ def test_discover_interactive_enter_skips_project_add(monkeypatch, tmp_path: Pat
     assert state.papers == []
 
 
+def test_discover_non_json_prints_semantic_scholar_fallback_notice(monkeypatch, capsys):
+    from mdtero import cli
+
+    def fake_discover(self, query, *, limit=10):
+        assert query == "rag papers"
+        return {
+            "source": "openalex_server",
+            "discovery_fallback": {
+                "from": "semantic_scholar_local",
+                "to": "openalex_server",
+                "reason_code": "semantic_scholar_rate_limited",
+                "action_hint": "Semantic Scholar rate-limited local discovery. Wait and retry.",
+            },
+            "items": [{"title": "Fallback Paper", "doi": "10.1000/fallback", "source": "openalex"}],
+        }
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    args = type("Args", (), {"query": "rag papers", "limit": 3, "add": False, "select": "", "interactive": False, "json": False})()
+
+    assert cli.cmd_discover(args) == 0
+    output = capsys.readouterr().out
+    assert "Semantic Scholar local discovery failed (semantic_scholar_rate_limited)" in output
+    assert "server OpenAlex fallback" in output
+    assert "Fallback Paper" in output
+
+
 def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: Path):
     path = tmp_path / "config.json"
     save_config(

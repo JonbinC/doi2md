@@ -1282,6 +1282,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
+    _print_discovery_fallback_notice(result)
     _print_discovery_table(result)
     if project_add is not None:
         Console().print(f"Added {project_add['added_count']} discovery result(s) to project; skipped {project_add['skipped_count']}.")
@@ -1300,6 +1301,17 @@ def _print_discovery_table(result: dict[str, Any], *, console: Console | None = 
     for index, item in enumerate(result.get("items") or [], start=1):
         table.add_row(str(index), str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
     (console or Console()).print(table)
+
+
+def _print_discovery_fallback_notice(result: dict[str, Any], *, console: Console | None = None) -> None:
+    fallback = result.get("discovery_fallback") if isinstance(result.get("discovery_fallback"), dict) else None
+    if not fallback:
+        return
+    target = console or Console()
+    reason = str(fallback.get("reason_code") or "semantic_scholar_local_failed")
+    hint = str(fallback.get("action_hint") or "Using server OpenAlex fallback for this query.")
+    target.print(f"Semantic Scholar local discovery failed ({reason}); using server OpenAlex fallback.")
+    target.print(hint)
 
 
 def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str) -> dict[str, Any]:
