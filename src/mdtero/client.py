@@ -132,7 +132,13 @@ class MdteroClient:
         local_failure: dict[str, Any] | None = None
         if self.config.has_semantic_scholar_key:
             try:
-                return self._semantic_scholar_search(query, limit=limit)
+                result = self._semantic_scholar_search(query, limit=limit)
+                result["discovery_diagnostics"] = {
+                    "semantic_scholar_configured": True,
+                    "semantic_scholar_attempted": True,
+                    "server_openalex_attempted": False,
+                }
+                return result
             except (httpx.HTTPError, ValueError) as exc:
                 local_failure = _local_semantic_scholar_failure(exc)
         try:
@@ -140,6 +146,11 @@ class MdteroClient:
         except (MdteroApiError, httpx.HTTPError, ValueError) as exc:
             raise DiscoveryError(_discovery_failure_payload(exc, local_failure=local_failure)) from exc
         result.setdefault("source", "openalex_server")
+        result["discovery_diagnostics"] = {
+            "semantic_scholar_configured": self.config.has_semantic_scholar_key,
+            "semantic_scholar_attempted": self.config.has_semantic_scholar_key,
+            "server_openalex_attempted": True,
+        }
         if local_failure:
             result["local_semantic_scholar_error"] = local_failure["error_type"]
             result["local_semantic_scholar_failure"] = local_failure

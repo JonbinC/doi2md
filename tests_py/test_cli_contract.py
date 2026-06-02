@@ -1963,6 +1963,11 @@ def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monk
     result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
 
     assert result["source"] == "openalex_server"
+    assert result["discovery_diagnostics"] == {
+        "semantic_scholar_configured": True,
+        "semantic_scholar_attempted": True,
+        "server_openalex_attempted": True,
+    }
     assert result["local_semantic_scholar_error"] == "ConnectError"
     assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_network_error"
     assert result["discovery_fallback"] == {
@@ -1990,6 +1995,35 @@ def test_discover_explains_semantic_scholar_rate_limit_before_openalex_fallback(
     assert result["local_semantic_scholar_failure"]["status_code"] == 429
     assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_rate_limited"
     assert "server OpenAlex fallback" in result["discovery_fallback"]["action_hint"]
+
+
+def test_discover_marks_semantic_scholar_success_diagnostics(monkeypatch):
+    def fake_s2(self, query, *, limit):
+        return {"source": "semantic_scholar_local", "items": [{"title": "S2 paper"}]}
+
+    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
+
+    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
+
+    assert result["source"] == "semantic_scholar_local"
+    assert result["discovery_diagnostics"] == {
+        "semantic_scholar_configured": True,
+        "semantic_scholar_attempted": True,
+        "server_openalex_attempted": False,
+    }
+
+
+def test_discover_marks_openalex_when_semantic_scholar_is_not_configured(monkeypatch):
+    monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": [{"title": "OA paper"}]})
+
+    result = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1)
+
+    assert result["source"] == "openalex_server"
+    assert result["discovery_diagnostics"] == {
+        "semantic_scholar_configured": False,
+        "semantic_scholar_attempted": False,
+        "server_openalex_attempted": True,
+    }
 
 
 def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch):
