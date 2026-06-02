@@ -53,6 +53,17 @@ class _CallbackServer(ThreadingHTTPServer):
 
 def _make_callback_handler(expected_state: str, event: threading.Event, result: dict[str, Any]):
     class CallbackHandler(BaseHTTPRequestHandler):
+        def do_OPTIONS(self) -> None:  # noqa: N802 - stdlib handler API
+            if urllib.parse.urlparse(self.path).path != "/callback":
+                self._send_json(404, {"ok": False, "error": "not_found"})
+                return
+            self.send_response(204)
+            self._send_cors_headers()
+            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.end_headers()
+
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
             if urllib.parse.urlparse(self.path).path != "/callback":
                 self._send_json(404, {"ok": False, "error": "not_found"})
@@ -81,7 +92,14 @@ def _make_callback_handler(expected_state: str, event: threading.Event, result: 
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            self._send_cors_headers()
             self.end_headers()
             self.wfile.write(body)
+
+        def _send_cors_headers(self) -> None:
+            origin = str(self.headers.get("Origin") or "").strip()
+            if origin in {"https://mdtero.com", "http://localhost:5173", "http://127.0.0.1:5173"}:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
 
     return CallbackHandler
