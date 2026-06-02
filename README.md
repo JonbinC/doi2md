@@ -23,7 +23,7 @@ uv tool install mdtero
 mdtero setup
 ```
 
-The stable public install command is `uv tool install mdtero`. If PyPI propagation lags during alpha testing, use `uv tool install git+https://github.com/JonbinC/doi2md.git` as the temporary fallback so you get the tested `0.2.0a10` Python client.
+The stable public install command is `uv tool install mdtero`. If PyPI propagation lags during alpha testing, use `uv tool install git+https://github.com/JonbinC/doi2md.git` as the temporary fallback so you get the tested `0.2.0a11` Python client.
 
 `mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. When it finds existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, or `~/.opencode` directories, it can multi-select and install the Mdtero skill during onboarding. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives.
 

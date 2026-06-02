@@ -821,12 +821,25 @@ def test_web_login_loopback_accepts_site_callback():
         opened_urls.append(url)
         parsed = urllib.parse.urlparse(url)
         query = urllib.parse.parse_qs(parsed.query)
+        preflight = httpx.options(
+            query["cli_callback"][0],
+            headers={
+                "Origin": "https://mdtero.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Content-Type",
+            },
+            timeout=5,
+        )
+        assert preflight.status_code == 204
+        assert preflight.headers["access-control-allow-origin"] == "https://mdtero.com"
         response = httpx.post(
             query["cli_callback"][0],
+            headers={"Origin": "https://mdtero.com"},
             json={"state": query["cli_state"][0], "apiKey": "mdt_live_web", "prefix": "mdt_live"},
             timeout=5,
         )
         assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "https://mdtero.com"
         return True
 
     result = run_web_login("https://mdtero.example", timeout_seconds=5, open_browser=fake_open)
