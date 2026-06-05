@@ -30,10 +30,11 @@ During alpha, install the known-good public client from GitHub with `uv tool ins
 For a one-command agent setup:
 
 ```bash
+curl -Ls https://mdtero.com/install.sh | sh
 curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 ```
 
-The script installs `uv` when needed, installs the Python runtime, then runs `mdtero agent install --target <target>`.
+The script installs `uv` when needed and installs the Python runtime. Pass `--agent <target>` to also install an agent skill.
 
 ## Agent Targets
 

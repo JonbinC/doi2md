@@ -7265,6 +7265,8 @@ def test_public_repo_has_no_root_npm_or_per_agent_install_runtime():
     install_script = (repo_root / "install.sh").read_text(encoding="utf-8")
     assert "uv tool install --force git+https://github.com/JonbinC/doi2md.git" in install_script
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in install_script
+    assert "install.sh [--agent" in install_script
+    assert "Installing Mdtero CLI" in install_script
     assert "mdtero agent install --target" in install_script
     assert "npm" not in install_script.lower()
     assert "npx" not in install_script.lower()
