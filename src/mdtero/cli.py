@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -124,8 +126,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_wait_options(parse)
     parse.add_argument("--trace", action="store_true")
 
+    parse_batch = _cmd(sub, "parse-batch", "Parse DOI/URL targets from a text file, optionally wait and download Markdown.", cmd_parse_batch)
+    parse_batch.add_argument("path", type=Path, help="Text file with one DOI or URL per line; blank lines and # comments are ignored.")
+    parse_batch.add_argument("--download", nargs="?", const="paper_md", default=None, help="Download an artifact after each succeeded parse. Defaults to paper_md when the flag is present.")
+    parse_batch.add_argument("--output-dir", type=Path, default=Path("mdtero-output"))
+    parse_batch.add_argument("--filename-template", default="{author}_{year}_{shorttitle}", help="Download filename template using {author}, {year}, {shorttitle}, {title}, {doi}, {task_id}, and {artifact}.")
+    parse_batch.add_argument("--manifest", action=argparse.BooleanOptionalAction, default=True, help="Write manifest.csv and failed.csv in the output directory.")
+    parse_batch.add_argument("--json", action="store_true")
+    parse_batch.add_argument("--wait", action="store_true")
+    _add_wait_options(parse_batch)
+
     discover = _cmd(sub, "discover", "Search papers.", cmd_discover)
-    discover.add_argument("query")
+    discover.add_argument("query", nargs="+")
     discover.add_argument("--limit", type=int, default=10)
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
@@ -230,6 +242,8 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("task_id")
     download.add_argument("artifact", nargs="?", default="paper_md")
     download.add_argument("--output-dir", type=Path, default=Path.cwd())
+    download.add_argument("--filename-template", default="{author}_{year}_{shorttitle}", help="Prefer a metadata-based filename for Markdown artifacts. Use an empty string to keep the server filename.")
+    download.add_argument("--manifest", action=argparse.BooleanOptionalAction, default=True, help="Write/update manifest.csv in the output directory.")
     download.add_argument("--json", action="store_true")
 
     agent = sub.add_parser("agent")
@@ -1108,6 +1122,130 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 2 if any((result.get("final_task") or {}).get("status") == "timeout" for result in results) else 0
 
 
+def cmd_parse_batch(args: argparse.Namespace) -> int:
+    targets, failure = _validated_parse_batch_targets(args.path)
+    if failure:
+        _print_result(failure, json_output=args.json)
+        return 2
+    client = MdteroClient()
+    items: list[dict[str, Any]] = []
+    for index, target in enumerate(targets, start=1):
+        item: dict[str, Any] = {"index": index, "input": target, "status": "submitted"}
+        try:
+            route, result, acquisition = client.parse_with_route(target)
+            _enrich_parse_submission(result)
+            item.update({"task_id": result.get("task_id"), "route_kind": route.get("route_kind")})
+            if acquisition:
+                item["client_acquisition"] = acquisition
+            if result.get("task_id"):
+                add_paper(Path.cwd(), paper_from_submission(target, result, source="parse-batch"))
+            if args.wait and result.get("task_id"):
+                task = _wait_for_task(client, str(result["task_id"]), args=args)
+                _enrich_task_status(task)
+                if task.get("status") != "timeout":
+                    update_task(Path.cwd(), task)
+                _merge_waited_task_into_submission(result, task)
+                item.update(_batch_item_summary(target, result))
+                if args.download and task.get("status") == "succeeded":
+                    download = _download_task_artifact(
+                        client,
+                        str(result["task_id"]),
+                        str(args.download),
+                        args.output_dir,
+                        task=task,
+                        filename_template=args.filename_template,
+                    )
+                    item["download"] = download
+                    item["path"] = download.get("path")
+            else:
+                item.update(_batch_item_summary(target, result))
+        except Exception as exc:
+            item.update(_batch_exception_payload(target, exc))
+        items.append(item)
+    failed_rows = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
+    payload = {
+        "status": "completed" if not failed_rows else "completed_with_failures",
+        "input_path": str(args.path),
+        "total_count": len(items),
+        "succeeded_count": sum(1 for item in items if item.get("status") == "succeeded"),
+        "failed_count": len(failed_rows),
+        "downloaded_count": sum(1 for item in items if item.get("download")),
+        "items": items,
+        "failures": failed_rows,
+    }
+    if args.manifest:
+        payload["manifest"] = _write_batch_manifests(args.output_dir, items)
+    if args.json:
+        print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
+    else:
+        _print_parse_batch_summary(payload)
+    return 1 if failed_rows else 0
+
+
+def _validated_parse_batch_targets(path: Path) -> tuple[list[str], dict[str, Any] | None]:
+    if not path.exists():
+        return [], _parse_input_failure("batch_path_not_found", path=path, action_hint="Create the DOI/URL text file or pass the correct path.")
+    if not path.is_file():
+        return [], _parse_input_failure("batch_path_not_file", path=path, action_hint="Pass a text file with one DOI or URL per line. For local files use `mdtero parse --batch <directory>`.")
+    targets = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        targets.append(line)
+    if not targets:
+        return [], _parse_input_failure("batch_no_targets", path=path, action_hint="Add one DOI or URL per line, then rerun `mdtero parse-batch <dois.txt> --wait --download paper_md --json`.")
+    return targets, None
+
+
+def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, Any]:
+    task = result.get("final_task") if isinstance(result.get("final_task"), dict) else result
+    return {
+        "input": input_value,
+        "task_id": result.get("task_id") or task.get("task_id"),
+        "status": result.get("status") or task.get("status"),
+        "quality_label": _task_quality_label(task),
+        "reason_code": result.get("reason_code") or task.get("reason_code") or task.get("error_code"),
+        "action_hint": result.get("action_hint") or task.get("action_hint"),
+        "title": _task_title(task),
+        "doi": _task_doi(task) or _doi_from_input(input_value),
+        "preferred_artifact": _preferred_parse_artifact(task),
+    }
+
+
+def _batch_exception_payload(input_value: str, exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, AcquisitionError):
+        return {"input": input_value, "status": "failed", "reason_code": exc.reason_code, "action_hint": exc.action_hint, "diagnostics": exc.diagnostics}
+    if isinstance(exc, MdteroApiError):
+        payload = dict(exc.payload)
+        payload.setdefault("input", input_value)
+        payload.setdefault("status", "failed")
+        payload.setdefault("reason_code", payload.get("error_code") or "api_request_failed")
+        return payload
+    if isinstance(exc, httpx.HTTPStatusError):
+        payload = api_failure_payload(exc, method=exc.request.method, path=exc.request.url.path)
+        payload["input"] = input_value
+        return payload
+    return {
+        "input": input_value,
+        "status": "failed",
+        "reason_code": exc.__class__.__name__,
+        "action_hint": "Check the target with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`, then retry the batch.",
+        "message": str(exc),
+    }
+
+
+def _failed_manifest_row(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "input": item.get("input"),
+        "task_id": item.get("task_id"),
+        "status": item.get("status"),
+        "quality_label": item.get("quality_label"),
+        "reason_code": item.get("reason_code") or item.get("error_code"),
+        "action_hint": item.get("action_hint"),
+    }
+
+
 def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
     task_id = str(result.get("task_id") or result.get("id") or "").strip()
     if not task_id:
@@ -1115,6 +1253,7 @@ def _enrich_parse_submission(result: dict[str, Any]) -> dict[str, Any]:
     result.setdefault("task_id", task_id)
     result.setdefault("task_api", "/api/v1/tasks/{task_id}")
     result.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
+    _apply_quality_label(result)
     preferred_artifact = _preferred_parse_artifact(result)
     result.setdefault("preferred_artifact", preferred_artifact)
     next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
@@ -1209,6 +1348,8 @@ def _merge_waited_task_into_submission(result: dict[str, Any], task: dict[str, A
         "client_acquisition",
         "parse_outcome",
         "download_artifacts",
+        "quality_label",
+        "quality_warning",
         "result",
         "preferred_artifact",
         "next_commands",
@@ -1248,8 +1389,9 @@ def _preferred_parse_artifact(result: dict[str, Any]) -> str:
 
 
 def cmd_discover(args: argparse.Namespace) -> int:
+    query = _discover_query(args.query)
     try:
-        result = MdteroClient().discover(args.query, limit=args.limit)
+        result = MdteroClient().discover(query, limit=args.limit)
     except DiscoveryError as exc:
         if args.json:
             print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
@@ -1287,6 +1429,12 @@ def cmd_discover(args: argparse.Namespace) -> int:
     if project_add is not None:
         Console().print(f"Added {project_add['added_count']} discovery result(s) to project; skipped {project_add['skipped_count']}.")
     return 0
+
+
+def _discover_query(value: Any) -> str:
+    if isinstance(value, list):
+        return " ".join(str(part).strip() for part in value if str(part).strip()).strip()
+    return str(value or "").strip()
 
 
 def _prompt_discovery_selection(result: dict[str, Any]) -> str:
@@ -1653,6 +1801,7 @@ def _enrich_task_status(task: dict[str, Any]) -> dict[str, Any]:
     if not task_id:
         return task
     _promote_task_result_fields(task)
+    _apply_quality_label(task)
     task.setdefault("task_id", task_id)
     task.setdefault("task_api", "/api/v1/tasks/{task_id}")
     task.setdefault("download_api", "/api/v1/tasks/{task_id}/download/{artifact}")
@@ -1715,17 +1864,33 @@ def _promote_task_result_fields(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def cmd_download(args: argparse.Namespace) -> int:
-    path = MdteroClient().download(args.task_id, args.artifact, args.output_dir)
+    client = MdteroClient()
+    task: dict[str, Any] | None = None
+    try:
+        task = client.task(args.task_id)
+        _enrich_task_status(task)
+    except Exception:
+        task = None
+    filename_template = getattr(args, "filename_template", "{author}_{year}_{shorttitle}")
+    download = _download_task_artifact(client, args.task_id, args.artifact, args.output_dir, task=task, filename_template=filename_template)
     payload = {
         "status": "downloaded",
         "task_id": args.task_id,
         "artifact": args.artifact,
-        "path": str(path),
+        "path": download["path"],
+        "original_filename": download.get("original_filename"),
+        "quality_label": download.get("quality_label"),
     }
+    if task:
+        payload["task"] = _download_task_summary(task)
+    if getattr(args, "manifest", False):
+        payload["manifest"] = _append_download_manifest(args.output_dir, _manifest_row_from_task(task or {}, artifact=args.artifact, path=download["path"], input_value=None, original_filename=download.get("original_filename")))
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
-        Console().print(f"Downloaded {args.artifact} to {path}")
+        Console().print(f"Downloaded {args.artifact} to {download['path']}")
+        if _is_low_quality_label(str(download.get("quality_label") or "")):
+            Console().print(f"Warning: artifact quality is {download.get('quality_label')}; verify before citing it as full text.")
     return 0
 
 
@@ -3039,6 +3204,291 @@ def _next_step_command_groups() -> list[dict[str, Any]]:
     return build_next_step_command_groups()
 
 
+def _apply_quality_label(task: dict[str, Any]) -> dict[str, Any]:
+    label = _task_quality_label(task)
+    task["quality_label"] = label
+    task["quality_warning"] = _quality_warning(label)
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    if result is not task:
+        result.setdefault("quality_label", label)
+        warning = _quality_warning(label)
+        if warning:
+            result.setdefault("quality_warning", warning)
+        if result:
+            task["result"] = result
+    return task
+
+
+def _task_quality_label(task: dict[str, Any]) -> str:
+    for value in _quality_candidates(task):
+        cleaned = str(value or "").strip().lower()
+        if cleaned:
+            return _normalize_quality_label(cleaned)
+    status = str(task.get("status") or "").strip().lower()
+    if status == "succeeded":
+        return "full_text_good"
+    if status in {"failed", "cancelled", "timeout"}:
+        return "unavailable"
+    return "unknown"
+
+
+def _quality_candidates(task: dict[str, Any]) -> list[Any]:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    parse_outcome = task.get("parse_outcome") if isinstance(task.get("parse_outcome"), dict) else result.get("parse_outcome") if isinstance(result.get("parse_outcome"), dict) else {}
+    return [
+        task.get("quality_label"),
+        result.get("quality_label"),
+        quality.get("quality_label"),
+        quality.get("label"),
+        parse_outcome.get("quality_label") if isinstance(parse_outcome, dict) else None,
+        parse_outcome.get("outcome_code") if isinstance(parse_outcome, dict) else None,
+        task.get("reason_code"),
+        result.get("reason_code"),
+        quality.get("reason_code"),
+    ]
+
+
+def _normalize_quality_label(value: str) -> str:
+    if value in {"full_text_good", "fulltext_accepted", "full_text", "complete", "succeeded"}:
+        return "full_text_good"
+    if value in {"metadata_only", "no_fulltext", "no_full_text"}:
+        return "metadata_only"
+    if value in {"abstract_only", "abstract", "abstract_only_fulltext"}:
+        return "abstract_only"
+    if value in {"section_only_fulltext", "section_only", "sections_only"}:
+        return "section_only_fulltext"
+    if value in {"low_confidence_parse", "low_quality", "weak_fulltext", "weak_xml", "elsevier_xml_weak"}:
+        return "low_confidence_parse"
+    if "abstract" in value and "only" in value:
+        return "abstract_only"
+    if "metadata" in value and "only" in value:
+        return "metadata_only"
+    if "section_only" in value or "sections_only" in value:
+        return "section_only_fulltext"
+    if "low" in value or "weak" in value:
+        return "low_confidence_parse"
+    return value
+
+
+def _quality_warning(label: str) -> str | None:
+    if label == "full_text_good":
+        return None
+    if label in {"metadata_only", "abstract_only", "section_only_fulltext", "low_confidence_parse", "unavailable"}:
+        return f"Artifact quality is {label}; verify the source before citing it as full text."
+    return None
+
+
+def _is_low_quality_label(label: str) -> bool:
+    return bool(_quality_warning(_normalize_quality_label(label)))
+
+
+def _download_task_artifact(client: MdteroClient, task_id: str, artifact: str, output_dir: Path, *, task: dict[str, Any] | None, filename_template: str) -> dict[str, Any]:
+    filename = _download_filename(task, artifact=artifact, filename_template=filename_template) if task else None
+    try:
+        result = client.download(task_id, artifact, output_dir, filename=filename)
+    except TypeError:
+        result = client.download(task_id, artifact, output_dir)
+    path = Path(os.fspath(result))
+    return {
+        "artifact": artifact,
+        "path": str(path),
+        "filename": path.name,
+        "original_filename": getattr(result, "filename", path.name),
+        "content_type": getattr(result, "content_type", None),
+        "content_length": getattr(result, "content_length", None),
+        "quality_label": _task_quality_label(task or {}),
+    }
+
+
+def _download_filename(task: dict[str, Any], *, artifact: str, filename_template: str) -> str | None:
+    template = str(filename_template or "").strip()
+    if not template:
+        return None
+    extension = ".md" if artifact.endswith("_md") or artifact == "paper_md" else ".zip" if "bundle" in artifact else ""
+    label = _task_quality_label(task)
+    values = {
+        "author": _first_author(task) or "unknown",
+        "year": _task_year(task) or "n.d.",
+        "shorttitle": _short_title(_task_title(task)) or artifact,
+        "title": _slug(_task_title(task)) or artifact,
+        "doi": _slug(_task_doi(task)) or "no-doi",
+        "task_id": _slug(str(task.get("task_id") or task.get("id") or "")) or "task",
+        "artifact": _slug(artifact) or artifact,
+    }
+    try:
+        stem = template.format(**values)
+    except (KeyError, ValueError):
+        stem = "{author}_{year}_{shorttitle}".format(**values)
+    stem = _slug(stem) or values["task_id"]
+    if artifact.endswith("_md") and _is_low_quality_label(label):
+        stem = f"{stem}.low_quality"
+    return f"{stem}{extension}"
+
+
+def _append_download_manifest(output_dir: Path, row: dict[str, Any]) -> dict[str, str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "manifest.csv"
+    _append_csv_rows(path, [row], _manifest_fieldnames())
+    return {"manifest_csv": str(path)}
+
+
+def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dict[str, str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = output_dir / "manifest.csv"
+    failed_path = output_dir / "failed.csv"
+    rows = [_manifest_row_from_batch_item(item) for item in items if item.get("download")]
+    failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
+    _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
+    _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "action_hint"])
+    return {"manifest_csv": str(manifest_path), "failed_csv": str(failed_path)}
+
+
+def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
+    download = item.get("download") if isinstance(item.get("download"), dict) else {}
+    return {
+        "input": item.get("input"),
+        "doi": item.get("doi") or _doi_from_input(str(item.get("input") or "")),
+        "title": item.get("title"),
+        "task_id": item.get("task_id"),
+        "status": item.get("status"),
+        "quality_label": item.get("quality_label"),
+        "reason_code": item.get("reason_code"),
+        "artifact": str(download.get("artifact") or item.get("preferred_artifact") or ""),
+        "path": download.get("path") or item.get("path"),
+        "original_filename": download.get("original_filename"),
+    }
+
+
+def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, input_value: str | None, original_filename: str | None) -> dict[str, Any]:
+    return {
+        "input": input_value or task.get("paper_input") or task.get("input_summary") or _task_doi(task),
+        "doi": _task_doi(task),
+        "title": _task_title(task),
+        "task_id": task.get("task_id") or task.get("id"),
+        "status": task.get("status"),
+        "quality_label": _task_quality_label(task),
+        "reason_code": task.get("reason_code") or task.get("error_code"),
+        "artifact": artifact,
+        "path": path,
+        "original_filename": original_filename,
+    }
+
+
+def _download_task_summary(task: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "task_id": task.get("task_id") or task.get("id"),
+        "status": task.get("status"),
+        "title": _task_title(task),
+        "doi": _task_doi(task),
+        "quality_label": _task_quality_label(task),
+        "reason_code": task.get("reason_code") or task.get("error_code"),
+        "action_hint": task.get("action_hint"),
+    }
+
+
+def _manifest_fieldnames() -> list[str]:
+    return ["input", "doi", "title", "task_id", "status", "quality_label", "reason_code", "artifact", "path", "original_filename"]
+
+
+def _write_csv_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _append_csv_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
+    exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        if not exists:
+            writer.writeheader()
+        writer.writerows(rows)
+
+
+def _task_title(task: dict[str, Any]) -> str:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    for value in (task.get("title"), result.get("title"), metadata.get("title"), task.get("paper_title")):
+        cleaned = str(value or "").strip()
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _task_doi(task: dict[str, Any]) -> str:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    for value in (task.get("doi"), result.get("doi"), metadata.get("doi"), task.get("paper_input"), task.get("input_summary")):
+        doi = _doi_from_input(str(value or ""))
+        if doi:
+            return doi
+    return ""
+
+
+def _doi_from_input(value: str) -> str:
+    match = re.search(r"(10\.\d{4,9}/\S+)", value, flags=re.I)
+    if not match:
+        return ""
+    return match.group(1).rstrip(".,;)")
+
+
+def _task_year(task: dict[str, Any]) -> str:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    for value in (task.get("year"), result.get("year"), metadata.get("year"), metadata.get("published_year"), metadata.get("publication_year")):
+        match = re.search(r"(19|20)\d{2}", str(value or ""))
+        if match:
+            return match.group(0)
+    return ""
+
+
+def _first_author(task: dict[str, Any]) -> str:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    authors = task.get("authors") or result.get("authors") or metadata.get("authors")
+    first: Any = None
+    if isinstance(authors, list) and authors:
+        first = authors[0]
+    elif isinstance(authors, str):
+        first = authors.split(",", 1)[0].split(";", 1)[0]
+    if isinstance(first, dict):
+        first = first.get("family") or first.get("last") or first.get("name")
+    cleaned = str(first or "").strip()
+    if not cleaned:
+        return ""
+    return _slug(cleaned.split()[-1])
+
+
+def _short_title(title: str, *, words: int = 6) -> str:
+    tokens = re.findall(r"[A-Za-z0-9]+", title.lower())
+    return "_".join(tokens[:words])
+
+
+def _slug(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", str(value or "").strip().lower())
+    return cleaned.strip("_")
+
+
+def _print_parse_batch_summary(payload: dict[str, Any]) -> None:
+    console = Console()
+    console.print(
+        f"Parse batch: {payload.get('succeeded_count')}/{payload.get('total_count')} succeeded; "
+        f"{payload.get('downloaded_count')} downloaded; {payload.get('failed_count')} failed."
+    )
+    table = Table("Input", "Task", "Status", "Quality", "Path")
+    for item in payload.get("items") or []:
+        table.add_row(
+            str(item.get("input") or ""),
+            str(item.get("task_id") or ""),
+            str(item.get("status") or ""),
+            str(item.get("quality_label") or ""),
+            str(item.get("path") or ""),
+        )
+    console.print(table)
+
+
 def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
     payload = redact_sensitive_payload(payload)
     if json_output:
@@ -3047,6 +3497,12 @@ def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
     console = Console()
     if "task_id" in payload:
         console.print(f"Task: {payload.get('task_id')} ({payload.get('status')})")
+        quality_label = str(payload.get("quality_label") or "").strip()
+        if quality_label:
+            console.print(f"Quality: {quality_label}")
+        warning = payload.get("quality_warning") or _quality_warning(quality_label)
+        if warning:
+            console.print(f"Warning: {warning}")
         reason = payload.get("reason_code") or payload.get("action_hint")
         if reason:
             console.print(str(reason))

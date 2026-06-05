@@ -76,14 +76,18 @@ mdtero config zotero
 mdtero zotero import --json
 mdtero zotero sync --json
 mdtero discover "thermochemical energy storage" --limit 5 --json
+mdtero discover Thermochemical Energy storage Vermiculite --limit 5 --json
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3 --json
 mdtero parse 10.48550/arXiv.1706.03762 --json
+mdtero parse '10.1016/S0260-8774(02)00304-7' --trace --wait --timeout 300 --json
 mdtero parse https://example.org/open-paper --trace --wait --timeout 300 --json
 mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
 mdtero parse --batch ./papers --wait --timeout 300 --json
+mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
+mdtero download <task-id> paper_md --filename-template "{author}_{year}_{shorttitle}" --output-dir ./mdtero-output --json
 mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json
 mdtero translate paper.md --to zh-CN --wait --timeout 600 --json
 mdtero rag status --json
@@ -103,10 +107,12 @@ Validated in the current alpha:
 - deploy smoke with `mdtero smoke --json`; it creates an isolated project, runs discovery, arXiv/DOI parse with task polling, artifact download, server-side Voyage RAG build/status/query, validates `mdtero mcp briefing --json` exposes `agent_briefing`, `server_rag_status`, `server_rag_build`, and `rag_query`, and returns step-level `reason_code`, `action_hint`, task ids, paths, server project id, plus top-level `primary_failure`, `failed_steps`, and recovery `next_commands` when a smoke step fails
 - optional academic-key setup through either the interactive `mdtero config academic` flow or headless flags such as `--semantic-scholar-key <key> --json`; JSON output reports configured keys without echoing secrets
 - DOI/arXiv parse with task polling and Markdown/bundle download
+- batch DOI/URL parse with `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`, writing `manifest.csv` and `failed.csv`
 - PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds
 - local project init/add/remove/list/status, BibTeX import with de-duplication, project parse/refresh/download, and agent-readable JSON for project management commands
 - Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`
-- discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; if Semantic Scholar is unavailable, `--json` reports `local_semantic_scholar_failure` and `discovery_fallback` so agents can continue with OpenAlex while preserving the reason code; use `mdtero discover "<query>" --interactive` to inspect results and multi-select papers into the local project queue, or `--add --select 1,3 --json` for scripts and agents
+- discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback; if Semantic Scholar is unavailable, `--json` reports `local_semantic_scholar_failure` and `discovery_fallback` so agents can continue with OpenAlex while preserving the reason code; multi-word queries work with or without shell quotes, and `mdtero discover "<query>" --interactive` can inspect results and multi-select papers into the local project queue
+- `status`, waited parse results, and downloads expose `quality_label` / `quality_warning` for low-content artifacts such as `metadata_only`, `abstract_only`, `section_only_fulltext`, and `low_confidence_parse`; Markdown downloads default to `author_year_shorttitle.md`, append `.low_quality.md` for low-confidence full text, and update `manifest.csv`
 - local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output
 - server-side translation requests from parse task ids or local Markdown files
 - server-side Voyage RAG query/bootstrap; `mdtero rag query "What are the strongest findings?" --build-if-needed --json` creates or reuses the server project, imports completed Markdown, builds the backend Voyage index, and queries without asking the user to copy a server project id; query JSON returns extractive `answer`, stable `citations`, raw `matches`, LlamaIndex-style `source_nodes`, an `evidence_pack.context_markdown`, `citation_contract.required_for_final_answer`, `reason_code`, and `next_commands` for agents

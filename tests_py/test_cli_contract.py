@@ -1508,6 +1508,23 @@ def test_discover_interactive_adds_prompted_results_to_project(monkeypatch, tmp_
     assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
 
 
+def test_discover_accepts_unquoted_multi_word_query(monkeypatch, capsys):
+    from mdtero import cli
+
+    def fake_discover(self, query, *, limit=10):
+        assert query == "Thermochemical Energy storage Vermiculite"
+        assert limit == 5
+        return {"source": "semantic_scholar_local", "items": [{"title": "Vermiculite Paper", "doi": "10.1000/v"}]}
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    args = build_parser().parse_args(["discover", "Thermochemical", "Energy", "storage", "Vermiculite", "--limit", "5", "--json"])
+
+    assert cli.cmd_discover(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["items"][0]["title"] == "Vermiculite Paper"
+
+
 def test_discover_interactive_enter_skips_project_add(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -2571,25 +2588,100 @@ def test_project_queue_submission_refresh_helpers(tmp_path: Path):
 def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
-    downloaded = tmp_path / "paper.md"
+    downloaded = tmp_path / "donkers_2017_thermochemical_heat_storage_in_salt_hydrates.md"
 
-    def fake_download(self, task_id, artifact, output_dir):
+    def fake_task(self, task_id):
+        assert task_id == "task-1"
+        return {
+            "task_id": "task-1",
+            "status": "succeeded",
+            "paper_input": "https://doi.org/10.1016/j.apenergy.2017.04.080",
+            "result": {
+                "metadata": {
+                    "title": "Thermochemical heat storage in salt hydrates",
+                    "year": 2017,
+                    "authors": [{"name": "Donkers"}],
+                    "doi": "10.1016/j.apenergy.2017.04.080",
+                },
+                "parse_outcome": {"outcome_code": "fulltext_accepted"},
+            },
+        }
+
+    def fake_download(self, task_id, artifact, output_dir, *, filename=None):
         assert task_id == "task-1"
         assert artifact == "paper_md"
         assert output_dir == tmp_path
+        assert filename == downloaded.name
         return downloaded
 
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
     monkeypatch.setattr(MdteroClient, "download", fake_download)
 
     assert cli.cmd_download(type("Args", (), {"task_id": "task-1", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload == {
-        "status": "downloaded",
-        "task_id": "task-1",
-        "artifact": "paper_md",
-        "path": str(downloaded),
-    }
+    assert payload["status"] == "downloaded"
+    assert payload["task_id"] == "task-1"
+    assert payload["artifact"] == "paper_md"
+    assert payload["path"] == str(downloaded)
+    assert payload["quality_label"] == "full_text_good"
+    assert payload["task"]["title"] == "Thermochemical heat storage in salt hydrates"
+    assert payload["task"]["doi"] == "10.1016/j.apenergy.2017.04.080"
+
+
+def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    targets = tmp_path / "dois.txt"
+    targets.write_text("# comment\n10.1016/S0260-8774(02)00304-7\n", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    downloaded = output_dir / "bui_2003_water_activity_calcium_chloride_solution.md"
+
+    def fake_parse_with_route(self, value):
+        assert value == "10.1016/S0260-8774(02)00304-7"
+        return {"route_kind": "server_parse"}, {"task_id": "task-batch", "status": "queued"}, None
+
+    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
+        assert task_id == "task-batch"
+        return {
+            "task_id": "task-batch",
+            "status": "succeeded",
+            "result": {
+                "metadata": {
+                    "title": "Water activity calcium chloride solution",
+                    "year": 2003,
+                    "authors": [{"name": "Bui"}],
+                    "doi": "10.1016/S0260-8774(02)00304-7",
+                },
+                "parse_outcome": {"outcome_code": "fulltext_accepted"},
+            },
+        }
+
+    def fake_download(self, task_id, artifact, out_dir, *, filename=None):
+        assert task_id == "task-batch"
+        assert artifact == "paper_md"
+        assert out_dir == output_dir
+        assert filename == downloaded.name
+        return downloaded
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+    monkeypatch.chdir(tmp_path)
+
+    args = build_parser().parse_args(["parse-batch", str(targets), "--wait", "--download", "paper_md", "--output-dir", str(output_dir), "--json"])
+
+    assert cli.cmd_parse_batch(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["succeeded_count"] == 1
+    assert payload["downloaded_count"] == 1
+    assert payload["items"][0]["quality_label"] == "full_text_good"
+    assert payload["items"][0]["path"] == str(downloaded)
+    manifest = (output_dir / "manifest.csv").read_text(encoding="utf-8")
+    assert "task-batch" in manifest
+    assert str(downloaded) in manifest
+    assert "10.1016/S0260-8774(02)00304-7" in manifest
 
 
 def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypatch, tmp_path: Path, capsys):
