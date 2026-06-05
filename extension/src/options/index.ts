@@ -12,8 +12,8 @@ import {
 } from "../lib/storage";
 
 const ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json';
-const CLI_INSTALL_COMMAND = "uv tool install mdtero";
-const CLI_GITHUB_FALLBACK_COMMAND = "uv tool install git+https://github.com/JonbinC/doi2md.git";
+const CLI_INSTALL_COMMAND = "uv tool install --force git+https://github.com/JonbinC/doi2md.git";
+const CLI_PYPI_COMMAND = "uv tool install mdtero";
 
 const COPY = {
   en: {
@@ -71,7 +71,7 @@ const COPY = {
       ["RAG / MCP", "after parse", "Build backend Voyage RAG from completed Markdown and expose the same project to local agents through FastMCP. The bootstrap query creates or reuses the server project, binds it locally, imports Markdown, builds RAG, and queries without asking you to copy a server project id.", `${ONE_COMMAND_RAG_BOOTSTRAP}\nmdtero mcp briefing --json\nmdtero mcp serve`]
     ],
     cliOnboardingItems: [
-      ["Install", CLI_INSTALL_COMMAND, `Install the public Python client from PyPI. If the alpha has not propagated yet, use ${CLI_GITHUB_FALLBACK_COMMAND} as a temporary fallback; the extension never installs Python dependencies.`],
+      ["Install", CLI_INSTALL_COMMAND, `Install the known-good public Python client from GitHub during alpha. Use ${CLI_PYPI_COMMAND} only after the PyPI package is republished; the extension never installs Python dependencies.`],
       ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
       ["Checklist", "mdtero setup --json", "Return the same secret-safe onboarding checklist used by local agents."],
       ["Academic keys", "mdtero config academic", "Optional academic resource keys stay in local CLI config."],
@@ -91,7 +91,7 @@ const COPY = {
     guideSignedOut: [
       "Open website OAuth and complete sign-in at mdtero.com/auth.",
       "Return to this popup after the trusted auth bridge connects your account.",
-      `Optionally install the Python CLI with \`${CLI_INSTALL_COMMAND}\`; if PyPI has not propagated yet, use \`${CLI_GITHUB_FALLBACK_COMMAND}\` as a temporary fallback. Then run \`mdtero setup\` for workstation OAuth.`,
+      `Optionally install the Python CLI with \`${CLI_INSTALL_COMMAND}\`. Use \`${CLI_PYPI_COMMAND}\` only after the PyPI package is republished. Then run \`mdtero setup\` for workstation OAuth.`,
       "Parse the current paper page or upload a local PDF/EPUB from the popup.",
       "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
     ],
@@ -178,7 +178,7 @@ const COPY = {
       ["RAG / MCP", "解析后", "基于完成的 Markdown 构建后端 Voyage RAG，并通过 FastMCP 交给本地 agent。Bootstrap 查询会创建或复用服务端项目、写入本地绑定、导入 Markdown、构建 RAG 并查询，不需要你手工复制 server project id。", `${ONE_COMMAND_RAG_BOOTSTRAP}\nmdtero mcp briefing --json\nmdtero mcp serve`]
     ],
     cliOnboardingItems: [
-      ["安装", CLI_INSTALL_COMMAND, `从 PyPI 安装公开 Python 客户端；如果 alpha 还没同步，可临时使用 ${CLI_GITHUB_FALLBACK_COMMAND}。扩展不会安装 Python 依赖。`],
+      ["安装", CLI_INSTALL_COMMAND, `alpha 阶段从 GitHub 安装已验证的公开 Python 客户端；等 PyPI 重新发布后再使用 ${CLI_PYPI_COMMAND}。扩展不会安装 Python 依赖。`],
       ["鉴权", "mdtero setup", "工作站走网页登录 OAuth；可信无头服务器可走 API-key setup。"],
       ["检查清单", "mdtero setup --json", "返回给本地 agent 使用的同一份 secret-safe onboarding checklist。"],
       ["学术 key", "mdtero config academic", "学术资源 key 都是可选增强，只存在本地 CLI 配置。"],
@@ -198,7 +198,7 @@ const COPY = {
     guideSignedOut: [
       "打开网页登录，并在 mdtero.com/auth 完成授权。",
       "受信任 auth bridge 连接账户后，回到扩展弹窗继续。",
-      `可选安装 Python CLI：\`${CLI_INSTALL_COMMAND}\`；如果 PyPI 还没同步，可临时用 \`${CLI_GITHUB_FALLBACK_COMMAND}\`。再运行 \`mdtero setup\` 走工作站 OAuth。`,
+      `可选安装 Python CLI：\`${CLI_INSTALL_COMMAND}\`。等 PyPI 重新发布后再使用 \`${CLI_PYPI_COMMAND}\`。再运行 \`mdtero setup\` 走工作站 OAuth。`,
       "在弹窗解析当前论文页、粘贴 DOI，或上传本地 PDF/EPUB。",
       "任务完成后下载 Markdown、ZIP、源文件或译文。"
     ],
@@ -292,7 +292,7 @@ let uiLanguage: UiLanguage = "en";
 
 const CLI_HANDOFF_GUIDE_COMMAND = [
   CLI_INSTALL_COMMAND,
-  `# fallback if PyPI has not propagated: ${CLI_GITHUB_FALLBACK_COMMAND}`,
+  `# PyPI after republish: ${CLI_PYPI_COMMAND}`,
   "mdtero setup",
   "mdtero setup --json",
   "mdtero doctor --json",

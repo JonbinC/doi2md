@@ -663,8 +663,8 @@ def _local_dependency_summary() -> dict[str, Any]:
         "ready": not missing,
         "missing": missing,
         "checks": checks,
-        "install_command": "uv tool install --upgrade mdtero",
-        "fallback_install_command": "uv tool install --upgrade git+https://github.com/JonbinC/doi2md.git",
+        "install_command": "uv tool install --force git+https://github.com/JonbinC/doi2md.git",
+        "pypi_install_command": "uv tool install mdtero",
         "doctor_command": "mdtero doctor --json",
     }
 
