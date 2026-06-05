@@ -3494,8 +3494,8 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["checks"]["curl_cffi"]["capability"] == "local publisher route acquisition"
     assert payload["dependencies"]["checks"]["fastmcp"]["capability"] == "local MCP server for agents"
     assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
-    assert payload["dependencies"]["install_command"] == "uv tool install --upgrade mdtero"
-    assert payload["dependencies"]["fallback_install_command"] == "uv tool install --upgrade git+https://github.com/JonbinC/doi2md.git"
+    assert payload["dependencies"]["install_command"] == "uv tool install --force git+https://github.com/JonbinC/doi2md.git"
+    assert payload["dependencies"]["pypi_install_command"] == "uv tool install mdtero"
     assert payload["academic"]["discover_source"] == "server_openalex"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
     assert payload["input_routes"]["server_apis"] == {
@@ -4939,8 +4939,8 @@ def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_pa
         raise AssertionError("serve_project_context should fail when FastMCP is unavailable")
 
     assert "mdtero doctor --json" in message
-    assert "uv tool install --force mdtero" in message
     assert "uv tool install --force git+https://github.com/JonbinC/doi2md.git" in message
+    assert "avoid `uv tool install mdtero`" in message
     assert "npm" not in message.lower()
 
 
@@ -7138,8 +7138,8 @@ def test_python_agent_installer_writes_packaged_skill_without_npm(tmp_path: Path
     assert results[0].action == "installed"
     assert skill_path.exists()
     skill_text = skill_path.read_text(encoding="utf-8")
-    assert "uv tool install mdtero" in skill_text
-    assert "uv tool install git+https://github.com/JonbinC/doi2md.git" in skill_text
+    assert "uv tool install --force git+https://github.com/JonbinC/doi2md.git" in skill_text
+    assert "use PyPI only after the public client is republished" in skill_text
 
 
 def test_python_agent_installer_detects_and_uninstalls_targets(tmp_path: Path):
@@ -7221,14 +7221,14 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
     package_version = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
     assert manifest == site_manifest
-    assert manifest["quickInstallCommand"] == "uv tool install mdtero && mdtero setup"
-    assert manifest["alphaFallbackInstallCommand"] == "uv tool install git+https://github.com/JonbinC/doi2md.git"
+    assert manifest["quickInstallCommand"] == "uv tool install --force git+https://github.com/JonbinC/doi2md.git && mdtero setup"
+    assert manifest["pypiInstallCommand"] == "uv tool install mdtero"
     assert manifest["cli"]["packageName"] == "mdtero"
     assert manifest["cli"]["packageVersion"] == package_version
     assert manifest["releaseTruth"]["current"]["cli"]["version"] == package_version
     assert manifest["cli"]["packageManager"] == "uv"
-    assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install mdtero"
-    assert manifest["cli"]["runtimeFallbackInstallCommand"] == "uv tool install git+https://github.com/JonbinC/doi2md.git"
+    assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install --force git+https://github.com/JonbinC/doi2md.git"
+    assert manifest["cli"]["pypiInstallCommand"] == "uv tool install mdtero"
     assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
     assert manifest["cliCommand"] == "mdtero"
     assert "helperCommand" not in manifest
@@ -7263,8 +7263,8 @@ def test_public_repo_has_no_root_npm_or_per_agent_install_runtime():
     assert retired_install_docs == []
 
     install_script = (repo_root / "install.sh").read_text(encoding="utf-8")
-    assert "uv tool install mdtero" in install_script
-    assert "uv tool install git+https://github.com/JonbinC/doi2md.git" in install_script
+    assert "uv tool install --force git+https://github.com/JonbinC/doi2md.git" in install_script
+    assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in install_script
     assert "mdtero agent install --target" in install_script
     assert "npm" not in install_script.lower()
     assert "npx" not in install_script.lower()

@@ -9,10 +9,10 @@ usage() {
 Usage:
   install.sh --agent <claude_code|codex|gemini_cli|hermes|opencode> [--dry-run]
 
-Installs the Python Mdtero runtime with uv, then installs the matching agent
+Installs uv when needed, installs the Python Mdtero runtime, then installs the matching agent
 skill bundle through `mdtero agent install`. No Node package manager is
-required for this path. If PyPI propagation lags during alpha testing, the
-script falls back to the public GitHub repo.
+required for this path. During the alpha, the script installs the known-good
+public GitHub client because the old PyPI package name is still being replaced.
 
 Examples:
   curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
@@ -45,12 +45,37 @@ run() {
   fi
 }
 
+run_sh() {
+  printf '+ %s\n' "$*"
+  if [ "$DRY_RUN" = "0" ]; then
+    sh -c "$*"
+  fi
+}
+
+refresh_uv_path() {
+  if [ -n "${HOME:-}" ]; then
+    PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    export PATH
+  fi
+}
+
 ensure_uv() {
   if command_exists uv; then
     return 0
   fi
 
-  fail "uv is required for the Python Mdtero runtime. Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
+  printf '%s\n' "uv is not installed; installing uv first."
+  if command_exists curl; then
+    run_sh "curl -LsSf https://astral.sh/uv/install.sh | sh"
+  elif command_exists wget; then
+    run_sh "wget -qO- https://astral.sh/uv/install.sh | sh"
+  else
+    fail "uv is required and neither curl nor wget is available. Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
+  fi
+  refresh_uv_path
+  if ! command_exists uv; then
+    fail "uv was installed but is not on PATH. Open a new shell or add \$HOME/.local/bin to PATH, then rerun this installer."
+  fi
 }
 
 while [ "$#" -gt 0 ]; do
@@ -82,10 +107,7 @@ validate_target "$TARGET"
 
 printf '%s\n' "Installing Mdtero for agent: $TARGET"
 ensure_uv
-if ! run uv tool install mdtero; then
-  printf '%s\n' "PyPI install failed; trying alpha GitHub fallback."
-  run uv tool install git+https://github.com/JonbinC/doi2md.git
-fi
+run uv tool install --force git+https://github.com/JonbinC/doi2md.git
 run mdtero agent install --target "$TARGET"
 
 cat <<'EOF'
