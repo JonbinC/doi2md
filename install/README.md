@@ -18,6 +18,7 @@ During alpha, this GitHub command is the stable public install path. The old PyP
 For a one-command install:
 
 ```bash
+curl -Ls https://mdtero.com/install.sh | sh
 curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 ```
 
@@ -28,7 +29,7 @@ curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
 sh install-mdtero.sh --agent codex
 ```
 
-The install script installs `uv` when needed, installs the known-good public GitHub runtime during alpha, then runs `mdtero agent install --target <target>`.
+The install script installs `uv` when needed and installs the known-good public GitHub runtime during alpha. Pass `--agent <target>` to also install an agent skill.
 
 ## Connect An Agent Workspace
 
