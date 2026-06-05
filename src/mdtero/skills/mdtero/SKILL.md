@@ -41,21 +41,23 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - use a reusable project question when automating: `mdtero rag query "<question>" --build-if-needed --json`
 - explicit recovery/debug commands remain available: `mdtero rag build --wait --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
 - parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
+- quote DOI/URL values containing shell metacharacters, for example `mdtero parse '10.1016/S0260-8774(02)00304-7' --trace --wait --timeout 300 --json`
 - parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json`
 - continue from an extension handoff: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`
 - parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
-- search discovery: `mdtero discover "<query>" --json`
+- parse a text file of DOI/URL targets and download Markdown: `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`
+- search discovery: `mdtero discover "<query>" --json`; unquoted multi-word queries are also accepted by the CLI
 - add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive`
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3 --json`
 - poll status: `mdtero status <task-id> --wait --timeout 300 --json`
-- download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`
+- download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`; downloads use metadata-based filenames, append `.low_quality.md` for low-confidence Markdown, and update `manifest.csv`
 - translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json` or `mdtero translate <paper.md> --to zh-CN --wait --timeout 600 --json`
 - query server project RAG, automatically creating/binding/importing/building when needed: `mdtero rag query "<question>" --build-if-needed --json`
 - print local agent context without starting a server: `mdtero mcp briefing --json`
 - serve project MCP context: `mdtero mcp serve`
 - detect or install agent skills: `mdtero agent detect --json`, `mdtero agent install --interactive`, or `mdtero agent install --target <target>`
 - inspect install/project/RAG readiness for agents: `mdtero doctor --json`
-- `mdtero parse`, `mdtero project parse`, `mdtero status`, and `mdtero project refresh` JSON responses include `next_commands`; follow those returned commands before inventing a new continuation. For succeeded tasks, prefer the returned `preferred_artifact` and download command. For failed tasks, report `reason_code` / `action_hint` and use the returned retry or status command.
+- `mdtero parse`, `mdtero project parse`, `mdtero status`, and `mdtero project refresh` JSON responses include `next_commands`, `quality_label`, and sometimes `quality_warning`; follow those returned commands before inventing a new continuation. For succeeded tasks, prefer the returned `preferred_artifact` and download command. For failed or low-quality tasks, report `reason_code` / `action_hint` / `quality_label` and use the returned retry or status command.
 
 ## MCP Workflow
 

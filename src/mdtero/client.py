@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,20 @@ class MdteroApiError(RuntimeError):
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
         super().__init__(str(payload.get("message") or payload.get("error_code") or "Mdtero API request failed"))
+
+
+@dataclass(frozen=True)
+class DownloadResult:
+    path: Path
+    filename: str
+    content_type: str | None = None
+    content_length: int | None = None
+
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    def __str__(self) -> str:
+        return str(self.path)
 
 
 class MdteroClient:
@@ -99,7 +114,7 @@ class MdteroClient:
     def task(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/tasks/{task_id}")
 
-    def download(self, task_id: str, artifact: str, output_dir: Path) -> Path:
+    def download(self, task_id: str, artifact: str, output_dir: Path, *, filename: str | None = None) -> DownloadResult:
         output_dir.mkdir(parents=True, exist_ok=True)
         response = self._raw_request("GET", f"/api/v1/tasks/{task_id}/download/{artifact}")
         try:
@@ -110,10 +125,15 @@ class MdteroClient:
                     f"artifact '{artifact}' is not available for task {task_id}; check `mdtero status {task_id} --json` for the task reason_code"
                 ) from exc
             raise
-        filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact)
-        target = output_dir / filename
+        original_filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact)
+        target = output_dir / _safe_download_filename(filename or original_filename, fallback=original_filename)
         target.write_bytes(response.content)
-        return target
+        return DownloadResult(
+            path=target,
+            filename=original_filename,
+            content_type=response.headers.get("content-type"),
+            content_length=len(response.content),
+        )
 
     def wait(self, task_id: str, *, interval: float = 2.0, timeout: float = 600.0) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
@@ -327,6 +347,13 @@ def _filename_from_disposition(content_disposition: str | None, artifact: str) -
             if part.lower().startswith(marker):
                 return part[len(marker) :].strip('"') or f"{artifact}.bin"
     return f"{artifact}.bin"
+
+
+def _safe_download_filename(value: str, *, fallback: str) -> str:
+    cleaned = Path(str(value or "").strip()).name
+    if not cleaned or cleaned in {".", ".."}:
+        cleaned = Path(str(fallback or "").strip()).name
+    return cleaned or "download.bin"
 
 
 def _local_semantic_scholar_failure(exc: Exception) -> dict[str, Any]:
