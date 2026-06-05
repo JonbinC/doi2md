@@ -3222,8 +3222,11 @@ def _apply_quality_label(task: dict[str, Any]) -> dict[str, Any]:
 def _task_quality_label(task: dict[str, Any]) -> str:
     for value in _quality_candidates(task):
         cleaned = str(value or "").strip().lower()
-        if cleaned:
-            return _normalize_quality_label(cleaned)
+        if not cleaned:
+            continue
+        normalized = _normalize_quality_label(cleaned)
+        if normalized in _known_quality_labels():
+            return normalized
     status = str(task.get("status") or "").strip().lower()
     if status == "succeeded":
         return "full_text_good"
@@ -3269,6 +3272,10 @@ def _normalize_quality_label(value: str) -> str:
     if "low" in value or "weak" in value:
         return "low_confidence_parse"
     return value
+
+
+def _known_quality_labels() -> set[str]:
+    return {"full_text_good", "metadata_only", "abstract_only", "section_only_fulltext", "low_confidence_parse", "unavailable", "unknown"}
 
 
 def _quality_warning(label: str) -> str | None:
