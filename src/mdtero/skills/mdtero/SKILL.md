@@ -7,7 +7,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 ## Quick Start
 
-1. Install the Python runtime with `uv tool install --force git+https://github.com/JonbinC/doi2md.git`; use PyPI only after the public client is republished
+1. Install the Python runtime with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`; use PyPI only after the public client is republished
 2. Run `mdtero setup`
 3. Use `mdtero setup --api-key --json` when the environment is headless
 4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; use its `next_commands` before guessing recovery steps
@@ -100,5 +100,5 @@ The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only 
 ## Verification Rule
 
 - do not treat installation as complete until `mdtero doctor --json` reports `authenticated: true` and an API key source
-- if `mdtero` is missing or imports a top-level `service` package, install the public runtime with `uv tool install --force git+https://github.com/JonbinC/doi2md.git`; use PyPI only after the public client is republished
+- if `mdtero` is missing or imports a top-level `service` package, install the public runtime with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`; use PyPI only after the public client is republished
 - if a task fails, report `reason_code` and the server action hint before retrying

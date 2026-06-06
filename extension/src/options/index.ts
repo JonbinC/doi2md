@@ -12,7 +12,7 @@ import {
 } from "../lib/storage";
 
 const ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json';
-const CLI_INSTALL_COMMAND = "uv tool install --force git+https://github.com/JonbinC/doi2md.git";
+const CLI_INSTALL_COMMAND = "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git";
 const CLI_PYPI_COMMAND = "uv tool install mdtero";
 
 const COPY = {
