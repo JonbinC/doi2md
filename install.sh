@@ -113,7 +113,7 @@ else
   printf '%s\n' "Installing Mdtero CLI"
 fi
 ensure_uv
-run uv tool install --force git+https://github.com/JonbinC/doi2md.git
+run uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 if [ -n "$TARGET" ]; then
   run mdtero agent install --target "$TARGET"
 fi

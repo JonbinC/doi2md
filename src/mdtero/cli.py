@@ -73,6 +73,14 @@ def main(argv: list[str] | None = None) -> int:
     return int(result or 0)
 
 
+def _print_nested_help(parser: argparse.ArgumentParser) -> Any:
+    def _handler(_args: argparse.Namespace) -> int:
+        parser.print_help()
+        return 2
+
+    return _handler
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mdtero")
     parser.add_argument("--version", action="version", version=f"mdtero {__version__}")
@@ -106,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     smoke.add_argument("--json", action="store_true")
 
     config = sub.add_parser("config")
+    config.set_defaults(func=_print_nested_help(config))
     config_sub = config.add_subparsers(dest="config_command")
     academic_config = _cmd(config_sub, "academic", "Configure optional academic resource keys.", cmd_config_academic)
     academic_config.add_argument("--elsevier-key", help="Save an Elsevier API key without opening the interactive prompt.")
@@ -145,6 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--json", action="store_true")
 
     project = sub.add_parser("project")
+    project.set_defaults(func=_print_nested_help(project))
     project_sub = project.add_subparsers(dest="project_command")
     project_init = _cmd(project_sub, "init", "Initialize a local Mdtero project.", cmd_project_init)
     project_init.add_argument("--name")
@@ -190,6 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
     parse_bib.add_argument("paths", nargs="+", type=Path)
 
     zotero = sub.add_parser("zotero")
+    zotero.set_defaults(func=_print_nested_help(zotero))
     zotero_sub = zotero.add_subparsers(dest="zotero_command")
     zotero_import = _cmd(zotero_sub, "import", "Import a Zotero collection into the current project.", cmd_zotero_import)
     zotero_import.add_argument("--collection")
@@ -209,6 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
     translate.add_argument("--json", action="store_true")
 
     rag = sub.add_parser("rag")
+    rag.set_defaults(func=_print_nested_help(rag))
     rag_sub = rag.add_subparsers(dest="rag_command")
     rag_build = _cmd(rag_sub, "build", "Request server-side project RAG build.", cmd_rag_build)
     rag_build.add_argument("--project-id")
@@ -226,6 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
     rag_status.add_argument("--json", action="store_true")
 
     mcp = sub.add_parser("mcp")
+    mcp.set_defaults(func=_print_nested_help(mcp))
     mcp_sub = mcp.add_subparsers(dest="mcp_command")
     mcp_briefing = _cmd(mcp_sub, "briefing", "Print the local MCP agent briefing without starting a server.", cmd_mcp_briefing)
     mcp_briefing.add_argument("--json", action="store_true")
@@ -247,6 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("--json", action="store_true")
 
     agent = sub.add_parser("agent")
+    agent.set_defaults(func=_print_nested_help(agent))
     agent_sub = agent.add_subparsers(dest="agent_command")
     agent_detect = _cmd(agent_sub, "detect", "Detect local agent workspaces before installing skills.", cmd_agent_detect)
     agent_detect.add_argument("--root", type=Path)
@@ -663,7 +677,7 @@ def _local_dependency_summary() -> dict[str, Any]:
         "ready": not missing,
         "missing": missing,
         "checks": checks,
-        "install_command": "uv tool install --force git+https://github.com/JonbinC/doi2md.git",
+        "install_command": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
         "pypi_install_command": "uv tool install mdtero",
         "doctor_command": "mdtero doctor --json",
     }

@@ -7,7 +7,7 @@ Mdtero Account is the control plane for API keys, quota, billing, history, diagn
 ## Recommended Quick Start
 
 ```bash
-uv tool install --force git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 ```
 
@@ -118,7 +118,7 @@ The command prompts for the key securely and returns a secret-safe JSON summary 
 ## Update Or Uninstall
 
 ```bash
-uv tool install --force git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 mdtero agent install --target codex
 mdtero agent uninstall --target codex
 uv tool uninstall mdtero
@@ -128,7 +128,7 @@ uv tool uninstall mdtero
 
 ## Troubleshooting
 
-- If `mdtero` is missing or imports a top-level `service` package, run `uv tool install --force git+https://github.com/JonbinC/doi2md.git` to overwrite the retired PyPI bundle.
+- If `mdtero` is missing or imports a top-level `service` package, run `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git` to overwrite the retired PyPI bundle.
 - If `uv` is missing, use the one-command installer above; it installs uv first. For manual installs, follow `https://docs.astral.sh/uv/getting-started/installation/`.
 - If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero setup --api-key --json`.
 - If no agent workspace is detected, pass an explicit `--target`.
@@ -145,7 +145,7 @@ The browser extension owns browser-context capture, OAuth bridge, user-selected 
 Mdtero 当前公开主线是 Python/uv 客户端。默认安装：
 
 ```bash
-uv tool install --force git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 mdtero doctor
 ```

@@ -170,7 +170,7 @@ describe("workspace", () => {
   it("keeps extension-to-CLI onboarding aligned with the Python setup checklist", () => {
     const optionsSource = readFileSync(resolve("src/options/index.ts"), "utf-8");
 
-    expect(optionsSource).toContain('const CLI_INSTALL_COMMAND = "uv tool install --force git+https://github.com/JonbinC/doi2md.git"');
+    expect(optionsSource).toContain('const CLI_INSTALL_COMMAND = "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git"');
     expect(optionsSource).toContain('const CLI_PYPI_COMMAND = "uv tool install mdtero"');
     expect(optionsSource).toContain("known-good public Python client");
     expect(optionsSource).toContain("mdtero setup");

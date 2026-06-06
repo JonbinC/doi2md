@@ -2254,7 +2254,7 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
         ]),
         "command_blocks": {
             "workstation_oauth": "\n".join([
-                "uv tool install --force git+https://github.com/JonbinC/doi2md.git",
+                "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
                 "# PyPI command after the public package is replaced: uv tool install mdtero",
                 str(commands.get("setup") or "mdtero setup"),
                 "mdtero setup --json",
@@ -2498,7 +2498,7 @@ def serve_project_context(project_root: Path | None = None) -> None:
     except Exception as exc:  # pragma: no cover - optional runtime import
         raise RuntimeError(
             "FastMCP is required for `mdtero mcp serve`. Run `mdtero doctor --json` first; "
-            "reinstall the public client with `uv tool install --force git+https://github.com/JonbinC/doi2md.git`. "
+            "reinstall the public client with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`. "
             "The PyPI package name is still being replaced during alpha, so avoid `uv tool install mdtero` until the public package is republished."
         ) from exc
 
