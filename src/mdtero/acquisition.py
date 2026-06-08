@@ -254,6 +254,10 @@ def _direct_artifact_kind_from_url(url: str) -> str:
     lowered_url = urllib.parse.urlunparse(parsed._replace(fragment="")).lower()
     if not lowered_path:
         return ""
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    http_accept = " ".join(value for value_list in query.values() for value in value_list).lower()
+    if "text/xml" in http_accept or "application/xml" in http_accept:
+        return "xml"
     if lowered_path.endswith((".epub", "/epub")) or "/doi/epub/" in lowered_url:
         return "epub"
     if lowered_path.endswith((".pdf", "/pdf")) or "/doi/pdf/" in lowered_url or "/doi/epdf/" in lowered_url:
