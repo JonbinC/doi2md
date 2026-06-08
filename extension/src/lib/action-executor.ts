@@ -58,14 +58,14 @@ export async function executeAction(
   }
 }
 
-function executeFallbackPdfParse(
+async function executeFallbackPdfParse(
   context: ActionContext,
   routePlan: {
     user_message?: string;
     client_handoff_candidates?: ClientHandoffCandidate[];
     publisher_capabilities?: PublisherCapabilities;
   }
-): ActionResult {
+): Promise<ActionResult> {
   const candidate = pickPdfHandoffCandidate(routePlan.client_handoff_candidates || []);
   if (!candidate) {
     return {
@@ -77,6 +77,26 @@ function executeFallbackPdfParse(
   }
 
   const requiresBrowser = Boolean(candidate.requires_user_rights) || candidate.transport === "browser_extension";
+  if (context.tabId && candidate.artifact_url) {
+    try {
+      const response = await chrome.tabs.sendMessage(context.tabId, {
+        type: "mdtero.download_pdf.request",
+        artifactUrl: candidate.artifact_url,
+      });
+      const download = response?.download;
+      if (response?.ok && download?.ok && download.payloadBase64) {
+        return {
+          success: true,
+          rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/pdf" }),
+          filename: download.payloadName || "paper.pdf",
+          sourceDoi: inferSourceDoi(context.input),
+        };
+      }
+    } catch {
+      // Fall through to explicit browser guidance below.
+    }
+  }
+
   const sourceLabel = candidate.source || candidate.connector || "publisher PDF candidate";
   const artifactUrl = candidate.artifact_url ? ` Candidate: ${candidate.artifact_url}` : "";
   const reason = candidate.reason || routePlan.user_message || "This PDF candidate should be acquired from the user's browser session.";

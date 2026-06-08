@@ -345,22 +345,58 @@ ${html}`);
   };
 }
 async function downloadEpubArtifact(artifactUrl) {
+  const result = await downloadBinaryArtifact(artifactUrl, {
+    accept: "application/epub+zip,application/octet-stream,*/*;q=0.8",
+    artifactLabel: "EPUB",
+    payloadName: "paper.epub",
+    validate: () => true
+  });
+  return result;
+}
+async function downloadPdfArtifact(artifactUrl) {
+  const result = await downloadBinaryArtifact(artifactUrl, {
+    accept: "application/pdf,application/octet-stream,*/*;q=0.8",
+    artifactLabel: "PDF",
+    payloadName: "paper.pdf",
+    validate: (bytes) => looksLikePdfBytes(bytes)
+  });
+  return result;
+}
+async function downloadBinaryArtifact(artifactUrl, options) {
   const response = await fetch(artifactUrl, {
-    credentials: "include"
+    credentials: "include",
+    headers: {
+      Accept: options.accept
+    }
   });
   if (!response.ok) {
     return {
       ok: false,
       failureCode: "artifact_download_missing",
-      failureMessage: `Browser page context could not download the EPUB artifact (${response.status}).`
+      failureMessage: `Browser page context could not download the ${options.artifactLabel} artifact (${response.status}).`
+    };
+  }
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (!options.validate(bytes)) {
+    return {
+      ok: false,
+      failureCode: "artifact_download_missing",
+      failureMessage: `Browser page context downloaded a response that was not a valid ${options.artifactLabel} artifact.`
     };
   }
   return {
     ok: true,
-    payloadBase64: arrayBufferToBase64(await response.arrayBuffer()),
-    payloadName: "paper.epub",
+    payloadBase64: arrayBufferToBase64(buffer),
+    payloadName: options.payloadName,
     sourceUrl: artifactUrl
   };
+}
+function looksLikePdfBytes(bytes) {
+  if (bytes.length < 5) {
+    return false;
+  }
+  return bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70 && bytes[4] === 45;
 }
 async function fetchXmlArtifact(candidateUrls) {
   for (const candidate of candidateUrls.map((item) => String(item || "").trim()).filter(Boolean)) {
@@ -488,6 +524,19 @@ function shouldAcceptMdteroAuthMessage(event) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.download_epub.request") {
     downloadEpubArtifact(String(message.artifactUrl || "")).then((download) => sendResponse({ ok: true, download })).catch(
+      (error) => sendResponse({
+        ok: true,
+        download: {
+          ok: false,
+          failureCode: "artifact_download_missing",
+          failureMessage: error.message
+        }
+      })
+    );
+    return true;
+  }
+  if (message?.type === "mdtero.download_pdf.request") {
+    downloadPdfArtifact(String(message.artifactUrl || "")).then((download) => sendResponse({ ok: true, download })).catch(
       (error) => sendResponse({
         ok: true,
         download: {

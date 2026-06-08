@@ -1,10 +1,26 @@
 import { detectPaperInput } from "./lib/detect";
-import { buildPageCaptureResult, downloadEpubArtifact, extractXmlCandidateUrls, fetchHtmlArtifact, fetchXmlArtifact } from "./lib/page-capture";
+import { buildPageCaptureResult, downloadEpubArtifact, downloadPdfArtifact, extractXmlCandidateUrls, fetchHtmlArtifact, fetchXmlArtifact } from "./lib/page-capture";
 import { shouldAcceptMdteroAuthMessage } from "./lib/auth-bridge";
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.download_epub.request") {
     downloadEpubArtifact(String(message.artifactUrl || ""))
+      .then((download) => sendResponse({ ok: true, download }))
+      .catch((error: Error) =>
+        sendResponse({
+          ok: true,
+          download: {
+            ok: false,
+            failureCode: "artifact_download_missing",
+            failureMessage: error.message
+          }
+        })
+      );
+    return true;
+  }
+
+  if (message?.type === "mdtero.download_pdf.request") {
+    downloadPdfArtifact(String(message.artifactUrl || ""))
       .then((download) => sendResponse({ ok: true, download }))
       .catch((error: Error) =>
         sendResponse({
