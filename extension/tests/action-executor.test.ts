@@ -97,6 +97,42 @@ describe("executeAction", () => {
     });
   });
 
+  it("surfaces browser-session PDF handoff candidates for fallback PDF routes", async () => {
+    const result = await executeAction(
+      "fallback_pdf_parse",
+      {
+        input: "10.1109/demo",
+      },
+      {
+        user_message: "Server-side PDF acquisition failed.",
+        client_handoff_candidates: [
+          {
+            transport: "browser_extension",
+            capture_mode: "download_artifact",
+            artifact_kind: "pdf",
+            connector: "publisher_pdf_guess",
+            source: "publisher_pdf_guess:ieee_stamp_gateway",
+            artifact_url: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+            requires_user_rights: true,
+            reason: "IEEE PDF gateways often require browser state; use the extension to download the PDF and upload the artifact.",
+          },
+        ],
+        publisher_capabilities: {
+          access_mode: "institution_browser",
+        },
+      }
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.requiresBrowserCapture).toBe(true);
+    expect(result.requiresUpload).toBe(false);
+    expect(result.error).toContain("IEEE PDF gateways often require browser state");
+    expect(result.error).toContain("publisher_pdf_guess:ieee_stamp_gateway");
+    expect(result.error).toContain("institution_browser");
+    expect(result.error).toContain("https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149");
+    expect(result.nextCommand).toBe("mdtero parse 10.1109/demo --trace --wait --timeout 300 --json");
+  });
+
   it("fetches planned HTML candidates before falling back to current-tab capture", async () => {
     const chromeStub = {
       tabs: {

@@ -309,7 +309,7 @@ export function createRouterSSOTClient(
       headers,
     });
 
-    if (response.status === 404 && path === "/api/v1/route") {
+    if (response.status === 404 && (path === "/api/v1/route" || path === "/api/v1/extension/route")) {
       const routeInput = (init?.body && routeInputFromBody(init.body)) || "<doi-or-url>";
       return new Response(JSON.stringify({
         input_kind: "unknown",
@@ -354,7 +354,7 @@ export function createRouterSSOTClient(
      * Extension should use this instead of local routing rules.
      */
     fetchRoutePlan(payload: ExtensionRouteRequest) {
-      return request("/api/v1/route", {
+      return request("/api/v1/extension/route", {
         method: "POST",
         body: JSON.stringify(payload),
       }).then((response) => response.json() as Promise<ExtensionRouteResponse>);

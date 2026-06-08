@@ -3,6 +3,8 @@ import type {
   ActionResult,
   ActionType,
   AcquisitionCandidate,
+  ClientHandoffCandidate,
+  PublisherCapabilities,
 } from "@mdtero/shared";
 import { fetchXmlArtifact } from "./page-capture";
 import { buildCliParseCommand } from "./cli-handoff";
@@ -21,6 +23,8 @@ export async function executeAction(
     user_message?: string;
     best_oa_url?: string;
     acquisition_candidates?: AcquisitionCandidate[];
+    client_handoff_candidates?: ClientHandoffCandidate[];
+    publisher_capabilities?: PublisherCapabilities;
   }
 ): Promise<ActionResult> {
   switch (action) {
@@ -47,16 +51,46 @@ export async function executeAction(
       return executeFetchBrowserSource(context, routePlan);
 
     case "fallback_pdf_parse":
-      return {
-        success: false,
-        requiresUpload: true,
-        error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
-        nextCommand: buildCliParseCommand(context.input),
-      };
+      return executeFallbackPdfParse(context, routePlan);
 
     default:
       return { success: false, error: `Unknown action: ${action}` };
   }
+}
+
+function executeFallbackPdfParse(
+  context: ActionContext,
+  routePlan: {
+    user_message?: string;
+    client_handoff_candidates?: ClientHandoffCandidate[];
+    publisher_capabilities?: PublisherCapabilities;
+  }
+): ActionResult {
+  const candidate = pickPdfHandoffCandidate(routePlan.client_handoff_candidates || []);
+  if (!candidate) {
+    return {
+      success: false,
+      requiresUpload: true,
+      error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
+      nextCommand: buildCliParseCommand(context.input),
+    };
+  }
+
+  const requiresBrowser = Boolean(candidate.requires_user_rights) || candidate.transport === "browser_extension";
+  const sourceLabel = candidate.source || candidate.connector || "publisher PDF candidate";
+  const artifactUrl = candidate.artifact_url ? ` Candidate: ${candidate.artifact_url}` : "";
+  const reason = candidate.reason || routePlan.user_message || "This PDF candidate should be acquired from the user's browser session.";
+  const capability = routePlan.publisher_capabilities?.access_mode
+    ? ` Access: ${routePlan.publisher_capabilities.access_mode}.`
+    : "";
+
+  return {
+    success: false,
+    requiresBrowserCapture: requiresBrowser,
+    requiresUpload: !requiresBrowser,
+    error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
+    nextCommand: buildCliParseCommand(context.input),
+  };
 }
 
 /**
@@ -150,6 +184,7 @@ async function executeFetchEpubAsset(
     top_connector?: string;
     user_message?: string;
     acquisition_candidates?: AcquisitionCandidate[];
+    client_handoff_candidates?: ClientHandoffCandidate[];
   }
 ): Promise<ActionResult> {
   if (!context.tabId) {
@@ -161,14 +196,15 @@ async function executeFetchEpubAsset(
   }
 
   const candidate = pickEpubCandidate(routePlan);
-  if (!candidate?.epub_url) {
+  const epubUrl = candidate?.epub_url || pickArtifactHandoffUrl(routePlan.client_handoff_candidates || [], "epub");
+  if (!epubUrl) {
     return { success: false, error: "No EPUB acquisition URL available for this route." };
   }
 
   try {
     const response = await chrome.tabs.sendMessage(context.tabId, {
       type: "mdtero.download_epub.request",
-      artifactUrl: candidate.epub_url,
+      artifactUrl: epubUrl,
     });
     const download = response?.download;
     if (!response?.ok || !download?.ok || !download.payloadBase64) {
@@ -247,6 +283,7 @@ async function executeFetchBrowserSource(
     top_connector?: string;
     user_message?: string;
     acquisition_candidates?: AcquisitionCandidate[];
+    client_handoff_candidates?: ClientHandoffCandidate[];
   }
 ): Promise<ActionResult> {
   // This action requires the extension to capture from current tab
@@ -328,6 +365,7 @@ function pickEpubCandidate(routePlan: {
 function pickHtmlCandidateUrls(routePlan: {
   top_connector?: string;
   acquisition_candidates?: AcquisitionCandidate[];
+  client_handoff_candidates?: ClientHandoffCandidate[];
 }): string[] {
   const candidates = routePlan.acquisition_candidates || [];
   const topConnector = String(routePlan.top_connector || "").trim();
@@ -336,6 +374,9 @@ function pickHtmlCandidateUrls(routePlan: {
       .filter((candidate) => candidate.connector === topConnector)
       .flatMap((candidate) => [candidate.html_url, candidate.url]),
     ...candidates.flatMap((candidate) => [candidate.html_url, candidate.url]),
+    ...(routePlan.client_handoff_candidates || [])
+      .filter((candidate) => candidate.artifact_kind === "html")
+      .map((candidate) => candidate.source_url),
   ];
   return Array.from(
     new Set(
@@ -344,6 +385,14 @@ function pickHtmlCandidateUrls(routePlan: {
         .filter((url) => /^https?:\/\//i.test(url))
     )
   );
+}
+
+function pickPdfHandoffCandidate(candidates: ClientHandoffCandidate[]): ClientHandoffCandidate | undefined {
+  return candidates.find((candidate) => candidate.artifact_kind === "pdf" && candidate.capture_mode === "download_artifact");
+}
+
+function pickArtifactHandoffUrl(candidates: ClientHandoffCandidate[], artifactKind: string): string | undefined {
+  return candidates.find((candidate) => candidate.artifact_kind === artifactKind && candidate.artifact_url)?.artifact_url;
 }
 
 function base64ToBytes(payloadBase64: string): Uint8Array {

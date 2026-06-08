@@ -50,6 +50,40 @@ export interface AcquisitionCandidate {
   requires_api_key?: boolean;
 }
 
+export interface ClientHandoffCandidate {
+  transport: string;
+  capture_mode: "download_artifact" | "page_capture" | string;
+  artifact_kind: "pdf" | "html" | "epub" | "xml" | string;
+  connector?: string;
+  source?: string | null;
+  source_doi?: string | null;
+  artifact_url?: string;
+  source_url?: string;
+  access?: "open" | "licensed" | "unknown" | string;
+  preferred_return_artifact?: string;
+  upload_entrypoint?: string;
+  requires_user_rights?: boolean;
+  can_try_server_first?: boolean;
+  reason_code?: string;
+  reason?: string;
+}
+
+export interface PublisherCapabilities {
+  top_connector?: string | null;
+  publisher_family?: string | null;
+  support_tier?: string;
+  access_mode?: string;
+  preferred_artifacts?: string[];
+  server_can_attempt?: boolean;
+  browser_extension_useful?: boolean;
+  requires_user_rights?: boolean;
+  risk_level?: string;
+  client_handoff_count?: number;
+  candidate_support_tiers?: string[];
+  primary_strategy?: string;
+  browser_extension_role?: string;
+}
+
 export interface ExtensionRouteRequest {
   input: string;
   page_url?: string;
@@ -77,6 +111,8 @@ export interface ExtensionRouteResponse {
   access_decision?: "open" | "subscription_or_user_entitled" | "unknown";
   best_oa_url?: string;
   acquisition_candidates?: AcquisitionCandidate[];
+  client_handoff_candidates?: ClientHandoffCandidate[];
+  publisher_capabilities?: PublisherCapabilities;
   server_entrypoint?: string;
   upload_entrypoint?: string;
   client_command?: string;

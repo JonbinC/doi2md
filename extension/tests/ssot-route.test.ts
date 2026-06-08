@@ -97,6 +97,50 @@ describe("ssot-route", () => {
     });
   });
 
+  it("passes client handoff candidates and publisher capabilities into action execution", async () => {
+    executeAction.mockResolvedValue({
+      success: false,
+      requiresBrowserCapture: true,
+      error: "Use browser PDF gateway.",
+    });
+
+    const parseClient = {
+      createParseTask: vi.fn(),
+      createRawUploadTask: vi.fn(),
+    };
+
+    const routePlan = buildRoutePlan({
+      action_sequence: ["fallback_pdf_parse"],
+      client_handoff_candidates: [
+        {
+          transport: "browser_extension",
+          capture_mode: "download_artifact",
+          artifact_kind: "pdf",
+          artifact_url: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+          requires_user_rights: true,
+        },
+      ],
+      publisher_capabilities: {
+        access_mode: "institution_browser",
+        browser_extension_useful: true,
+      },
+    });
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    await executeSsotActionSequence(parseClient, routePlan, {
+      input: "10.1109/demo",
+    });
+
+    expect(executeAction).toHaveBeenCalledWith(
+      "fallback_pdf_parse",
+      expect.objectContaining({ input: "10.1109/demo" }),
+      expect.objectContaining({
+        client_handoff_candidates: routePlan.client_handoff_candidates,
+        publisher_capabilities: routePlan.publisher_capabilities,
+      }),
+    );
+  });
+
   it("fails closed when raw artifact submission fails on a fail-closed route", async () => {
     executeAction.mockResolvedValue({
       success: true,
