@@ -2441,6 +2441,17 @@ def test_elsevier_xml_acquisition_sends_local_api_key(monkeypatch, tmp_path: Pat
     assert seen_headers == {"X-ELS-APIKey": "elsevier-secret"}
 
 
+def test_elsevier_article_api_http_accept_url_is_xml_even_without_action_context():
+    from mdtero.acquisition import _direct_artifact_kind_from_url
+
+    assert (
+        _direct_artifact_kind_from_url(
+            "https://api.elsevier.com/content/article/PII:S2352152X26009485?httpAccept=text/xml"
+        )
+        == "xml"
+    )
+
+
 def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_server_parse(monkeypatch, tmp_path: Path):
     acquired_path = tmp_path / "paper.xml"
     acquired_path.write_text("<article><front><article-meta /></front></article>", encoding="utf-8")
