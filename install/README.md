@@ -29,7 +29,7 @@ curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
 sh install-mdtero.sh --agent codex
 ```
 
-The install script installs `uv` when needed and installs the known-good public GitHub runtime during alpha. Pass `--agent <target>` to also install an agent skill.
+The install script installs the known-good public GitHub runtime during alpha. It prefers `uv`, falls back to `pipx install --force git+https://github.com/JonbinC/doi2md.git`, then falls back to `python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git`. Pass `--agent <target>` to also install an agent skill.
 
 ## Connect An Agent Workspace
 
@@ -128,8 +128,8 @@ uv tool uninstall mdtero
 
 ## Troubleshooting
 
-- If `mdtero` is missing or imports a top-level `service` package, run `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git` to overwrite the retired PyPI bundle.
-- If `uv` is missing, use the one-command installer above; it installs uv first. For manual installs, follow `https://docs.astral.sh/uv/getting-started/installation/`.
+- If `mdtero` is missing, imports a top-level `service` package, or fails with `ModuleNotFoundError: No module named 'psycopg'`, reinstall the public client with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git` or `curl -Ls https://mdtero.com/install.sh | sh`. That overwrites the retired PyPI backend bundle.
+- If `uv` is missing, use the one-command installer above. It will try `uv`, then `pipx`, then Python user-site pip. For manual uv installs, follow `https://docs.astral.sh/uv/getting-started/installation/`.
 - If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero setup --api-key --json`.
 - If no agent workspace is detected, pass an explicit `--target`.
 - If OpenClaw is needed, use `clawhub install mdtero`; `mdtero agent install --target openclaw` is intentionally unsupported.

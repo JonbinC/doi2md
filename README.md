@@ -23,7 +23,7 @@ uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 ```
 
-During alpha, install the known-good public client from GitHub with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`. The old PyPI `mdtero` package currently points at a retired backend bundle; use the PyPI command only after the public client is republished there.
+During alpha, install the known-good public client from GitHub with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`. The old PyPI `mdtero` package currently points at a retired backend bundle; use the PyPI command only after the public client is republished there. If a user has no `uv`, use `curl -Ls https://mdtero.com/install.sh | sh`; the installer prefers `uv`, falls back to `pipx`, then falls back to `python3 -m pip --user`.
 
 `mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. When it finds existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, or `~/.opencode` directories, it can multi-select and install the Mdtero skill during onboarding. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives.
 
@@ -34,7 +34,7 @@ curl -Ls https://mdtero.com/install.sh | sh
 curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 ```
 
-The script installs `uv` when needed and installs the Python runtime. Pass `--agent <target>` to also install an agent skill.
+The script installs the Python runtime with `uv` when available. If `uv` cannot be installed, it falls back to `pipx install --force git+https://github.com/JonbinC/doi2md.git`, then to `python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git`. Pass `--agent <target>` to also install an agent skill.
 
 ## Agent Targets
 
@@ -185,7 +185,7 @@ Mdtero 当前公开主线是 Python/uv 客户端、浏览器扩展和 agent skil
 
 ```bash
 uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
-# fallback: uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+# no uv fallback: curl -Ls https://mdtero.com/install.sh | sh
 mdtero setup
 mdtero doctor
 mdtero doctor --json

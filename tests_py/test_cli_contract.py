@@ -982,7 +982,7 @@ def test_doctor_reports_local_dependency_and_optional_integration_state(monkeypa
     assert cli.cmd_doctor(type("Args", (), {})()) == 0
     output = capsys.readouterr().out
 
-    assert seen_imports == ["curl_cffi.requests", "fastmcp", "pyzotero"]
+    assert seen_imports == ["service", "curl_cffi.requests", "fastmcp", "pyzotero"]
     assert "FastMCP" in output
     assert "MCP server available" in output
     assert "pyzotero" in output
@@ -1139,6 +1139,23 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     assert "wiley-secret" not in raw
     assert "s2-secret" not in raw
     assert "zotero-secret" not in raw
+
+
+def test_doctor_json_reports_public_install_boundary(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_test")
+    mock_doctor_remote_auth_ok(monkeypatch)
+
+    assert cli.cmd_doctor(type("Args", (), {"json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["install_boundary"]["package"] == "mdtero"
+    assert payload["install_boundary"]["version"]
+    assert payload["install_boundary"]["status"] in {"ok", "mixed_environment"}
+    assert payload["install_boundary"]["backend_service_importable"] in {True, False}
+    assert "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git" in payload["install_boundary"]["next_commands"]
 
 
 def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path, capsys):
@@ -3507,6 +3524,9 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["checks"]["fastmcp"]["capability"] == "local MCP server for agents"
     assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
     assert payload["dependencies"]["install_command"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git"
+    assert payload["dependencies"]["installer_command"] == "curl -Ls https://mdtero.com/install.sh | sh"
+    assert payload["dependencies"]["pipx_install_command"] == "pipx install --force git+https://github.com/JonbinC/doi2md.git"
+    assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git"
     assert payload["dependencies"]["pypi_install_command"] == "uv tool install mdtero"
     assert payload["academic"]["discover_source"] == "server_openalex"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
@@ -7236,12 +7256,16 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
 
     assert manifest == site_manifest
     assert manifest["quickInstallCommand"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git && mdtero setup"
+    assert manifest["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
     assert manifest["pypiInstallCommand"] == "uv tool install mdtero"
     assert manifest["cli"]["packageName"] == "mdtero"
     assert manifest["cli"]["packageVersion"] == package_version
     assert manifest["releaseTruth"]["current"]["cli"]["version"] == package_version
     assert manifest["cli"]["packageManager"] == "uv"
     assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git"
+    assert manifest["cli"]["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
+    assert manifest["cli"]["pipxInstallCommand"] == "pipx install --force git+https://github.com/JonbinC/doi2md.git"
+    assert manifest["cli"]["pipUserInstallCommand"] == "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git"
     assert manifest["cli"]["pypiInstallCommand"] == "uv tool install mdtero"
     assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
     assert manifest["cliCommand"] == "mdtero"
@@ -7277,8 +7301,11 @@ def test_public_repo_has_no_root_npm_or_per_agent_install_runtime():
     assert retired_install_docs == []
 
     install_script = (repo_root / "install.sh").read_text(encoding="utf-8")
-    assert "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git" in install_script
+    assert "GITHUB_SPEC=\"git+https://github.com/JonbinC/doi2md.git\"" in install_script
+    assert "uv tool install --force --reinstall \"$GITHUB_SPEC\"" in install_script
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in install_script
+    assert "pipx install --force" in install_script
+    assert "-m pip install --user --force-reinstall \"$GITHUB_SPEC\"" in install_script
     assert "install.sh [--agent" in install_script
     assert "Installing Mdtero CLI" in install_script
     assert "mdtero agent install --target" in install_script
