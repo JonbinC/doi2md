@@ -3314,6 +3314,9 @@ def _apply_quality_label(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _task_quality_label(task: dict[str, Any]) -> str:
+    outcome_label = _quality_label_from_parse_outcome(task)
+    if outcome_label:
+        return outcome_label
     for value in _quality_candidates(task):
         cleaned = str(value or "").strip().lower()
         if not cleaned:
@@ -3327,6 +3330,30 @@ def _task_quality_label(task: dict[str, Any]) -> str:
     if status in {"failed", "cancelled", "timeout"}:
         return "unavailable"
     return "unknown"
+
+
+def _quality_label_from_parse_outcome(task: dict[str, Any]) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    parse_outcome = task.get("parse_outcome") if isinstance(task.get("parse_outcome"), dict) else result.get("parse_outcome") if isinstance(result.get("parse_outcome"), dict) else {}
+    outcome_code = str(parse_outcome.get("outcome_code") or "").strip().lower()
+    reason_codes = {
+        str(item).strip().lower()
+        for item in (parse_outcome.get("reason_codes") or [])
+        if str(item).strip()
+    }
+    if outcome_code == "fulltext_accepted":
+        return None
+    if outcome_code == "content_incomplete":
+        if "metadata_only" in reason_codes or "doi_resolver_html_metadata_only" in reason_codes:
+            return "metadata_only"
+        if "abstract_only" in reason_codes:
+            return "abstract_only"
+        if "section_only_fulltext" in reason_codes:
+            return "section_only_fulltext"
+        return "low_confidence_parse"
+    if outcome_code in {"artifact_rejected", "parser_failure"}:
+        return "unavailable"
+    return None
 
 
 def _quality_candidates(task: dict[str, Any]) -> list[Any]:
@@ -3422,9 +3449,24 @@ def _download_filename(task: dict[str, Any], *, artifact: str, filename_template
     except (KeyError, ValueError):
         stem = "{author}_{year}_{shorttitle}".format(**values)
     stem = _slug(stem) or values["task_id"]
+    if _is_low_information_download_stem(stem, artifact=artifact):
+        return None
     if artifact.endswith("_md") and _is_low_quality_label(label):
         stem = f"{stem}.low_quality"
     return f"{stem}{extension}"
+
+
+def _is_low_information_download_stem(stem: str, *, artifact: str) -> bool:
+    normalized = _slug(stem)
+    artifact_slug = _slug(artifact) or artifact
+    low_information = {
+        artifact_slug,
+        f"unknown_n_d_{artifact_slug}",
+        f"unknown_nd_{artifact_slug}",
+        f"unknown_{artifact_slug}",
+        f"n_d_{artifact_slug}",
+    }
+    return normalized in low_information or normalized.startswith(f"unknown_n_d_{artifact_slug}.")
 
 
 def _append_download_manifest(output_dir: Path, row: dict[str, Any]) -> dict[str, str]:
@@ -3477,12 +3519,14 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
 
 
 def _download_task_summary(task: dict[str, Any]) -> dict[str, Any]:
+    quality_label = _task_quality_label(task)
     return {
         "task_id": task.get("task_id") or task.get("id"),
         "status": task.get("status"),
         "title": _task_title(task),
         "doi": _task_doi(task),
-        "quality_label": _task_quality_label(task),
+        "quality_label": quality_label,
+        "quality_warning": _quality_warning(quality_label),
         "reason_code": task.get("reason_code") or task.get("error_code"),
         "action_hint": task.get("action_hint"),
     }
