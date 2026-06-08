@@ -34,6 +34,11 @@ CHALLENGE_MARKERS = (
     "proof-of-work scheme",
     "you must enable javascript to get past this challenge",
 )
+PUBLISHER_ERROR_SHELL_MARKERS = (
+    "ieee xplore - unable to load page",
+    "unable to load page",
+    "xplorestaging.ieee.org",
+)
 META_REFRESH_RE = re.compile(
     rb"<meta[^>]+http-equiv=[\"']?refresh[\"']?[^>]+content=[\"'][^\"']*url=([^\"'>\s]+)",
     re.I,
@@ -140,11 +145,8 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "httpx", **exc.to_dict()})
 
-    raise AcquisitionError(
-        "client_acquisition_fetch_failed",
-        "Mdtero could not fetch the routed source locally; retry from a browser session or upload the PDF/EPUB/XML/HTML file directly.",
-        diagnostics={"attempts": errors[-20:]},
-    )
+    reason_code, action_hint, diagnostics = _summarize_acquisition_failures(errors)
+    raise AcquisitionError(reason_code, action_hint, diagnostics=diagnostics)
 
 
 def _allowed_artifact_kinds(route: dict[str, Any]) -> set[str]:
@@ -405,6 +407,13 @@ def _validate_payload(content: bytes, *, url: str, expected_kind: str, content_t
             "The publisher returned an anti-bot or JavaScript challenge page instead of article content; use the browser extension with your logged-in browser session or upload the PDF/EPUB/XML file directly.",
             diagnostics={"url": url, "source": source, "content_type": content_type},
         )
+    publisher_error = _publisher_error_shell(text_head, url=url)
+    if publisher_error:
+        raise AcquisitionError(
+            "publisher_blocked_remote_pdf" if expected_kind == "pdf" else "publisher_blocked_remote_content",
+            "The publisher returned an HTML error shell instead of article content; open the article in an entitled browser session and use extension capture, upload an authorized file, or import an authorized Zotero attachment.",
+            diagnostics={"url": url, "source": source, "content_type": content_type, "publisher_error": publisher_error},
+        )
     normalized_type = content_type.lower()
     if expected_kind == "pdf" and not head.startswith(b"%PDF"):
         raise AcquisitionError(
@@ -418,6 +427,45 @@ def _validate_payload(content: bytes, *, url: str, expected_kind: str, content_t
             f"The routed {expected_kind.upper()} URL returned HTML instead of {expected_kind.upper()} content; use the browser extension or upload the file directly.",
             diagnostics={"url": url, "source": source, "content_type": content_type},
         )
+
+
+def _publisher_error_shell(text_head: str, *, url: str) -> str:
+    normalized_url = str(url or "").lower()
+    if "ieee.org" not in normalized_url and "xplorestaging.ieee.org" not in normalized_url:
+        return ""
+    if any(marker in text_head for marker in PUBLISHER_ERROR_SHELL_MARKERS):
+        return "ieee_error_shell"
+    return ""
+
+
+def _summarize_acquisition_failures(errors: list[dict[str, Any]]) -> tuple[str, str, dict[str, Any]]:
+    attempts = errors[-20:]
+    reason_codes = [str(error.get("reason_code") or "").strip() for error in attempts if str(error.get("reason_code") or "").strip()]
+    nested_reason_codes = [
+        str(attempt.get("reason_code") or "").strip()
+        for error in attempts
+        for attempt in ((error.get("diagnostics") or {}).get("attempts") or [])
+        if isinstance(attempt, dict) and str(attempt.get("reason_code") or "").strip()
+    ]
+    all_reason_codes = reason_codes + nested_reason_codes
+    diagnostics = {"attempts": attempts}
+    if "publisher_blocked_remote_pdf" in all_reason_codes:
+        return (
+            "publisher_blocked_remote_pdf",
+            "The publisher returned an HTML error shell instead of the routed PDF. Open the article in an entitled browser session and use extension capture, upload an authorized PDF/HTML/XML/EPUB, or import an authorized Zotero attachment.",
+            diagnostics,
+        )
+    if all_reason_codes and all(code == "client_acquisition_challenge_page" for code in all_reason_codes):
+        return (
+            "client_acquisition_challenge_page",
+            "The publisher returned anti-bot or JavaScript challenge pages for every routed source; use the browser extension with your logged-in browser session or upload an authorized file directly.",
+            diagnostics,
+        )
+    return (
+        "client_acquisition_fetch_failed",
+        "Mdtero could not fetch the routed source locally; retry from a browser session or upload the PDF/EPUB/XML/HTML file directly.",
+        diagnostics,
+    )
 
 
 def _fetch_headers(*, url: str, artifact_kind: str, referer: str | None = None, extra_headers: dict[str, str] | None = None) -> dict[str, str]:

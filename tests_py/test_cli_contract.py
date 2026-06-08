@@ -2317,10 +2317,48 @@ def test_acquire_from_route_rejects_challenge_pages(monkeypatch):
             timeout=12,
         )
     except AcquisitionError as exc:
-        assert exc.reason_code == "client_acquisition_fetch_failed"
+        assert exc.reason_code == "client_acquisition_challenge_page"
         assert exc.diagnostics["attempts"][0]["reason_code"] == "client_acquisition_challenge_page"
     else:
         raise AssertionError("expected AcquisitionError")
+
+
+def test_acquire_from_route_promotes_publisher_blocked_pdf(monkeypatch):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        raise AcquisitionError(
+            "publisher_blocked_remote_pdf",
+            "publisher shell",
+            diagnostics={"url": url, "source": "curl_cffi", "content_type": "text/html", "publisher_error": "ieee_error_shell"},
+        )
+
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        raise AcquisitionError(
+            "client_httpx_http_error",
+            "HTTP 418",
+            diagnostics={"status_code": 418},
+        )
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquire_from_route(
+            {
+                "action_sequence": ["fallback_pdf_parse"],
+                "acquisition_candidates": [
+                    {
+                        "connector": "best_oa_location_pdf",
+                        "pdf_url": "http://xplorestaging.ieee.org/ielx8/demo.pdf?arnumber=1",
+                    }
+                ],
+            },
+            "10.1109/demo",
+            timeout=12,
+        )
+
+    assert exc_info.value.reason_code == "publisher_blocked_remote_pdf"
+    assert "entitled browser session" in exc_info.value.action_hint
+    assert exc_info.value.diagnostics["attempts"][0]["diagnostics"]["publisher_error"] == "ieee_error_shell"
 
 
 def test_acquisition_rejects_google_recaptcha_challenge_page():
@@ -2367,6 +2405,27 @@ def test_acquisition_rejects_anubis_challenge_page():
         )
 
     assert exc_info.value.reason_code == "client_acquisition_challenge_page"
+
+
+def test_acquisition_rejects_ieee_error_shell_as_publisher_blocked_pdf():
+    from mdtero import acquisition
+
+    html = b"""
+    <!doctype html><html><head><title>IEEE Xplore - Unable to Load Page</title></head>
+    <body>IEEE Xplore is unable to load this page.</body></html>
+    """
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquisition._validate_payload(
+            html,
+            url="https://ieeexplore.ieee.org/document/10620139/",
+            expected_kind="pdf",
+            content_type="text/html;charset=UTF-8",
+            source="curl_cffi:chrome136",
+        )
+
+    assert exc_info.value.reason_code == "publisher_blocked_remote_pdf"
+    assert exc_info.value.diagnostics["publisher_error"] == "ieee_error_shell"
 
 
 def test_acquire_from_route_respects_allowed_artifact_kinds(monkeypatch):
