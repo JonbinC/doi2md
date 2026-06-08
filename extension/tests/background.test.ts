@@ -570,6 +570,92 @@ describe("extension background routing", () => {
     });
   });
 
+  it("executes SSOT PDF handoff routes through browser download and raw artifact upload", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    fetchRoutePlan.mockResolvedValue({
+      input_kind: "doi",
+      input_value: "10.1109/demo",
+      top_connector: "publisher_pdf_guess",
+      route_kind: "browser_capture_required",
+      acquisition_mode: "browser_extension",
+      requires_browser_capture: true,
+      allows_current_tab: true,
+      action_sequence: ["fallback_pdf_parse"],
+      acceptance_rules: {},
+      fail_closed: true,
+      user_message: "Use browser session for the publisher PDF gateway.",
+      matched_connectors: ["publisher_pdf_guess"],
+      acquisition_candidates: [],
+      client_handoff_candidates: [
+        {
+          transport: "browser_extension",
+          capture_mode: "download_artifact",
+          artifact_kind: "pdf",
+          connector: "publisher_pdf_guess",
+          source: "publisher_pdf_guess:ieee_stamp_gateway",
+          artifact_url: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+          requires_user_rights: true,
+        }
+      ],
+      publisher_capabilities: {
+        access_mode: "institution_browser",
+        browser_extension_useful: true,
+      }
+    });
+    chromeStub.tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      download: {
+        ok: true,
+        payloadBase64: "JVBERi0xLjc=",
+        payloadName: "paper.pdf",
+        sourceUrl: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149"
+      }
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.ssot.request",
+        input: "10.1109/demo",
+        pageContext: {
+          tabId: 42,
+          tabUrl: "https://ieeexplore.ieee.org/document/9919149",
+          tabTitle: "IEEE Paper"
+        }
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(async () => {
+      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        type: "mdtero.download_pdf.request",
+        artifactUrl: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149"
+      });
+      expect(createRawUploadTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawFile: expect.any(Blob),
+          filename: "paper.pdf",
+          sourceDoi: "10.1109/demo",
+          sourceInput: "10.1109/demo"
+        })
+      );
+      const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
+      expect(rawArtifact.type).toBe("application/pdf");
+      const text = new TextDecoder().decode(new Uint8Array(await rawArtifact.arrayBuffer()));
+      expect(text).toBe("%PDF-1.7");
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-v2", status: "queued" }
+      });
+    });
+  });
+
   it("returns browser-capture guidance when an SSOT page route cannot use the current tab", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);

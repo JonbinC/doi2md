@@ -25,6 +25,19 @@ export type EpubDownloadResult =
       failureMessage: string;
     };
 
+export type PdfDownloadResult =
+  | {
+      ok: true;
+      payloadBase64: string;
+      payloadName: "paper.pdf";
+      sourceUrl: string;
+    }
+  | {
+      ok: false;
+      failureCode: "artifact_download_missing";
+      failureMessage: string;
+    };
+
 export type XmlFetchResult =
   | {
       ok: true;
@@ -410,24 +423,72 @@ export function buildPageCaptureResult(input: PageCaptureInput): PageCaptureResu
 }
 
 export async function downloadEpubArtifact(artifactUrl: string): Promise<EpubDownloadResult> {
+  const result = await downloadBinaryArtifact(artifactUrl, {
+    accept: "application/epub+zip,application/octet-stream,*/*;q=0.8",
+    artifactLabel: "EPUB",
+    payloadName: "paper.epub",
+    validate: () => true,
+  });
+  return result as EpubDownloadResult;
+}
+
+export async function downloadPdfArtifact(artifactUrl: string): Promise<PdfDownloadResult> {
+  const result = await downloadBinaryArtifact(artifactUrl, {
+    accept: "application/pdf,application/octet-stream,*/*;q=0.8",
+    artifactLabel: "PDF",
+    payloadName: "paper.pdf",
+    validate: (bytes) => looksLikePdfBytes(bytes),
+  });
+  return result as PdfDownloadResult;
+}
+
+async function downloadBinaryArtifact(
+  artifactUrl: string,
+  options: {
+    accept: string;
+    artifactLabel: string;
+    payloadName: "paper.epub" | "paper.pdf";
+    validate: (bytes: Uint8Array) => boolean;
+  }
+): Promise<EpubDownloadResult | PdfDownloadResult> {
   const response = await fetch(artifactUrl, {
-    credentials: "include"
+    credentials: "include",
+    headers: {
+      Accept: options.accept
+    }
   });
 
   if (!response.ok) {
     return {
       ok: false,
       failureCode: "artifact_download_missing",
-      failureMessage: `Browser page context could not download the EPUB artifact (${response.status}).`
+      failureMessage: `Browser page context could not download the ${options.artifactLabel} artifact (${response.status}).`
+    };
+  }
+
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (!options.validate(bytes)) {
+    return {
+      ok: false,
+      failureCode: "artifact_download_missing",
+      failureMessage: `Browser page context downloaded a response that was not a valid ${options.artifactLabel} artifact.`
     };
   }
 
   return {
     ok: true,
-    payloadBase64: arrayBufferToBase64(await response.arrayBuffer()),
-    payloadName: "paper.epub",
+    payloadBase64: arrayBufferToBase64(buffer),
+    payloadName: options.payloadName,
     sourceUrl: artifactUrl
   };
+}
+
+function looksLikePdfBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 5) {
+    return false;
+  }
+  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
 }
 
 export async function fetchXmlArtifact(candidateUrls: string[]): Promise<XmlFetchResult> {

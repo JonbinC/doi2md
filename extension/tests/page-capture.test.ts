@@ -7,6 +7,7 @@ import {
   fetchHtmlArtifact,
   fetchXmlArtifact,
   downloadEpubArtifact,
+  downloadPdfArtifact,
   isLikelyChallengeOrLoginShell
 } from "../src/lib/page-capture";
 import {
@@ -145,6 +146,51 @@ describe("downloadEpubArtifact", () => {
         ok: false,
         failureCode: "artifact_download_missing",
         failureMessage: "Browser page context could not download the EPUB artifact (403)."
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("downloadPdfArtifact", () => {
+  it("downloads and validates PDF bytes through the page context with credentials", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      expect(init?.credentials).toBe("include");
+      expect(new Headers(init?.headers).get("Accept")).toContain("application/pdf");
+      return {
+        ok: true,
+        arrayBuffer: async () => Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]).buffer
+      } as Response;
+    }) as typeof fetch;
+
+    try {
+      const result = await downloadPdfArtifact("https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149");
+      expect(result).toEqual({
+        ok: true,
+        payloadBase64: "JVBERi0xLjc=",
+        payloadName: "paper.pdf",
+        sourceUrl: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149"
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("rejects HTML shells returned from PDF gateways", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new TextEncoder().encode("<html>Access denied</html>").buffer
+    }) as Response) as typeof fetch;
+
+    try {
+      const result = await downloadPdfArtifact("https://publisher.example/pdf");
+      expect(result).toEqual({
+        ok: false,
+        failureCode: "artifact_download_missing",
+        failureMessage: "Browser page context downloaded a response that was not a valid PDF artifact."
       });
     } finally {
       globalThis.fetch = originalFetch;

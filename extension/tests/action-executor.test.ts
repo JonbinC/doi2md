@@ -133,6 +133,49 @@ describe("executeAction", () => {
     expect(result.nextCommand).toBe("mdtero parse 10.1109/demo --trace --wait --timeout 300 --json");
   });
 
+  it("downloads PDF handoff candidates through the active browser action", async () => {
+    const chromeStub = {
+      tabs: {
+        sendMessage: vi.fn().mockResolvedValue({
+          ok: true,
+          download: {
+            ok: true,
+            payloadBase64: "JVBERi0xLjc=",
+            payloadName: "paper.pdf",
+          },
+        }),
+      },
+    };
+    vi.stubGlobal("chrome", chromeStub);
+
+    const result = await executeAction(
+      "fallback_pdf_parse",
+      {
+        input: "10.1109/demo",
+        tabId: 42,
+      },
+      {
+        client_handoff_candidates: [
+          {
+            transport: "browser_extension",
+            capture_mode: "download_artifact",
+            artifact_kind: "pdf",
+            artifact_url: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+            requires_user_rights: true,
+          },
+        ],
+      }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.pdf");
+    expect(result.rawArtifact?.type).toBe("application/pdf");
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: "mdtero.download_pdf.request",
+      artifactUrl: "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+    });
+  });
+
   it("fetches planned HTML candidates before falling back to current-tab capture", async () => {
     const chromeStub = {
       tabs: {
