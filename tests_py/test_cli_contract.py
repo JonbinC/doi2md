@@ -2514,6 +2514,41 @@ def test_mdpi_url_candidates_prefer_epub_before_page_fetch(monkeypatch):
     assert calls[0] == ("https://www.mdpi.com/2071-1050/17/5/2018/epub", "epub")
 
 
+def test_acquire_from_route_preserves_mdpi_fallback_attempt_diagnostics(monkeypatch):
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("curl_cffi", url, artifact_kind))
+        raise AcquisitionError("client_acquisition_challenge_page", "challenge")
+
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("httpx", url, artifact_kind))
+        raise AcquisitionError("client_httpx_http_error", "403")
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    route = {
+        "action_sequence": ["fetch_epub_asset"],
+        "acceptance_rules": {"allowed_artifact_kinds": ["epub", "html", "xml", "pdf"]},
+        "acquisition_candidates": [
+            {"connector": "mdpi_epub_asset", "url": "https://www.mdpi.com/1996-1073/18/1/42/epub"},
+            {"connector": "best_oa_location_html", "url": "https://www.mdpi.com/1996-1073/18/1/42"},
+            {"connector": "mdpi_jats_xml", "url": "https://www.mdpi.com/1996-1073/18/1/42/xml"},
+            {"connector": "openalex_grobid_xml", "url": "https://content.openalex.org/works/W4405810597.grobid-xml"},
+            {"connector": "doi_resolver_html", "url": "https://www.mdpi.com/1996-1073/18/1/42/"},
+        ],
+    }
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquire_from_route(route, "10.3390/en18010042", timeout=12)
+
+    attempted_urls = [attempt["url"] for attempt in exc_info.value.diagnostics["attempts"]]
+    assert "https://www.mdpi.com/1996-1073/18/1/42/epub" in attempted_urls
+    assert "https://www.mdpi.com/1996-1073/18/1/42/xml" in attempted_urls
+    assert calls[0] == ("curl_cffi", "https://www.mdpi.com/1996-1073/18/1/42/epub", "epub")
+
+
 def test_curl_cffi_tries_browser_profile_cascade(monkeypatch):
     from mdtero import acquisition
 
