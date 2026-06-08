@@ -138,7 +138,7 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
     raise AcquisitionError(
         "client_acquisition_fetch_failed",
         "Mdtero could not fetch the routed source locally; retry from a browser session or upload the PDF/EPUB/XML/HTML file directly.",
-        diagnostics={"attempts": errors[-6:]},
+        diagnostics={"attempts": errors[-20:]},
     )
 
 
