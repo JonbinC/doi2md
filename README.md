@@ -10,7 +10,7 @@ Mdtero turns papers into reusable Markdown research packages.
 
 This repository is the public home for the active launch surfaces:
 
-- Python runtime CLI/TUI package `mdtero`, installed with `uv tool install --force git+https://github.com/JonbinC/doi2md.git`
+- Python runtime CLI/TUI package `mdtero`, installed with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`
 - browser extension for OAuth login, DOI/current-page parse, PDF/EPUB upload, translation, polling, and download
 - packaged agent skill bundle installed by the Python CLI with `mdtero agent install`
 
@@ -19,11 +19,11 @@ The old npm installer runtime has been retired from this repository. Skill insta
 ## Quick Start
 
 ```bash
-uv tool install --force git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 ```
 
-During alpha, install the known-good public client from GitHub with `uv tool install --force git+https://github.com/JonbinC/doi2md.git`. The old PyPI `mdtero` package currently points at a retired backend bundle; use the PyPI command only after the public client is republished there.
+During alpha, install the known-good public client from GitHub with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`. The old PyPI `mdtero` package currently points at a retired backend bundle; use the PyPI command only after the public client is republished there.
 
 `mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. When it finds existing `~/.codex`, `~/.claude`, `~/.gemini`, `~/.hermes`, or `~/.opencode` directories, it can multi-select and install the Mdtero skill during onboarding. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives.
 
@@ -184,8 +184,8 @@ npm --prefix extension run build
 Mdtero 当前公开主线是 Python/uv 客户端、浏览器扩展和 agent skill。alpha 阶段默认从 GitHub 安装已验证客户端；等 PyPI 包重新发布后再切回 PyPI：
 
 ```bash
-uv tool install --force git+https://github.com/JonbinC/doi2md.git
-# fallback: uv tool install --force git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+# fallback: uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
 mdtero setup
 mdtero doctor
 mdtero doctor --json

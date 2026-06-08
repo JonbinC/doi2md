@@ -286,7 +286,7 @@ async function writeSettings(next) {
 
 // src/options/index.ts
 var ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json';
-var CLI_INSTALL_COMMAND = "uv tool install --force git+https://github.com/JonbinC/doi2md.git";
+var CLI_INSTALL_COMMAND = "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git";
 var CLI_PYPI_COMMAND = "uv tool install mdtero";
 var COPY = {
   en: {
