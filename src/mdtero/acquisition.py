@@ -200,7 +200,8 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
             continue
         connector = str(candidate.get("connector") or "") or None
         add(candidate.get("url"), connector=connector)
-        add(candidate.get("html_url"), kind="html", connector=connector)
+        html_url = str(candidate.get("html_url") or "").strip()
+        add(html_url, kind=None if _direct_artifact_kind_from_url(html_url) else "html", connector=connector)
         add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector)
         add(candidate.get("epub_url"), kind="epub", connector=connector)
         add(candidate.get("pdf_url"), kind="pdf", connector=connector)

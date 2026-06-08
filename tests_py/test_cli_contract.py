@@ -2452,6 +2452,40 @@ def test_elsevier_article_api_http_accept_url_is_xml_even_without_action_context
     )
 
 
+def test_elsevier_xml_accept_html_url_candidate_is_not_forced_to_html(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append((url, artifact_kind))
+        raise AcquisitionError("client_curl_cffi_http_error", "blocked")
+
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append((url, artifact_kind))
+        raise AcquisitionError("client_httpx_http_error", "blocked")
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "acceptance_rules": {"allowed_artifact_kinds": ["xml"]},
+        "acquisition_candidates": [
+            {
+                "connector": "best_oa_location_html",
+                "html_url": "https://api.elsevier.com/content/article/PII:S2352152X26009485?httpAccept=text/xml",
+            }
+        ],
+    }
+
+    with pytest.raises(AcquisitionError):
+        acquire_from_route(route, "10.1016/j.est.2026.121284", config=MdteroConfig(academic=AcademicKeys(elsevier_api_key="demo")))
+
+    assert calls == [
+        ("https://api.elsevier.com/content/article/PII:S2352152X26009485?httpAccept=text/xml", "xml"),
+        ("https://api.elsevier.com/content/article/PII:S2352152X26009485?httpAccept=text/xml", "xml"),
+    ]
+
+
 def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_server_parse(monkeypatch, tmp_path: Path):
     acquired_path = tmp_path / "paper.xml"
     acquired_path.write_text("<article><front><article-meta /></front></article>", encoding="utf-8")
