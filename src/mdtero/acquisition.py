@@ -139,11 +139,11 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
         try:
             return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
         except AcquisitionError as exc:
-            errors.append({"url": url, "source": "curl_cffi", **exc.to_dict()})
+            errors.append({"url": url, "source": "curl_cffi", **_candidate_error_context(candidate), **exc.to_dict()})
         try:
             return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
         except AcquisitionError as exc:
-            errors.append({"url": url, "source": "httpx", **exc.to_dict()})
+            errors.append({"url": url, "source": "httpx", **_candidate_error_context(candidate), **exc.to_dict()})
 
     reason_code, action_hint, diagnostics = _summarize_acquisition_failures(errors)
     raise AcquisitionError(reason_code, action_hint, diagnostics=diagnostics)
@@ -156,6 +156,17 @@ def _allowed_artifact_kinds(route: dict[str, Any]) -> set[str]:
         for kind in (acceptance_rules.get("allowed_artifact_kinds") or [])
         if str(kind or "").strip().lower() in {"html", "xml", "epub", "pdf"}
     }
+
+
+def _candidate_error_context(candidate: dict[str, str]) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    if candidate.get("source"):
+        context["candidate_source"] = candidate.get("source")
+    if candidate.get("connector"):
+        context["candidate_connector"] = candidate.get("connector")
+    if candidate.get("requires_browser"):
+        context["requires_browser"] = True
+    return context
 
 
 def curl_cffi_available() -> bool:
@@ -186,7 +197,15 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
     candidates: list[dict[str, str]] = []
     seen: set[str] = set()
 
-    def add(url: object, *, kind: str | None = None, connector: str | None = None, prefer_mdpi_epub: bool = True) -> None:
+    def add(
+        url: object,
+        *,
+        kind: str | None = None,
+        connector: str | None = None,
+        prefer_mdpi_epub: bool = True,
+        source: str | None = None,
+        requires_browser: bool = False,
+    ) -> None:
         value = str(url or "").strip()
         if not value or not URL_PATTERN.match(value) or value in seen:
             return
@@ -200,6 +219,10 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
             item["artifact_kind"] = kind
         if connector:
             item["connector"] = connector
+        if source:
+            item["source"] = source
+        if requires_browser:
+            item["requires_browser"] = "true"
         candidates.append(item)
 
     for candidate in route.get("acquisition_candidates") or []:
@@ -212,6 +235,39 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
         add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector)
         add(candidate.get("epub_url"), kind="epub", connector=connector)
         add(candidate.get("pdf_url"), kind="pdf", connector=connector)
+
+    browser_required: list[dict[str, str]] = []
+    for handoff in route.get("client_handoff_candidates") or []:
+        if not isinstance(handoff, dict):
+            continue
+        artifact_kind = str(handoff.get("artifact_kind") or "").strip().lower()
+        if artifact_kind not in {"html", "xml", "epub", "pdf"}:
+            continue
+        capture_mode = str(handoff.get("capture_mode") or "").strip()
+        url = handoff.get("source_url") if artifact_kind == "html" or capture_mode == "page_capture" else handoff.get("artifact_url")
+        value = str(url or "").strip()
+        if not value or not URL_PATTERN.match(value) or value in seen:
+            continue
+        requires_browser = bool(handoff.get("requires_user_rights")) and not bool(handoff.get("can_try_server_first"))
+        item = {
+            "url": value,
+            "artifact_kind": artifact_kind,
+            "connector": str(handoff.get("connector") or "client_handoff"),
+            "source": str(handoff.get("source") or handoff.get("reason_code") or "client_handoff_candidate"),
+        }
+        if requires_browser:
+            item["requires_browser"] = "true"
+            browser_required.append(item)
+        else:
+            seen.add(value)
+            candidates.append(item)
+
+    for item in browser_required:
+        value = item["url"]
+        if value in seen:
+            continue
+        seen.add(value)
+        candidates.append(item)
 
     add(route.get("best_oa_url"))
     if URL_PATTERN.match(str(input_value or "")) and not DOI_PATTERN.match(input_value):
@@ -449,10 +505,27 @@ def _summarize_acquisition_failures(errors: list[dict[str, Any]]) -> tuple[str, 
     ]
     all_reason_codes = reason_codes + nested_reason_codes
     diagnostics = {"attempts": attempts}
+    if any(bool(error.get("requires_browser")) for error in attempts):
+        diagnostics["browser_handoff_candidates"] = [
+            {
+                "url": error.get("url"),
+                "candidate_source": error.get("candidate_source"),
+                "candidate_connector": error.get("candidate_connector"),
+                "reason_code": error.get("reason_code"),
+            }
+            for error in attempts
+            if error.get("requires_browser")
+        ]
     if "publisher_blocked_remote_pdf" in all_reason_codes:
         return (
             "publisher_blocked_remote_pdf",
             "The publisher returned an HTML error shell instead of the routed PDF. Open the article in an entitled browser session and use extension capture, upload an authorized PDF/HTML/XML/EPUB, or import an authorized Zotero attachment.",
+            diagnostics,
+        )
+    if any(bool(error.get("requires_browser")) for error in attempts):
+        return (
+            "client_acquisition_browser_session_required",
+            "The route includes a browser-session handoff candidate, but CLI local acquisition did not receive a usable artifact. Use the Mdtero extension from an entitled browser session or upload an authorized PDF/EPUB/XML/HTML file.",
             diagnostics,
         )
     if all_reason_codes and all(code == "client_acquisition_challenge_page" for code in all_reason_codes):

@@ -2292,6 +2292,127 @@ def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
     ]
 
 
+def test_acquire_from_route_uses_client_handoff_pdf_candidates(monkeypatch):
+    calls = []
+
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("curl_cffi", url, artifact_kind, timeout))
+        return AcquiredArtifact(
+            url=url,
+            path=Path("/tmp/paper.pdf"),
+            artifact_kind=artifact_kind,
+            source="curl_cffi",
+            status_code=200,
+            content_type="application/pdf",
+        )
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+
+    artifact = acquire_from_route(
+        {
+            "action_sequence": ["fallback_pdf_parse"],
+            "client_handoff_candidates": [
+                {
+                    "transport": "direct_download_or_browser_extension",
+                    "capture_mode": "download_artifact",
+                    "artifact_kind": "pdf",
+                    "artifact_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/demo",
+                    "connector": "publisher_pdf_guess",
+                    "source": "publisher_pdf_guess:wiley_pdfdirect",
+                    "can_try_server_first": True,
+                }
+            ],
+        },
+        "10.1002/demo",
+        timeout=12,
+    )
+
+    assert artifact.artifact_kind == "pdf"
+    assert calls == [("curl_cffi", "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/demo", "pdf", 12)]
+
+
+def test_acquire_from_route_keeps_browser_only_handoff_diagnostics(monkeypatch):
+    calls = []
+
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("curl_cffi", url, artifact_kind, timeout, kwargs.get("config")))
+        raise AcquisitionError(
+            "publisher_blocked_remote_pdf",
+            "publisher shell",
+            diagnostics={"url": url, "publisher_error": "ieee_error_shell"},
+        )
+
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("httpx", url, artifact_kind, timeout, kwargs.get("config")))
+        raise AcquisitionError("client_httpx_http_error", "HTTP 403", diagnostics={"status_code": 403})
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquire_from_route(
+            {
+                "action_sequence": ["fallback_pdf_parse"],
+                "client_handoff_candidates": [
+                    {
+                        "transport": "browser_extension",
+                        "capture_mode": "download_artifact",
+                        "artifact_kind": "pdf",
+                        "artifact_url": "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+                        "connector": "publisher_pdf_guess",
+                        "source": "publisher_pdf_guess:ieee_stamp_gateway",
+                        "requires_user_rights": True,
+                        "can_try_server_first": False,
+                    }
+                ],
+            },
+            "10.1109/demo",
+            timeout=12,
+        )
+
+    assert calls[0][:4] == ("curl_cffi", "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149", "pdf", 12)
+    assert exc_info.value.reason_code == "publisher_blocked_remote_pdf"
+    assert "entitled browser session" in exc_info.value.action_hint
+    assert exc_info.value.diagnostics["browser_handoff_candidates"][0]["candidate_source"] == "publisher_pdf_guess:ieee_stamp_gateway"
+    assert exc_info.value.diagnostics["attempts"][0]["diagnostics"]["publisher_error"] == "ieee_error_shell"
+
+
+def test_acquire_from_route_classifies_browser_only_handoff_failures(monkeypatch):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        raise AcquisitionError("client_curl_cffi_http_error", "HTTP 403", diagnostics={"status_code": 403})
+
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        raise AcquisitionError("client_httpx_http_error", "HTTP 403", diagnostics={"status_code": 403})
+
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr("mdtero.acquisition._fetch_with_httpx", fake_httpx)
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquire_from_route(
+            {
+                "action_sequence": ["fallback_pdf_parse"],
+                "client_handoff_candidates": [
+                    {
+                        "transport": "browser_extension",
+                        "capture_mode": "download_artifact",
+                        "artifact_kind": "pdf",
+                        "artifact_url": "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149",
+                        "connector": "publisher_pdf_guess",
+                        "source": "publisher_pdf_guess:ieee_stamp_gateway",
+                        "requires_user_rights": True,
+                        "can_try_server_first": False,
+                    }
+                ],
+            },
+            "10.1109/demo",
+            timeout=12,
+        )
+
+    assert exc_info.value.reason_code == "client_acquisition_browser_session_required"
+    assert "Mdtero extension" in exc_info.value.action_hint
+    assert exc_info.value.diagnostics["browser_handoff_candidates"][0]["url"] == "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149"
+
+
 def test_acquire_from_route_rejects_challenge_pages(monkeypatch):
     def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         raise AcquisitionError(
