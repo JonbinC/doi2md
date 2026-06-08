@@ -9,6 +9,7 @@ import httpx
 
 from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_locally
 from .config import MdteroConfig, load_config
+from .network import ProxyValidationError, assert_required_campus_proxy, proxy_settings_from_config
 
 
 class DiscoveryError(RuntimeError):
@@ -72,6 +73,7 @@ class MdteroClient:
         return self._request("POST", "/api/v1/tasks/parse", json={"input": input_value})
 
     def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+        assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         route = self.route(input_value)
         if should_acquire_locally(route, input_value, config=self.config):
             artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0), config=self.config)
@@ -149,6 +151,7 @@ class MdteroClient:
             time.sleep(interval)
 
     def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
+        assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         local_failure: dict[str, Any] | None = None
         if self.config.has_semantic_scholar_key:
             try:
@@ -257,7 +260,8 @@ class MdteroClient:
         return self._request("GET", "/me/usage")
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        with httpx.Client(timeout=self.timeout) as client:
+        proxy_settings = proxy_settings_from_config(self.config)
+        with httpx.Client(timeout=self.timeout, **proxy_settings.httpx_kwargs) as client:
             response = client.request(method, self._url(path), headers=self._headers(), **kwargs)
         try:
             response.raise_for_status()
@@ -269,14 +273,16 @@ class MdteroClient:
         return payload
 
     def _raw_request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        proxy_settings = proxy_settings_from_config(self.config)
+        with httpx.Client(timeout=self.timeout, follow_redirects=True, **proxy_settings.httpx_kwargs) as client:
             response = client.request(method, self._url(path), headers=self._headers(), **kwargs)
         return response
 
     def _semantic_scholar_search(self, query: str, *, limit: int) -> dict[str, Any]:
         headers = {"x-api-key": self.config.academic.semantic_scholar_api_key or ""}
         params = {"query": query, "limit": limit, "fields": "title,authors,year,url,externalIds,abstract"}
-        with httpx.Client(timeout=self.timeout) as client:
+        proxy_settings = proxy_settings_from_config(self.config)
+        with httpx.Client(timeout=self.timeout, **proxy_settings.httpx_kwargs) as client:
             response = client.get("https://api.semanticscholar.org/graph/v1/paper/search", headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
@@ -384,6 +390,8 @@ def _local_semantic_scholar_failure(exc: Exception) -> dict[str, Any]:
         payload["reason_code"] = "semantic_scholar_timeout"
     elif isinstance(exc, httpx.ConnectError):
         payload["reason_code"] = "semantic_scholar_network_error"
+    elif isinstance(exc, ProxyValidationError):
+        payload.update(exc.payload)
     else:
         payload["detail"] = str(exc)
     return payload
@@ -401,7 +409,9 @@ def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] 
     if local_failure:
         payload["local_semantic_scholar_error"] = local_failure["error_type"]
         payload["local_semantic_scholar_failure"] = local_failure
-    if isinstance(exc, httpx.HTTPStatusError):
+    if isinstance(exc, ProxyValidationError):
+        payload.update(exc.payload)
+    elif isinstance(exc, httpx.HTTPStatusError):
         response = exc.response
         payload["status_code"] = response.status_code
         try:

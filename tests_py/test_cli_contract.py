@@ -40,6 +40,7 @@ from mdtero.projects import (
 from mdtero.rag_contract import ensure_rag_contract
 from mdtero.workflow import parse_trace_from_route, status_trace, upload_trace
 from mdtero.zotero import build_sync_note, paper_from_zotero_item, sync_project_to_zotero
+from mdtero.network import ProxySettings, ProxyValidationError, assert_required_campus_proxy, proxy_settings_from_config
 
 
 def load_python_script(path: Path):
@@ -1008,6 +1009,68 @@ def test_doctor_reports_optional_fallbacks_when_integrations_are_missing(monkeyp
     assert "Zotero import/sync unavailable" in output
     assert "server OpenAlex fallback" in output
     assert "run mdtero config zotero" in output
+
+
+def test_doctor_json_reports_proxy_guard(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_PROXY_URL", "socks5h://100.127.22.74:20815")
+    monkeypatch.setenv("MDTERO_REQUIRE_CAMPUS_PROXY", "1")
+    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
+    mock_doctor_remote_auth_ok(monkeypatch)
+
+    assert cli.cmd_doctor(type("Args", (), {"json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["proxy"] == {
+        "configured": True,
+        "proxy_url_present": True,
+        "require_campus_proxy": True,
+        "outlet_check": "required_before_network",
+        "action_hint": "Campus proxy is required; Mdtero will verify AS786/Jisc/Nottingham before discovery or route acquisition.",
+    }
+
+
+def test_required_campus_proxy_fails_closed_on_wrong_outlet():
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"ip": "5.151.186.35", "asn": "AS42689", "asn_org": "Glide Student & Residential Limited", "city": "Coventry"}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            return FakeResponse()
+
+    try:
+        assert_required_campus_proxy(ProxySettings(proxy_url="socks5h://proxy.example:20815", require_campus_proxy=True), client_factory=FakeClient)
+    except ProxyValidationError as exc:
+        assert exc.payload["reason_code"] == "campus_proxy_outlet_mismatch"
+        assert exc.payload["detail"]["asn"] == "AS42689"
+        assert exc.payload["detail"]["city"] == "Coventry"
+    else:
+        raise AssertionError("expected ProxyValidationError")
+
+
+def test_proxy_settings_from_config_reads_environment(monkeypatch):
+    monkeypatch.setenv("MDTERO_PROXY_URL", "socks5h://proxy.example:20815")
+    monkeypatch.setenv("MDTERO_REQUIRE_CAMPUS_PROXY", "1")
+
+    settings = proxy_settings_from_config(MdteroConfig())
+
+    assert settings.proxy_url == "socks5h://proxy.example:20815"
+    assert settings.require_campus_proxy is True
 
 
 def test_doctor_reports_project_queue_and_rag_readiness(monkeypatch, tmp_path: Path, capsys):
@@ -2202,11 +2265,11 @@ def test_acquisition_failure_returns_agent_friendly_error(monkeypatch):
 def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
     calls = []
 
-    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         calls.append(("curl_cffi", url, artifact_kind, timeout))
         raise AcquisitionError("client_curl_cffi_http_error", "403", diagnostics={"status_code": 403})
 
-    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         calls.append(("httpx", url, artifact_kind, timeout))
         return AcquiredArtifact(url=url, path=Path("/tmp/demo.html"), artifact_kind=artifact_kind, source="httpx", status_code=200, content_type="text/html")
 
@@ -2230,14 +2293,14 @@ def test_acquire_from_route_uses_curl_cffi_then_httpx_fallback(monkeypatch):
 
 
 def test_acquire_from_route_rejects_challenge_pages(monkeypatch):
-    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         raise AcquisitionError(
             "client_acquisition_challenge_page",
             "challenge",
             diagnostics={"url": url, "source": "curl_cffi", "content_type": "text/html"},
         )
 
-    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         raise AcquisitionError(
             "client_acquisition_challenge_page",
             "challenge",
@@ -2303,7 +2366,7 @@ def test_elsevier_xml_acquisition_sends_local_api_key(monkeypatch, tmp_path: Pat
     acquired_path.write_text("<article />", encoding="utf-8")
     seen_headers = {}
 
-    def fake_fetch(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_fetch(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         seen_headers.update(extra_headers or {})
         return AcquiredArtifact(
             url=url,
@@ -2371,11 +2434,11 @@ def test_direct_fulltext_xml_url_uses_local_acquisition_even_when_route_is_serve
 def test_mdpi_url_candidates_prefer_epub_before_page_fetch(monkeypatch):
     calls = []
 
-    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         calls.append((url, artifact_kind))
         raise AcquisitionError("client_acquisition_challenge_page", "challenge")
 
-    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None):
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
         raise AcquisitionError("client_httpx_http_error", "403")
 
     monkeypatch.setattr("mdtero.acquisition._fetch_with_curl_cffi", fake_cffi)
@@ -2431,6 +2494,43 @@ def test_curl_cffi_tries_browser_profile_cascade(monkeypatch):
 
     assert artifact.source == "curl_cffi:chrome124"
     assert profiles[:2] == ["chrome136", "chrome124"]
+
+
+def test_curl_cffi_passes_configured_proxy(monkeypatch):
+    from mdtero import acquisition
+
+    seen_proxies = []
+
+    class FakeResponse:
+        status_code = 200
+        content = b"<article>ok</article>"
+        headers = {"content-type": "text/html"}
+
+    class FakeSession:
+        def __init__(self, *, impersonate):
+            self.impersonate = impersonate
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, **kwargs):
+            seen_proxies.append(kwargs.get("proxies"))
+            return FakeResponse()
+
+    class FakeRequests:
+        Session = FakeSession
+
+    monkeypatch.setitem(__import__("sys").modules, "curl_cffi", type("FakeCurl", (), {"requests": FakeRequests})())
+    monkeypatch.setattr(acquisition.tempfile, "NamedTemporaryFile", lambda **kwargs: open(Path("/tmp/mdtero-test-proxy.html"), "wb"))
+
+    config = MdteroConfig(proxy_url="socks5h://proxy.example:20815")
+    artifact = acquisition._fetch_with_curl_cffi("https://example.test/paper", artifact_kind="html", timeout=12, config=config)
+
+    assert artifact.source == "curl_cffi:chrome136"
+    assert seen_proxies == [{"http": "socks5h://proxy.example:20815", "https": "socks5h://proxy.example:20815"}]
 
 
 def test_curl_cffi_reports_profile_diagnostics_when_challenge_persists(monkeypatch):
