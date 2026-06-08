@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -678,8 +679,40 @@ def _local_dependency_summary() -> dict[str, Any]:
         "missing": missing,
         "checks": checks,
         "install_command": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
+        "installer_command": "curl -Ls https://mdtero.com/install.sh | sh",
+        "pipx_install_command": "pipx install --force git+https://github.com/JonbinC/doi2md.git",
+        "pip_user_install_command": "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git",
         "pypi_install_command": "uv tool install mdtero",
         "doctor_command": "mdtero doctor --json",
+    }
+
+
+def _install_boundary_summary() -> dict[str, Any]:
+    service_spec = None
+    try:
+        service_spec = importlib.util.find_spec("service")
+    except (ImportError, AttributeError, ValueError):
+        service_spec = None
+    service_origin = getattr(service_spec, "origin", None) if service_spec is not None else None
+    mdtero_executable = shutil.which("mdtero")
+    status = "ok"
+    action_hint = "Public Mdtero CLI package is active."
+    if service_origin:
+        status = "mixed_environment"
+        action_hint = "A top-level backend `service` package is importable in this Python environment. Reinstall the public CLI with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git` or `curl -Ls https://mdtero.com/install.sh | sh`; avoid the old PyPI package until it is republished."
+    return {
+        "status": status,
+        "package": "mdtero",
+        "version": __version__,
+        "entrypoint": mdtero_executable,
+        "backend_service_importable": bool(service_origin),
+        "backend_service_origin": str(service_origin) if service_origin else None,
+        "action_hint": action_hint,
+        "next_commands": [
+            "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
+            "curl -Ls https://mdtero.com/install.sh | sh",
+            "mdtero doctor --json",
+        ],
     }
 
 
@@ -749,6 +782,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
 
 def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
+    install_boundary = _install_boundary_summary()
     api_key_status = "ok" if cfg.is_authenticated else "missing"
     api_key_detail = cfg.api_key_source
     if remote_auth.get("status") == "failed":
@@ -758,6 +792,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         ("API key", api_key_status, api_key_detail),
         ("Config", "ok" if config_path().exists() else "not created", str(config_path())),
         ("API base", "ok", cfg.api_base_url),
+        ("Install boundary", str(install_boundary["status"]), str(install_boundary["action_hint"])),
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
         _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
         _dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"),
@@ -784,6 +819,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "remote_auth": remote_auth,
         "config_path": str(config_path()),
         "api_base_url": cfg.api_base_url,
+        "install_boundary": _install_boundary_summary(),
         "checks": row_payload,
         "dependencies": {
             "curl_cffi": _doctor_row_status(rows, "curl_cffi"),
