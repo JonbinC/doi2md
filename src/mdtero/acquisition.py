@@ -28,6 +28,11 @@ CHALLENGE_MARKERS = (
     "just a moment",
     "verify you are human",
     "window._cf_chl_opt",
+    "making sure you're not a bot",
+    "protected by anubis",
+    "anubis version",
+    "proof-of-work scheme",
+    "you must enable javascript to get past this challenge",
 )
 META_REFRESH_RE = re.compile(
     rb"<meta[^>]+http-equiv=[\"']?refresh[\"']?[^>]+content=[\"'][^\"']*url=([^\"'>\s]+)",

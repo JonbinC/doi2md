@@ -2345,6 +2345,30 @@ def test_acquisition_rejects_google_recaptcha_challenge_page():
     assert exc_info.value.reason_code == "client_acquisition_challenge_page"
 
 
+def test_acquisition_rejects_anubis_challenge_page():
+    from mdtero import acquisition
+
+    html = b"""
+    <!doctype html><html><head><title>Making sure you're not a bot!</title></head>
+    <body>
+      <h1>Making sure you're not a bot!</h1>
+      <p>Protected by Anubis From Techaro.</p>
+      <p>You must enable JavaScript to get past this challenge.</p>
+    </body></html>
+    """
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquisition._validate_payload(
+            html,
+            url="http://urn.kb.se/resolve?urn=urn:nbn:se:liu:diva-159145",
+            expected_kind="html",
+            content_type="text/html; charset=utf-8",
+            source="curl_cffi:chrome136",
+        )
+
+    assert exc_info.value.reason_code == "client_acquisition_challenge_page"
+
+
 def test_acquire_from_route_respects_allowed_artifact_kinds(monkeypatch):
     from mdtero import acquisition
 
