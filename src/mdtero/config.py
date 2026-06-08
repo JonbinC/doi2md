@@ -43,6 +43,8 @@ class MdteroConfig:
     academic: AcademicKeys = field(default_factory=AcademicKeys)
     zotero: ZoteroConfig = field(default_factory=ZoteroConfig)
     default_project: str | None = None
+    proxy_url: str | None = None
+    require_campus_proxy: bool = False
 
     @property
     def has_semantic_scholar_key(self) -> bool:
@@ -64,6 +66,15 @@ class MdteroConfig:
     def is_authenticated(self) -> bool:
         return self.effective_api_key is not None
 
+    @property
+    def effective_proxy_url(self) -> str | None:
+        return (self.proxy_url or os.environ.get("MDTERO_PROXY_URL") or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or "").strip() or None
+
+    @property
+    def campus_proxy_required(self) -> bool:
+        value = str(os.environ.get("MDTERO_REQUIRE_CAMPUS_PROXY") or "").strip().lower()
+        return self.require_campus_proxy or value in {"1", "true", "yes", "on"}
+
 
 def load_config(path: Path | None = None) -> MdteroConfig:
     target = path or config_path()
@@ -74,6 +85,8 @@ def load_config(path: Path | None = None) -> MdteroConfig:
             site_base_url=os.environ.get("MDTERO_SITE_URL", DEFAULT_SITE_BASE),
             api_key=None,
             academic=academic_env,
+            proxy_url=os.environ.get("MDTERO_PROXY_URL") or None,
+            require_campus_proxy=str(os.environ.get("MDTERO_REQUIRE_CAMPUS_PROXY") or "").strip().lower() in {"1", "true", "yes", "on"},
         )
     payload = json.loads(target.read_text(encoding="utf-8"))
     academic = payload.get("academic") or {}
@@ -83,6 +96,8 @@ def load_config(path: Path | None = None) -> MdteroConfig:
         site_base_url=str(payload.get("site_base_url") or os.environ.get("MDTERO_SITE_URL") or DEFAULT_SITE_BASE),
         api_key=payload.get("api_key") or None,
         default_project=payload.get("default_project") or None,
+        proxy_url=payload.get("proxy_url") or os.environ.get("MDTERO_PROXY_URL") or None,
+        require_campus_proxy=bool(payload.get("require_campus_proxy")) or str(os.environ.get("MDTERO_REQUIRE_CAMPUS_PROXY") or "").strip().lower() in {"1", "true", "yes", "on"},
         academic=AcademicKeys(
             elsevier_api_key=academic.get("elsevier_api_key") or academic_env.elsevier_api_key or None,
             wiley_tdm_token=academic.get("wiley_tdm_token") or academic_env.wiley_tdm_token or None,

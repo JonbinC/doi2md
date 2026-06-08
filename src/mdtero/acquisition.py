@@ -10,6 +10,8 @@ from typing import Any
 
 import httpx
 
+from .network import proxy_settings_from_config
+
 
 DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$", re.I)
 URL_PATTERN = re.compile(r"^https?://", re.I)
@@ -111,11 +113,11 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
         artifact_kind = _artifact_kind(candidate, route, url)
         extra_headers = _credential_headers(route, candidate, url, config=config)
         try:
-            return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers)
+            return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "curl_cffi", **exc.to_dict()})
         try:
-            return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers)
+            return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "httpx", **exc.to_dict()})
 
@@ -240,7 +242,7 @@ def _direct_artifact_kind_from_url(url: str) -> str:
     return ""
 
 
-def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float, extra_headers: dict[str, str] | None = None) -> AcquiredArtifact:
+def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float, extra_headers: dict[str, str] | None = None, config: Any | None = None) -> AcquiredArtifact:
     try:
         from curl_cffi import requests as curl_requests
     except Exception as exc:
@@ -250,14 +252,19 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float, extra
             diagnostics={"error": exc.__class__.__name__},
         ) from exc
     errors: list[dict[str, Any]] = []
+    proxy_url = proxy_settings_from_config(config).proxy_url
     for profile in CURL_CFFI_IMPERSONATION_PROFILES:
         try:
             with curl_requests.Session(impersonate=profile) as session:
+                request_kwargs: dict[str, Any] = {}
+                if proxy_url:
+                    request_kwargs["proxies"] = {"http": proxy_url, "https": proxy_url}
                 response = session.get(
                     url,
                     timeout=timeout,
                     allow_redirects=True,
                     headers=_fetch_headers(url=url, artifact_kind=artifact_kind, extra_headers=extra_headers),
+                    **request_kwargs,
                 )
                 response = _follow_meta_refresh_once(
                     session,
@@ -266,6 +273,7 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float, extra
                     timeout=timeout,
                     artifact_kind=artifact_kind,
                     extra_headers=extra_headers,
+                    proxy_url=proxy_url,
                 )
         except Exception as exc:
             errors.append({"profile": profile, "error": exc.__class__.__name__})
@@ -281,9 +289,10 @@ def _fetch_with_curl_cffi(url: str, *, artifact_kind: str, timeout: float, extra
     )
 
 
-def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float, extra_headers: dict[str, str] | None = None) -> AcquiredArtifact:
+def _fetch_with_httpx(url: str, *, artifact_kind: str, timeout: float, extra_headers: dict[str, str] | None = None, config: Any | None = None) -> AcquiredArtifact:
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers(url=url, artifact_kind=artifact_kind, extra_headers=extra_headers)) as client:
+        proxy_settings = proxy_settings_from_config(config)
+        with httpx.Client(timeout=timeout, follow_redirects=True, headers=_fetch_headers(url=url, artifact_kind=artifact_kind, extra_headers=extra_headers), **proxy_settings.httpx_kwargs) as client:
             response = client.get(url)
     except Exception as exc:
         raise AcquisitionError(
@@ -314,7 +323,7 @@ def _artifact_from_response(response: Any, *, url: str, artifact_kind: str, sour
     return AcquiredArtifact(url=url, path=path, artifact_kind=_artifact_kind_from_path(path), source=source, status_code=response.status_code, content_type=content_type)
 
 
-def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, timeout: float, artifact_kind: str, extra_headers: dict[str, str] | None = None) -> Any:
+def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, timeout: float, artifact_kind: str, extra_headers: dict[str, str] | None = None, proxy_url: str | None = None) -> Any:
     content_type = str(response.headers.get("content-type") or "").lower()
     if "html" not in content_type:
         return response
@@ -324,11 +333,15 @@ def _follow_meta_refresh_once(session: Any, response: Any, *, base_url: str, tim
     target = urllib.parse.urljoin(base_url, marker.group(1).decode("utf-8", errors="ignore").strip("'\""))
     if not target or urllib.parse.urlparse(target).netloc != urllib.parse.urlparse(base_url).netloc:
         return response
+    request_kwargs: dict[str, Any] = {}
+    if proxy_url:
+        request_kwargs["proxies"] = {"http": proxy_url, "https": proxy_url}
     return session.get(
         target,
         timeout=timeout,
         allow_redirects=True,
         headers=_fetch_headers(url=target, artifact_kind=artifact_kind, referer=base_url, extra_headers=extra_headers),
+        **request_kwargs,
     )
 
 

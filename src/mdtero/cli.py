@@ -22,6 +22,7 @@ from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
+from .network import ProxyValidationError, proxy_settings_from_config
 from .onboarding import (
     ACADEMIC_OPTIONS,
     GENERIC_RAG_QUERY_COMMAND,
@@ -792,6 +793,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         ("API key", api_key_status, api_key_detail),
         ("Config", "ok" if config_path().exists() else "not created", str(config_path())),
         ("API base", "ok", cfg.api_base_url),
+        ("Proxy", "required" if cfg.campus_proxy_required else ("configured" if cfg.effective_proxy_url else "optional"), _proxy_config_detail(cfg)),
         ("Install boundary", str(install_boundary["status"]), str(install_boundary["action_hint"])),
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
         _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
@@ -819,6 +821,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "remote_auth": remote_auth,
         "config_path": str(config_path()),
         "api_base_url": cfg.api_base_url,
+        "proxy": _proxy_config_payload(cfg),
         "install_boundary": _install_boundary_summary(),
         "checks": row_payload,
         "dependencies": {
@@ -907,6 +910,30 @@ def _doctor_auth_next_commands(cfg: MdteroConfig, remote_auth: dict[str, Any]) -
     if remote_auth.get("status") == "failed":
         return [str(command) for command in remote_auth.get("next_commands") or ["mdtero setup --api-key --json", "mdtero doctor --json"]]
     return ["mdtero doctor --json"]
+
+
+def _proxy_config_payload(cfg: MdteroConfig) -> dict[str, Any]:
+    settings = proxy_settings_from_config(cfg)
+    return {
+        "configured": bool(settings.proxy_url),
+        "proxy_url_present": bool(settings.proxy_url),
+        "require_campus_proxy": settings.require_campus_proxy,
+        "outlet_check": "required_before_network" if settings.require_campus_proxy else "not_required",
+        "action_hint": (
+            "Campus proxy is required; Mdtero will verify AS786/Jisc/Nottingham before discovery or route acquisition."
+            if settings.require_campus_proxy
+            else "Proxy is optional. Set MDTERO_PROXY_URL and MDTERO_REQUIRE_CAMPUS_PROXY=1 for guarded campus-network paper acquisition."
+        ),
+    }
+
+
+def _proxy_config_detail(cfg: MdteroConfig) -> str:
+    payload = _proxy_config_payload(cfg)
+    if payload["require_campus_proxy"]:
+        return "campus outlet check required; proxy configured" if payload["configured"] else "campus outlet check required; proxy missing"
+    if payload["configured"]:
+        return "proxy configured"
+    return "set MDTERO_PROXY_URL to route local acquisition/discovery through a proxy"
 
 
 def _doctor_row_status(rows: list[tuple[str, str, str]], check: str) -> dict[str, str] | None:
@@ -1146,6 +1173,9 @@ def cmd_parse(args: argparse.Namespace) -> int:
             }
             _print_result(failure, json_output=args.json or args.trace)
             return 2
+        except ProxyValidationError as exc:
+            _print_result(exc.payload, json_output=args.json or args.trace)
+            return 2
         except MdteroApiError as exc:
             _print_result(exc.payload, json_output=args.json or args.trace)
             return 2
@@ -1264,6 +1294,11 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
 
 
 def _batch_exception_payload(input_value: str, exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, ProxyValidationError):
+        payload = dict(exc.payload)
+        payload.setdefault("input", input_value)
+        payload.setdefault("status", "failed")
+        return payload
     if isinstance(exc, AcquisitionError):
         return {"input": input_value, "status": "failed", "reason_code": exc.reason_code, "action_hint": exc.action_hint, "diagnostics": exc.diagnostics}
     if isinstance(exc, MdteroApiError):
@@ -1442,6 +1477,13 @@ def cmd_discover(args: argparse.Namespace) -> int:
     query = _discover_query(args.query)
     try:
         result = MdteroClient().discover(query, limit=args.limit)
+    except ProxyValidationError as exc:
+        if args.json:
+            print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print(f"Discovery failed: {exc.payload.get('reason_code')}")
+            Console().print(str(exc.payload.get("action_hint") or ""))
+        return 2
     except DiscoveryError as exc:
         if args.json:
             print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
@@ -2908,6 +2950,8 @@ def _detail_next_commands(detail: dict[str, Any]) -> list[str]:
 
 
 def _http_error_detail(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, ProxyValidationError):
+        return redact_sensitive_payload(exc.payload) if isinstance(exc.payload, dict) else {}
     if isinstance(exc, DiscoveryError):
         return redact_sensitive_payload(exc.payload) if isinstance(exc.payload, dict) else {}
     if isinstance(exc, MdteroApiError):
