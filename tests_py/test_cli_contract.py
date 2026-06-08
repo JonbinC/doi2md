@@ -16,7 +16,7 @@ from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
-from mdtero.client import DiscoveryError, MdteroApiError, MdteroClient, _semantic_scholar_parse_url, translation_source_path_from_task
+from mdtero.client import DiscoveryError, DownloadResult, MdteroApiError, MdteroClient, _semantic_scholar_parse_url, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, ingest_project_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -2323,6 +2323,62 @@ def test_acquire_from_route_rejects_challenge_pages(monkeypatch):
         raise AssertionError("expected AcquisitionError")
 
 
+def test_acquisition_rejects_google_recaptcha_challenge_page():
+    from mdtero import acquisition
+
+    html = b"""
+    <!doctype html><html><head>
+      <base href="https://www.google.com/recaptcha/challengepage/">
+      <script>window['ppConfig'] = {productName: 'RecaptchaChallengePageUi'};</script>
+    </head><body>Checking your browser</body></html>
+    """
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquisition._validate_payload(
+            html,
+            url="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5944364",
+            expected_kind="html",
+            content_type="text/html; charset=utf-8",
+            source="curl_cffi:chrome136",
+        )
+
+    assert exc_info.value.reason_code == "client_acquisition_challenge_page"
+
+
+def test_acquire_from_route_respects_allowed_artifact_kinds(monkeypatch):
+    from mdtero import acquisition
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_cffi(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("curl_cffi", url))
+        raise AcquisitionError("client_curl_cffi_http_error", "blocked")
+
+    def fake_httpx(url, *, artifact_kind, timeout, extra_headers=None, **kwargs):
+        calls.append(("httpx", url))
+        raise AcquisitionError("client_httpx_http_error", "blocked")
+
+    monkeypatch.setattr(acquisition, "_fetch_with_curl_cffi", fake_cffi)
+    monkeypatch.setattr(acquisition, "_fetch_with_httpx", fake_httpx)
+
+    route = {
+        "action_sequence": ["fetch_structured_xml"],
+        "acceptance_rules": {"allowed_artifact_kinds": ["xml"]},
+        "acquisition_candidates": [
+            {"url": "https://example.test/fullTextXML", "connector": "europe_pmc_fulltext_xml"},
+            {"html_url": "https://example.test/article", "connector": "best_oa_location_html"},
+        ],
+    }
+
+    with pytest.raises(AcquisitionError) as exc_info:
+        acquire_from_route(route, "10.1000/demo")
+
+    assert calls == [("curl_cffi", "https://example.test/fullTextXML"), ("httpx", "https://example.test/fullTextXML")]
+    attempts = exc_info.value.diagnostics["attempts"]
+    assert attempts[-1]["reason_code"] == "client_acquisition_artifact_kind_not_allowed"
+    assert attempts[-1]["diagnostics"]["artifact_kind"] == "html"
+
+
 def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
     assert should_acquire_locally({"action_sequence": ["fetch_remote_html"], "requires_raw_upload": False}, "10.1000/demo") is False
     assert (
@@ -2756,6 +2812,72 @@ def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, caps
     assert payload["quality_label"] == "full_text_good"
     assert payload["task"]["title"] == "Thermochemical heat storage in salt hydrates"
     assert payload["task"]["doi"] == "10.1016/j.apenergy.2017.04.080"
+
+
+def test_download_marks_content_incomplete_markdown_as_low_quality(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    downloaded = tmp_path / "thin.low_quality.md"
+
+    def fake_task(self, task_id):
+        assert task_id == "task-thin"
+        return {
+            "task_id": "task-thin",
+            "status": "succeeded",
+            "result": {
+                "metadata": {"title": "Thin capture", "year": 2026, "authors": [{"name": "Chen"}]},
+                "quality_label": "full_text_good",
+                "parse_outcome": {
+                    "outcome_code": "content_incomplete",
+                    "reason_codes": ["content_incomplete", "short_sparse_markdown"],
+                },
+            },
+        }
+
+    def fake_download(self, task_id, artifact, output_dir, *, filename=None):
+        assert task_id == "task-thin"
+        assert artifact == "paper_md"
+        assert filename == "chen_2026_thin_capture.low_quality.md"
+        return downloaded
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-thin", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["quality_label"] == "low_confidence_parse"
+    assert payload["task"]["quality_warning"]
+
+
+def test_download_uses_server_filename_when_metadata_template_is_low_information(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    downloaded = tmp_path / "vaswani2017attention.md"
+
+    def fake_task(self, task_id):
+        assert task_id == "task-metadata-light"
+        return {
+            "task_id": "task-metadata-light",
+            "status": "succeeded",
+            "paper_input": "10.48550/arXiv.1706.03762",
+            "result": {"parse_outcome": {"outcome_code": "fulltext_accepted"}},
+        }
+
+    def fake_download(self, task_id, artifact, output_dir, *, filename=None):
+        assert task_id == "task-metadata-light"
+        assert artifact == "paper_md"
+        assert filename is None
+        return DownloadResult(path=downloaded, filename="vaswani2017attention.md", content_type="text/markdown", content_length=1024)
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-metadata-light", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["path"] == str(downloaded)
+    assert payload["original_filename"] == "vaswani2017attention.md"
 
 
 def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: Path, capsys):

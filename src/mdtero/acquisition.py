@@ -20,8 +20,11 @@ CHALLENGE_MARKERS = (
     "bm-verify=",
     "cf-browser-verification",
     "checking if the site connection is secure",
+    "google.com/recaptcha/challengepage",
     "enable javascript and cookies to continue",
     "interstitialchallenge",
+    "recaptchachallengepageui",
+    "recaptcha/challengepage",
     "just a moment",
     "verify you are human",
     "window._cf_chl_opt",
@@ -106,11 +109,22 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
         )
 
     errors: list[dict[str, Any]] = []
+    allowed_kinds = _allowed_artifact_kinds(route)
     for candidate in candidates:
         url = str(candidate.get("url") or "").strip()
         if not url:
             continue
         artifact_kind = _artifact_kind(candidate, route, url)
+        if allowed_kinds and artifact_kind not in allowed_kinds:
+            errors.append(
+                {
+                    "url": url,
+                    "reason_code": "client_acquisition_artifact_kind_not_allowed",
+                    "action_hint": f"Route acceptance rules allow {sorted(allowed_kinds)}, not {artifact_kind}.",
+                    "diagnostics": {"artifact_kind": artifact_kind, "allowed_artifact_kinds": sorted(allowed_kinds)},
+                }
+            )
+            continue
         extra_headers = _credential_headers(route, candidate, url, config=config)
         try:
             return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
@@ -126,6 +140,15 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
         "Mdtero could not fetch the routed source locally; retry from a browser session or upload the PDF/EPUB/XML/HTML file directly.",
         diagnostics={"attempts": errors[-6:]},
     )
+
+
+def _allowed_artifact_kinds(route: dict[str, Any]) -> set[str]:
+    acceptance_rules = route.get("acceptance_rules") if isinstance(route.get("acceptance_rules"), dict) else {}
+    return {
+        str(kind or "").strip().lower()
+        for kind in (acceptance_rules.get("allowed_artifact_kinds") or [])
+        if str(kind or "").strip().lower() in {"html", "xml", "epub", "pdf"}
+    }
 
 
 def curl_cffi_available() -> bool:
