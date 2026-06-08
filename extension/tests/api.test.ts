@@ -239,6 +239,42 @@ describe("createApiClient", () => {
     expect(route.client_command).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
   });
 
+  it("fetches extension-aware route plans from the v1 extension route", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({
+        input_kind: "doi",
+        input_value: "10.1000/demo",
+        top_connector: "publisher_pdf_guess",
+        route_kind: "browser_capture_required",
+        acquisition_mode: "browser_extension",
+        allows_current_tab: true,
+        action_sequence: ["fallback_pdf_parse"],
+        acceptance_rules: {},
+        fail_closed: true,
+        matched_connectors: ["publisher_pdf_guess"],
+      }), { status: 200 })
+    );
+
+    const client = createRouterSSOTClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    await client.fetchRoutePlan({
+      input: "10.1000/demo",
+      page_url: "https://example.org/paper",
+      page_title: "Example Paper",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/extension/route",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("uploads raw artifact payloads through the v1 upload route", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async () => new Response(JSON.stringify({ task_id: "task-v2", status: "queued" }), { status: 200 }));

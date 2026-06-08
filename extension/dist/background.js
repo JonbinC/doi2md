@@ -284,7 +284,7 @@ function createRouterSSOTClient(getSettings) {
       ...init,
       headers
     });
-    if (response.status === 404 && path === "/api/v1/route") {
+    if (response.status === 404 && (path === "/api/v1/route" || path === "/api/v1/extension/route")) {
       const routeInput = init?.body && routeInputFromBody(init.body) || "<doi-or-url>";
       return new Response(JSON.stringify({
         input_kind: "unknown",
@@ -326,7 +326,7 @@ function createRouterSSOTClient(getSettings) {
      * Extension should use this instead of local routing rules.
      */
     fetchRoutePlan(payload) {
-      return request("/api/v1/route", {
+      return request("/api/v1/extension/route", {
         method: "POST",
         body: JSON.stringify(payload)
       }).then((response) => response.json());
@@ -483,15 +483,33 @@ async function executeAction(action, context, routePlan) {
     case "fetch_browser_source":
       return executeFetchBrowserSource(context, routePlan);
     case "fallback_pdf_parse":
-      return {
-        success: false,
-        requiresUpload: true,
-        error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
-        nextCommand: buildCliParseCommand(context.input)
-      };
+      return executeFallbackPdfParse(context, routePlan);
     default:
       return { success: false, error: `Unknown action: ${action}` };
   }
+}
+function executeFallbackPdfParse(context, routePlan) {
+  const candidate = pickPdfHandoffCandidate(routePlan.client_handoff_candidates || []);
+  if (!candidate) {
+    return {
+      success: false,
+      requiresUpload: true,
+      error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
+      nextCommand: buildCliParseCommand(context.input)
+    };
+  }
+  const requiresBrowser = Boolean(candidate.requires_user_rights) || candidate.transport === "browser_extension";
+  const sourceLabel = candidate.source || candidate.connector || "publisher PDF candidate";
+  const artifactUrl = candidate.artifact_url ? ` Candidate: ${candidate.artifact_url}` : "";
+  const reason = candidate.reason || routePlan.user_message || "This PDF candidate should be acquired from the user's browser session.";
+  const capability = routePlan.publisher_capabilities?.access_mode ? ` Access: ${routePlan.publisher_capabilities.access_mode}.` : "";
+  return {
+    success: false,
+    requiresBrowserCapture: requiresBrowser,
+    requiresUpload: !requiresBrowser,
+    error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
+    nextCommand: buildCliParseCommand(context.input)
+  };
 }
 async function executeCaptureCurrentTabHtml(context) {
   if (!context.tabId) {
@@ -562,13 +580,14 @@ async function executeFetchEpubAsset(context, routePlan) {
     };
   }
   const candidate = pickEpubCandidate(routePlan);
-  if (!candidate?.epub_url) {
+  const epubUrl = candidate?.epub_url || pickArtifactHandoffUrl(routePlan.client_handoff_candidates || [], "epub");
+  if (!epubUrl) {
     return { success: false, error: "No EPUB acquisition URL available for this route." };
   }
   try {
     const response = await chrome.tabs.sendMessage(context.tabId, {
       type: "mdtero.download_epub.request",
-      artifactUrl: candidate.epub_url
+      artifactUrl: epubUrl
     });
     const download = response?.download;
     if (!response?.ok || !download?.ok || !download.payloadBase64) {
@@ -682,13 +701,20 @@ function pickHtmlCandidateUrls(routePlan) {
   const topConnector = String(routePlan.top_connector || "").trim();
   const urls = [
     ...candidates.filter((candidate) => candidate.connector === topConnector).flatMap((candidate) => [candidate.html_url, candidate.url]),
-    ...candidates.flatMap((candidate) => [candidate.html_url, candidate.url])
+    ...candidates.flatMap((candidate) => [candidate.html_url, candidate.url]),
+    ...(routePlan.client_handoff_candidates || []).filter((candidate) => candidate.artifact_kind === "html").map((candidate) => candidate.source_url)
   ];
   return Array.from(
     new Set(
       urls.map((url) => String(url || "").trim()).filter((url) => /^https?:\/\//i.test(url))
     )
   );
+}
+function pickPdfHandoffCandidate(candidates) {
+  return candidates.find((candidate) => candidate.artifact_kind === "pdf" && candidate.capture_mode === "download_artifact");
+}
+function pickArtifactHandoffUrl(candidates, artifactKind) {
+  return candidates.find((candidate) => candidate.artifact_kind === artifactKind && candidate.artifact_url)?.artifact_url;
 }
 function base64ToBytes(payloadBase64) {
   const decoded = globalThis.atob(payloadBase64);
@@ -726,7 +752,9 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
       fail_closed: routePlan.fail_closed,
       user_message: routePlan.user_message,
       best_oa_url: routePlan.best_oa_url,
-      acquisition_candidates: routePlan.acquisition_candidates
+      acquisition_candidates: routePlan.acquisition_candidates,
+      client_handoff_candidates: routePlan.client_handoff_candidates,
+      publisher_capabilities: routePlan.publisher_capabilities
     });
     if (result.success) {
       if (result.rawArtifact) {

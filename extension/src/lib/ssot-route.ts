@@ -77,6 +77,8 @@ export async function executeSsotActionSequence(
       user_message: routePlan.user_message,
       best_oa_url: routePlan.best_oa_url,
       acquisition_candidates: routePlan.acquisition_candidates,
+      client_handoff_candidates: routePlan.client_handoff_candidates,
+      publisher_capabilities: routePlan.publisher_capabilities,
     });
 
     if (result.success) {
