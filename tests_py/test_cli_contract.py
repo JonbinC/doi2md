@@ -3536,6 +3536,9 @@ def test_parse_batch_writes_failed_manifest_next_action(monkeypatch, tmp_path: P
     assert manifest_rows[0]["next_action"] == "retry_with_trace_or_upload_source"
     assert manifest_rows[0]["route_kind"] == ""
     assert manifest_rows[0]["path"] == ""
+    summary = json.loads((output_dir / "manifest_summary.json").read_text(encoding="utf-8"))
+    assert summary["failed_count"] == 1
+    assert summary["failures"] == {"by_reason_code": {"parser_failed": 1}}
     failed = (output_dir / "failed.csv").read_text(encoding="utf-8")
     rows = list(csv.DictReader(failed.splitlines()))
     assert rows[0]["reason_code"] == "parser_failed"
