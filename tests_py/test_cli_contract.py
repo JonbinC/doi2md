@@ -3436,6 +3436,18 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["table_missing_local_file_count"] == "1"
     assert rows[0]["visual_asset_repair_hint"] == "repair_or_regenerate_artifact_bundle_assets"
     assert rows[0]["follow_up_tags"] == "repair_visual_assets"
+    summary = json.loads((output_dir / "manifest_summary.json").read_text(encoding="utf-8"))
+    assert payload["manifest"]["summary_json"] == str(output_dir / "manifest_summary.json")
+    assert summary["total_count"] == 1
+    assert summary["downloaded_count"] == 1
+    assert summary["by_quality_label"] == {"full_text_good": 1}
+    assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unrenderable_tables": 1}
+    assert summary["follow_up"]["by_tag"] == {"repair_visual_assets": 1}
+    assert summary["follow_up"]["by_next_action"] == {"repair_visual_assets": 1}
+    assert summary["route_quality"]["best_source_formats"] == {"pdf": 1}
+    assert summary["route_quality"]["by_source_format"]["xml"]["incomplete_count"] == 1
+    assert summary["route_quality"]["by_source_format"]["xml"]["best_quality_labels"] == {"abstract_only": 1}
+    assert summary["route_quality"]["by_source_format"]["pdf"]["accepted_count"] == 1
 
 
 def test_parse_batch_writes_failed_manifest_next_action(monkeypatch, tmp_path: Path, capsys):
