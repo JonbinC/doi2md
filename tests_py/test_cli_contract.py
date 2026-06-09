@@ -3301,7 +3301,9 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                         "missing_table_asset_ids": ["tbl1"],
                         "figure": {
                             "usable_asset_rate": 0.5,
+                            "missing_path_count": 0,
                             "missing_local_file_count": 2,
+                            "remote_url_count": 1,
                         },
                         "table": {
                             "usable_asset_rate": 0.75,
@@ -3357,7 +3359,11 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["missing_figure_asset_count"] == "2"
     assert rows[0]["missing_table_asset_count"] == "1"
     assert rows[0]["figure_usable_asset_rate"] == "0.5"
+    assert rows[0]["figure_missing_path_count"] == "0"
+    assert rows[0]["figure_missing_local_file_count"] == "2"
+    assert rows[0]["figure_remote_url_count"] == "1"
     assert rows[0]["table_usable_asset_rate"] == "0.75"
+    assert rows[0]["table_missing_local_file_count"] == "1"
     assert rows[0]["visual_asset_repair_hint"] == "repair_or_regenerate_artifact_bundle_assets"
     assert rows[0]["follow_up_tags"] == "repair_visual_assets"
 
