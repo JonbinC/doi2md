@@ -30,6 +30,12 @@ class DownloadResult:
     filename: str
     content_type: str | None = None
     content_length: int | None = None
+    quality_label: str | None = None
+    quality_warning_code: str | None = None
+    quality_warning: str | None = None
+    parse_outcome: str | None = None
+    parse_billable: bool | None = None
+    parse_reason_codes: tuple[str, ...] = ()
 
     def __fspath__(self) -> str:
         return str(self.path)
@@ -135,6 +141,12 @@ class MdteroClient:
             filename=original_filename,
             content_type=response.headers.get("content-type"),
             content_length=len(response.content),
+            quality_label=_header_value(response.headers, "x-mdtero-quality-label"),
+            quality_warning_code=_header_value(response.headers, "x-mdtero-quality-warning-code"),
+            quality_warning=_header_value(response.headers, "x-mdtero-quality-warning"),
+            parse_outcome=_header_value(response.headers, "x-mdtero-parse-outcome"),
+            parse_billable=_bool_header_value(response.headers, "x-mdtero-parse-billable"),
+            parse_reason_codes=_csv_header_values(response.headers, "x-mdtero-parse-reason-codes"),
         )
 
     def wait(self, task_id: str, *, interval: float = 2.0, timeout: float = 600.0) -> dict[str, Any]:
@@ -438,6 +450,24 @@ def _api_error_status_code(exc: Exception) -> int | None:
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code
     return None
+
+
+def _header_value(headers: httpx.Headers, key: str) -> str | None:
+    value = str(headers.get(key) or "").strip()
+    return value or None
+
+
+def _bool_header_value(headers: httpx.Headers, key: str) -> bool | None:
+    value = str(headers.get(key) or "").strip().lower()
+    if value in {"true", "1", "yes"}:
+        return True
+    if value in {"false", "0", "no"}:
+        return False
+    return None
+
+
+def _csv_header_values(headers: httpx.Headers, key: str) -> tuple[str, ...]:
+    return tuple(value.strip() for value in str(headers.get(key) or "").split(",") if value.strip())
 
 
 def api_failure_payload(exc: httpx.HTTPStatusError, *, method: str, path: str) -> dict[str, Any]:

@@ -1972,6 +1972,11 @@ def cmd_download(args: argparse.Namespace) -> int:
         "path": download["path"],
         "original_filename": download.get("original_filename"),
         "quality_label": download.get("quality_label"),
+        "quality_warning_code": download.get("quality_warning_code"),
+        "quality_warning": download.get("quality_warning"),
+        "parse_outcome": download.get("parse_outcome"),
+        "parse_billable": download.get("parse_billable"),
+        "parse_reason_codes": download.get("parse_reason_codes") or [],
     }
     if task:
         payload["task"] = _download_task_summary(task)
@@ -1981,8 +1986,9 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         Console().print(f"Downloaded {args.artifact} to {download['path']}")
-        if _is_low_quality_label(str(download.get("quality_label") or "")):
-            Console().print(f"Warning: artifact quality is {download.get('quality_label')}; verify before citing it as full text.")
+        warning = download.get("quality_warning") or _quality_warning(str(download.get("quality_label") or ""))
+        if warning or download.get("parse_billable") is False:
+            Console().print(f"Warning: {warning or 'downloaded artifact is not marked billable full text; verify before citing it.'}")
     return 0
 
 
@@ -3425,7 +3431,12 @@ def _download_task_artifact(client: MdteroClient, task_id: str, artifact: str, o
         "original_filename": getattr(result, "filename", path.name),
         "content_type": getattr(result, "content_type", None),
         "content_length": getattr(result, "content_length", None),
-        "quality_label": _task_quality_label(task or {}),
+        "quality_label": getattr(result, "quality_label", None) or _task_quality_label(task or {}),
+        "quality_warning_code": getattr(result, "quality_warning_code", None),
+        "quality_warning": getattr(result, "quality_warning", None),
+        "parse_outcome": getattr(result, "parse_outcome", None),
+        "parse_billable": getattr(result, "parse_billable", None),
+        "parse_reason_codes": list(getattr(result, "parse_reason_codes", ()) or ()),
     }
 
 

@@ -3134,6 +3134,49 @@ def test_download_marks_content_incomplete_markdown_as_low_quality(monkeypatch, 
     assert payload["task"]["quality_warning"]
 
 
+def test_download_json_includes_download_response_quality_headers(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    downloaded = tmp_path / "thin.low_quality.md"
+
+    def fake_task(self, task_id):
+        assert task_id == "task-header-quality"
+        return {
+            "task_id": "task-header-quality",
+            "status": "succeeded",
+            "result": {"metadata": {"title": "Header quality", "year": 2026, "authors": [{"name": "Chen"}]}},
+        }
+
+    def fake_download(self, task_id, artifact, output_dir, *, filename=None):
+        assert task_id == "task-header-quality"
+        assert artifact == "paper_md"
+        return DownloadResult(
+            path=downloaded,
+            filename="header-quality.md",
+            content_type="text/markdown",
+            content_length=128,
+            quality_label="abstract_only",
+            quality_warning_code="parse_quality_abstract_only",
+            quality_warning="Mdtero captured only the abstract.",
+            parse_outcome="content_incomplete",
+            parse_billable=False,
+            parse_reason_codes=("content_incomplete", "abstract_only"),
+        )
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-header-quality", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["quality_label"] == "abstract_only"
+    assert payload["quality_warning_code"] == "parse_quality_abstract_only"
+    assert payload["quality_warning"] == "Mdtero captured only the abstract."
+    assert payload["parse_outcome"] == "content_incomplete"
+    assert payload["parse_billable"] is False
+    assert payload["parse_reason_codes"] == ["content_incomplete", "abstract_only"]
+
+
 def test_download_uses_server_filename_when_metadata_template_is_low_information(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
@@ -3162,6 +3205,41 @@ def test_download_uses_server_filename_when_metadata_template_is_low_information
 
     assert payload["path"] == str(downloaded)
     assert payload["original_filename"] == "vaswani2017attention.md"
+
+
+def test_client_download_captures_quality_headers(monkeypatch, tmp_path: Path):
+    request = httpx.Request("GET", "https://api.mdtero.com/api/v1/tasks/task-1/download/paper_md")
+
+    def fake_raw_request(self, method, path, **kwargs):
+        assert method == "GET"
+        assert path == "/api/v1/tasks/task-1/download/paper_md"
+        return httpx.Response(
+            200,
+            request=request,
+            content=b"# Abstract only\n",
+            headers={
+                "content-type": "text/markdown",
+                "content-disposition": 'attachment; filename="paper.md"',
+                "x-mdtero-quality-label": "abstract_only",
+                "x-mdtero-quality-warning-code": "parse_quality_abstract_only",
+                "x-mdtero-quality-warning": "Mdtero captured only the abstract.",
+                "x-mdtero-parse-outcome": "content_incomplete",
+                "x-mdtero-parse-billable": "false",
+                "x-mdtero-parse-reason-codes": "content_incomplete,abstract_only",
+            },
+        )
+
+    monkeypatch.setattr(MdteroClient, "_raw_request", fake_raw_request)
+
+    result = MdteroClient().download("task-1", "paper_md", tmp_path)
+
+    assert result.path.read_text(encoding="utf-8") == "# Abstract only\n"
+    assert result.quality_label == "abstract_only"
+    assert result.quality_warning_code == "parse_quality_abstract_only"
+    assert result.quality_warning == "Mdtero captured only the abstract."
+    assert result.parse_outcome == "content_incomplete"
+    assert result.parse_billable is False
+    assert result.parse_reason_codes == ("content_incomplete", "abstract_only")
 
 
 def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: Path, capsys):
