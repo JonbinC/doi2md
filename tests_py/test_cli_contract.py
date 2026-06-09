@@ -3325,6 +3325,10 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                 },
                 "selected_provider": "mineru_precision",
                 "parser_strategy": "uploaded_pdf_mineru_precision_v2",
+                "route_kind": "api_first",
+                "provider_id": "elsevier_article_retrieval_api",
+                "top_connector": "elsevier_article_retrieval_api",
+                "publisher_family": "elsevier",
                 "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": [], "next_action": "repair_visual_assets"},
                 "quality_route_summary": {
                     "candidate_count": 2,
@@ -3445,7 +3449,9 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     rows = list(csv.DictReader(manifest.splitlines()))
     assert len(rows) == 1
     assert rows[0]["next_action"] == "repair_visual_assets"
-    assert rows[0]["route_kind"] == "server_parse"
+    assert rows[0]["route_kind"] == "api_first"
+    assert rows[0]["provider_id"] == "elsevier_article_retrieval_api"
+    assert rows[0]["publisher_family"] == "elsevier"
     assert rows[0]["route_candidate_count"] == "2"
     assert rows[0]["route_best_source_format"] == "pdf"
     assert rows[0]["route_next_action"] == "none"
@@ -3499,6 +3505,9 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     route_quality_rows = list(csv.DictReader((output_dir / "route_quality.csv").read_text(encoding="utf-8").splitlines()))
     route_by_format = {row["source_format"]: row for row in route_quality_rows}
     assert len(route_quality_rows) == 3
+    assert route_by_format["xml"]["route_kind"] == "api_first"
+    assert route_by_format["xml"]["publisher_family"] == "elsevier"
+    assert route_by_format["xml"]["parser_strategy"] == "uploaded_pdf_mineru_precision_v2"
     assert route_by_format["xml"]["incomplete_count"] == "1"
     assert route_by_format["xml"]["best_quality_label"] == "abstract_only"
     assert route_by_format["xml"]["reason_codes"] == "content_incomplete,abstract_only"
