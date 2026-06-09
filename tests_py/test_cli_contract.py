@@ -3483,6 +3483,12 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert summary["downloaded_count"] == 1
     assert summary["by_quality_label"] == {"full_text_good": 1}
     assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unrenderable_tables": 1}
+    assert summary["artifacts"] == {
+        "with_download_count": 1,
+        "missing_download_count": 0,
+        "by_artifact": {"paper_md": 1},
+        "by_preferred_artifact": {"paper_md": 1},
+    }
     assert summary["content"] == {
         "abstract_only_count": 0,
         "partial_or_low_confidence_count": 0,
@@ -3553,6 +3559,7 @@ def test_parse_batch_writes_failed_manifest_next_action(monkeypatch, tmp_path: P
     summary = json.loads((output_dir / "manifest_summary.json").read_text(encoding="utf-8"))
     assert summary["failed_count"] == 1
     assert summary["failures"] == {"by_reason_code": {"parser_failed": 1}}
+    assert summary["artifacts"]["missing_download_count"] == 1
     failed = (output_dir / "failed.csv").read_text(encoding="utf-8")
     rows = list(csv.DictReader(failed.splitlines()))
     assert rows[0]["reason_code"] == "parser_failed"

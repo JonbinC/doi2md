@@ -3547,6 +3547,12 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "by_quality_label": {},
         "quality_issues": {"by_code": {}},
         "failures": {"by_reason_code": {}},
+        "artifacts": {
+            "with_download_count": 0,
+            "missing_download_count": 0,
+            "by_artifact": {},
+            "by_preferred_artifact": {},
+        },
         "content": {
             "abstract_only_count": 0,
             "partial_or_low_confidence_count": 0,
@@ -3595,6 +3601,7 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
             failure_reasons[reason_code] = failure_reasons.get(reason_code, 0) + 1
         if item.get("download"):
             summary["downloaded_count"] += 1
+        _accumulate_cli_artifact_summary(summary["artifacts"], item)
         quality_label = str(item.get("quality_label") or "unknown").strip() or "unknown"
         summary["by_quality_label"][quality_label] = summary["by_quality_label"].get(quality_label, 0) + 1
         _accumulate_cli_counter(summary["quality_issues"]["by_code"], item.get("quality_issue_codes"))
@@ -3625,6 +3632,22 @@ def _empty_cli_route_format_summary() -> dict[str, Any]:
         "best_quality_labels": {},
         "reason_codes": {},
     }
+
+
+def _accumulate_cli_artifact_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
+    download = item.get("download") if isinstance(item.get("download"), dict) else {}
+    artifact = str(download.get("artifact") or item.get("artifact") or "").strip()
+    preferred_artifact = str(item.get("preferred_artifact") or "").strip()
+    if download:
+        summary["with_download_count"] += 1
+    else:
+        summary["missing_download_count"] += 1
+    if artifact:
+        by_artifact = summary["by_artifact"]
+        by_artifact[artifact] = by_artifact.get(artifact, 0) + 1
+    if preferred_artifact:
+        by_preferred = summary["by_preferred_artifact"]
+        by_preferred[preferred_artifact] = by_preferred.get(preferred_artifact, 0) + 1
 
 
 def _accumulate_cli_content_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
