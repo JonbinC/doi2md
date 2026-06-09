@@ -3537,7 +3537,11 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "missing_figure_asset_count": item.get("missing_figure_asset_count"),
         "missing_table_asset_count": item.get("missing_table_asset_count"),
         "figure_usable_asset_rate": item.get("figure_usable_asset_rate"),
+        "figure_missing_path_count": item.get("figure_missing_path_count"),
+        "figure_missing_local_file_count": item.get("figure_missing_local_file_count"),
+        "figure_remote_url_count": item.get("figure_remote_url_count"),
         "table_usable_asset_rate": item.get("table_usable_asset_rate"),
+        "table_missing_local_file_count": item.get("table_missing_local_file_count"),
         "visual_asset_repair_hint": item.get("visual_asset_repair_hint"),
         "follow_up_tags": item.get("follow_up_tags"),
         "artifact": str(download.get("artifact") or item.get("preferred_artifact") or ""),
@@ -3627,7 +3631,11 @@ def _task_visual_asset_summary(task: dict[str, Any]) -> dict[str, Any]:
         "missing_figure_asset_count": len(visual_assets.get("missing_figure_asset_ids") or []),
         "missing_table_asset_count": len(visual_assets.get("missing_table_asset_ids") or []),
         "figure_usable_asset_rate": figure.get("usable_asset_rate"),
+        "figure_missing_path_count": _integer_value(figure.get("missing_path_count")),
+        "figure_missing_local_file_count": _integer_value(figure.get("missing_local_file_count")),
+        "figure_remote_url_count": _integer_value(figure.get("remote_url_count")),
         "table_usable_asset_rate": table.get("usable_asset_rate"),
+        "table_missing_local_file_count": _integer_value(table.get("missing_local_file_count")),
         "visual_asset_repair_hint": repair_hint,
         "follow_up_tags": _join_values(follow_up_tags),
     }
@@ -3684,6 +3692,13 @@ def _number_value(value: Any) -> float:
         return 0.0
 
 
+def _integer_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _join_values(values: Any) -> str:
     if isinstance(values, str):
         return values
@@ -3714,7 +3729,11 @@ def _manifest_fieldnames() -> list[str]:
         "missing_figure_asset_count",
         "missing_table_asset_count",
         "figure_usable_asset_rate",
+        "figure_missing_path_count",
+        "figure_missing_local_file_count",
+        "figure_remote_url_count",
         "table_usable_asset_rate",
+        "table_missing_local_file_count",
         "visual_asset_repair_hint",
         "follow_up_tags",
         "artifact",
