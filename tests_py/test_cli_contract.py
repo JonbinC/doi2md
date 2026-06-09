@@ -3072,7 +3072,14 @@ def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, caps
                     "authors": [{"name": "Donkers"}],
                     "doi": "10.1016/j.apenergy.2017.04.080",
                 },
-                "parse_outcome": {"outcome_code": "fulltext_accepted"},
+                "selected_provider": "mineru_precision",
+                "parser_strategy": "uploaded_pdf_mineru_precision_v2",
+                "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": []},
+                "quality_route_summary": {
+                    "best_connector": "best_oa_location_pdf",
+                    "best_quality_label": "full_text_good",
+                    "needs_followup": False,
+                },
             },
         }
 
@@ -3081,7 +3088,15 @@ def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, caps
         assert artifact == "paper_md"
         assert output_dir == tmp_path
         assert filename == downloaded.name
-        return downloaded
+        return DownloadResult(
+            path=downloaded,
+            filename=downloaded.name,
+            content_type="text/markdown",
+            content_length=1024,
+            parse_outcome="fulltext_accepted",
+            parse_billable=True,
+            parse_reason_codes=(),
+        )
 
     monkeypatch.setattr(MdteroClient, "task", fake_task)
     monkeypatch.setattr(MdteroClient, "download", fake_download)
@@ -3166,7 +3181,7 @@ def test_download_json_includes_download_response_quality_headers(monkeypatch, t
     monkeypatch.setattr(MdteroClient, "task", fake_task)
     monkeypatch.setattr(MdteroClient, "download", fake_download)
 
-    assert cli.cmd_download(type("Args", (), {"task_id": "task-header-quality", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-header-quality", "artifact": "paper_md", "output_dir": tmp_path, "json": True, "manifest": True})()) == 0
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["quality_label"] == "abstract_only"
@@ -3175,6 +3190,10 @@ def test_download_json_includes_download_response_quality_headers(monkeypatch, t
     assert payload["parse_outcome"] == "content_incomplete"
     assert payload["parse_billable"] is False
     assert payload["parse_reason_codes"] == ["content_incomplete", "abstract_only"]
+    manifest = (tmp_path / "manifest.csv").read_text(encoding="utf-8")
+    assert "parse_outcome" in manifest
+    assert "content_incomplete" in manifest
+    assert "abstract_only" in manifest
 
 
 def test_download_uses_server_filename_when_metadata_template_is_low_information(monkeypatch, tmp_path: Path, capsys):
@@ -3266,7 +3285,14 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     "authors": [{"name": "Bui"}],
                     "doi": "10.1016/S0260-8774(02)00304-7",
                 },
-                "parse_outcome": {"outcome_code": "fulltext_accepted"},
+                "selected_provider": "mineru_precision",
+                "parser_strategy": "uploaded_pdf_mineru_precision_v2",
+                "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": []},
+                "quality_route_summary": {
+                    "best_connector": "best_oa_location_pdf",
+                    "best_quality_label": "full_text_good",
+                    "needs_followup": False,
+                },
             },
         }
 
@@ -3275,7 +3301,15 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
         assert artifact == "paper_md"
         assert out_dir == output_dir
         assert filename == downloaded.name
-        return downloaded
+        return DownloadResult(
+            path=downloaded,
+            filename=downloaded.name,
+            content_type="text/markdown",
+            content_length=1024,
+            parse_outcome="fulltext_accepted",
+            parse_billable=True,
+            parse_reason_codes=(),
+        )
 
     monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
     monkeypatch.setattr(MdteroClient, "wait", fake_wait)
@@ -3295,6 +3329,10 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "task-batch" in manifest
     assert str(downloaded) in manifest
     assert "10.1016/S0260-8774(02)00304-7" in manifest
+    assert "mineru_precision" in manifest
+    assert "uploaded_pdf_mineru_precision_v2" in manifest
+    assert "fulltext_accepted" in manifest
+    assert "best_oa_location_pdf" in manifest
 
 
 def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypatch, tmp_path: Path, capsys):
