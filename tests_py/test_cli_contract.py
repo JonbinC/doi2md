@@ -3411,6 +3411,41 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["follow_up_tags"] == "repair_visual_assets"
 
 
+def test_parse_batch_writes_failed_manifest_next_action(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    targets = tmp_path / "dois.txt"
+    targets.write_text("10.1000/failure\n", encoding="utf-8")
+    output_dir = tmp_path / "out"
+
+    def fake_parse_with_route(self, value):
+        assert value == "10.1000/failure"
+        raise MdteroApiError(
+            {
+                "status": "failed",
+                "reason_code": "parser_failed",
+                "next_action": "retry_with_trace_or_upload_source",
+                "action_hint": "Retry with trace or upload the source file.",
+            }
+        )
+
+    monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
+    monkeypatch.chdir(tmp_path)
+
+    args = build_parser().parse_args(["parse-batch", str(targets), "--output-dir", str(output_dir), "--json"])
+
+    assert cli.cmd_parse_batch(args) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "completed_with_failures"
+    assert payload["failures"][0]["next_action"] == "retry_with_trace_or_upload_source"
+    failed = (output_dir / "failed.csv").read_text(encoding="utf-8")
+    rows = list(csv.DictReader(failed.splitlines()))
+    assert rows[0]["reason_code"] == "parser_failed"
+    assert rows[0]["next_action"] == "retry_with_trace_or_upload_source"
+    assert rows[0]["action_hint"] == "Retry with trace or upload the source file."
+
+
 def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
