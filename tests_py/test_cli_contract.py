@@ -3359,13 +3359,14 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                             "best_reference_count": 52,
                             "best_figure_usable_asset_rate": 0.5,
                             "best_structured_table_rate": 0.8,
+                            "best_table_renderable_rate": 1.0,
                             "reason_codes": [],
                         },
                     },
                 },
                 "quality": {
                     "content_level": "full_text",
-                    "quality_issue_codes": ["missing_figure_assets", "unrenderable_tables"],
+                    "quality_issue_codes": ["missing_figure_assets", "unstructured_tables"],
                     "abstract_only": False,
                     "section_count": 8,
                     "paragraph_count": 36,
@@ -3377,6 +3378,10 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     "table_count": 2,
                     "structured_table_count": 1,
                     "structured_table_rate": 0.5,
+                    "renderable_table_count": 2,
+                    "table_renderable_rate": 1.0,
+                    "tables_missing_structure": 1,
+                    "tables_missing_renderable_assets": 0,
                     "formula_count": 3,
                     "visual_asset_diagnostics": {
                         "needs_visual_asset_retry": True,
@@ -3453,8 +3458,9 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["route_pdf_reference_count"] == "52"
     assert rows[0]["route_pdf_figure_usable_asset_rate"] == "0.5"
     assert rows[0]["route_pdf_structured_table_rate"] == "0.8"
+    assert rows[0]["route_pdf_table_renderable_rate"] == "1.0"
     assert rows[0]["content_level"] == "full_text"
-    assert rows[0]["quality_issue_codes"] == "missing_figure_assets,unrenderable_tables"
+    assert rows[0]["quality_issue_codes"] == "missing_figure_assets,unstructured_tables"
     assert rows[0]["abstract_only"] == "False"
     assert rows[0]["section_count"] == "8"
     assert rows[0]["body_token_count"] == "6400"
@@ -3465,6 +3471,10 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["table_count"] == "2"
     assert rows[0]["structured_table_count"] == "1"
     assert rows[0]["structured_table_rate"] == "0.5"
+    assert rows[0]["renderable_table_count"] == "2"
+    assert rows[0]["table_renderable_rate"] == "1.0"
+    assert rows[0]["tables_missing_structure"] == "1"
+    assert rows[0]["tables_missing_renderable_assets"] == "0"
     assert rows[0]["formula_count"] == "3"
     assert rows[0]["visual_asset_retry"] == "True"
     assert rows[0]["missing_figure_asset_count"] == "2"
@@ -3482,7 +3492,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert summary["total_count"] == 1
     assert summary["downloaded_count"] == 1
     assert summary["by_quality_label"] == {"full_text_good": 1}
-    assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unrenderable_tables": 1}
+    assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unstructured_tables": 1}
     assert summary["artifacts"] == {
         "with_download_count": 1,
         "missing_download_count": 0,
@@ -3499,8 +3509,11 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert summary["tables"] == {
         "total_table_count": 2,
         "structured_table_count": 1,
+        "renderable_table_count": 2,
         "needs_structure_retry_count": 1,
+        "needs_renderable_retry_count": 0,
         "unstructured_table_count": 1,
+        "unrenderable_table_count": 0,
     }
     assert summary["formulas"] == {"total_formula_count": 3}
     assert summary["visual_assets"] == {
