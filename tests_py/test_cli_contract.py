@@ -3489,6 +3489,21 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["follow_up_tags"] == "repair_visual_assets"
     summary = json.loads((output_dir / "manifest_summary.json").read_text(encoding="utf-8"))
     assert payload["manifest"]["summary_json"] == str(output_dir / "manifest_summary.json")
+    assert payload["manifest"]["retry_fulltext_csv"] == str(output_dir / "retry_fulltext.csv")
+    assert payload["manifest"]["repair_visual_assets_csv"] == str(output_dir / "repair_visual_assets.csv")
+    assert payload["manifest"]["repair_tables_csv"] == str(output_dir / "repair_tables.csv")
+    retry_rows = list(csv.DictReader((output_dir / "retry_fulltext.csv").read_text(encoding="utf-8").splitlines()))
+    repair_asset_rows = list(csv.DictReader((output_dir / "repair_visual_assets.csv").read_text(encoding="utf-8").splitlines()))
+    repair_table_rows = list(csv.DictReader((output_dir / "repair_tables.csv").read_text(encoding="utf-8").splitlines()))
+    assert retry_rows == []
+    assert len(repair_asset_rows) == 1
+    assert repair_asset_rows[0]["task_id"] == "task-batch"
+    assert repair_asset_rows[0]["missing_figure_asset_count"] == "2"
+    assert repair_asset_rows[0]["visual_asset_repair_hint"] == "repair_or_regenerate_artifact_bundle_assets"
+    assert len(repair_table_rows) == 1
+    assert repair_table_rows[0]["task_id"] == "task-batch"
+    assert repair_table_rows[0]["structured_table_count"] == "1"
+    assert repair_table_rows[0]["table_renderable_rate"] == "1.0"
     assert summary["total_count"] == 1
     assert summary["downloaded_count"] == 1
     assert summary["by_quality_label"] == {"full_text_good": 1}
@@ -3573,11 +3588,17 @@ def test_parse_batch_writes_failed_manifest_next_action(monkeypatch, tmp_path: P
     assert summary["failed_count"] == 1
     assert summary["failures"] == {"by_reason_code": {"parser_failed": 1}}
     assert summary["artifacts"]["missing_download_count"] == 1
+    assert payload["manifest"]["retry_fulltext_csv"] == str(output_dir / "retry_fulltext.csv")
+    assert payload["manifest"]["repair_visual_assets_csv"] == str(output_dir / "repair_visual_assets.csv")
+    assert payload["manifest"]["repair_tables_csv"] == str(output_dir / "repair_tables.csv")
     failed = (output_dir / "failed.csv").read_text(encoding="utf-8")
     rows = list(csv.DictReader(failed.splitlines()))
     assert rows[0]["reason_code"] == "parser_failed"
     assert rows[0]["next_action"] == "retry_with_trace_or_upload_source"
     assert rows[0]["action_hint"] == "Retry with trace or upload the source file."
+    assert list(csv.DictReader((output_dir / "retry_fulltext.csv").read_text(encoding="utf-8").splitlines())) == []
+    assert list(csv.DictReader((output_dir / "repair_visual_assets.csv").read_text(encoding="utf-8").splitlines())) == []
+    assert list(csv.DictReader((output_dir / "repair_tables.csv").read_text(encoding="utf-8").splitlines())) == []
 
 
 def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypatch, tmp_path: Path, capsys):

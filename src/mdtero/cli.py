@@ -3529,12 +3529,28 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
     manifest_path = output_dir / "manifest.csv"
     failed_path = output_dir / "failed.csv"
     summary_path = output_dir / "manifest_summary.json"
+    retry_fulltext_path = output_dir / "retry_fulltext.csv"
+    repair_visual_assets_path = output_dir / "repair_visual_assets.csv"
+    repair_tables_path = output_dir / "repair_tables.csv"
     rows = [_manifest_row_from_batch_item(item) for item in items]
     failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
+    retry_fulltext_rows = [row for row in rows if _batch_row_needs_fulltext_retry(row)]
+    repair_visual_asset_rows = [row for row in rows if _batch_row_needs_visual_asset_repair(row)]
+    repair_table_rows = [row for row in rows if _batch_row_needs_table_repair(row)]
     _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
     _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "next_action", "action_hint"])
+    _write_csv_rows(retry_fulltext_path, retry_fulltext_rows, _follow_up_manifest_fieldnames())
+    _write_csv_rows(repair_visual_assets_path, repair_visual_asset_rows, _follow_up_manifest_fieldnames())
+    _write_csv_rows(repair_tables_path, repair_table_rows, _follow_up_manifest_fieldnames())
     summary_path.write_text(json.dumps(_batch_manifest_summary(items), indent=2, ensure_ascii=False), encoding="utf-8")
-    return {"manifest_csv": str(manifest_path), "failed_csv": str(failed_path), "summary_json": str(summary_path)}
+    return {
+        "manifest_csv": str(manifest_path),
+        "failed_csv": str(failed_path),
+        "summary_json": str(summary_path),
+        "retry_fulltext_csv": str(retry_fulltext_path),
+        "repair_visual_assets_csv": str(repair_visual_assets_path),
+        "repair_tables_csv": str(repair_tables_path),
+    }
 
 
 def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
@@ -3624,6 +3640,44 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         for source_format in ("xml", "html", "pdf"):
             _accumulate_cli_route_format_summary(summary["route_quality"]["by_source_format"][source_format], item, source_format)
     return summary
+
+
+def _batch_row_needs_fulltext_retry(row: dict[str, Any]) -> bool:
+    quality_label = str(row.get("quality_label") or "").strip()
+    content_level = str(row.get("content_level") or "").strip()
+    issue_codes = set(_split_cli_values(row.get("quality_issue_codes")))
+    parse_reason_codes = set(_split_cli_values(row.get("parse_reason_codes")))
+    route_next_action = str(row.get("route_next_action") or "").strip()
+    if quality_label in {"metadata_only", "abstract_only", "partial_fulltext", "low_confidence_parse"}:
+        return True
+    if content_level in {"metadata_only", "abstract_only", "partial_fulltext"}:
+        return True
+    if issue_codes & {"short_body", "section_only_fulltext"}:
+        return True
+    if parse_reason_codes & {"content_incomplete", "abstract_only", "partial_fulltext", "short_body", "short_sparse_markdown"}:
+        return True
+    return route_next_action in {"retry_with_pdf_or_html_fulltext", "try_pdf_or_html_fulltext_fallback", "retry_with_fulltext_fallback"}
+
+
+def _batch_row_needs_visual_asset_repair(row: dict[str, Any]) -> bool:
+    issue_codes = set(_split_cli_values(row.get("quality_issue_codes")))
+    if "missing_figure_assets" in issue_codes:
+        return True
+    if str(row.get("visual_asset_retry") or "").strip().lower() == "true":
+        return True
+    return _integer_value(row.get("missing_figure_asset_count")) > 0 or _integer_value(row.get("figure_missing_local_file_count")) > 0
+
+
+def _batch_row_needs_table_repair(row: dict[str, Any]) -> bool:
+    issue_codes = set(_split_cli_values(row.get("quality_issue_codes")))
+    if issue_codes & {"unstructured_tables", "unrenderable_tables"}:
+        return True
+    table_count = _integer_value(row.get("table_count"))
+    structured_table_count = _integer_value(row.get("structured_table_count"))
+    renderable_table_count = _optional_integer_value(row.get("renderable_table_count"))
+    if table_count > structured_table_count:
+        return True
+    return renderable_table_count is not None and table_count > renderable_table_count
 
 
 def _empty_cli_route_format_summary() -> dict[str, Any]:
@@ -4079,6 +4133,44 @@ def _manifest_fieldnames() -> list[str]:
         "artifact",
         "path",
         "original_filename",
+    ]
+
+
+def _follow_up_manifest_fieldnames() -> list[str]:
+    return [
+        "input",
+        "doi",
+        "title",
+        "task_id",
+        "status",
+        "quality_label",
+        "content_level",
+        "quality_issue_codes",
+        "next_action",
+        "route_best_connector",
+        "route_best_source_format",
+        "route_best_quality_label",
+        "route_next_action",
+        "section_count",
+        "body_token_count",
+        "figure_count",
+        "figures_missing_assets",
+        "missing_figure_asset_count",
+        "figure_missing_local_file_count",
+        "visual_asset_repair_hint",
+        "table_count",
+        "structured_table_count",
+        "structured_table_rate",
+        "renderable_table_count",
+        "table_renderable_rate",
+        "tables_missing_structure",
+        "tables_missing_renderable_assets",
+        "formula_count",
+        "parse_outcome",
+        "parse_reason_codes",
+        "reason_code",
+        "action_hint",
+        "path",
     ]
 
 
