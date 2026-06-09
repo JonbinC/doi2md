@@ -3288,7 +3288,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                 },
                 "selected_provider": "mineru_precision",
                 "parser_strategy": "uploaded_pdf_mineru_precision_v2",
-                "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": []},
+                "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": [], "next_action": "repair_visual_assets"},
                 "quality_route_summary": {
                     "candidate_count": 2,
                     "accepted_count": 1,
@@ -3386,6 +3386,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "fulltext_accepted" in manifest
     assert "best_oa_location_pdf" in manifest
     rows = list(csv.DictReader(manifest.splitlines()))
+    assert rows[0]["next_action"] == "repair_visual_assets"
     assert rows[0]["route_candidate_count"] == "2"
     assert rows[0]["route_best_source_format"] == "pdf"
     assert rows[0]["route_xml_incomplete_count"] == "1"
