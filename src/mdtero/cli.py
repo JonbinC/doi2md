@@ -3425,19 +3425,31 @@ def _normalize_quality_label(value: str) -> str:
 
 
 def _known_quality_labels() -> set[str]:
-    return {"full_text_good", "metadata_only", "abstract_only", "section_only_fulltext", "low_confidence_parse", "unavailable", "unknown"}
+    return {
+        "full_text_good",
+        "full_text_with_warnings",
+        "metadata_only",
+        "abstract_only",
+        "section_only_fulltext",
+        "low_confidence_parse",
+        "unavailable",
+        "unknown",
+    }
 
 
 def _quality_warning(label: str) -> str | None:
     if label == "full_text_good":
         return None
+    if label == "full_text_with_warnings":
+        return "Full text is available, but figures, tables, or other assets need inspection before citation or RAG use."
     if label in {"metadata_only", "abstract_only", "section_only_fulltext", "low_confidence_parse", "unavailable"}:
         return f"Artifact quality is {label}; verify the source before citing it as full text."
     return None
 
 
 def _is_low_quality_label(label: str) -> bool:
-    return bool(_quality_warning(_normalize_quality_label(label)))
+    normalized = _normalize_quality_label(label)
+    return normalized in {"metadata_only", "abstract_only", "section_only_fulltext", "low_confidence_parse", "unavailable"}
 
 
 def _download_task_artifact(client: MdteroClient, task_id: str, artifact: str, output_dir: Path, *, task: dict[str, Any] | None, filename_template: str) -> dict[str, Any]:
