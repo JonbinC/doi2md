@@ -1284,6 +1284,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
     route_summary = _task_quality_route_summary(task)
     route_formats = _task_route_format_summary(task)
     visual_assets = _task_visual_asset_summary(task)
+    next_action = _task_next_action(task, parse_outcome=parse_outcome)
     return {
         "input": input_value,
         "task_id": result.get("task_id") or task.get("task_id"),
@@ -1291,6 +1292,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "quality_label": _task_quality_label(task),
         "reason_code": result.get("reason_code") or task.get("reason_code") or task.get("error_code"),
         "action_hint": result.get("action_hint") or task.get("action_hint"),
+        "next_action": next_action,
         "selected_provider": task.get("selected_provider") or _task_result(task).get("selected_provider"),
         "parser_strategy": task.get("parser_strategy") or _task_result(task).get("parser_strategy"),
         "parse_outcome": parse_outcome.get("outcome_code") if parse_outcome else None,
@@ -3526,6 +3528,7 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "quality_label": item.get("quality_label"),
         "reason_code": item.get("reason_code"),
         "action_hint": item.get("action_hint"),
+        "next_action": item.get("next_action"),
         "selected_provider": item.get("selected_provider"),
         "parser_strategy": item.get("parser_strategy"),
         "parse_outcome": download.get("parse_outcome") or item.get("parse_outcome"),
@@ -3561,6 +3564,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
     route_summary = _task_quality_route_summary(task)
     route_formats = _task_route_format_summary(task)
     visual_assets = _task_visual_asset_summary(task)
+    next_action = _task_next_action(task, parse_outcome=parse_outcome)
     return {
         "input": input_value or task.get("paper_input") or task.get("input_summary") or _task_doi(task),
         "doi": _task_doi(task),
@@ -3570,6 +3574,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "quality_label": _task_quality_label(task),
         "reason_code": task.get("reason_code") or task.get("error_code"),
         "action_hint": task.get("action_hint"),
+        "next_action": next_action,
         "selected_provider": task.get("selected_provider") or _task_result(task).get("selected_provider"),
         "parser_strategy": task.get("parser_strategy") or _task_result(task).get("parser_strategy"),
         "parse_outcome": download.get("parse_outcome") or (parse_outcome.get("outcome_code") if parse_outcome else None),
@@ -3614,6 +3619,20 @@ def _task_parse_outcome(task: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result.get("parse_outcome"), dict):
         return result["parse_outcome"]
     return {}
+
+
+def _task_next_action(task: dict[str, Any], *, parse_outcome: dict[str, Any] | None = None) -> str | None:
+    result = _task_result(task)
+    parse_outcome = parse_outcome if isinstance(parse_outcome, dict) else _task_parse_outcome(task)
+    for value in (
+        parse_outcome.get("next_action") if isinstance(parse_outcome, dict) else None,
+        task.get("next_action"),
+        result.get("next_action"),
+    ):
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return None
 
 
 def _task_quality_route_summary(task: dict[str, Any]) -> dict[str, Any]:
@@ -3776,6 +3795,7 @@ def _manifest_fieldnames() -> list[str]:
         "quality_label",
         "reason_code",
         "action_hint",
+        "next_action",
         "selected_provider",
         "parser_strategy",
         "parse_outcome",
