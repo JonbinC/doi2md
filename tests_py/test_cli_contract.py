@@ -3327,6 +3327,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                 },
                 "quality": {
                     "content_level": "full_text",
+                    "quality_issue_codes": ["missing_figure_assets", "unrenderable_tables"],
                     "abstract_only": False,
                     "section_count": 8,
                     "paragraph_count": 36,
@@ -3412,6 +3413,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["route_pdf_figure_usable_asset_rate"] == "0.5"
     assert rows[0]["route_pdf_structured_table_rate"] == "0.8"
     assert rows[0]["content_level"] == "full_text"
+    assert rows[0]["quality_issue_codes"] == "missing_figure_assets,unrenderable_tables"
     assert rows[0]["abstract_only"] == "False"
     assert rows[0]["section_count"] == "8"
     assert rows[0]["body_token_count"] == "6400"
