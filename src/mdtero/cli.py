@@ -4246,6 +4246,7 @@ def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
         quality_label = str(payload.get("quality_label") or "").strip()
         if quality_label:
             console.print(f"Quality: {quality_label}")
+        _print_quality_summary(payload, console)
         warning = payload.get("quality_warning") or _quality_warning(quality_label)
         if warning:
             console.print(f"Warning: {warning}")
@@ -4255,6 +4256,40 @@ def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
         _print_translation_attempts(payload, console)
     else:
         console.print(payload)
+
+
+def _print_quality_summary(payload: dict[str, Any], console: Console) -> None:
+    summary = payload.get("quality_summary") if isinstance(payload.get("quality_summary"), dict) else {}
+    if not summary and isinstance(payload.get("result"), dict):
+        quality = payload["result"].get("quality") if isinstance(payload["result"].get("quality"), dict) else {}
+        summary = quality if isinstance(quality, dict) else {}
+    if not summary:
+        return
+    metrics = []
+    for label, key in (
+        ("sections", "section_count"),
+        ("tokens", "body_token_count"),
+        ("figures", "figure_count"),
+        ("missing figures", "figures_missing_assets"),
+        ("tables", "table_count"),
+        ("structured tables", "structured_table_count"),
+        ("formulas", "formula_count"),
+    ):
+        value = summary.get(key)
+        if value not in (None, ""):
+            metrics.append(f"{label}: {value}")
+    for label, key in (("structured table rate", "structured_table_rate"), ("table renderable rate", "table_renderable_rate")):
+        value = summary.get(key)
+        if value not in (None, ""):
+            metrics.append(f"{label}: {value}")
+    if metrics:
+        console.print("Quality metrics: " + "; ".join(metrics))
+    issue_codes = summary.get("quality_issue_codes")
+    if issue_codes:
+        console.print("Quality issues: " + _join_values(issue_codes))
+    next_action = str(summary.get("next_action") or "").strip()
+    if next_action and next_action != "none":
+        console.print(f"Quality next action: {next_action}")
 
 
 def _print_translation_attempts(payload: dict[str, Any], console: Console) -> None:

@@ -3838,6 +3838,49 @@ def test_status_text_prints_skipped_translation_provider_attempt_messages(monkey
     assert "OPENAI_API_KEY" in output
 
 
+def test_status_text_prints_parse_quality_summary(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="parse-status-quality-demo")
+
+    def fake_task(self, task_id):
+        return {
+            "task_id": task_id,
+            "task_kind": "parse",
+            "status": "succeeded",
+            "quality_label": "full_text_with_warnings",
+            "quality_summary": {
+                "quality_label": "full_text_with_warnings",
+                "section_count": 8,
+                "body_token_count": 6400,
+                "figure_count": 4,
+                "figures_missing_assets": 2,
+                "table_count": 2,
+                "structured_table_count": 1,
+                "structured_table_rate": 0.5,
+                "table_renderable_rate": 1.0,
+                "formula_count": 3,
+                "quality_issue_codes": ["missing_figure_assets", "unstructured_tables"],
+                "next_action": "repair_visual_assets",
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.cmd_status(type("Args", (), {"task_id": "task-parse", "wait": False, "json": False, "trace": False})()) == 0
+    output = capsys.readouterr().out
+
+    assert "Quality: full_text_with_warnings" in output
+    assert "sections: 8" in output
+    assert "tokens: 6400" in output
+    assert "missing figures: 2" in output
+    assert "structured table rate: 0.5" in output
+    assert "renderable rate: 1.0" in output
+    assert "Quality issues: missing_figure_assets,unstructured_tables" in output
+    assert "Quality next action: repair_visual_assets" in output
+
+
 def test_status_wait_timeout_returns_structured_payload_without_updating_project(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
