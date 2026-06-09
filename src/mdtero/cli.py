@@ -3563,8 +3563,11 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "tables": {
             "total_table_count": 0,
             "structured_table_count": 0,
+            "renderable_table_count": 0,
             "needs_structure_retry_count": 0,
+            "needs_renderable_retry_count": 0,
             "unstructured_table_count": 0,
+            "unrenderable_table_count": 0,
         },
         "formulas": {"total_formula_count": 0},
         "visual_assets": {
@@ -3672,13 +3675,20 @@ def _accumulate_cli_content_summary(summary: dict[str, Any], item: dict[str, Any
 def _accumulate_cli_table_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
     table_count = _integer_value(item.get("table_count"))
     structured_table_count = _integer_value(item.get("structured_table_count"))
+    explicit_renderable_table_count = _optional_integer_value(item.get("renderable_table_count"))
+    renderable_table_count = explicit_renderable_table_count if explicit_renderable_table_count is not None else structured_table_count
     unstructured_count = max(table_count - structured_table_count, 0)
+    unrenderable_count = max(table_count - renderable_table_count, 0)
     summary["total_table_count"] += table_count
     summary["structured_table_count"] += structured_table_count
+    summary["renderable_table_count"] += renderable_table_count
     summary["unstructured_table_count"] += unstructured_count
+    summary["unrenderable_table_count"] += unrenderable_count
     issue_codes = {str(value).strip() for value in _split_cli_values(item.get("quality_issue_codes")) if str(value).strip()}
-    if "unrenderable_tables" in issue_codes or unstructured_count > 0:
+    if "unstructured_tables" in issue_codes or unstructured_count > 0:
         summary["needs_structure_retry_count"] += 1
+    if "unrenderable_tables" in issue_codes or unrenderable_count > 0:
+        summary["needs_renderable_retry_count"] += 1
 
 
 def _accumulate_cli_visual_asset_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
@@ -3754,6 +3764,10 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "figure_remote_url_count": item.get("figure_remote_url_count"),
         "table_usable_asset_rate": item.get("table_usable_asset_rate"),
         "table_missing_local_file_count": item.get("table_missing_local_file_count"),
+        "renderable_table_count": item.get("renderable_table_count"),
+        "table_renderable_rate": item.get("table_renderable_rate"),
+        "tables_missing_structure": item.get("tables_missing_structure"),
+        "tables_missing_renderable_assets": item.get("tables_missing_renderable_assets"),
         "visual_asset_repair_hint": item.get("visual_asset_repair_hint"),
         "follow_up_tags": item.get("follow_up_tags"),
         "artifact": str(download.get("artifact") or item.get("preferred_artifact") or ""),
@@ -3883,6 +3897,7 @@ def _route_source_format_values(source_format: str, summary: Any) -> dict[str, A
             f"{prefix}_reference_count": None,
             f"{prefix}_figure_usable_asset_rate": None,
             f"{prefix}_structured_table_rate": None,
+            f"{prefix}_table_renderable_rate": None,
             f"{prefix}_reason_codes": "",
         }
     return {
@@ -3897,6 +3912,7 @@ def _route_source_format_values(source_format: str, summary: Any) -> dict[str, A
         f"{prefix}_reference_count": summary.get("best_reference_count"),
         f"{prefix}_figure_usable_asset_rate": summary.get("best_figure_usable_asset_rate"),
         f"{prefix}_structured_table_rate": summary.get("best_structured_table_rate"),
+        f"{prefix}_table_renderable_rate": summary.get("best_table_renderable_rate"),
         f"{prefix}_reason_codes": _join_values(summary.get("reason_codes") or []),
     }
 
@@ -4089,6 +4105,7 @@ def _route_format_fieldnames() -> list[str]:
         "reference_count",
         "figure_usable_asset_rate",
         "structured_table_rate",
+        "table_renderable_rate",
         "reason_codes",
     )
     for source_format in ("xml", "html", "pdf"):
@@ -4111,6 +4128,10 @@ def _quality_metric_fieldnames() -> list[str]:
         "table_count",
         "structured_table_count",
         "structured_table_rate",
+        "renderable_table_count",
+        "table_renderable_rate",
+        "tables_missing_structure",
+        "tables_missing_renderable_assets",
         "formula_count",
         "equation_count",
     ]
