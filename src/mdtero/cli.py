@@ -3547,6 +3547,20 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "by_quality_label": {},
         "quality_issues": {"by_code": {}},
         "failures": {"by_reason_code": {}},
+        "content": {
+            "abstract_only_count": 0,
+            "partial_or_low_confidence_count": 0,
+            "short_body_count": 0,
+            "min_body_token_count": None,
+            "max_body_token_count": None,
+        },
+        "tables": {
+            "total_table_count": 0,
+            "structured_table_count": 0,
+            "needs_structure_retry_count": 0,
+            "unstructured_table_count": 0,
+        },
+        "formulas": {"total_formula_count": 0},
         "visual_assets": {
             "needs_retry_count": 0,
             "missing_figure_asset_count": 0,
@@ -3584,6 +3598,9 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         quality_label = str(item.get("quality_label") or "unknown").strip() or "unknown"
         summary["by_quality_label"][quality_label] = summary["by_quality_label"].get(quality_label, 0) + 1
         _accumulate_cli_counter(summary["quality_issues"]["by_code"], item.get("quality_issue_codes"))
+        _accumulate_cli_content_summary(summary["content"], item)
+        _accumulate_cli_table_summary(summary["tables"], item)
+        summary["formulas"]["total_formula_count"] += _integer_value(item.get("formula_count") or item.get("equation_count"))
         _accumulate_cli_visual_asset_summary(summary["visual_assets"], item)
         _accumulate_cli_counter(summary["follow_up"]["by_tag"], item.get("follow_up_tags"))
         next_action = str(item.get("next_action") or "none").strip() or "none"
@@ -3608,6 +3625,37 @@ def _empty_cli_route_format_summary() -> dict[str, Any]:
         "best_quality_labels": {},
         "reason_codes": {},
     }
+
+
+def _accumulate_cli_content_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
+    quality_label = str(item.get("quality_label") or "").strip()
+    content_level = str(item.get("content_level") or "").strip()
+    issue_codes = {str(value).strip() for value in _split_cli_values(item.get("quality_issue_codes")) if str(value).strip()}
+    if item.get("abstract_only") is True or str(item.get("abstract_only") or "").lower() == "true" or quality_label == "abstract_only" or content_level == "abstract_only":
+        summary["abstract_only_count"] += 1
+    if quality_label in {"partial_fulltext", "low_confidence_parse"} or content_level == "partial_fulltext":
+        summary["partial_or_low_confidence_count"] += 1
+    body_token_count = _optional_integer_value(item.get("body_token_count"))
+    if body_token_count is None:
+        return
+    if body_token_count < 1200 or "short_body" in issue_codes or "section_only_fulltext" in issue_codes:
+        summary["short_body_count"] += 1
+    current_min = summary.get("min_body_token_count")
+    current_max = summary.get("max_body_token_count")
+    summary["min_body_token_count"] = body_token_count if current_min is None else min(current_min, body_token_count)
+    summary["max_body_token_count"] = body_token_count if current_max is None else max(current_max, body_token_count)
+
+
+def _accumulate_cli_table_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
+    table_count = _integer_value(item.get("table_count"))
+    structured_table_count = _integer_value(item.get("structured_table_count"))
+    unstructured_count = max(table_count - structured_table_count, 0)
+    summary["total_table_count"] += table_count
+    summary["structured_table_count"] += structured_table_count
+    summary["unstructured_table_count"] += unstructured_count
+    issue_codes = {str(value).strip() for value in _split_cli_values(item.get("quality_issue_codes")) if str(value).strip()}
+    if "unrenderable_tables" in issue_codes or unstructured_count > 0:
+        summary["needs_structure_retry_count"] += 1
 
 
 def _accumulate_cli_visual_asset_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
@@ -3926,6 +3974,23 @@ def _integer_value(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _optional_integer_value(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _split_cli_values(values: Any) -> list[str]:
+    if isinstance(values, str):
+        iterable = values.split(",")
+    else:
+        iterable = values or []
+    return [str(value).strip() for value in iterable if str(value).strip()]
 
 
 def _join_values(values: Any) -> str:
