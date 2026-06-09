@@ -3546,6 +3546,7 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "by_status": {},
         "by_quality_label": {},
         "quality_issues": {"by_code": {}},
+        "failures": {"by_reason_code": {}},
         "visual_assets": {
             "needs_retry_count": 0,
             "missing_figure_asset_count": 0,
@@ -3575,6 +3576,9 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
             summary["succeeded_count"] += 1
         if status in {"failed", "cancelled", "timeout"}:
             summary["failed_count"] += 1
+            reason_code = str(item.get("reason_code") or item.get("error_code") or "unknown").strip() or "unknown"
+            failure_reasons = summary["failures"]["by_reason_code"]
+            failure_reasons[reason_code] = failure_reasons.get(reason_code, 0) + 1
         if item.get("download"):
             summary["downloaded_count"] += 1
         quality_label = str(item.get("quality_label") or "unknown").strip() or "unknown"
