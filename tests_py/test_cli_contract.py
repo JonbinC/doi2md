@@ -3335,6 +3335,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     "best_source_format": "pdf",
                     "best_quality_label": "full_text_good",
                     "needs_followup": False,
+                    "next_action": "none",
                     "by_source_format": {
                         "xml": {
                             "candidate_count": 1,
@@ -3440,6 +3441,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["next_action"] == "repair_visual_assets"
     assert rows[0]["route_candidate_count"] == "2"
     assert rows[0]["route_best_source_format"] == "pdf"
+    assert rows[0]["route_next_action"] == "none"
     assert rows[0]["route_xml_incomplete_count"] == "1"
     assert rows[0]["route_xml_best_quality_label"] == "abstract_only"
     assert rows[0]["route_xml_body_token_count"] == "180"
@@ -3481,6 +3483,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unrenderable_tables": 1}
     assert summary["follow_up"]["by_tag"] == {"repair_visual_assets": 1}
     assert summary["follow_up"]["by_next_action"] == {"repair_visual_assets": 1}
+    assert summary["follow_up"]["by_route_next_action"] == {"none": 1}
     assert summary["route_quality"]["best_source_formats"] == {"pdf": 1}
     assert summary["route_quality"]["by_source_format"]["xml"]["incomplete_count"] == 1
     assert summary["route_quality"]["by_source_format"]["xml"]["best_quality_labels"] == {"abstract_only": 1}

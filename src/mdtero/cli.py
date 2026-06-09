@@ -1303,6 +1303,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "route_best_source_format": route_summary.get("best_source_format") if route_summary else None,
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
+        "route_next_action": route_summary.get("next_action") if route_summary else None,
         **route_formats,
         **quality_metrics,
         **visual_assets,
@@ -3547,6 +3548,7 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "follow_up": {
             "by_tag": {},
             "by_next_action": {},
+            "by_route_next_action": {},
         },
         "route_quality": {
             "best_source_formats": {},
@@ -3572,6 +3574,8 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         _accumulate_cli_counter(summary["follow_up"]["by_tag"], item.get("follow_up_tags"))
         next_action = str(item.get("next_action") or "none").strip() or "none"
         summary["follow_up"]["by_next_action"][next_action] = summary["follow_up"]["by_next_action"].get(next_action, 0) + 1
+        route_next_action = str(item.get("route_next_action") or "none").strip() or "none"
+        summary["follow_up"]["by_route_next_action"][route_next_action] = summary["follow_up"]["by_route_next_action"].get(route_next_action, 0) + 1
         best_source_format = str(item.get("route_best_source_format") or "").strip().lower()
         if best_source_format:
             winners = summary["route_quality"]["best_source_formats"]
@@ -3639,6 +3643,7 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "route_best_source_format": item.get("route_best_source_format"),
         "route_best_quality_label": item.get("route_best_quality_label"),
         "route_needs_followup": item.get("route_needs_followup"),
+        "route_next_action": item.get("route_next_action"),
         **_route_format_manifest_values(item),
         **_quality_metric_manifest_values(item),
         "visual_asset_retry": item.get("visual_asset_retry"),
@@ -3687,6 +3692,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "route_best_source_format": route_summary.get("best_source_format") if route_summary else None,
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
+        "route_next_action": route_summary.get("next_action") if route_summary else None,
         **route_formats,
         **quality_metrics,
         **visual_assets,
@@ -3921,6 +3927,7 @@ def _manifest_fieldnames() -> list[str]:
         "route_best_source_format",
         "route_best_quality_label",
         "route_needs_followup",
+        "route_next_action",
         *_route_count_fieldnames(),
         *_route_format_fieldnames(),
         *_quality_metric_fieldnames(),
