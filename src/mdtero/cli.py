@@ -1225,7 +1225,7 @@ def cmd_parse_batch(args: argparse.Namespace) -> int:
                 if task.get("status") != "timeout":
                     update_task(Path.cwd(), task)
                 _merge_waited_task_into_submission(result, task)
-                item.update(_batch_item_summary(target, result))
+                item.update(_batch_item_summary(target, result, route_kind=item.get("route_kind")))
                 if args.download and task.get("status") == "succeeded":
                     download = _download_task_artifact(
                         client,
@@ -1238,7 +1238,7 @@ def cmd_parse_batch(args: argparse.Namespace) -> int:
                     item["download"] = download
                     item["path"] = download.get("path")
             else:
-                item.update(_batch_item_summary(target, result))
+                item.update(_batch_item_summary(target, result, route_kind=item.get("route_kind")))
         except Exception as exc:
             item.update(_batch_exception_payload(target, exc))
         items.append(item)
@@ -1278,7 +1278,7 @@ def _validated_parse_batch_targets(path: Path) -> tuple[list[str], dict[str, Any
     return targets, None
 
 
-def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, Any]:
+def _batch_item_summary(input_value: str, result: dict[str, Any], *, route_kind: Any = None) -> dict[str, Any]:
     task = result.get("final_task") if isinstance(result.get("final_task"), dict) else result
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
@@ -1294,6 +1294,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "reason_code": result.get("reason_code") or task.get("reason_code") or task.get("error_code"),
         "action_hint": result.get("action_hint") or task.get("action_hint"),
         "next_action": next_action,
+        "route_kind": result.get("route_kind") or task.get("route_kind") or _task_result(task).get("route_kind") or route_kind,
         "selected_provider": task.get("selected_provider") or _task_result(task).get("selected_provider"),
         "parser_strategy": task.get("parser_strategy") or _task_result(task).get("parser_strategy"),
         "parse_outcome": parse_outcome.get("outcome_code") if parse_outcome else None,
@@ -3654,6 +3655,7 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "reason_code": item.get("reason_code"),
         "action_hint": item.get("action_hint"),
         "next_action": item.get("next_action"),
+        "route_kind": item.get("route_kind"),
         "selected_provider": item.get("selected_provider"),
         "parser_strategy": item.get("parser_strategy"),
         "parse_outcome": download.get("parse_outcome") or item.get("parse_outcome"),
@@ -3703,6 +3705,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "reason_code": task.get("reason_code") or task.get("error_code"),
         "action_hint": task.get("action_hint"),
         "next_action": next_action,
+        "route_kind": task.get("route_kind") or _task_result(task).get("route_kind"),
         "selected_provider": task.get("selected_provider") or _task_result(task).get("selected_provider"),
         "parser_strategy": task.get("parser_strategy") or _task_result(task).get("parser_strategy"),
         "parse_outcome": download.get("parse_outcome") or (parse_outcome.get("outcome_code") if parse_outcome else None),
@@ -3938,6 +3941,7 @@ def _manifest_fieldnames() -> list[str]:
         "reason_code",
         "action_hint",
         "next_action",
+        "route_kind",
         "selected_provider",
         "parser_strategy",
         "parse_outcome",
