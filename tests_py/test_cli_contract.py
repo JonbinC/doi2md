@@ -3438,6 +3438,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "fulltext_accepted" in manifest
     assert "best_oa_location_pdf" in manifest
     rows = list(csv.DictReader(manifest.splitlines()))
+    assert len(rows) == 1
     assert rows[0]["next_action"] == "repair_visual_assets"
     assert rows[0]["route_candidate_count"] == "2"
     assert rows[0]["route_best_source_format"] == "pdf"
@@ -3526,6 +3527,13 @@ def test_parse_batch_writes_failed_manifest_next_action(monkeypatch, tmp_path: P
 
     assert payload["status"] == "completed_with_failures"
     assert payload["failures"][0]["next_action"] == "retry_with_trace_or_upload_source"
+    manifest = (output_dir / "manifest.csv").read_text(encoding="utf-8")
+    manifest_rows = list(csv.DictReader(manifest.splitlines()))
+    assert len(manifest_rows) == 1
+    assert manifest_rows[0]["input"] == "10.1000/failure"
+    assert manifest_rows[0]["reason_code"] == "parser_failed"
+    assert manifest_rows[0]["next_action"] == "retry_with_trace_or_upload_source"
+    assert manifest_rows[0]["path"] == ""
     failed = (output_dir / "failed.csv").read_text(encoding="utf-8")
     rows = list(csv.DictReader(failed.splitlines()))
     assert rows[0]["reason_code"] == "parser_failed"
