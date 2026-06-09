@@ -3326,6 +3326,19 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     },
                 },
                 "quality": {
+                    "content_level": "full_text",
+                    "abstract_only": False,
+                    "section_count": 8,
+                    "paragraph_count": 36,
+                    "body_token_count": 6400,
+                    "reference_count": 52,
+                    "figure_count": 4,
+                    "figures_missing_assets": 2,
+                    "figure_asset_missing_rate": 0.5,
+                    "table_count": 2,
+                    "structured_table_count": 1,
+                    "structured_table_rate": 0.5,
+                    "formula_count": 3,
                     "visual_asset_diagnostics": {
                         "needs_visual_asset_retry": True,
                         "missing_figure_asset_ids": ["fig1", "fig2"],
@@ -3398,6 +3411,18 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert rows[0]["route_pdf_reference_count"] == "52"
     assert rows[0]["route_pdf_figure_usable_asset_rate"] == "0.5"
     assert rows[0]["route_pdf_structured_table_rate"] == "0.8"
+    assert rows[0]["content_level"] == "full_text"
+    assert rows[0]["abstract_only"] == "False"
+    assert rows[0]["section_count"] == "8"
+    assert rows[0]["body_token_count"] == "6400"
+    assert rows[0]["reference_count"] == "52"
+    assert rows[0]["figure_count"] == "4"
+    assert rows[0]["figures_missing_assets"] == "2"
+    assert rows[0]["figure_asset_missing_rate"] == "0.5"
+    assert rows[0]["table_count"] == "2"
+    assert rows[0]["structured_table_count"] == "1"
+    assert rows[0]["structured_table_rate"] == "0.5"
+    assert rows[0]["formula_count"] == "3"
     assert rows[0]["visual_asset_retry"] == "True"
     assert rows[0]["missing_figure_asset_count"] == "2"
     assert rows[0]["missing_table_asset_count"] == "1"
