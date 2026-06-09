@@ -3529,16 +3529,19 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
     manifest_path = output_dir / "manifest.csv"
     failed_path = output_dir / "failed.csv"
     summary_path = output_dir / "manifest_summary.json"
+    route_quality_path = output_dir / "route_quality.csv"
     retry_fulltext_path = output_dir / "retry_fulltext.csv"
     repair_visual_assets_path = output_dir / "repair_visual_assets.csv"
     repair_tables_path = output_dir / "repair_tables.csv"
     rows = [_manifest_row_from_batch_item(item) for item in items]
     failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
+    route_quality_rows = _route_quality_manifest_rows(rows)
     retry_fulltext_rows = [row for row in rows if _batch_row_needs_fulltext_retry(row)]
     repair_visual_asset_rows = [row for row in rows if _batch_row_needs_visual_asset_repair(row)]
     repair_table_rows = [row for row in rows if _batch_row_needs_table_repair(row)]
     _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
     _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "next_action", "action_hint"])
+    _write_csv_rows(route_quality_path, route_quality_rows, _route_quality_manifest_fieldnames())
     _write_csv_rows(retry_fulltext_path, retry_fulltext_rows, _follow_up_manifest_fieldnames())
     _write_csv_rows(repair_visual_assets_path, repair_visual_asset_rows, _follow_up_manifest_fieldnames())
     _write_csv_rows(repair_tables_path, repair_table_rows, _follow_up_manifest_fieldnames())
@@ -3547,6 +3550,7 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
         "manifest_csv": str(manifest_path),
         "failed_csv": str(failed_path),
         "summary_json": str(summary_path),
+        "route_quality_csv": str(route_quality_path),
         "retry_fulltext_csv": str(retry_fulltext_path),
         "repair_visual_assets_csv": str(repair_visual_assets_path),
         "repair_tables_csv": str(repair_tables_path),
@@ -3640,6 +3644,48 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         for source_format in ("xml", "html", "pdf"):
             _accumulate_cli_route_format_summary(summary["route_quality"]["by_source_format"][source_format], item, source_format)
     return summary
+
+
+def _route_quality_manifest_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        for source_format in ("xml", "html", "pdf"):
+            prefix = f"route_{source_format}_"
+            output.append(
+                {
+                    "input": row.get("input"),
+                    "doi": row.get("doi"),
+                    "title": row.get("title"),
+                    "task_id": row.get("task_id"),
+                    "status": row.get("status"),
+                    "source_format": source_format,
+                    "route_best_connector": row.get("route_best_connector"),
+                    "route_best_source_format": row.get("route_best_source_format"),
+                    "route_best_quality_label": row.get("route_best_quality_label"),
+                    "route_next_action": row.get("route_next_action"),
+                    "candidate_count": row.get(f"{prefix}candidate_count"),
+                    "accepted_count": row.get(f"{prefix}accepted_count"),
+                    "incomplete_count": row.get(f"{prefix}incomplete_count"),
+                    "failed_count": row.get(f"{prefix}failed_count"),
+                    "best_quality_label": row.get(f"{prefix}best_quality_label"),
+                    "section_count": row.get(f"{prefix}section_count"),
+                    "paragraph_count": row.get(f"{prefix}paragraph_count"),
+                    "body_token_count": row.get(f"{prefix}body_token_count"),
+                    "reference_count": row.get(f"{prefix}reference_count"),
+                    "figure_usable_asset_rate": row.get(f"{prefix}figure_usable_asset_rate"),
+                    "structured_table_rate": row.get(f"{prefix}structured_table_rate"),
+                    "table_renderable_rate": row.get(f"{prefix}table_renderable_rate"),
+                    "reason_codes": row.get(f"{prefix}reason_codes"),
+                    "selected_quality_label": row.get("quality_label"),
+                    "selected_content_level": row.get("content_level"),
+                    "selected_body_token_count": row.get("body_token_count"),
+                    "selected_quality_issue_codes": row.get("quality_issue_codes"),
+                    "selected_next_action": row.get("next_action"),
+                    "artifact": row.get("artifact"),
+                    "path": row.get("path"),
+                }
+            )
+    return output
 
 
 def _batch_row_needs_fulltext_retry(row: dict[str, Any]) -> bool:
@@ -4170,6 +4216,41 @@ def _follow_up_manifest_fieldnames() -> list[str]:
         "parse_reason_codes",
         "reason_code",
         "action_hint",
+        "path",
+    ]
+
+
+def _route_quality_manifest_fieldnames() -> list[str]:
+    return [
+        "input",
+        "doi",
+        "title",
+        "task_id",
+        "status",
+        "source_format",
+        "route_best_connector",
+        "route_best_source_format",
+        "route_best_quality_label",
+        "route_next_action",
+        "candidate_count",
+        "accepted_count",
+        "incomplete_count",
+        "failed_count",
+        "best_quality_label",
+        "section_count",
+        "paragraph_count",
+        "body_token_count",
+        "reference_count",
+        "figure_usable_asset_rate",
+        "structured_table_rate",
+        "table_renderable_rate",
+        "reason_codes",
+        "selected_quality_label",
+        "selected_content_level",
+        "selected_body_token_count",
+        "selected_quality_issue_codes",
+        "selected_next_action",
+        "artifact",
         "path",
     ]
 
