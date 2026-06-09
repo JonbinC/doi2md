@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import csv
 import json
 import shlex
 import subprocess
@@ -3293,6 +3294,24 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     "best_quality_label": "full_text_good",
                     "needs_followup": False,
                 },
+                "quality": {
+                    "visual_asset_diagnostics": {
+                        "needs_visual_asset_retry": True,
+                        "missing_figure_asset_ids": ["fig1", "fig2"],
+                        "missing_table_asset_ids": ["tbl1"],
+                        "figure": {
+                            "usable_asset_rate": 0.5,
+                            "missing_local_file_count": 2,
+                        },
+                        "table": {
+                            "usable_asset_rate": 0.75,
+                            "missing_local_file_count": 1,
+                        },
+                    }
+                },
+            },
+            "manifest_row": {
+                "follow_up_tags": ["repair_visual_assets"],
             },
         }
 
@@ -3333,6 +3352,14 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "uploaded_pdf_mineru_precision_v2" in manifest
     assert "fulltext_accepted" in manifest
     assert "best_oa_location_pdf" in manifest
+    rows = list(csv.DictReader(manifest.splitlines()))
+    assert rows[0]["visual_asset_retry"] == "True"
+    assert rows[0]["missing_figure_asset_count"] == "2"
+    assert rows[0]["missing_table_asset_count"] == "1"
+    assert rows[0]["figure_usable_asset_rate"] == "0.5"
+    assert rows[0]["table_usable_asset_rate"] == "0.75"
+    assert rows[0]["visual_asset_repair_hint"] == "repair_or_regenerate_artifact_bundle_assets"
+    assert rows[0]["follow_up_tags"] == "repair_visual_assets"
 
 
 def test_status_json_includes_download_next_command_for_succeeded_tasks(monkeypatch, tmp_path: Path, capsys):
