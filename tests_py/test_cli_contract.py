@@ -3290,9 +3290,39 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                 "parser_strategy": "uploaded_pdf_mineru_precision_v2",
                 "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": []},
                 "quality_route_summary": {
+                    "candidate_count": 2,
+                    "accepted_count": 1,
+                    "incomplete_count": 1,
+                    "failed_count": 0,
                     "best_connector": "best_oa_location_pdf",
                     "best_quality_label": "full_text_good",
                     "needs_followup": False,
+                    "by_source_format": {
+                        "xml": {
+                            "candidate_count": 1,
+                            "accepted_count": 0,
+                            "incomplete_count": 1,
+                            "failed_count": 0,
+                            "best_quality_label": "abstract_only",
+                            "best_section_count": 0,
+                            "best_body_token_count": 180,
+                            "reason_codes": ["content_incomplete", "abstract_only"],
+                        },
+                        "pdf": {
+                            "candidate_count": 1,
+                            "accepted_count": 1,
+                            "incomplete_count": 0,
+                            "failed_count": 0,
+                            "best_quality_label": "full_text_good",
+                            "best_section_count": 8,
+                            "best_paragraph_count": 36,
+                            "best_body_token_count": 6400,
+                            "best_reference_count": 52,
+                            "best_figure_usable_asset_rate": 0.5,
+                            "best_structured_table_rate": 0.8,
+                            "reason_codes": [],
+                        },
+                    },
                 },
                 "quality": {
                     "visual_asset_diagnostics": {
@@ -3355,6 +3385,16 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "fulltext_accepted" in manifest
     assert "best_oa_location_pdf" in manifest
     rows = list(csv.DictReader(manifest.splitlines()))
+    assert rows[0]["route_candidate_count"] == "2"
+    assert rows[0]["route_xml_incomplete_count"] == "1"
+    assert rows[0]["route_xml_best_quality_label"] == "abstract_only"
+    assert rows[0]["route_xml_body_token_count"] == "180"
+    assert rows[0]["route_xml_reason_codes"] == "content_incomplete,abstract_only"
+    assert rows[0]["route_pdf_accepted_count"] == "1"
+    assert rows[0]["route_pdf_body_token_count"] == "6400"
+    assert rows[0]["route_pdf_reference_count"] == "52"
+    assert rows[0]["route_pdf_figure_usable_asset_rate"] == "0.5"
+    assert rows[0]["route_pdf_structured_table_rate"] == "0.8"
     assert rows[0]["visual_asset_retry"] == "True"
     assert rows[0]["missing_figure_asset_count"] == "2"
     assert rows[0]["missing_table_asset_count"] == "1"
