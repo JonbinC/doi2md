@@ -3707,7 +3707,9 @@ def _route_format_manifest_values(item: dict[str, Any]) -> dict[str, Any]:
 def _task_quality_metrics(task: dict[str, Any]) -> dict[str, Any]:
     result = _task_result(task)
     quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
-    return {field: quality.get(field) for field in _quality_metric_fieldnames()}
+    metrics = {field: quality.get(field) for field in _quality_metric_fieldnames()}
+    metrics["quality_issue_codes"] = _join_values(quality.get("quality_issue_codes") or [])
+    return metrics
 
 
 def _quality_metric_manifest_values(item: dict[str, Any]) -> dict[str, Any]:
@@ -3877,6 +3879,7 @@ def _route_format_fieldnames() -> list[str]:
 def _quality_metric_fieldnames() -> list[str]:
     return [
         "content_level",
+        "quality_issue_codes",
         "abstract_only",
         "section_count",
         "paragraph_count",
