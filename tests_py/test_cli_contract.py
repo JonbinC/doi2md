@@ -3483,6 +3483,20 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert summary["downloaded_count"] == 1
     assert summary["by_quality_label"] == {"full_text_good": 1}
     assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unrenderable_tables": 1}
+    assert summary["content"] == {
+        "abstract_only_count": 0,
+        "partial_or_low_confidence_count": 0,
+        "short_body_count": 0,
+        "min_body_token_count": 6400,
+        "max_body_token_count": 6400,
+    }
+    assert summary["tables"] == {
+        "total_table_count": 2,
+        "structured_table_count": 1,
+        "needs_structure_retry_count": 1,
+        "unstructured_table_count": 1,
+    }
+    assert summary["formulas"] == {"total_formula_count": 3}
     assert summary["visual_assets"] == {
         "needs_retry_count": 1,
         "missing_figure_asset_count": 2,
