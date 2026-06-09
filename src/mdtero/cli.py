@@ -3514,11 +3514,94 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / "manifest.csv"
     failed_path = output_dir / "failed.csv"
+    summary_path = output_dir / "manifest_summary.json"
     rows = [_manifest_row_from_batch_item(item) for item in items if item.get("download")]
     failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
     _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
     _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "next_action", "action_hint"])
-    return {"manifest_csv": str(manifest_path), "failed_csv": str(failed_path)}
+    summary_path.write_text(json.dumps(_batch_manifest_summary(items), indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"manifest_csv": str(manifest_path), "failed_csv": str(failed_path), "summary_json": str(summary_path)}
+
+
+def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "total_count": len(items),
+        "succeeded_count": 0,
+        "failed_count": 0,
+        "downloaded_count": 0,
+        "by_status": {},
+        "by_quality_label": {},
+        "quality_issues": {"by_code": {}},
+        "follow_up": {
+            "by_tag": {},
+            "by_next_action": {},
+        },
+        "route_quality": {
+            "best_source_formats": {},
+            "by_source_format": {
+                "xml": _empty_cli_route_format_summary(),
+                "html": _empty_cli_route_format_summary(),
+                "pdf": _empty_cli_route_format_summary(),
+            },
+        },
+    }
+    for item in items:
+        status = str(item.get("status") or "unknown").strip() or "unknown"
+        summary["by_status"][status] = summary["by_status"].get(status, 0) + 1
+        if status == "succeeded":
+            summary["succeeded_count"] += 1
+        if status in {"failed", "cancelled", "timeout"}:
+            summary["failed_count"] += 1
+        if item.get("download"):
+            summary["downloaded_count"] += 1
+        quality_label = str(item.get("quality_label") or "unknown").strip() or "unknown"
+        summary["by_quality_label"][quality_label] = summary["by_quality_label"].get(quality_label, 0) + 1
+        _accumulate_cli_counter(summary["quality_issues"]["by_code"], item.get("quality_issue_codes"))
+        _accumulate_cli_counter(summary["follow_up"]["by_tag"], item.get("follow_up_tags"))
+        next_action = str(item.get("next_action") or "none").strip() or "none"
+        summary["follow_up"]["by_next_action"][next_action] = summary["follow_up"]["by_next_action"].get(next_action, 0) + 1
+        best_source_format = str(item.get("route_best_source_format") or "").strip().lower()
+        if best_source_format:
+            winners = summary["route_quality"]["best_source_formats"]
+            winners[best_source_format] = winners.get(best_source_format, 0) + 1
+        for source_format in ("xml", "html", "pdf"):
+            _accumulate_cli_route_format_summary(summary["route_quality"]["by_source_format"][source_format], item, source_format)
+    return summary
+
+
+def _empty_cli_route_format_summary() -> dict[str, Any]:
+    return {
+        "candidate_count": 0,
+        "accepted_count": 0,
+        "incomplete_count": 0,
+        "failed_count": 0,
+        "best_quality_labels": {},
+        "reason_codes": {},
+    }
+
+
+def _accumulate_cli_route_format_summary(summary: dict[str, Any], item: dict[str, Any], source_format: str) -> None:
+    prefix = f"route_{source_format}_"
+    summary["candidate_count"] += _integer_value(item.get(f"{prefix}candidate_count"))
+    summary["accepted_count"] += _integer_value(item.get(f"{prefix}accepted_count"))
+    summary["incomplete_count"] += _integer_value(item.get(f"{prefix}incomplete_count"))
+    summary["failed_count"] += _integer_value(item.get(f"{prefix}failed_count"))
+    label = str(item.get(f"{prefix}best_quality_label") or "").strip()
+    if label:
+        labels = summary["best_quality_labels"]
+        labels[label] = labels.get(label, 0) + 1
+    _accumulate_cli_counter(summary["reason_codes"], item.get(f"{prefix}reason_codes"))
+
+
+def _accumulate_cli_counter(counter: dict[str, int], values: Any) -> None:
+    if isinstance(values, str):
+        iterable = values.split(",")
+    else:
+        iterable = values or []
+    for value in iterable:
+        normalized = str(value or "").strip()
+        if normalized:
+            counter[normalized] = counter.get(normalized, 0) + 1
 
 
 def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
