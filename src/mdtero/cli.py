@@ -1280,6 +1280,8 @@ def _validated_parse_batch_targets(path: Path) -> tuple[list[str], dict[str, Any
 
 def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, Any]:
     task = result.get("final_task") if isinstance(result.get("final_task"), dict) else result
+    parse_outcome = _task_parse_outcome(task)
+    route_summary = _task_quality_route_summary(task)
     return {
         "input": input_value,
         "task_id": result.get("task_id") or task.get("task_id"),
@@ -1287,6 +1289,14 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "quality_label": _task_quality_label(task),
         "reason_code": result.get("reason_code") or task.get("reason_code") or task.get("error_code"),
         "action_hint": result.get("action_hint") or task.get("action_hint"),
+        "selected_provider": task.get("selected_provider") or _task_result(task).get("selected_provider"),
+        "parser_strategy": task.get("parser_strategy") or _task_result(task).get("parser_strategy"),
+        "parse_outcome": parse_outcome.get("outcome_code") if parse_outcome else None,
+        "parse_billable": parse_outcome.get("billable") if parse_outcome else None,
+        "parse_reason_codes": _join_values(parse_outcome.get("reason_codes") if parse_outcome else []),
+        "route_best_connector": route_summary.get("best_connector") if route_summary else None,
+        "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
+        "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
         "title": _task_title(task),
         "doi": _task_doi(task) or _doi_from_input(input_value),
         "preferred_artifact": _preferred_parse_artifact(task),
@@ -1327,6 +1337,8 @@ def _failed_manifest_row(item: dict[str, Any]) -> dict[str, Any]:
         "status": item.get("status"),
         "quality_label": item.get("quality_label"),
         "reason_code": item.get("reason_code") or item.get("error_code"),
+        "parse_outcome": item.get("parse_outcome"),
+        "parse_reason_codes": item.get("parse_reason_codes"),
         "action_hint": item.get("action_hint"),
     }
 
@@ -1981,7 +1993,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     if task:
         payload["task"] = _download_task_summary(task)
     if getattr(args, "manifest", False):
-        payload["manifest"] = _append_download_manifest(args.output_dir, _manifest_row_from_task(task or {}, artifact=args.artifact, path=download["path"], input_value=None, original_filename=download.get("original_filename")))
+        payload["manifest"] = _append_download_manifest(args.output_dir, _manifest_row_from_task(task or {}, artifact=args.artifact, path=download["path"], input_value=None, original_filename=download.get("original_filename"), download=download))
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -3494,7 +3506,7 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
     rows = [_manifest_row_from_batch_item(item) for item in items if item.get("download")]
     failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
     _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
-    _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "action_hint"])
+    _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "action_hint"])
     return {"manifest_csv": str(manifest_path), "failed_csv": str(failed_path)}
 
 
@@ -3508,13 +3520,27 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "status": item.get("status"),
         "quality_label": item.get("quality_label"),
         "reason_code": item.get("reason_code"),
+        "action_hint": item.get("action_hint"),
+        "selected_provider": item.get("selected_provider"),
+        "parser_strategy": item.get("parser_strategy"),
+        "parse_outcome": download.get("parse_outcome") or item.get("parse_outcome"),
+        "parse_billable": download.get("parse_billable") if download.get("parse_billable") is not None else item.get("parse_billable"),
+        "parse_reason_codes": _join_values(download.get("parse_reason_codes") or item.get("parse_reason_codes")),
+        "quality_warning_code": download.get("quality_warning_code"),
+        "quality_warning": download.get("quality_warning"),
+        "route_best_connector": item.get("route_best_connector"),
+        "route_best_quality_label": item.get("route_best_quality_label"),
+        "route_needs_followup": item.get("route_needs_followup"),
         "artifact": str(download.get("artifact") or item.get("preferred_artifact") or ""),
         "path": download.get("path") or item.get("path"),
         "original_filename": download.get("original_filename"),
     }
 
 
-def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, input_value: str | None, original_filename: str | None) -> dict[str, Any]:
+def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, input_value: str | None, original_filename: str | None, download: dict[str, Any] | None = None) -> dict[str, Any]:
+    download = download or {}
+    parse_outcome = _task_parse_outcome(task)
+    route_summary = _task_quality_route_summary(task)
     return {
         "input": input_value or task.get("paper_input") or task.get("input_summary") or _task_doi(task),
         "doi": _task_doi(task),
@@ -3523,6 +3549,17 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "status": task.get("status"),
         "quality_label": _task_quality_label(task),
         "reason_code": task.get("reason_code") or task.get("error_code"),
+        "action_hint": task.get("action_hint"),
+        "selected_provider": task.get("selected_provider") or _task_result(task).get("selected_provider"),
+        "parser_strategy": task.get("parser_strategy") or _task_result(task).get("parser_strategy"),
+        "parse_outcome": download.get("parse_outcome") or (parse_outcome.get("outcome_code") if parse_outcome else None),
+        "parse_billable": download.get("parse_billable") if download.get("parse_billable") is not None else (parse_outcome.get("billable") if parse_outcome else None),
+        "parse_reason_codes": _join_values(download.get("parse_reason_codes") or (parse_outcome.get("reason_codes") if parse_outcome else [])),
+        "quality_warning_code": download.get("quality_warning_code"),
+        "quality_warning": download.get("quality_warning"),
+        "route_best_connector": route_summary.get("best_connector") if route_summary else None,
+        "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
+        "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
         "artifact": artifact,
         "path": path,
         "original_filename": original_filename,
@@ -3543,8 +3580,58 @@ def _download_task_summary(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _task_result(task: dict[str, Any]) -> dict[str, Any]:
+    return task.get("result") if isinstance(task.get("result"), dict) else {}
+
+
+def _task_parse_outcome(task: dict[str, Any]) -> dict[str, Any]:
+    result = _task_result(task)
+    if isinstance(task.get("parse_outcome"), dict):
+        return task["parse_outcome"]
+    if isinstance(result.get("parse_outcome"), dict):
+        return result["parse_outcome"]
+    return {}
+
+
+def _task_quality_route_summary(task: dict[str, Any]) -> dict[str, Any]:
+    result = _task_result(task)
+    if isinstance(task.get("quality_route_summary"), dict):
+        return task["quality_route_summary"]
+    if isinstance(result.get("quality_route_summary"), dict):
+        return result["quality_route_summary"]
+    return {}
+
+
+def _join_values(values: Any) -> str:
+    if isinstance(values, str):
+        return values
+    return ",".join(str(value).strip() for value in (values or []) if str(value).strip())
+
+
 def _manifest_fieldnames() -> list[str]:
-    return ["input", "doi", "title", "task_id", "status", "quality_label", "reason_code", "artifact", "path", "original_filename"]
+    return [
+        "input",
+        "doi",
+        "title",
+        "task_id",
+        "status",
+        "quality_label",
+        "reason_code",
+        "action_hint",
+        "selected_provider",
+        "parser_strategy",
+        "parse_outcome",
+        "parse_billable",
+        "parse_reason_codes",
+        "quality_warning_code",
+        "quality_warning",
+        "route_best_connector",
+        "route_best_quality_label",
+        "route_needs_followup",
+        "artifact",
+        "path",
+        "original_filename",
+    ]
 
 
 def _write_csv_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
