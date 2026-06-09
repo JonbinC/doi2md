@@ -3528,7 +3528,7 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
     manifest_path = output_dir / "manifest.csv"
     failed_path = output_dir / "failed.csv"
     summary_path = output_dir / "manifest_summary.json"
-    rows = [_manifest_row_from_batch_item(item) for item in items if item.get("download")]
+    rows = [_manifest_row_from_batch_item(item) for item in items]
     failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
     _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
     _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "next_action", "action_hint"])
