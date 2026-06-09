@@ -1282,6 +1282,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
     task = result.get("final_task") if isinstance(result.get("final_task"), dict) else result
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
+    route_formats = _task_route_format_summary(task)
     visual_assets = _task_visual_asset_summary(task)
     return {
         "input": input_value,
@@ -1298,6 +1299,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "route_best_connector": route_summary.get("best_connector") if route_summary else None,
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
+        **route_formats,
         **visual_assets,
         "title": _task_title(task),
         "doi": _task_doi(task) or _doi_from_input(input_value),
@@ -3533,6 +3535,7 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "route_best_connector": item.get("route_best_connector"),
         "route_best_quality_label": item.get("route_best_quality_label"),
         "route_needs_followup": item.get("route_needs_followup"),
+        **_route_format_manifest_values(item),
         "visual_asset_retry": item.get("visual_asset_retry"),
         "missing_figure_asset_count": item.get("missing_figure_asset_count"),
         "missing_table_asset_count": item.get("missing_table_asset_count"),
@@ -3554,6 +3557,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
     download = download or {}
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
+    route_formats = _task_route_format_summary(task)
     visual_assets = _task_visual_asset_summary(task)
     return {
         "input": input_value or task.get("paper_input") or task.get("input_summary") or _task_doi(task),
@@ -3574,6 +3578,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "route_best_connector": route_summary.get("best_connector") if route_summary else None,
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
+        **route_formats,
         **visual_assets,
         "artifact": artifact,
         "path": path,
@@ -3615,6 +3620,59 @@ def _task_quality_route_summary(task: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result.get("quality_route_summary"), dict):
         return result["quality_route_summary"]
     return {}
+
+
+def _task_route_format_summary(task: dict[str, Any]) -> dict[str, Any]:
+    summary = _task_quality_route_summary(task)
+    if not summary:
+        return {}
+    values = {
+        "route_candidate_count": summary.get("candidate_count"),
+        "route_accepted_count": summary.get("accepted_count"),
+        "route_incomplete_count": summary.get("incomplete_count"),
+        "route_failed_count": summary.get("failed_count"),
+    }
+    by_source_format = summary.get("by_source_format") if isinstance(summary.get("by_source_format"), dict) else {}
+    for source_format in ("xml", "html", "pdf"):
+        values.update(_route_source_format_values(source_format, by_source_format.get(source_format)))
+    return values
+
+
+def _route_source_format_values(source_format: str, summary: Any) -> dict[str, Any]:
+    prefix = f"route_{source_format}"
+    if not isinstance(summary, dict):
+        return {
+            f"{prefix}_candidate_count": 0,
+            f"{prefix}_accepted_count": 0,
+            f"{prefix}_incomplete_count": 0,
+            f"{prefix}_failed_count": 0,
+            f"{prefix}_best_quality_label": None,
+            f"{prefix}_section_count": None,
+            f"{prefix}_paragraph_count": None,
+            f"{prefix}_body_token_count": None,
+            f"{prefix}_reference_count": None,
+            f"{prefix}_figure_usable_asset_rate": None,
+            f"{prefix}_structured_table_rate": None,
+            f"{prefix}_reason_codes": "",
+        }
+    return {
+        f"{prefix}_candidate_count": summary.get("candidate_count"),
+        f"{prefix}_accepted_count": summary.get("accepted_count"),
+        f"{prefix}_incomplete_count": summary.get("incomplete_count"),
+        f"{prefix}_failed_count": summary.get("failed_count"),
+        f"{prefix}_best_quality_label": summary.get("best_quality_label"),
+        f"{prefix}_section_count": summary.get("best_section_count"),
+        f"{prefix}_paragraph_count": summary.get("best_paragraph_count"),
+        f"{prefix}_body_token_count": summary.get("best_body_token_count"),
+        f"{prefix}_reference_count": summary.get("best_reference_count"),
+        f"{prefix}_figure_usable_asset_rate": summary.get("best_figure_usable_asset_rate"),
+        f"{prefix}_structured_table_rate": summary.get("best_structured_table_rate"),
+        f"{prefix}_reason_codes": _join_values(summary.get("reason_codes") or []),
+    }
+
+
+def _route_format_manifest_values(item: dict[str, Any]) -> dict[str, Any]:
+    return {field: item.get(field) for field in (*_route_count_fieldnames(), *_route_format_fieldnames())}
 
 
 def _task_visual_asset_summary(task: dict[str, Any]) -> dict[str, Any]:
@@ -3725,6 +3783,8 @@ def _manifest_fieldnames() -> list[str]:
         "route_best_connector",
         "route_best_quality_label",
         "route_needs_followup",
+        *_route_count_fieldnames(),
+        *_route_format_fieldnames(),
         "visual_asset_retry",
         "missing_figure_asset_count",
         "missing_table_asset_count",
@@ -3740,6 +3800,36 @@ def _manifest_fieldnames() -> list[str]:
         "path",
         "original_filename",
     ]
+
+
+def _route_count_fieldnames() -> list[str]:
+    return [
+        "route_candidate_count",
+        "route_accepted_count",
+        "route_incomplete_count",
+        "route_failed_count",
+    ]
+
+
+def _route_format_fieldnames() -> list[str]:
+    fields = []
+    suffixes = (
+        "candidate_count",
+        "accepted_count",
+        "incomplete_count",
+        "failed_count",
+        "best_quality_label",
+        "section_count",
+        "paragraph_count",
+        "body_token_count",
+        "reference_count",
+        "figure_usable_asset_rate",
+        "structured_table_rate",
+        "reason_codes",
+    )
+    for source_format in ("xml", "html", "pdf"):
+        fields.extend(f"route_{source_format}_{suffix}" for suffix in suffixes)
+    return fields
 
 
 def _write_csv_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
