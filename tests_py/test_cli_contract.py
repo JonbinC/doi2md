@@ -3150,6 +3150,43 @@ def test_download_marks_content_incomplete_markdown_as_low_quality(monkeypatch, 
     assert payload["task"]["quality_warning"]
 
 
+def test_download_preserves_full_text_with_warnings_without_low_quality_suffix(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    downloaded = tmp_path / "chen_2026_visual_gaps.md"
+
+    def fake_task(self, task_id):
+        assert task_id == "task-warning"
+        return {
+            "task_id": "task-warning",
+            "status": "succeeded",
+            "result": {
+                "metadata": {"title": "Visual gaps", "year": 2026, "authors": [{"name": "Chen"}]},
+                "quality": {
+                    "quality_label": "full_text_with_warnings",
+                    "content_level": "full_text",
+                    "quality_issue_codes": ["missing_figure_assets"],
+                },
+                "parse_outcome": {"outcome_code": "fulltext_accepted", "billable": True, "reason_codes": []},
+            },
+        }
+
+    def fake_download(self, task_id, artifact, output_dir, *, filename=None):
+        assert task_id == "task-warning"
+        assert artifact == "paper_md"
+        assert filename == "chen_2026_visual_gaps.md"
+        return DownloadResult(path=downloaded, filename=downloaded.name, content_type="text/markdown", content_length=1024)
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-warning", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["quality_label"] == "full_text_with_warnings"
+    assert "figures" in payload["task"]["quality_warning"]
+
+
 def test_download_json_includes_download_response_quality_headers(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
