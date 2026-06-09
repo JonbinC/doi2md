@@ -1282,6 +1282,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
     task = result.get("final_task") if isinstance(result.get("final_task"), dict) else result
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
+    visual_assets = _task_visual_asset_summary(task)
     return {
         "input": input_value,
         "task_id": result.get("task_id") or task.get("task_id"),
@@ -1297,6 +1298,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "route_best_connector": route_summary.get("best_connector") if route_summary else None,
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
+        **visual_assets,
         "title": _task_title(task),
         "doi": _task_doi(task) or _doi_from_input(input_value),
         "preferred_artifact": _preferred_parse_artifact(task),
@@ -3531,6 +3533,13 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "route_best_connector": item.get("route_best_connector"),
         "route_best_quality_label": item.get("route_best_quality_label"),
         "route_needs_followup": item.get("route_needs_followup"),
+        "visual_asset_retry": item.get("visual_asset_retry"),
+        "missing_figure_asset_count": item.get("missing_figure_asset_count"),
+        "missing_table_asset_count": item.get("missing_table_asset_count"),
+        "figure_usable_asset_rate": item.get("figure_usable_asset_rate"),
+        "table_usable_asset_rate": item.get("table_usable_asset_rate"),
+        "visual_asset_repair_hint": item.get("visual_asset_repair_hint"),
+        "follow_up_tags": item.get("follow_up_tags"),
         "artifact": str(download.get("artifact") or item.get("preferred_artifact") or ""),
         "path": download.get("path") or item.get("path"),
         "original_filename": download.get("original_filename"),
@@ -3541,6 +3550,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
     download = download or {}
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
+    visual_assets = _task_visual_asset_summary(task)
     return {
         "input": input_value or task.get("paper_input") or task.get("input_summary") or _task_doi(task),
         "doi": _task_doi(task),
@@ -3560,6 +3570,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "route_best_connector": route_summary.get("best_connector") if route_summary else None,
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
+        **visual_assets,
         "artifact": artifact,
         "path": path,
         "original_filename": original_filename,
@@ -3602,6 +3613,77 @@ def _task_quality_route_summary(task: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _task_visual_asset_summary(task: dict[str, Any]) -> dict[str, Any]:
+    manifest_row = task.get("manifest_row") if isinstance(task.get("manifest_row"), dict) else {}
+    visual_assets = manifest_row.get("visual_assets") if isinstance(manifest_row.get("visual_assets"), dict) else {}
+    follow_up_tags = manifest_row.get("follow_up_tags") if isinstance(manifest_row.get("follow_up_tags"), list) else []
+    if not visual_assets:
+        visual_assets = _visual_assets_from_quality(_task_result(task))
+    figure = visual_assets.get("figure") if isinstance(visual_assets.get("figure"), dict) else {}
+    table = visual_assets.get("table") if isinstance(visual_assets.get("table"), dict) else {}
+    repair_hint = _visual_asset_repair_hint_from_follow_up(task) or _visual_asset_repair_hint(visual_assets)
+    return {
+        "visual_asset_retry": visual_assets.get("needs_visual_asset_retry"),
+        "missing_figure_asset_count": len(visual_assets.get("missing_figure_asset_ids") or []),
+        "missing_table_asset_count": len(visual_assets.get("missing_table_asset_ids") or []),
+        "figure_usable_asset_rate": figure.get("usable_asset_rate"),
+        "table_usable_asset_rate": table.get("usable_asset_rate"),
+        "visual_asset_repair_hint": repair_hint,
+        "follow_up_tags": _join_values(follow_up_tags),
+    }
+
+
+def _visual_assets_from_quality(result: dict[str, Any]) -> dict[str, Any]:
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    diagnostics = quality.get("visual_asset_diagnostics") if isinstance(quality.get("visual_asset_diagnostics"), dict) else {}
+    if not diagnostics:
+        return {}
+    figure = diagnostics.get("figure") if isinstance(diagnostics.get("figure"), dict) else {}
+    table = diagnostics.get("table") if isinstance(diagnostics.get("table"), dict) else {}
+    return {
+        "needs_visual_asset_retry": diagnostics.get("needs_visual_asset_retry"),
+        "missing_figure_asset_ids": diagnostics.get("missing_figure_asset_ids") or [],
+        "missing_table_asset_ids": diagnostics.get("missing_table_asset_ids") or [],
+        "figure": figure,
+        "table": table,
+    }
+
+
+def _visual_asset_repair_hint_from_follow_up(task: dict[str, Any]) -> str | None:
+    for source in (task.get("manifest_row"), task):
+        if not isinstance(source, dict):
+            continue
+        follow_up = source.get("follow_up")
+        if isinstance(follow_up, dict):
+            for item in follow_up.get("repair_visual_assets") or []:
+                if isinstance(item, dict) and item.get("repair_hint"):
+                    return str(item.get("repair_hint"))
+        if source.get("repair_hint"):
+            return str(source.get("repair_hint"))
+    return None
+
+
+def _visual_asset_repair_hint(visual_assets: dict[str, Any]) -> str | None:
+    if not visual_assets:
+        return None
+    figure = visual_assets.get("figure") if isinstance(visual_assets.get("figure"), dict) else {}
+    table = visual_assets.get("table") if isinstance(visual_assets.get("table"), dict) else {}
+    if _number_value(figure.get("missing_path_count")):
+        return "retry_with_publisher_html_or_pdf_asset_fusion"
+    if _number_value(figure.get("missing_local_file_count")) or _number_value(table.get("missing_local_file_count")):
+        return "repair_or_regenerate_artifact_bundle_assets"
+    if visual_assets.get("missing_figure_asset_ids") or visual_assets.get("missing_table_asset_ids"):
+        return "retry_visual_asset_localization"
+    return None
+
+
+def _number_value(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _join_values(values: Any) -> str:
     if isinstance(values, str):
         return values
@@ -3628,6 +3710,13 @@ def _manifest_fieldnames() -> list[str]:
         "route_best_connector",
         "route_best_quality_label",
         "route_needs_followup",
+        "visual_asset_retry",
+        "missing_figure_asset_count",
+        "missing_table_asset_count",
+        "figure_usable_asset_rate",
+        "table_usable_asset_rate",
+        "visual_asset_repair_hint",
+        "follow_up_tags",
         "artifact",
         "path",
         "original_filename",
