@@ -3295,6 +3295,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     "incomplete_count": 1,
                     "failed_count": 0,
                     "best_connector": "best_oa_location_pdf",
+                    "best_source_format": "pdf",
                     "best_quality_label": "full_text_good",
                     "needs_followup": False,
                     "by_source_format": {
@@ -3386,6 +3387,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "best_oa_location_pdf" in manifest
     rows = list(csv.DictReader(manifest.splitlines()))
     assert rows[0]["route_candidate_count"] == "2"
+    assert rows[0]["route_best_source_format"] == "pdf"
     assert rows[0]["route_xml_incomplete_count"] == "1"
     assert rows[0]["route_xml_best_quality_label"] == "abstract_only"
     assert rows[0]["route_xml_body_token_count"] == "180"
