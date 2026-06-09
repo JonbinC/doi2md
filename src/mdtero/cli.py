@@ -1283,6 +1283,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
     route_formats = _task_route_format_summary(task)
+    quality_metrics = _task_quality_metrics(task)
     visual_assets = _task_visual_asset_summary(task)
     next_action = _task_next_action(task, parse_outcome=parse_outcome)
     return {
@@ -1303,6 +1304,7 @@ def _batch_item_summary(input_value: str, result: dict[str, Any]) -> dict[str, A
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
         **route_formats,
+        **quality_metrics,
         **visual_assets,
         "title": _task_title(task),
         "doi": _task_doi(task) or _doi_from_input(input_value),
@@ -3543,6 +3545,7 @@ def _manifest_row_from_batch_item(item: dict[str, Any]) -> dict[str, Any]:
         "route_best_quality_label": item.get("route_best_quality_label"),
         "route_needs_followup": item.get("route_needs_followup"),
         **_route_format_manifest_values(item),
+        **_quality_metric_manifest_values(item),
         "visual_asset_retry": item.get("visual_asset_retry"),
         "missing_figure_asset_count": item.get("missing_figure_asset_count"),
         "missing_table_asset_count": item.get("missing_table_asset_count"),
@@ -3565,6 +3568,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
     parse_outcome = _task_parse_outcome(task)
     route_summary = _task_quality_route_summary(task)
     route_formats = _task_route_format_summary(task)
+    quality_metrics = _task_quality_metrics(task)
     visual_assets = _task_visual_asset_summary(task)
     next_action = _task_next_action(task, parse_outcome=parse_outcome)
     return {
@@ -3589,6 +3593,7 @@ def _manifest_row_from_task(task: dict[str, Any], *, artifact: str, path: str, i
         "route_best_quality_label": route_summary.get("best_quality_label") if route_summary else None,
         "route_needs_followup": route_summary.get("needs_followup") if route_summary else None,
         **route_formats,
+        **quality_metrics,
         **visual_assets,
         "artifact": artifact,
         "path": path,
@@ -3697,6 +3702,16 @@ def _route_source_format_values(source_format: str, summary: Any) -> dict[str, A
 
 def _route_format_manifest_values(item: dict[str, Any]) -> dict[str, Any]:
     return {field: item.get(field) for field in (*_route_count_fieldnames(), *_route_format_fieldnames())}
+
+
+def _task_quality_metrics(task: dict[str, Any]) -> dict[str, Any]:
+    result = _task_result(task)
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    return {field: quality.get(field) for field in _quality_metric_fieldnames()}
+
+
+def _quality_metric_manifest_values(item: dict[str, Any]) -> dict[str, Any]:
+    return {field: item.get(field) for field in _quality_metric_fieldnames()}
 
 
 def _task_visual_asset_summary(task: dict[str, Any]) -> dict[str, Any]:
@@ -3811,6 +3826,7 @@ def _manifest_fieldnames() -> list[str]:
         "route_needs_followup",
         *_route_count_fieldnames(),
         *_route_format_fieldnames(),
+        *_quality_metric_fieldnames(),
         "visual_asset_retry",
         "missing_figure_asset_count",
         "missing_table_asset_count",
@@ -3856,6 +3872,25 @@ def _route_format_fieldnames() -> list[str]:
     for source_format in ("xml", "html", "pdf"):
         fields.extend(f"route_{source_format}_{suffix}" for suffix in suffixes)
     return fields
+
+
+def _quality_metric_fieldnames() -> list[str]:
+    return [
+        "content_level",
+        "abstract_only",
+        "section_count",
+        "paragraph_count",
+        "body_token_count",
+        "reference_count",
+        "figure_count",
+        "figures_missing_assets",
+        "figure_asset_missing_rate",
+        "table_count",
+        "structured_table_count",
+        "structured_table_rate",
+        "formula_count",
+        "equation_count",
+    ]
 
 
 def _write_csv_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
