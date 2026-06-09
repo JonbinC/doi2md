@@ -1332,6 +1332,7 @@ def _batch_exception_payload(input_value: str, exc: Exception) -> dict[str, Any]
         "input": input_value,
         "status": "failed",
         "reason_code": exc.__class__.__name__,
+        "next_action": "retry_with_trace_or_upload_source",
         "action_hint": "Check the target with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`, then retry the batch.",
         "message": str(exc),
     }
@@ -1346,6 +1347,7 @@ def _failed_manifest_row(item: dict[str, Any]) -> dict[str, Any]:
         "reason_code": item.get("reason_code") or item.get("error_code"),
         "parse_outcome": item.get("parse_outcome"),
         "parse_reason_codes": item.get("parse_reason_codes"),
+        "next_action": item.get("next_action"),
         "action_hint": item.get("action_hint"),
     }
 
@@ -3513,7 +3515,7 @@ def _write_batch_manifests(output_dir: Path, items: list[dict[str, Any]]) -> dic
     rows = [_manifest_row_from_batch_item(item) for item in items if item.get("download")]
     failures = [_failed_manifest_row(item) for item in items if item.get("status") in {"failed", "cancelled", "timeout"}]
     _write_csv_rows(manifest_path, rows, _manifest_fieldnames())
-    _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "action_hint"])
+    _write_csv_rows(failed_path, failures, ["input", "task_id", "status", "quality_label", "reason_code", "parse_outcome", "parse_reason_codes", "next_action", "action_hint"])
     return {"manifest_csv": str(manifest_path), "failed_csv": str(failed_path)}
 
 
