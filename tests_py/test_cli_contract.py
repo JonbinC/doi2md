@@ -3481,6 +3481,14 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert summary["downloaded_count"] == 1
     assert summary["by_quality_label"] == {"full_text_good": 1}
     assert summary["quality_issues"]["by_code"] == {"missing_figure_assets": 1, "unrenderable_tables": 1}
+    assert summary["visual_assets"] == {
+        "needs_retry_count": 1,
+        "missing_figure_asset_count": 2,
+        "missing_table_asset_count": 1,
+        "missing_local_figure_file_count": 2,
+        "missing_local_table_file_count": 1,
+        "by_repair_hint": {"repair_or_regenerate_artifact_bundle_assets": 1},
+    }
     assert summary["follow_up"]["by_tag"] == {"repair_visual_assets": 1}
     assert summary["follow_up"]["by_next_action"] == {"repair_visual_assets": 1}
     assert summary["follow_up"]["by_route_next_action"] == {"none": 1}

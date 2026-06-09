@@ -3545,6 +3545,14 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         "by_status": {},
         "by_quality_label": {},
         "quality_issues": {"by_code": {}},
+        "visual_assets": {
+            "needs_retry_count": 0,
+            "missing_figure_asset_count": 0,
+            "missing_table_asset_count": 0,
+            "missing_local_figure_file_count": 0,
+            "missing_local_table_file_count": 0,
+            "by_repair_hint": {},
+        },
         "follow_up": {
             "by_tag": {},
             "by_next_action": {},
@@ -3571,6 +3579,7 @@ def _batch_manifest_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         quality_label = str(item.get("quality_label") or "unknown").strip() or "unknown"
         summary["by_quality_label"][quality_label] = summary["by_quality_label"].get(quality_label, 0) + 1
         _accumulate_cli_counter(summary["quality_issues"]["by_code"], item.get("quality_issue_codes"))
+        _accumulate_cli_visual_asset_summary(summary["visual_assets"], item)
         _accumulate_cli_counter(summary["follow_up"]["by_tag"], item.get("follow_up_tags"))
         next_action = str(item.get("next_action") or "none").strip() or "none"
         summary["follow_up"]["by_next_action"][next_action] = summary["follow_up"]["by_next_action"].get(next_action, 0) + 1
@@ -3594,6 +3603,19 @@ def _empty_cli_route_format_summary() -> dict[str, Any]:
         "best_quality_labels": {},
         "reason_codes": {},
     }
+
+
+def _accumulate_cli_visual_asset_summary(summary: dict[str, Any], item: dict[str, Any]) -> None:
+    if item.get("visual_asset_retry") is True:
+        summary["needs_retry_count"] += 1
+    summary["missing_figure_asset_count"] += _integer_value(item.get("missing_figure_asset_count"))
+    summary["missing_table_asset_count"] += _integer_value(item.get("missing_table_asset_count"))
+    summary["missing_local_figure_file_count"] += _integer_value(item.get("figure_missing_local_file_count"))
+    summary["missing_local_table_file_count"] += _integer_value(item.get("table_missing_local_file_count"))
+    repair_hint = str(item.get("visual_asset_repair_hint") or "").strip()
+    if repair_hint:
+        by_repair_hint = summary["by_repair_hint"]
+        by_repair_hint[repair_hint] = by_repair_hint.get(repair_hint, 0) + 1
 
 
 def _accumulate_cli_route_format_summary(summary: dict[str, Any], item: dict[str, Any], source_format: str) -> None:
