@@ -20,6 +20,8 @@ export interface MdteroAuthTokenPayload {
   type: "mdtero.auth.token";
   token: string;
   email: string;
+  source: "extension";
+  issuedAt: number;
 }
 
 export function isMdteroAuthTokenPayload(data: unknown): data is MdteroAuthTokenPayload {
@@ -30,11 +32,22 @@ export function isMdteroAuthTokenPayload(data: unknown): data is MdteroAuthToken
       "token" in data &&
       "email" in data &&
       (data as Record<string, unknown>).type === "mdtero.auth.token" &&
+      (data as Record<string, unknown>).source === "extension" &&
       typeof (data as Record<string, unknown>).token === "string" &&
       typeof (data as Record<string, unknown>).email === "string" &&
+      typeof (data as Record<string, unknown>).issuedAt === "number" &&
       (data as Record<string, unknown>).token &&
-      (data as Record<string, unknown>).email
+      (data as Record<string, unknown>).email &&
+      isFreshAuthBridgeTimestamp(Number((data as Record<string, unknown>).issuedAt))
   );
+}
+
+export function isFreshAuthBridgeTimestamp(issuedAt: number, now = Date.now()): boolean {
+  if (!Number.isFinite(issuedAt)) {
+    return false;
+  }
+  const ageMs = Math.abs(now - issuedAt);
+  return ageMs <= 60_000;
 }
 
 export function isTrustedMdteroOrigin(origin: string): boolean {

@@ -16,7 +16,7 @@ describe("extension manifest", () => {
       content_scripts?: Array<{ matches?: string[]; js?: string[]; run_at?: string }>;
     };
 
-    expect(manifest.permissions).toEqual(["storage", "downloads", "tabs"]);
+    expect(manifest.permissions).toEqual(["storage", "downloads", "tabs", "activeTab", "scripting"]);
     expect(manifest.host_permissions).toEqual([
       "https://api.mdtero.com/*",
       "https://doi.org/*",
@@ -120,6 +120,8 @@ describe("extension manifest", () => {
     const contentSource = readFileSync(resolve("src/content.ts"), "utf-8");
 
     expect(manifest.permissions ?? []).not.toContain("nativeMessaging");
+    expect(manifest.permissions ?? []).toContain("activeTab");
+    expect(manifest.permissions ?? []).toContain("scripting");
     expect(backgroundSource).not.toContain("connectNative");
     expect(backgroundSource).not.toContain("initializeBrowserBridge");
     expect(backgroundSource).not.toContain("mdtero.bridge.status");

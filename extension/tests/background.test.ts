@@ -35,6 +35,11 @@ function createChromeStub() {
   return {
     runtime: {
       id: "runtime-demo",
+      getManifest: vi.fn(() => ({
+        content_scripts: [
+          { js: ["dist/content.js"] },
+        ],
+      })),
       onMessage: {
         addListener(listener: (message: unknown, sender: unknown, sendResponse: (payload: unknown) => void) => boolean | void) {
           messageListeners.push(listener);
@@ -43,6 +48,9 @@ function createChromeStub() {
     },
     tabs: {
       sendMessage: vi.fn()
+    },
+    scripting: {
+      executeScript: vi.fn().mockResolvedValue(undefined),
     },
     __messageListeners: messageListeners
   };
@@ -275,6 +283,63 @@ describe("extension background routing", () => {
       );
       const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
       await expect(rawArtifact.text()).resolves.toContain("Captured browser full text");
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-v2", status: "queued" },
+      });
+    });
+  });
+
+  it("injects the content script before dedicated HTML capture on unsupported active tabs", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    chromeStub.tabs.sendMessage
+      .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+      .mockResolvedValueOnce({
+        ok: true,
+        capture: {
+          ok: true,
+          html: "<html><body><article>Dynamically injected capture</article></body></html>",
+          payloadName: "paper.html",
+          sourceUrl: "https://publisher.example/fulltext",
+          pageTitle: "Injected capture",
+        },
+      });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.current_html.request",
+        input: "https://publisher.example/fulltext",
+        pageContext: {
+          tabId: 77,
+          tabUrl: "https://publisher.example/fulltext",
+        },
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(async () => {
+      expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
+        target: { tabId: 77 },
+        files: ["dist/content.js"],
+      });
+      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledTimes(2);
+      expect(createRawUploadTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawFile: expect.any(Blob),
+          filename: "paper.html",
+          sourceInput: "https://publisher.example/fulltext",
+          artifactKind: "html",
+        })
+      );
+      const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
+      await expect(rawArtifact.text()).resolves.toContain("Dynamically injected capture");
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-v2", status: "queued" },
