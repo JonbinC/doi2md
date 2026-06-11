@@ -473,6 +473,36 @@ async function fetchXmlArtifact(candidateUrls) {
   };
 }
 
+// src/lib/tab-messaging.ts
+async function sendTabMessageWithInjection(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (firstError) {
+    if (!canInjectContentScript(firstError)) {
+      throw firstError;
+    }
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [getContentScriptFile()]
+    });
+    return chrome.tabs.sendMessage(tabId, message);
+  }
+}
+function getContentScriptFile() {
+  const scripts = chrome.runtime.getManifest?.().content_scripts || [];
+  for (const script of scripts) {
+    const firstFile = script.js?.[0];
+    if (firstFile && firstFile.includes("content.js")) {
+      return firstFile;
+    }
+  }
+  return "content.js";
+}
+function canInjectContentScript(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /receiving end does not exist/i.test(message) || /could not establish connection/i.test(message) || /no tab with id/i.test(message);
+}
+
 // src/lib/action-executor.ts
 async function executeAction(action, context, routePlan) {
   switch (action) {
@@ -509,7 +539,7 @@ async function executeFallbackPdfParse(context, routePlan) {
   const requiresBrowser = Boolean(candidate.requires_user_rights) || candidate.transport === "browser_extension";
   if (context.tabId && candidate.artifact_url) {
     try {
-      const response = await chrome.tabs.sendMessage(context.tabId, {
+      const response = await sendTabMessageWithInjection(context.tabId, {
         type: "mdtero.download_pdf.request",
         artifactUrl: candidate.artifact_url
       });
@@ -543,7 +573,7 @@ async function executeCaptureCurrentTabHtml(context) {
     return { success: false, error: "No tab ID for current tab capture" };
   }
   try {
-    const response = await chrome.tabs.sendMessage(context.tabId, {
+    const response = await sendTabMessageWithInjection(context.tabId, {
       type: "mdtero.capture_current_tab.request"
     });
     if (response?.xml?.ok && response.xml.payloadText) {
@@ -615,7 +645,7 @@ async function executeFetchEpubAsset(context, routePlan) {
     return { success: false, error: "No EPUB acquisition URL available for this route." };
   }
   try {
-    const response = await chrome.tabs.sendMessage(context.tabId, {
+    const response = await sendTabMessageWithInjection(context.tabId, {
       type: "mdtero.download_epub.request",
       artifactUrl: epubUrl
     });
@@ -682,7 +712,7 @@ async function executeFetchBrowserSource(context, routePlan) {
   const htmlCandidateUrls = pickHtmlCandidateUrls(routePlan);
   if (htmlCandidateUrls.length > 0) {
     try {
-      const response = await chrome.tabs.sendMessage(context.tabId, {
+      const response = await sendTabMessageWithInjection(context.tabId, {
         type: "mdtero.fetch_html.request",
         candidateUrls: htmlCandidateUrls
       });
@@ -1028,33 +1058,5 @@ function buildFileParseCommand(filename, artifactKind) {
 function inferSourceDoi2(input) {
   const trimmed = String(input || "").trim();
   return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
-}
-async function sendTabMessageWithInjection(tabId, message) {
-  try {
-    return await chrome.tabs.sendMessage(tabId, message);
-  } catch (firstError) {
-    if (!canInjectContentScript(firstError)) {
-      throw firstError;
-    }
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: [getContentScriptFile()]
-    });
-    return chrome.tabs.sendMessage(tabId, message);
-  }
-}
-function getContentScriptFile() {
-  const scripts = chrome.runtime.getManifest?.().content_scripts || [];
-  for (const script of scripts) {
-    const firstFile = script.js?.[0];
-    if (firstFile && firstFile.includes("content.js")) {
-      return firstFile;
-    }
-  }
-  return "content.js";
-}
-function canInjectContentScript(error) {
-  const message = error instanceof Error ? error.message : String(error || "");
-  return /receiving end does not exist/i.test(message) || /could not establish connection/i.test(message) || /no tab with id/i.test(message);
 }
 //# sourceMappingURL=background.js.map

@@ -8,6 +8,7 @@ import type {
 } from "@mdtero/shared";
 import { fetchXmlArtifact } from "./page-capture";
 import { buildCliParseCommand } from "./cli-handoff";
+import { sendTabMessageWithInjection } from "./tab-messaging";
 
 type RouteAction = ActionType | string;
 
@@ -79,7 +80,7 @@ async function executeFallbackPdfParse(
   const requiresBrowser = Boolean(candidate.requires_user_rights) || candidate.transport === "browser_extension";
   if (context.tabId && candidate.artifact_url) {
     try {
-      const response = await chrome.tabs.sendMessage(context.tabId, {
+      const response = await sendTabMessageWithInjection(context.tabId, {
         type: "mdtero.download_pdf.request",
         artifactUrl: candidate.artifact_url,
       });
@@ -123,7 +124,7 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
   }
 
   try {
-    const response = await chrome.tabs.sendMessage(context.tabId, {
+    const response = await sendTabMessageWithInjection(context.tabId, {
       type: "mdtero.capture_current_tab.request",
     });
 
@@ -226,7 +227,7 @@ async function executeFetchEpubAsset(
   }
 
   try {
-    const response = await chrome.tabs.sendMessage(context.tabId, {
+    const response = await sendTabMessageWithInjection(context.tabId, {
       type: "mdtero.download_epub.request",
       artifactUrl: epubUrl,
     });
@@ -326,7 +327,7 @@ async function executeFetchBrowserSource(
   const htmlCandidateUrls = pickHtmlCandidateUrls(routePlan);
   if (htmlCandidateUrls.length > 0) {
     try {
-      const response = await chrome.tabs.sendMessage(context.tabId, {
+      const response = await sendTabMessageWithInjection(context.tabId, {
         type: "mdtero.fetch_html.request",
         candidateUrls: htmlCandidateUrls,
       });

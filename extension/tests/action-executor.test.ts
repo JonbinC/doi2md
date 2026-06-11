@@ -218,6 +218,53 @@ describe("executeAction", () => {
     await expect(result.rawArtifact?.text()).resolves.toContain("Fetched full text");
   });
 
+  it("injects the content script before current-tab HTML capture when the tab is not connected", async () => {
+    const chromeStub = {
+      runtime: {
+        getManifest: vi.fn(() => ({
+          content_scripts: [{ js: ["dist/content.js"] }],
+        })),
+      },
+      tabs: {
+        sendMessage: vi.fn()
+          .mockRejectedValueOnce(new Error("Could not establish connection. Receiving end does not exist."))
+          .mockResolvedValueOnce({
+            ok: true,
+            capture: {
+              ok: true,
+              html: "<html><article>Injected full text</article></html>",
+              payloadName: "paper.html",
+            },
+          }),
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    vi.stubGlobal("chrome", chromeStub);
+
+    const result = await executeAction(
+      "capture_current_tab_html",
+      {
+        input: "10.1000/demo",
+        tabId: 42,
+      },
+      {}
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.html");
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 42 },
+      files: ["dist/content.js"],
+    });
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledTimes(2);
+    expect(chromeStub.tabs.sendMessage).toHaveBeenLastCalledWith(42, {
+      type: "mdtero.capture_current_tab.request",
+    });
+    await expect(result.rawArtifact?.text()).resolves.toContain("Injected full text");
+  });
+
   it("quotes shell-sensitive URL handoff commands when browser capture fails", async () => {
     const chromeStub = {
       tabs: {
