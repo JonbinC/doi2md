@@ -57,17 +57,15 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="website-auth-note"');
     expect(optionsHtml).toContain('id="connection-guide-card"');
     expect(optionsHtml).toContain('id="connection-guide-list"');
-    expect(optionsHtml).toContain('id="input-route-card"');
-    expect(optionsHtml).toContain('id="input-route-list"');
-    expect(optionsHtml).toContain('Extension + CLI');
-    expect(optionsHtml).toContain('id="cli-handoff-guide-card"');
-    expect(optionsHtml).toContain('id="cli-handoff-guide-command"');
-    expect(optionsHtml).toContain('id="copy-cli-handoff-guide"');
-    expect(optionsHtml).toContain('id="mcp-server-config-card"');
-    expect(optionsHtml).toContain('id="mcp-server-config-command"');
-    expect(optionsHtml).toContain('id="copy-mcp-server-config"');
-    expect(optionsHtml).toContain('FastMCP');
-    expect(optionsHtml).toContain('stdio');
+    expect(optionsHtml).toContain('id="elsevier-settings-card"');
+    expect(optionsHtml).toContain('id="elsevier-key-status"');
+    expect(optionsHtml).toContain('id="toggle-elsevier-key"');
+    expect(optionsHtml).toContain('id="clear-elsevier-key"');
+    expect(optionsHtml).not.toContain('id="input-route-card"');
+    expect(optionsHtml).not.toContain('Extension + CLI');
+    expect(optionsHtml).not.toContain('id="cli-handoff-guide-card"');
+    expect(optionsHtml).not.toContain('id="mcp-server-config-card"');
+    expect(optionsHtml).not.toContain('FastMCP');
     expect(optionsHtml).toContain('id="setup-step-auth"');
     expect(optionsHtml).toContain('Parse / Upload');
     expect(optionsHtml).toContain('Translate');
@@ -101,7 +99,7 @@ describe("workspace", () => {
     expect(readme).toContain("Publisher pages cannot mint extension tokens");
     expect(readme).toContain("can store your own Elsevier API key locally");
     expect(readme).toContain("does not use native messaging or a local helper process");
-    expect(readme).toContain("shows a CLI handoff command");
+    expect(readme).toContain("The options page keeps CLI setup out of the extension product surface");
   });
 
   it("declares warm brand assets for the extension", () => {
@@ -154,10 +152,8 @@ describe("workspace", () => {
     expect(styles).toContain('.workflow-strip span[data-state="done"]');
     expect(styles).toContain('.workflow-strip span[data-state="pending"]');
     expect(styles).toContain(".guide-item { display: grid; grid-template-columns: auto minmax(0, 1fr);");
-    expect(styles).toContain(".input-route-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
-    expect(styles).toContain(".input-route-copy { width: 100%; }");
-    expect(styles).toContain(".handoff-guide-header { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
-    expect(styles).toContain(".handoff-guide-command { display: block;");
+    expect(styles).toContain(".setting-card-header { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
+    expect(styles).toContain(".sensitive-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
     expect(styles).toContain("#account-email, #account-status, #usage-status { overflow-wrap: anywhere; }");
     expect(styles).toContain("button { min-height: 40px;");
     expect(styles).toContain(".cli-handoff code { min-width: 0; overflow: auto;");
@@ -167,23 +163,17 @@ describe("workspace", () => {
     expect(styles).toContain(".hero { background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 250, 244, 0.88)), linear-gradient(135deg, rgba(109, 57, 32, 0.06), transparent 52%);");
   });
 
-  it("keeps extension-to-CLI onboarding aligned with the Python setup checklist", () => {
+  it("keeps options scoped to extension settings instead of CLI onboarding", () => {
     const optionsSource = readFileSync(resolve("src/options/index.ts"), "utf-8");
 
-    expect(optionsSource).toContain('const CLI_INSTALL_COMMAND = "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git"');
-    expect(optionsSource).toContain('const CLI_PYPI_COMMAND = "uv tool install mdtero"');
-    expect(optionsSource).toContain("known-good public Python client");
-    expect(optionsSource).toContain("mdtero setup");
-    expect(optionsSource).toContain("mdtero setup --json");
-    expect(optionsSource).toContain("Choose the shortest path to a Markdown artifact");
-    expect(optionsSource).toContain("mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json");
-    expect(optionsSource).toContain("mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json");
-    expect(optionsSource).toContain("onboarding checklist");
-    expect(optionsSource).toContain("mdtero config academic");
-    expect(optionsSource).toContain("mdtero mcp briefing --json");
-    expect(optionsSource).toContain("mdtero mcp serve");
-    expect(optionsSource).toContain("mcpServers");
-    expect(optionsSource).toContain("<local-mdtero-project-root>");
+    expect(optionsSource).toContain("elsevierSettingsTitle");
+    expect(optionsSource).toContain("elsevierKeySaved");
+    expect(optionsSource).toContain("renderElsevierKeyState");
+    expect(optionsSource).not.toContain("CLI_INSTALL_COMMAND");
+    expect(optionsSource).not.toContain("uv tool install");
+    expect(optionsSource).not.toContain("mdtero mcp");
+    expect(optionsSource).not.toContain("mcpServers");
+    expect(optionsSource).not.toContain("RAG");
     expect(optionsSource).not.toContain("mdtero setup --api-key <key>");
   });
 
