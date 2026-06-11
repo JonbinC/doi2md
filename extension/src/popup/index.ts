@@ -12,6 +12,7 @@ import {
   type LocalFileArtifactKind,
   type ParsePageContext
 } from "../lib/runtime";
+import { sendTabMessageWithInjection } from "../lib/tab-messaging";
 import {
   getReconnectablePendingTranslationTask,
   getPendingPopupTask,
@@ -899,7 +900,7 @@ async function refreshBridgeStatus() {
   }
 
   try {
-    await chrome.tabs.sendMessage(tab.id, createDetectMessage());
+    await sendTabMessageWithInjection(tab.id, createDetectMessage());
     currentBridgeStatus = { state: "connected", runnerState: "idle" };
   } catch {
     currentBridgeStatus = { state: "unavailable", runnerState: "idle" };
@@ -918,7 +919,7 @@ async function detectCurrentTab() {
 
   try {
     setStatus(getActionStatusText("detecting", uiLanguage));
-    const response = await chrome.tabs.sendMessage(tab.id, createDetectMessage());
+    const response = await sendTabMessageWithInjection(tab.id, createDetectMessage());
     if (response?.detected?.value && inputEl) {
       inputEl.value = response.detected.value;
       currentInput = response.detected.value;

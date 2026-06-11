@@ -340,6 +340,36 @@ function createDetectMessage() {
   };
 }
 
+// src/lib/tab-messaging.ts
+async function sendTabMessageWithInjection(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (firstError) {
+    if (!canInjectContentScript(firstError)) {
+      throw firstError;
+    }
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [getContentScriptFile()]
+    });
+    return chrome.tabs.sendMessage(tabId, message);
+  }
+}
+function getContentScriptFile() {
+  const scripts = chrome.runtime.getManifest?.().content_scripts || [];
+  for (const script of scripts) {
+    const firstFile = script.js?.[0];
+    if (firstFile && firstFile.includes("content.js")) {
+      return firstFile;
+    }
+  }
+  return "content.js";
+}
+function canInjectContentScript(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /receiving end does not exist/i.test(message) || /could not establish connection/i.test(message) || /no tab with id/i.test(message);
+}
+
 // ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";
 
@@ -1718,7 +1748,7 @@ async function refreshBridgeStatus() {
     return;
   }
   try {
-    await chrome.tabs.sendMessage(tab.id, createDetectMessage());
+    await sendTabMessageWithInjection(tab.id, createDetectMessage());
     currentBridgeStatus = { state: "connected", runnerState: "idle" };
   } catch {
     currentBridgeStatus = { state: "unavailable", runnerState: "idle" };
@@ -1735,7 +1765,7 @@ async function detectCurrentTab() {
   }
   try {
     setStatus(getActionStatusText("detecting", uiLanguage));
-    const response = await chrome.tabs.sendMessage(tab.id, createDetectMessage());
+    const response = await sendTabMessageWithInjection(tab.id, createDetectMessage());
     if (response?.detected?.value && inputEl) {
       inputEl.value = response.detected.value;
       currentInput = response.detected.value;
