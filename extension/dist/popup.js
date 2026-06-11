@@ -1389,6 +1389,9 @@ function renderActionButtons() {
   if (pickEpubButton) {
     pickEpubButton.disabled = isParsing;
   }
+  if (pickHtmlButton) {
+    pickHtmlButton.disabled = isParsing;
+  }
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
     translateButton.disabled = isTranslating || !hasParsedMarkdownSource(lastParsedMarkdownSource);
