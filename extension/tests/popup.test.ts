@@ -702,6 +702,57 @@ describe("getTaskFailureText", () => {
     ).toBe("解析失败，请重试。 原因：client_acquisition_challenge_page 下一步：请用扩展上传 PDF/EPUB，或在 CLI 中继续。");
   });
 
+  it("does not mask Elsevier Article Retrieval XML failures as generic parser failures", () => {
+    const task = {
+      task_id: "task-elsevier",
+      status: "failed",
+      stage: "failed",
+      task_kind: "parse",
+      error_code: "parser_failed",
+      error_message:
+        "Elsevier / ScienceDirect XML acquisition failed through the Article Retrieval API. Verify ELSEVIER_API_KEY, institutional entitlement, and the API response; Mdtero will fail closed instead of masking this as a ScienceDirect PDF redirect.",
+      reason_code: null,
+      action_hint: null,
+      next_commands: [`mdtero status task-elsevier --json`]
+    };
+
+    const text = getTaskFailureText(task, "Parse failed. Please try again.", "en");
+
+    expect(text).toContain("Reason: elsevier_article_retrieval_api_failed");
+    expect(text).toContain("Next: Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response");
+    expect(text).toContain("Command: mdtero parse <doi-or-url> --trace --wait --timeout 300 --json");
+    expect(text).not.toContain("Reason: parser_failed");
+  });
+
+  it("uses normalized Elsevier XML diagnostics in task summaries and handoff context", () => {
+    const task = {
+      task_id: "task-elsevier",
+      status: "failed",
+      stage: "failed",
+      task_kind: "parse",
+      error_code: "parser_failed",
+      error_message:
+        "Elsevier / ScienceDirect XML acquisition failed through the Article Retrieval API. Verify ELSEVIER_API_KEY, institutional entitlement, and the API response; Mdtero will fail closed instead of masking this as a ScienceDirect PDF redirect.",
+      reason_code: null,
+      action_hint: null,
+      next_commands: [`mdtero status task-elsevier --json`]
+    };
+
+    expect(getTaskProcessingSummary(task, "zh")).toEqual([
+      "原因：elsevier_article_retrieval_api_failed",
+      "下一步：Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response; retry with CLI trace mode or upload the source XML/PDF/HTML file directly."
+    ]);
+    expect(buildTaskHandoffContext(task, "parse")).toMatchObject({
+      reasonCode: "elsevier_article_retrieval_api_failed",
+      actionHint: "Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response; retry with CLI trace mode or upload the source XML/PDF/HTML file directly.",
+      nextCommands: [
+        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
+        "mdtero parse --file <paper.xml|paper.pdf|paper.html> --trace --wait --timeout 600 --json",
+        "mdtero status task-elsevier --json"
+      ]
+    });
+  });
+
   it("summarizes translation provider attempts for failed translation tasks", () => {
     expect(
       getTaskFailureText(

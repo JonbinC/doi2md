@@ -1,5 +1,6 @@
 .DS_Store
 .pytest_cache/
+.mdtero/
 .venv/
 __pycache__/
 *.py[cod]
