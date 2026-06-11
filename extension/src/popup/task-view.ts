@@ -10,6 +10,9 @@ import { isSupportedPaperPage } from "../lib/supported-page";
 
 const SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"] as const;
 const SOURCE_ORDER = ["paper_pdf", "paper_epub", "paper_html", "paper_xml"] as const;
+const ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_REASON = "elsevier_article_retrieval_api_failed";
+const ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_HINT =
+  "Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response; retry with CLI trace mode or upload the source XML/PDF/HTML file directly.";
 
 function getArtifactKeys(result?: TaskResult | null): string[] {
   const keyed = Object.keys(result?.artifacts ?? {});
@@ -79,13 +82,14 @@ export function getTaskProcessingSummary(
     | undefined,
   language: UiLanguage = "en"
 ): string[] {
+  const diagnostic = normalizeTaskFailureDiagnostic(task);
   const result = task?.result;
   const provider = firstPresentString(task?.selected_provider, result?.selected_provider);
   const strategy = firstPresentString(task?.parser_strategy, result?.parser_strategy);
   const acquisition = summarizeClientAcquisition(task?.client_acquisition || result?.client_acquisition);
   const outcome = summarizeParseOutcome(task?.parse_outcome || result?.parse_outcome);
-  const reason = firstPresentString(task?.reason_code, result?.reason_code);
-  const actionHint = firstPresentString(task?.action_hint, result?.action_hint);
+  const reason = diagnostic.reasonCode ?? firstPresentString(task?.reason_code, result?.reason_code);
+  const actionHint = diagnostic.actionHint ?? firstPresentString(task?.action_hint, result?.action_hint);
   const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
   const artifacts = summarizeDownloadArtifacts(result);
   const lines: string[] = [];
@@ -390,9 +394,10 @@ export function getTaskFailureText(
   fallback: string,
   language: UiLanguage = "en"
 ): string {
+  const diagnostic = normalizeTaskFailureDiagnostic(task);
   const message = redactSensitiveText(task?.error_message?.trim() || fallback);
-  const reason = (task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
-  const actionHint = redactSensitiveText((task?.action_hint || task?.result?.action_hint || "").trim());
+  const reason = (diagnostic.reasonCode || task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
+  const actionHint = redactSensitiveText((diagnostic.actionHint || task?.action_hint || task?.result?.action_hint || "").trim());
   const parts = [message];
   if (reason) {
     parts.push(language === "zh" ? `原因：${reason}` : `Reason: ${reason}`);
@@ -454,7 +459,8 @@ export function firstTaskNextCommand(
     | null
     | undefined
 ): string {
-  return firstNextCommand([...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]);
+  const diagnostic = normalizeTaskFailureDiagnostic(task);
+  return firstNextCommand([...(diagnostic.nextCommands ?? []), ...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]);
 }
 
 export function getTaskFailureCliHandoff(
@@ -668,6 +674,7 @@ export function buildTaskHandoffContext(
     | undefined,
   kind: "parse" | "translate"
 ): CliHandoffContext {
+  const diagnostic = normalizeTaskFailureDiagnostic(task);
   const downloadArtifacts = (task?.result?.download_artifacts ?? [])
     .map((artifact) => {
       const name = String(artifact.artifact || "").trim();
@@ -684,11 +691,11 @@ export function buildTaskHandoffContext(
     parserStrategy: firstPresentString(task?.parser_strategy, task?.result?.parser_strategy),
     clientAcquisition: summarizeObjectForHandoff(task?.client_acquisition || task?.result?.client_acquisition),
     parseOutcome: summarizeObjectForHandoff(task?.parse_outcome || task?.result?.parse_outcome),
-    reasonCode: task?.reason_code || task?.result?.reason_code || undefined,
-    actionHint: task?.action_hint || task?.result?.action_hint || undefined,
+    reasonCode: diagnostic.reasonCode || task?.reason_code || task?.result?.reason_code || undefined,
+    actionHint: diagnostic.actionHint || task?.action_hint || task?.result?.action_hint || undefined,
     preferredArtifact: task?.preferred_artifact || task?.result?.preferred_artifact || undefined,
     downloadArtifacts,
-    nextCommands: normalizeCommandList([...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]),
+    nextCommands: normalizeCommandList([...(diagnostic.nextCommands ?? []), ...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]),
   };
 }
 
@@ -797,7 +804,8 @@ export function buildTaskFailureCliHandoffPlan(
   input?: string | null,
   kind: "parse" | "translate" = "parse"
 ): CliHandoffPlan {
-  const taskCommands = normalizeCommandList(task?.next_commands);
+  const diagnostic = normalizeTaskFailureDiagnostic(task);
+  const taskCommands = normalizeCommandList([...(diagnostic.nextCommands ?? []), ...(task?.next_commands ?? [])]);
   if (taskCommands.length > 0) {
     return {
       primaryCommand: taskCommands[0],
@@ -833,6 +841,51 @@ export function buildTaskFailureCliHandoffPlan(
     source: "none",
     kind
   };
+}
+
+function normalizeTaskFailureDiagnostic(
+  task:
+    | (Partial<Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint" | "next_commands">> & {
+        result?: Partial<Pick<TaskResult, "reason_code" | "action_hint" | "next_commands">> | null;
+      })
+    | null
+    | undefined
+): { reasonCode?: string; actionHint?: string; nextCommands?: string[] } {
+  const explicitReason = firstPresentString(task?.reason_code, task?.result?.reason_code);
+  if (explicitReason && explicitReason !== "parser_failed") {
+    return {};
+  }
+  if (!isElsevierArticleRetrievalFailure(task)) {
+    return {};
+  }
+  return {
+    reasonCode: ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_REASON,
+    actionHint: ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_HINT,
+    nextCommands: [
+      "mdtero parse <doi-or-url> --trace --json",
+      "mdtero parse --file <paper.xml|paper.pdf|paper.html> --json",
+    ],
+  };
+}
+
+function isElsevierArticleRetrievalFailure(
+  task:
+    | (Partial<Pick<TaskRecord, "error_message" | "error_code">> & {
+        result?: Partial<Pick<TaskResult, "reason_code">> | null;
+      })
+    | null
+    | undefined
+): boolean {
+  if (firstPresentString(task?.error_code, task?.result?.reason_code) !== "parser_failed") {
+    return false;
+  }
+  const message = String(task?.error_message || "").toLowerCase();
+  return (
+    message.includes("elsevier") &&
+    message.includes("sciencedirect") &&
+    message.includes("article retrieval api") &&
+    message.includes("xml acquisition failed")
+  );
 }
 
 function normalizeCommandList(commands?: string[] | null): string[] {
