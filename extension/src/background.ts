@@ -107,7 +107,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!tabId) {
         throw new Error("Open the full-text article page in the current tab before HTML capture.");
       }
-      const response = await chrome.tabs.sendMessage(tabId, {
+      const response = await sendTabMessageWithInjection(tabId, {
         type: "mdtero.capture_html.request",
       });
       const capture = response?.capture;
@@ -204,4 +204,39 @@ function buildFileParseCommand(filename?: string, artifactKind?: LocalFileArtifa
 function inferSourceDoi(input?: string): string | undefined {
   const trimmed = String(input || "").trim();
   return /^10\.\S+/i.test(trimmed) ? trimmed : undefined;
+}
+
+async function sendTabMessageWithInjection(tabId: number, message: unknown): Promise<any> {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (firstError) {
+    if (!canInjectContentScript(firstError)) {
+      throw firstError;
+    }
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [getContentScriptFile()],
+    });
+    return chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
+function getContentScriptFile(): string {
+  const scripts = chrome.runtime.getManifest?.().content_scripts || [];
+  for (const script of scripts) {
+    const firstFile = script.js?.[0];
+    if (firstFile && firstFile.includes("content.js")) {
+      return firstFile;
+    }
+  }
+  return "content.js";
+}
+
+function canInjectContentScript(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return (
+    /receiving end does not exist/i.test(message) ||
+    /could not establish connection/i.test(message) ||
+    /no tab with id/i.test(message)
+  );
 }

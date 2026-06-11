@@ -493,8 +493,15 @@ var TRUSTED_LOCAL_DEV_HOST_PATTERNS = [
 ];
 function isMdteroAuthTokenPayload(data) {
   return Boolean(
-    data && typeof data === "object" && "type" in data && "token" in data && "email" in data && data.type === "mdtero.auth.token" && typeof data.token === "string" && typeof data.email === "string" && data.token && data.email
+    data && typeof data === "object" && "type" in data && "token" in data && "email" in data && data.type === "mdtero.auth.token" && data.source === "extension" && typeof data.token === "string" && typeof data.email === "string" && typeof data.issuedAt === "number" && data.token && data.email && isFreshAuthBridgeTimestamp(Number(data.issuedAt))
   );
+}
+function isFreshAuthBridgeTimestamp(issuedAt, now = Date.now()) {
+  if (!Number.isFinite(issuedAt)) {
+    return false;
+  }
+  const ageMs = Math.abs(now - issuedAt);
+  return ageMs <= 6e4;
 }
 function isTrustedMdteroOrigin(origin) {
   try {
