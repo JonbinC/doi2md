@@ -36,8 +36,10 @@ describe("content auth bridge", () => {
         origin: "https://mdtero.com",
         data: {
           type: "mdtero.auth.token",
+          source: "extension",
           token: "web-token",
           email: "reader@example.com",
+          issuedAt: Date.now(),
         },
       })
     );
@@ -63,7 +65,31 @@ describe("content auth bridge", () => {
         origin: "https://www.sciencedirect.com",
         data: {
           type: "mdtero.auth.token",
+          source: "extension",
           token: "publisher-token",
+          email: "reader@example.com",
+          issuedAt: Date.now(),
+        },
+      })
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects legacy auth-shaped messages without source and freshness metadata", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+
+    await import("../src/content");
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        origin: "https://mdtero.com",
+        data: {
+          type: "mdtero.auth.token",
+          token: "legacy-token",
           email: "reader@example.com",
         },
       })
