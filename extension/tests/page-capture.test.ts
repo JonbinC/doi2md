@@ -243,7 +243,7 @@ describe("fetchHtmlArtifact", () => {
       expect(result).toEqual({
         ok: false,
         failureCode: "artifact_download_missing",
-        failureMessage: "Page loaded but did not expose article content."
+        failureMessage: "The tab is open, but Mdtero received a challenge or blocked page instead of article content."
       });
     } finally {
       globalThis.fetch = originalFetch;

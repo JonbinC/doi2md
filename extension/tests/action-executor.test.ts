@@ -398,7 +398,7 @@ describe("executeAction", () => {
           capture: {
             ok: false,
             failureCode: "challenge_page_detected",
-            failureMessage: "Page loaded but did not expose article content."
+            failureMessage: "The tab is open, but Mdtero received a challenge or blocked page instead of article content."
           }
         })
       }
@@ -415,7 +415,7 @@ describe("executeAction", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Page loaded but did not expose article content.");
+    expect(result.error).toBe("The tab is open, but Mdtero received a challenge or blocked page instead of article content.");
     expect(result.nextCommand).toBe("mdtero parse 'https://www.mdpi.com/2071-1050/17/5/2018?x=a b' --trace --wait --timeout 300 --json");
   });
 });
