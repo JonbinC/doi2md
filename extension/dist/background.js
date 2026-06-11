@@ -509,7 +509,11 @@ async function executeAction(action, context, routePlan) {
     case "capture_current_tab_html":
       return executeCaptureCurrentTabHtml(context);
     case "native_arxiv_parse":
-      return { success: true };
+      return executeNativeArxivParse(context);
+    case "fetch_elsevier_xml":
+      return executeFetchElsevierXml(context);
+    case "fetch_springer_pdf":
+      return executeFetchSpringerPdf(context, routePlan);
     case "fetch_structured_xml":
       return executeFetchStructuredXml(context, routePlan);
     case "fetch_remote_html":
@@ -526,8 +530,73 @@ async function executeAction(action, context, routePlan) {
       return { success: false, error: `Unknown action: ${action}` };
   }
 }
+async function executeFetchElsevierXml(context) {
+  const apiKey = String(context.elsevierApiKey || "").trim();
+  if (!apiKey) {
+    return {
+      success: false,
+      error: "Elsevier API key is not configured in the extension.",
+      nextCommand: buildCliParseCommand(context.input)
+    };
+  }
+  const identifier = inferElsevierIdentifier(context.input);
+  if (!identifier) {
+    return {
+      success: false,
+      error: "Elsevier extension XML fetch requires a DOI, PII, or ScienceDirect article URL.",
+      nextCommand: buildCliParseCommand(context.input)
+    };
+  }
+  const requestUrl = buildElsevierArticleRetrievalUrl(identifier.kind, identifier.value);
+  try {
+    const response = await fetch(requestUrl, {
+      headers: {
+        "Accept": "text/xml",
+        "X-ELS-APIKey": apiKey
+      }
+    });
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Elsevier Article Retrieval API returned ${response.status}.`,
+        nextCommand: buildCliParseCommand(context.input)
+      };
+    }
+    const xml = (await response.text()).trim();
+    if (!xml || !xml.startsWith("<") || isLikelyHtmlDocument(xml) || isLikelyChallengeOrLoginShell(xml)) {
+      return {
+        success: false,
+        error: "Elsevier Article Retrieval API did not return structured XML.",
+        nextCommand: buildCliParseCommand(context.input)
+      };
+    }
+    return {
+      success: true,
+      rawArtifact: new Blob([xml], { type: "application/xml" }),
+      filename: "paper.xml",
+      artifactKind: "xml",
+      sourceDoi: identifier.kind === "doi" ? identifier.value : void 0
+    };
+  } catch (error) {
+    return { success: false, error: String(error), nextCommand: buildCliParseCommand(context.input) };
+  }
+}
+async function executeNativeArxivParse(context) {
+  const arxivId = inferArxivId(context.input);
+  if (!arxivId) {
+    return { success: false, error: "No arXiv identifier found.", nextCommand: buildCliParseCommand(context.input) };
+  }
+  return downloadPdfFromUrl(buildArxivPdfUrl(arxivId), context, "arxiv.pdf");
+}
 async function executeFallbackPdfParse(context, routePlan) {
   const candidate = pickPdfHandoffCandidate(routePlan.client_handoff_candidates || []);
+  const directPdfUrl = pickPdfCandidateUrls(routePlan).find(Boolean);
+  if (directPdfUrl) {
+    const directResult = await downloadPdfFromUrl(directPdfUrl, context, "paper.pdf");
+    if (directResult.success) {
+      return directResult;
+    }
+  }
   if (!candidate) {
     return {
       success: false,
@@ -567,6 +636,47 @@ async function executeFallbackPdfParse(context, routePlan) {
     error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
     nextCommand: buildCliParseCommand(context.input)
   };
+}
+async function executeFetchSpringerPdf(context, routePlan) {
+  const candidateUrl = pickPdfCandidateUrls(routePlan)[0] || buildSpringerPdfUrl(context.input);
+  if (!candidateUrl) {
+    return {
+      success: false,
+      requiresUpload: true,
+      error: routePlan.user_message || "No Springer PDF URL available for this route.",
+      nextCommand: buildCliParseCommand(context.input)
+    };
+  }
+  return downloadPdfFromUrl(candidateUrl, context, "paper.pdf");
+}
+async function downloadPdfFromUrl(url, context, filename) {
+  try {
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { Accept: "application/pdf" }
+    });
+    if (!response.ok) {
+      return { success: false, error: `PDF fetch failed: ${response.status}`, nextCommand: buildCliParseCommand(context.input) };
+    }
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    if (!looksLikePdfBytes(bytes)) {
+      return {
+        success: false,
+        error: "PDF fetch returned a non-PDF response.",
+        nextCommand: buildCliParseCommand(context.input)
+      };
+    }
+    return {
+      success: true,
+      rawArtifact: new Blob([bytes], { type: "application/pdf" }),
+      filename,
+      artifactKind: "pdf",
+      sourceDoi: inferSourceDoi(context.input)
+    };
+  } catch (error) {
+    return { success: false, error: String(error), nextCommand: buildCliParseCommand(context.input) };
+  }
 }
 async function executeCaptureCurrentTabHtml(context) {
   if (!context.tabId) {
@@ -676,19 +786,13 @@ async function executeFetchOaRepository(context, routePlan) {
   try {
     const isPdf = oaUrl.toLowerCase().includes(".pdf") || oaUrl.includes("/pdf") || oaUrl.includes("download");
     if (isPdf) {
-      return {
-        success: false,
-        requiresUpload: true,
-        error: "OA source is PDF. Please download and upload manually.",
-        nextCommand: buildCliParseCommand(context.input)
-      };
+      return downloadPdfFromUrl(oaUrl, context, "paper.pdf");
     }
     const response = await fetch(oaUrl, { credentials: "include" });
     if (!response.ok) {
       return { success: false, error: `OA fetch failed: ${response.status}` };
     }
     const html = await response.text();
-    const finalUrl = response.url;
     return {
       success: true,
       rawArtifact: new Blob([html], { type: "text/html" }),
@@ -735,6 +839,75 @@ function inferSourceDoi(input) {
   const trimmed = String(input || "").trim();
   return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
 }
+function inferElsevierIdentifier(input) {
+  const doi = inferSourceDoi(input);
+  if (doi) {
+    return { kind: "doi", value: doi };
+  }
+  const trimmed = String(input || "").trim();
+  try {
+    const parsed = new URL(trimmed);
+    const piiMatch = parsed.pathname.match(/\/pii\/([^/?#]+)/i);
+    if (piiMatch?.[1]) {
+      return { kind: "pii", value: decodeURIComponent(piiMatch[1]) };
+    }
+  } catch {
+  }
+  if (/^S\d{14,}[A-Z0-9]*$/i.test(trimmed)) {
+    return { kind: "pii", value: trimmed };
+  }
+  return void 0;
+}
+function buildElsevierArticleRetrievalUrl(kind, value) {
+  const encodedValue = encodeURIComponent(value).replace(/%2F/gi, "/");
+  const params = new URLSearchParams({
+    httpAccept: "text/xml",
+    view: "FULL"
+  });
+  return `https://api.elsevier.com/content/article/${kind}/${encodedValue}?${params.toString()}`;
+}
+function inferArxivId(input) {
+  const trimmed = String(input || "").trim();
+  const doiMatch = trimmed.match(/^10\.48550\/arXiv\.([^\s?#]+)$/i);
+  if (doiMatch?.[1]) return doiMatch[1];
+  const prefixedMatch = trimmed.match(/^arXiv:([^\s?#]+)$/i);
+  if (prefixedMatch?.[1]) return prefixedMatch[1];
+  try {
+    const parsed = new URL(trimmed);
+    if (/arxiv\.org$/i.test(parsed.hostname)) {
+      const match = parsed.pathname.match(/\/(?:abs|pdf|e-print)\/(.+?)(?:\.pdf)?$/i);
+      if (match?.[1]) return decodeURIComponent(match[1]);
+    }
+  } catch {
+  }
+  if (/^(?:\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return void 0;
+}
+function buildArxivPdfUrl(arxivId) {
+  return `https://arxiv.org/pdf/${arxivId.replace(/\.pdf$/i, "")}.pdf`;
+}
+function buildSpringerPdfUrl(input) {
+  const trimmed = String(input || "").trim();
+  try {
+    const parsed = new URL(trimmed);
+    const pdfMatch = parsed.pathname.match(/\/content\/pdf\/(.+?\.pdf)$/i);
+    if (pdfMatch?.[1]) {
+      return parsed.toString();
+    }
+    const articleMatch = parsed.pathname.match(/\/article\/(10\..+)$/i);
+    if (articleMatch?.[1]) {
+      return `https://link.springer.com/content/pdf/${decodeURIComponent(articleMatch[1])}.pdf`;
+    }
+  } catch {
+  }
+  const doi = inferSourceDoi(trimmed);
+  return doi ? `https://link.springer.com/content/pdf/${doi}.pdf` : void 0;
+}
+function looksLikePdfBytes(bytes) {
+  return bytes.length >= 5 && bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70 && bytes[4] === 45;
+}
 function isStructuredXmlCandidate(candidate) {
   const format = String(candidate.format || "").trim().toLowerCase();
   const handoff = String(candidate.handoff || "").trim().toLowerCase();
@@ -779,6 +952,16 @@ function pickPdfHandoffCandidate(candidates) {
 function pickArtifactHandoffUrl(candidates, artifactKind) {
   return candidates.find((candidate) => candidate.artifact_kind === artifactKind && candidate.artifact_url)?.artifact_url;
 }
+function pickPdfCandidateUrls(routePlan) {
+  const candidates = routePlan.acquisition_candidates || [];
+  const topConnector = String(routePlan.top_connector || "").trim();
+  const urls = [
+    ...candidates.filter((candidate) => candidate.connector === topConnector).flatMap((candidate) => [candidate.pdf_url, candidate.format === "pdf" ? candidate.url : void 0]),
+    ...candidates.flatMap((candidate) => [candidate.pdf_url, candidate.format === "pdf" ? candidate.url : void 0]),
+    ...(routePlan.client_handoff_candidates || []).filter((candidate) => candidate.artifact_kind === "pdf" && !candidate.requires_user_rights).map((candidate) => candidate.artifact_url)
+  ];
+  return Array.from(new Set(urls.map((url) => String(url || "").trim()).filter((url) => /^https?:\/\//i.test(url))));
+}
 function base64ToBytes(payloadBase64) {
   const decoded = globalThis.atob(payloadBase64);
   const bytes = new Uint8Array(decoded.length);
@@ -797,17 +980,8 @@ async function fetchRoutePlanFromSsot(routeClient, input, pageContext) {
   });
 }
 async function executeSsotActionSequence(parseClient, routePlan, context) {
-  if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
-    try {
-      const task = await parseClient.createParseTask({ input: context.input });
-      return { success: true, taskId: task.task_id, task };
-    } catch (error) {
-      return {
-        success: false,
-        error: String(error),
-        nextCommand: buildCliParseCommand(context.input)
-      };
-    }
+  if (shouldSubmitServerParse(routePlan)) {
+    return submitServerParse(parseClient, context.input);
   }
   for (const action of routePlan.action_sequence) {
     const result = await executeAction(action, context, {
@@ -851,12 +1025,43 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
         nextCommand: result.nextCommand || buildCliParseCommand(context.input)
       };
     }
+    if (action === "fetch_elsevier_xml") {
+      const serverResult = await submitServerParse(parseClient, context.input);
+      if (serverResult.success) {
+        return serverResult;
+      }
+      return {
+        ...serverResult,
+        error: `${result.error || "Elsevier XML fetch failed"}; backend fallback failed: ${serverResult.error}`
+      };
+    }
     if (routePlan.fail_closed) {
       return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
     }
   }
   return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
 }
+async function submitServerParse(parseClient, input) {
+  try {
+    const task = await parseClient.createParseTask({ input });
+    return { success: true, taskId: task.task_id, task };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      nextCommand: buildCliParseCommand(input)
+    };
+  }
+}
+function shouldSubmitServerParse(routePlan) {
+  if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
+    return true;
+  }
+  return routePlan.action_sequence.some((action) => SERVER_SIDE_CREDENTIAL_ACTIONS.has(action));
+}
+var SERVER_SIDE_CREDENTIAL_ACTIONS = /* @__PURE__ */ new Set([
+  "fetch_wiley_tdm_pdf"
+]);
 function inferArtifactKindFromFilename(filename) {
   const normalized = String(filename || "").trim().toLowerCase();
   if (normalized.endsWith(".pdf")) return "pdf";
@@ -884,7 +1089,8 @@ async function readSettings() {
     apiBaseUrl: current.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     token: current.token,
     email: current.email,
-    uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
+    uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
+    elsevierApiKey: current.elsevierApiKey
   };
 }
 async function writeSettings(next) {
@@ -926,7 +1132,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           tabId: message.pageContext?.tabId,
           tabUrl: message.pageContext?.tabUrl,
           tabTitle: message.pageContext?.tabTitle,
-          input: message.input
+          input: message.input,
+          elsevierApiKey: settings.elsevierApiKey
         }
       );
       if (result.success && result.taskId) {

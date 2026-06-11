@@ -48,6 +48,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           tabUrl: message.pageContext?.tabUrl,
           tabTitle: message.pageContext?.tabTitle,
           input: message.input,
+          elsevierApiKey: settings.elsevierApiKey,
         }
       );
 

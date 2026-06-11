@@ -284,7 +284,8 @@ async function readSettings() {
     apiBaseUrl: current.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     token: current.token,
     email: current.email,
-    uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
+    uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
+    elsevierApiKey: current.elsevierApiKey
   };
 }
 async function writeSettings(next) {
@@ -313,7 +314,7 @@ var COPY = {
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
     cliHandoffGuideTitle: "Extension + CLI handoff",
     cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents. After one parse succeeds, use one-command RAG bootstrap instead of hand-copying a server project id; MCP agents should follow `mcp_tool_plan` and call `server_rag_build(wait=true)` before `rag_query` when a build is needed.",
-    cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
+    cliHandoffGuideBoundary: "The extension can store your own Elsevier API key locally for Article Retrieval XML. Wiley TDM, Semantic Scholar, local helper credentials, and Python dependencies stay in the CLI or backend.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
     mcpServerConfigTitle: "Agent MCP server",
@@ -385,6 +386,9 @@ mdtero mcp serve`]
     uiLanguage: "Interface language",
     advanced: "Advanced",
     apiUrl: "API URL",
+    elsevierApiKey: "Elsevier API key",
+    elsevierApiKeyPlaceholder: "Optional user key",
+    elsevierApiKeyNote: "Optional. Stored locally in this browser and used only for Elsevier Article Retrieval XML before backend fallback.",
     save: "Save",
     historyTitle: "Account history",
     historyNote: "Downloads from your history are always free.",
@@ -421,7 +425,7 @@ mdtero mcp serve`]
     websiteAuthNote: "\u6269\u5C55\u7EDF\u4E00\u6253\u5F00 mdtero.com/auth \u767B\u5F55\u3002\u8BF7\u5728\u5B98\u7F51\u5B8C\u6210\u767B\u5F55\uFF0C\u53D7\u4FE1\u4EFB auth bridge \u4F1A\u628A token \u4EA4\u56DE\u6269\u5C55\u3002",
     cliHandoffGuideTitle: "\u6269\u5C55 + CLI \u4EA4\u63A5",
     cliHandoffGuideNote: "\u6269\u5C55\u8D1F\u8D23\u6D4F\u89C8\u5668\u4E0A\u4E0B\u6587\u3001\u5F53\u524D\u9875\u89E3\u6790\u3001PDF/EPUB \u4E0A\u4F20\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002\u9047\u5230 publisher challenge\u3001\u6821\u56ED\u7F51\u767B\u5F55\u6001\u6216\u7528\u6237\u5DF2\u4FDD\u5B58\u6587\u4EF6\u65F6\uFF0C\u4EA4\u7ED9 Python CLI \u7EE7\u7EED\uFF1B`mdtero setup --json` \u4F1A\u8FD4\u56DE\u7ED9 agent \u4F7F\u7528\u7684 onboarding checklist\u3002\u5DF2\u6709\u4E00\u6B21\u6210\u529F\u89E3\u6790\u540E\uFF0C\u7528\u4E00\u6761\u547D\u4EE4 RAG bootstrap\uFF0C\u4E0D\u8981\u624B\u5DE5\u590D\u5236 server project id\uFF1BMCP agent \u5E94\u6309 `mcp_tool_plan`\uFF0C\u9700\u8981\u6784\u5EFA\u65F6\u5148\u8C03\u7528 `server_rag_build(wait=true)`\uFF0C\u518D\u8C03\u7528 `rag_query`\u3002",
-    cliHandoffGuideBoundary: "\u6269\u5C55\u4E0D\u5B89\u88C5 Python \u4F9D\u8D56\u3001\u4E0D\u8FD0\u884C\u672C\u5730 helper\uFF0C\u4E5F\u4E0D\u4FDD\u5B58 Elsevier/Wiley/Semantic Scholar key\uFF1B\u8FD9\u4E9B\u53EA\u7559\u5728\u672C\u5730 CLI \u7684 `mdtero config academic`\u3002",
+    cliHandoffGuideBoundary: "\u6269\u5C55\u53EF\u4EE5\u5728\u672C\u6D4F\u89C8\u5668\u672C\u5730\u4FDD\u5B58\u4F60\u81EA\u5DF1\u7684 Elsevier API key\uFF0C\u7528\u4E8E Article Retrieval XML\u3002Wiley TDM\u3001Semantic Scholar\u3001\u672C\u5730 helper \u51ED\u636E\u548C Python \u4F9D\u8D56\u4ECD\u7559\u5728 CLI \u6216\u540E\u7AEF\u3002",
     copyCliHandoffGuide: "\u590D\u5236\u4EA4\u63A5",
     cliHandoffGuideCopied: "CLI \u4EA4\u63A5\u5DF2\u590D\u5236\u3002",
     mcpServerConfigTitle: "Agent MCP \u670D\u52A1",
@@ -493,6 +497,9 @@ mdtero mcp serve`]
     uiLanguage: "\u754C\u9762\u8BED\u8A00",
     advanced: "\u9AD8\u7EA7\u8BBE\u7F6E",
     apiUrl: "API \u5730\u5740",
+    elsevierApiKey: "Elsevier API key",
+    elsevierApiKeyPlaceholder: "\u53EF\u9009\uFF0C\u7528\u6237\u81EA\u5DF1\u7684 key",
+    elsevierApiKeyNote: "\u53EF\u9009\u3002\u53EA\u4FDD\u5B58\u5728\u672C\u6D4F\u89C8\u5668\u672C\u5730\uFF0C\u7528\u4E8E Elsevier Article Retrieval XML\uFF1B\u5931\u8D25\u65F6\u81EA\u52A8\u56DE\u9000\u540E\u7AEF\u89E3\u6790\u3002",
     save: "\u4FDD\u5B58",
     historyTitle: "\u8D26\u6237\u5386\u53F2",
     historyNote: "\u4ECE\u5386\u53F2\u8BB0\u5F55\u4E0B\u8F7D\u5185\u5BB9\u6C38\u8FDC\u514D\u8D39\uFF0C\u4E0D\u6263\u9664\u989D\u5EA6\u3002",
@@ -560,6 +567,9 @@ var setupStepDownloadEl = document.querySelector("#setup-step-download");
 var uiLanguageLabel = document.querySelector("#ui-language-label");
 var advancedSummary = document.querySelector("#advanced-summary");
 var apiBaseUrlLabel = document.querySelector("#api-base-url-label");
+var elsevierApiKeyInput = document.querySelector("#elsevier-api-key");
+var elsevierApiKeyLabel = document.querySelector("#elsevier-api-key-label");
+var elsevierApiKeyNote = document.querySelector("#elsevier-api-key-note");
 var historySection = document.querySelector("#history-section");
 var historyList = document.querySelector("#history-list");
 var historyTitle = document.querySelector("#history-title");
@@ -651,6 +661,9 @@ function applyLanguage() {
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
+  if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
+  if (elsevierApiKeyInput) elsevierApiKeyInput.placeholder = copy.elsevierApiKeyPlaceholder;
+  if (elsevierApiKeyNote) elsevierApiKeyNote.textContent = copy.elsevierApiKeyNote;
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
@@ -872,6 +885,7 @@ async function refreshView() {
   uiLanguage = resolveUiLanguage(settings.uiLanguage, globalThis.navigator?.language);
   applyLanguage();
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
+  if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey || "";
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
   if (accountStatus) {
     accountStatus.textContent = settings.email ? copyFor(uiLanguage).signedIn(settings.email) : copyFor(uiLanguage).notSignedIn;
@@ -932,7 +946,8 @@ saveButton?.addEventListener("click", async () => {
   await writeSettings(
     mergeSettings(current, {
       apiBaseUrl: apiBaseUrlInput?.value.trim() || current.apiBaseUrl,
-      uiLanguage: resolveUiLanguage(uiLanguageSelect?.value, globalThis.navigator?.language)
+      uiLanguage: resolveUiLanguage(uiLanguageSelect?.value, globalThis.navigator?.language),
+      elsevierApiKey: elsevierApiKeyInput?.value.trim() || void 0
     })
   );
   await refreshView();

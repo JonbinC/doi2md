@@ -7,6 +7,7 @@
   "permissions": ["storage", "downloads", "tabs", "activeTab", "scripting"],
   "host_permissions": [
     "https://api.mdtero.com/*",
+    "https://api.elsevier.com/*",
     "https://doi.org/*",
     "*://*.arxiv.org/*",
     "*://*.dl.acm.org/*",

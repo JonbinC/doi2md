@@ -45,7 +45,7 @@ describe("workspace", () => {
     expect(popupHtml).not.toContain("MinerU");
     expect(popupHtml).not.toContain("PMC");
     expect(popupHtml).not.toContain("Wiley");
-    expect(optionsHtml).not.toContain("Elsevier");
+    expect(optionsHtml).toContain("Elsevier");
     expect(optionsHtml).not.toContain("PMC");
     expect(optionsHtml).not.toContain("Wiley");
     expect(optionsHtml).toContain('href="./styles.css"');
@@ -78,7 +78,7 @@ describe("workspace", () => {
     expect(optionsHtml).not.toContain('id="shadow-status"');
     expect(optionsHtml).not.toContain('id="springer-oa-api-key"');
     expect(optionsHtml).not.toContain('id="wiley-tdm-token"');
-    expect(optionsHtml).not.toContain('id="elsevier-api-key"');
+    expect(optionsHtml).toContain('id="elsevier-api-key"');
     expect(optionsHtml).toContain('id="permissions-card"');
     expect(optionsHtml).toContain('id="permissions-title"');
     expect(optionsHtml).not.toContain('id="publisher-capability-groups"');
@@ -99,7 +99,7 @@ describe("workspace", () => {
 
     expect(readme).toContain("The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com`");
     expect(readme).toContain("Publisher pages cannot mint extension tokens");
-    expect(readme).toContain("does not store publisher API keys, TDM keys, or local helper credentials");
+    expect(readme).toContain("can store your own Elsevier API key locally");
     expect(readme).toContain("does not use native messaging or a local helper process");
     expect(readme).toContain("shows a CLI handoff command");
   });

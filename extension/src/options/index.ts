@@ -34,7 +34,7 @@ const COPY = {
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
     cliHandoffGuideTitle: "Extension + CLI handoff",
     cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents. After one parse succeeds, use one-command RAG bootstrap instead of hand-copying a server project id; MCP agents should follow `mcp_tool_plan` and call `server_rag_build(wait=true)` before `rag_query` when a build is needed.",
-    cliHandoffGuideBoundary: "The extension does not install Python dependencies, run native helpers, or store Elsevier/Wiley/Semantic Scholar keys; those stay in `mdtero config academic` on the local CLI.",
+    cliHandoffGuideBoundary: "The extension can store your own Elsevier API key locally for Article Retrieval XML. Wiley TDM, Semantic Scholar, local helper credentials, and Python dependencies stay in the CLI or backend.",
     copyCliHandoffGuide: "Copy handoff",
     cliHandoffGuideCopied: "CLI handoff copied.",
     mcpServerConfigTitle: "Agent MCP server",
@@ -104,6 +104,9 @@ const COPY = {
     uiLanguage: "Interface language",
     advanced: "Advanced",
     apiUrl: "API URL",
+    elsevierApiKey: "Elsevier API key",
+    elsevierApiKeyPlaceholder: "Optional user key",
+    elsevierApiKeyNote: "Optional. Stored locally in this browser and used only for Elsevier Article Retrieval XML before backend fallback.",
     save: "Save",
     historyTitle: "Account history",
     historyNote: "Downloads from your history are always free.",
@@ -141,7 +144,7 @@ const COPY = {
     websiteAuthNote: "扩展统一打开 mdtero.com/auth 登录。请在官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
     cliHandoffGuideTitle: "扩展 + CLI 交接",
     cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续；`mdtero setup --json` 会返回给 agent 使用的 onboarding checklist。已有一次成功解析后，用一条命令 RAG bootstrap，不要手工复制 server project id；MCP agent 应按 `mcp_tool_plan`，需要构建时先调用 `server_rag_build(wait=true)`，再调用 `rag_query`。",
-    cliHandoffGuideBoundary: "扩展不安装 Python 依赖、不运行本地 helper，也不保存 Elsevier/Wiley/Semantic Scholar key；这些只留在本地 CLI 的 `mdtero config academic`。",
+    cliHandoffGuideBoundary: "扩展可以在本浏览器本地保存你自己的 Elsevier API key，用于 Article Retrieval XML。Wiley TDM、Semantic Scholar、本地 helper 凭据和 Python 依赖仍留在 CLI 或后端。",
     copyCliHandoffGuide: "复制交接",
     cliHandoffGuideCopied: "CLI 交接已复制。",
     mcpServerConfigTitle: "Agent MCP 服务",
@@ -211,6 +214,9 @@ const COPY = {
     uiLanguage: "界面语言",
     advanced: "高级设置",
     apiUrl: "API 地址",
+    elsevierApiKey: "Elsevier API key",
+    elsevierApiKeyPlaceholder: "可选，用户自己的 key",
+    elsevierApiKeyNote: "可选。只保存在本浏览器本地，用于 Elsevier Article Retrieval XML；失败时自动回退后端解析。",
     save: "保存",
     historyTitle: "账户历史",
     historyNote: "从历史记录下载内容永远免费，不扣除额度。",
@@ -279,6 +285,9 @@ const setupStepDownloadEl = document.querySelector<HTMLSpanElement>("#setup-step
 const uiLanguageLabel = document.querySelector<HTMLLabelElement>("#ui-language-label");
 const advancedSummary = document.querySelector<HTMLElement>("#advanced-summary");
 const apiBaseUrlLabel = document.querySelector<HTMLLabelElement>("#api-base-url-label");
+const elsevierApiKeyInput = document.querySelector<HTMLInputElement>("#elsevier-api-key");
+const elsevierApiKeyLabel = document.querySelector<HTMLLabelElement>("#elsevier-api-key-label");
+const elsevierApiKeyNote = document.querySelector<HTMLParagraphElement>("#elsevier-api-key-note");
 const historySection = document.querySelector<HTMLElement>("#history-section");
 const historyList = document.querySelector<HTMLDivElement>("#history-list");
 const historyTitle = document.querySelector<HTMLHeadingElement>("#history-title");
@@ -388,6 +397,9 @@ function applyLanguage() {
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
+  if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
+  if (elsevierApiKeyInput) elsevierApiKeyInput.placeholder = copy.elsevierApiKeyPlaceholder;
+  if (elsevierApiKeyNote) elsevierApiKeyNote.textContent = copy.elsevierApiKeyNote;
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
@@ -632,6 +644,7 @@ async function refreshView() {
   applyLanguage();
 
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
+  if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey || "";
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
   if (accountStatus) {
     accountStatus.textContent = settings.email
@@ -706,7 +719,8 @@ saveButton?.addEventListener("click", async () => {
   await writeSettings(
       mergeSettings(current, {
         apiBaseUrl: apiBaseUrlInput?.value.trim() || current.apiBaseUrl,
-        uiLanguage: resolveUiLanguage(uiLanguageSelect?.value as UiLanguage | undefined, globalThis.navigator?.language)
+        uiLanguage: resolveUiLanguage(uiLanguageSelect?.value as UiLanguage | undefined, globalThis.navigator?.language),
+        elsevierApiKey: elsevierApiKeyInput?.value.trim() || undefined,
     })
   );
   await refreshView();
