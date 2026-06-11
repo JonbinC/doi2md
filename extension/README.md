@@ -74,6 +74,8 @@ Open the popup or options page and choose **Open Mdtero Account**. Sign in at `h
 
 The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com` (plus localhost during development). Publisher pages cannot mint extension tokens. The extension can store your own Elsevier API key locally for Article Retrieval XML, but it does not store Wiley TDM keys, Springer keys, shared backend credentials, or local helper credentials.
 
+The options page keeps CLI setup out of the extension product surface. It focuses on Mdtero Account status, quota, direct Elsevier key configuration, interface language, API URL, permissions, and account history.
+
 ## Parse Papers
 
 Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension first tries browser-side raw acquisition when the route supports it: Elsevier Article Retrieval XML with your key, arXiv PDF, open PDF candidates, open XML/HTML, current-tab HTML capture, and browser-session PDF/EPUB downloads. Captured raw artifacts are uploaded to the backend parse endpoint. When local acquisition is unavailable, the extension falls back to a backend parse task, polls it, and shows returned artifacts.
@@ -88,7 +90,7 @@ After a parse task succeeds, the Translate button uses the parsed Markdown artif
 
 Tokens, email, and UI language are stored in browser local storage. Local PDF/EPUB intake uploads the chosen file to create a parse task. The extension does not bundle Python dependencies such as `curl_cffi`, `pyzotero`, or `fastmcp`; those belong to the Python CLI.
 
-The extension does not use native messaging or a local helper process. When browser capture is blocked by a challenge page, campus-network dependency, or logged-in session state, the popup shows a CLI handoff command instead of trying to bypass the page inside the extension.
+The extension does not use native messaging or a local helper process. When browser capture receives a login, challenge, subscription, or shell page instead of article content, the popup explains that the open tab is not exposing parsable full text and offers browser-native next steps such as opening the full-text/PDF view or uploading a PDF/XML/EPUB.
 
 ## CLI Handoff
 

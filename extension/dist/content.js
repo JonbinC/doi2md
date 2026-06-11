@@ -288,14 +288,14 @@ ${html}`);
     return {
       ok: false,
       failureCode: "challenge_page_detected",
-      failureMessage: "Page loaded but did not expose article content."
+      failureMessage: "The tab is open, but Mdtero received a challenge or blocked page instead of article content."
     };
   }
   if (accessShell === "login") {
     return {
       ok: false,
       failureCode: "login_required",
-      failureMessage: "Page loaded but still requires user sign-in or institutional access."
+      failureMessage: "The tab is open, but Mdtero received a login, access, or subscription page instead of the article. Open the full-text or PDF view in this browser session, or upload the PDF/XML/EPUB."
     };
   }
   const sanitizedHtml = sanitizeCapturedHtml(html);
@@ -326,7 +326,7 @@ ${html}`);
     return {
       ok: false,
       failureCode: "article_body_missing",
-      failureMessage: "Page loaded but no article body markers were detected.",
+      failureMessage: "The tab is open, but Mdtero could not find a parsable article body in the captured page. Open the full-text/PDF view or upload the PDF/XML/EPUB.",
       failureContext: {
         sourceUrl: input.url,
         title: input.title,

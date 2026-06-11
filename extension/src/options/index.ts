@@ -11,14 +11,10 @@ import {
   type UiLanguage
 } from "../lib/storage";
 
-const ONE_COMMAND_RAG_BOOTSTRAP = 'mdtero rag query "What are the strongest findings?" --build-if-needed --json';
-const CLI_INSTALL_COMMAND = "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git";
-const CLI_PYPI_COMMAND = "uv tool install mdtero";
-
 const COPY = {
   en: {
     title: "Mdtero Extension",
-    subtitle: "Use website OAuth for sign-in, check balance and quota, and manage browser capture, upload, translation, and download settings.",
+    subtitle: "Sign in, check quota, and configure browser-side paper capture.",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension read the current paper page and open website OAuth when you sign in.",
     permissionsDownloads: "`downloads` saves Markdown files, translations, ZIP bundles, and uploaded-source results back to your machine.",
@@ -32,57 +28,6 @@ const COPY = {
     openAccount: "Open website OAuth",
     websiteAuthTitle: "Website sign-in",
     websiteAuthNote: "The extension opens mdtero.com/auth for OAuth sign-in. Complete login on the website, and the trusted auth bridge will hand the token back to this extension.",
-    cliHandoffGuideTitle: "Extension + CLI handoff",
-    cliHandoffGuideNote: "Use the extension for browser context, current-page parse, PDF/EPUB upload, translation, and downloads. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI; `mdtero setup --json` returns the onboarding checklist for agents. After one parse succeeds, use one-command RAG bootstrap instead of hand-copying a server project id; MCP agents should follow `mcp_tool_plan` and call `server_rag_build(wait=true)` before `rag_query` when a build is needed.",
-    cliHandoffGuideBoundary: "The extension can store your own Elsevier API key locally for Article Retrieval XML. Wiley TDM, Semantic Scholar, local helper credentials, and Python dependencies stay in the CLI or backend.",
-    copyCliHandoffGuide: "Copy handoff",
-    cliHandoffGuideCopied: "CLI handoff copied.",
-    mcpServerConfigTitle: "Agent MCP server",
-    mcpServerConfigNote: "After `mdtero setup`, start `mdtero mcp serve` from a local project and paste this stdio server config into Codex, Claude, Gemini, Hermes, or OpenCode.",
-    mcpServerConfigMeta: "FastMCP · stdio · local project root",
-    copyMcpServerConfig: "Copy MCP config",
-    mcpServerConfigCopied: "MCP config copied.",
-    cliOnboardingTitle: "CLI setup checklist",
-    cliOnboardingNote: "The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.",
-    cliOnboardingPill: "Python / uv",
-    inputRouteTitle: "Input routes",
-    inputRouteNote: "Choose the shortest path to a Markdown artifact. The extension covers browser context; the CLI continues local files, RAG, MCP, and agent handoff.",
-    inputRoutePill: "Extension + CLI",
-    inputRouteCopy: "Copy",
-    inputRouteCopied: "Route copied.",
-    serverApiContractTitle: "Server API contract",
-    serverApiContractNote: "The same /api/v1 routes back extension capture, CLI upload, task polling, downloads, project import, and backend Voyage RAG.",
-    copyServerApiContract: "Copy API contract",
-    serverApiContractCopied: "API contract copied.",
-    serverApiContract: [
-      ["route", "/api/v1/route"],
-      ["parse", "/api/v1/tasks/parse"],
-      ["upload", "/api/v1/tasks/upload"],
-      ["status", "/api/v1/tasks/{task_id}"],
-      ["download", "/api/v1/tasks/{task_id}/download/{artifact}"],
-      ["project_import", "/api/v1/projects/{project_id}/tasks/{task_id}/import"],
-      ["rag_build", "/api/v1/projects/{project_id}/rag/build"],
-      ["rag_query", "/api/v1/projects/{project_id}/rag/query"]
-    ],
-    inputRoutes: [
-      ["DOI or URL", "fast smoke", "Use the CLI for DOI, arXiv, EuropePMC XML, or an open URL the backend route can recognize.", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
-      ["PDF / EPUB file", "upload", "Use direct file upload for local PDF, EPUB, XML, or HTML. PDFs go through the backend MinerU-first path.", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
-      ["Browser extension", "manual capture", "Use the extension when OAuth, campus network, cookies, or a selected PDF/EPUB matter, then hand off saved inputs to the CLI.", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
-      ["RAG / MCP", "after parse", "Build backend Voyage RAG from completed Markdown and expose the same project to local agents through FastMCP. The bootstrap query creates or reuses the server project, binds it locally, imports Markdown, builds RAG, and queries without asking you to copy a server project id.", `${ONE_COMMAND_RAG_BOOTSTRAP}\nmdtero mcp briefing --json\nmdtero mcp serve`]
-    ],
-    cliOnboardingItems: [
-      ["Install", CLI_INSTALL_COMMAND, `Install the known-good public Python client from GitHub during alpha. Use ${CLI_PYPI_COMMAND} only after the PyPI package is republished; the extension never installs Python dependencies.`],
-      ["Authenticate", "mdtero setup", "Use website OAuth on a workstation, or API-key setup on a trusted headless server."],
-      ["Checklist", "mdtero setup --json", "Return the same secret-safe onboarding checklist used by local agents."],
-      ["Academic keys", "mdtero config academic", "Optional academic resource keys stay in local CLI config."],
-      ["Discover", "mdtero discover \"<topic>\" --limit 5 --interactive", "Use local Semantic Scholar when configured; otherwise use server OpenAlex."],
-      ["Parse", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "Preserve route, client_acquisition, reason_code, action_hint, and artifacts."],
-      ["File upload", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json", "Continue from browser-saved files or challenged publisher pages; PDF/MinerU tasks can take longer than DOI route checks."],
-      ["RAG", ONE_COMMAND_RAG_BOOTSTRAP, "Backend Voyage RAG is driven by the CLI project. This one command can create or bind the server project, import succeeded Markdown, build Voyage RAG, and query with citations; citation_contract requires final answers to preserve citations and source_nodes."],
-      ["MCP briefing", "mdtero mcp briefing --json", "Expose account, project, extension_handoff, RAG readiness, citation_contract, and the mcp_tool_plan steps including server_rag_build(wait=true) before rag_query."],
-      ["MCP server", "mdtero mcp serve", "Run the FastMCP stdio server from the local project root for agent context tools."],
-      ["Agent skills", "mdtero agent install --interactive", "Detect Codex, Claude, Gemini, Hermes, or OpenCode and select workspaces with Space."]
-    ],
     guideTitle: "Connection guide",
     setupStepAuth: "OAuth",
     setupStepParse: "Parse / Upload",
@@ -91,7 +36,6 @@ const COPY = {
     guideSignedOut: [
       "Open website OAuth and complete sign-in at mdtero.com/auth.",
       "Return to this popup after the trusted auth bridge connects your account.",
-      `Optionally install the Python CLI with \`${CLI_INSTALL_COMMAND}\`. Use \`${CLI_PYPI_COMMAND}\` only after the PyPI package is republished. Then run \`mdtero setup\` for workstation OAuth.`,
       "Parse the current paper page or upload a local PDF/EPUB from the popup.",
       "Download Markdown, ZIP bundles, source files, or translations when tasks finish."
     ],
@@ -104,10 +48,19 @@ const COPY = {
     uiLanguage: "Interface language",
     advanced: "Advanced",
     apiUrl: "API URL",
+    elsevierSettingsTitle: "Elsevier access",
+    elsevierSettingsNote: "Add your own Elsevier API key to let the extension fetch Article Retrieval XML directly from supported ScienceDirect pages.",
+    elsevierConfigured: "Configured",
+    elsevierNotConfigured: "Not configured",
+    elsevierKeyVisible: "Hide",
+    elsevierKeyHidden: "Show",
+    elsevierKeySaved: "Elsevier key saved in this browser.",
+    elsevierKeyCleared: "Elsevier key cleared.",
+    clearElsevierKey: "Clear key",
     elsevierApiKey: "Elsevier API key",
-    elsevierApiKeyPlaceholder: "Optional user key",
-    elsevierApiKeyNote: "Optional. Stored locally in this browser and used only for Elsevier Article Retrieval XML before backend fallback.",
-    save: "Save",
+    elsevierApiKeyPlaceholder: "Paste your Elsevier API key",
+    elsevierApiKeyNote: "Stored only in this browser. Used for Elsevier XML capture before backend fallback.",
+    save: "Save settings",
     historyTitle: "Account history",
     historyNote: "Downloads from your history are always free.",
     historyEmpty: "No parsing or translation history found yet.",
@@ -142,57 +95,6 @@ const COPY = {
     openAccount: "打开网页登录",
     websiteAuthTitle: "官网登录",
     websiteAuthNote: "扩展统一打开 mdtero.com/auth 登录。请在官网完成登录，受信任 auth bridge 会把 token 交回扩展。",
-    cliHandoffGuideTitle: "扩展 + CLI 交接",
-    cliHandoffGuideNote: "扩展负责浏览器上下文、当前页解析、PDF/EPUB 上传、翻译和下载。遇到 publisher challenge、校园网登录态或用户已保存文件时，交给 Python CLI 继续；`mdtero setup --json` 会返回给 agent 使用的 onboarding checklist。已有一次成功解析后，用一条命令 RAG bootstrap，不要手工复制 server project id；MCP agent 应按 `mcp_tool_plan`，需要构建时先调用 `server_rag_build(wait=true)`，再调用 `rag_query`。",
-    cliHandoffGuideBoundary: "扩展可以在本浏览器本地保存你自己的 Elsevier API key，用于 Article Retrieval XML。Wiley TDM、Semantic Scholar、本地 helper 凭据和 Python 依赖仍留在 CLI 或后端。",
-    copyCliHandoffGuide: "复制交接",
-    cliHandoffGuideCopied: "CLI 交接已复制。",
-    mcpServerConfigTitle: "Agent MCP 服务",
-    mcpServerConfigNote: "运行 `mdtero setup` 后，在本地项目目录启动 `mdtero mcp serve`，再把这段 stdio server 配置粘贴到 Codex、Claude、Gemini、Hermes 或 OpenCode。",
-    mcpServerConfigMeta: "FastMCP · stdio · 本地项目根目录",
-    copyMcpServerConfig: "复制 MCP 配置",
-    mcpServerConfigCopied: "MCP 配置已复制。",
-    cliOnboardingTitle: "CLI 配置清单",
-    cliOnboardingNote: "Python 客户端负责本地抓取、项目队列、Zotero、后端 Voyage RAG、MCP 和 agent skill。",
-    cliOnboardingPill: "Python / uv",
-    inputRouteTitle: "输入路径",
-    inputRouteNote: "按输入类型选择最短 Markdown 路径。扩展负责浏览器上下文；CLI 继续处理本地文件、RAG、MCP 和 agent 交接。",
-    inputRoutePill: "扩展 + CLI",
-    inputRouteCopy: "复制",
-    inputRouteCopied: "路径已复制。",
-    serverApiContractTitle: "服务端 API 契约",
-    serverApiContractNote: "扩展抓取、CLI 上传、任务轮询、下载、项目导入和后端 Voyage RAG 都落到同一组 /api/v1 路由。",
-    copyServerApiContract: "复制 API 契约",
-    serverApiContractCopied: "API 契约已复制。",
-    serverApiContract: [
-      ["route", "/api/v1/route"],
-      ["parse", "/api/v1/tasks/parse"],
-      ["upload", "/api/v1/tasks/upload"],
-      ["status", "/api/v1/tasks/{task_id}"],
-      ["download", "/api/v1/tasks/{task_id}/download/{artifact}"],
-      ["project_import", "/api/v1/projects/{project_id}/tasks/{task_id}/import"],
-      ["rag_build", "/api/v1/projects/{project_id}/rag/build"],
-      ["rag_query", "/api/v1/projects/{project_id}/rag/query"]
-    ],
-    inputRoutes: [
-      ["DOI 或 URL", "快速冒烟", "DOI、arXiv、EuropePMC XML，或后端 route 能识别的开放 URL，优先走 CLI。", "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"],
-      ["PDF / EPUB 文件", "上传", "本地 PDF、EPUB、XML 或 HTML 走直接上传。PDF 默认进入后端 MinerU-first 路径。", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"],
-      ["浏览器扩展", "人工抓取", "遇到 OAuth、校园网、cookie 或人工选择 PDF/EPUB 时用扩展，再把已保存输入交给 CLI。", "mdtero parse <doi-or-current-page-url> --trace --wait --timeout 300 --json\nmdtero parse --file <saved-browser-artifact.pdf|epub|html|xml> --trace --wait --timeout 600 --json"],
-      ["RAG / MCP", "解析后", "基于完成的 Markdown 构建后端 Voyage RAG，并通过 FastMCP 交给本地 agent。Bootstrap 查询会创建或复用服务端项目、写入本地绑定、导入 Markdown、构建 RAG 并查询，不需要你手工复制 server project id。", `${ONE_COMMAND_RAG_BOOTSTRAP}\nmdtero mcp briefing --json\nmdtero mcp serve`]
-    ],
-    cliOnboardingItems: [
-      ["安装", CLI_INSTALL_COMMAND, `alpha 阶段从 GitHub 安装已验证的公开 Python 客户端；等 PyPI 重新发布后再使用 ${CLI_PYPI_COMMAND}。扩展不会安装 Python 依赖。`],
-      ["鉴权", "mdtero setup", "工作站走网页登录 OAuth；可信无头服务器可走 API-key setup。"],
-      ["检查清单", "mdtero setup --json", "返回给本地 agent 使用的同一份 secret-safe onboarding checklist。"],
-      ["学术 key", "mdtero config academic", "学术资源 key 都是可选增强，只存在本地 CLI 配置。"],
-      ["发现", "mdtero discover \"<topic>\" --limit 5 --interactive", "有 Semantic Scholar 时走本地；否则走服务端 OpenAlex。"],
-      ["解析", "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json", "保留 route、client_acquisition、reason_code、action_hint 和 artifacts。"],
-      ["文件上传", "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json", "浏览器保存的文件或 publisher challenge 页面交给 CLI 继续；PDF/MinerU 任务通常比 DOI route 检查更慢。"],
-      ["RAG", ONE_COMMAND_RAG_BOOTSTRAP, "后端 Voyage RAG 由 CLI 项目驱动。这一条命令可以创建或绑定服务端项目、导入成功 Markdown、构建 Voyage RAG，并带引用查询；citation_contract 要求最终回答保留 citations 和 source_nodes。"],
-      ["MCP briefing", "mdtero mcp briefing --json", "把账户、项目、extension_handoff、RAG readiness、citation_contract 和 mcp_tool_plan 交给本地 agent，包括在 rag_query 前调用 server_rag_build(wait=true)。"],
-      ["MCP 服务", "mdtero mcp serve", "在本地项目根目录运行 FastMCP stdio server，给 agent 提供上下文工具。"],
-      ["Agent skill", "mdtero agent install --interactive", "动态检测 Codex、Claude、Gemini、Hermes、OpenCode，并用空格多选安装。"]
-    ],
     guideTitle: "连接引导",
     setupStepAuth: "网页登录",
     setupStepParse: "解析 / 上传",
@@ -201,7 +103,6 @@ const COPY = {
     guideSignedOut: [
       "打开网页登录，并在 mdtero.com/auth 完成授权。",
       "受信任 auth bridge 连接账户后，回到扩展弹窗继续。",
-      `可选安装 Python CLI：\`${CLI_INSTALL_COMMAND}\`。等 PyPI 重新发布后再使用 \`${CLI_PYPI_COMMAND}\`。再运行 \`mdtero setup\` 走工作站 OAuth。`,
       "在弹窗解析当前论文页、粘贴 DOI，或上传本地 PDF/EPUB。",
       "任务完成后下载 Markdown、ZIP、源文件或译文。"
     ],
@@ -214,10 +115,19 @@ const COPY = {
     uiLanguage: "界面语言",
     advanced: "高级设置",
     apiUrl: "API 地址",
+    elsevierSettingsTitle: "Elsevier 访问",
+    elsevierSettingsNote: "添加你自己的 Elsevier API key，让扩展可以直接从支持的 ScienceDirect 页面获取 Article Retrieval XML。",
+    elsevierConfigured: "已配置",
+    elsevierNotConfigured: "未配置",
+    elsevierKeyVisible: "隐藏",
+    elsevierKeyHidden: "显示",
+    elsevierKeySaved: "Elsevier key 已保存在本浏览器。",
+    elsevierKeyCleared: "Elsevier key 已清除。",
+    clearElsevierKey: "清除 key",
     elsevierApiKey: "Elsevier API key",
-    elsevierApiKeyPlaceholder: "可选，用户自己的 key",
-    elsevierApiKeyNote: "可选。只保存在本浏览器本地，用于 Elsevier Article Retrieval XML；失败时自动回退后端解析。",
-    save: "保存",
+    elsevierApiKeyPlaceholder: "粘贴你的 Elsevier API key",
+    elsevierApiKeyNote: "只保存在本浏览器。用于 Elsevier XML 抓取，失败时再回退后端解析。",
+    save: "保存设置",
     historyTitle: "账户历史",
     historyNote: "从历史记录下载内容永远免费，不扣除额度。",
     historyEmpty: "暂无解析或翻译记录。",
@@ -254,28 +164,6 @@ const saveButton = document.querySelector<HTMLButtonElement>("#save-settings");
 const openAccountButton = document.querySelector<HTMLButtonElement>("#open-account");
 const websiteAuthTitleEl = document.querySelector<HTMLHeadingElement>("#website-auth-title");
 const websiteAuthNoteEl = document.querySelector<HTMLParagraphElement>("#website-auth-note");
-const cliHandoffGuideTitleEl = document.querySelector<HTMLHeadingElement>("#cli-handoff-guide-title");
-const cliHandoffGuideNoteEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-guide-note");
-const cliHandoffGuideBoundaryEl = document.querySelector<HTMLParagraphElement>("#cli-handoff-guide-boundary");
-const cliHandoffGuideCommandEl = document.querySelector<HTMLElement>("#cli-handoff-guide-command");
-const copyCliHandoffGuideButton = document.querySelector<HTMLButtonElement>("#copy-cli-handoff-guide");
-const mcpServerConfigTitleEl = document.querySelector<HTMLHeadingElement>("#mcp-server-config-title");
-const mcpServerConfigNoteEl = document.querySelector<HTMLParagraphElement>("#mcp-server-config-note");
-const mcpServerConfigMetaEl = document.querySelector<HTMLSpanElement>("#mcp-server-config-meta");
-const mcpServerConfigCommandEl = document.querySelector<HTMLElement>("#mcp-server-config-command");
-const copyMcpServerConfigButton = document.querySelector<HTMLButtonElement>("#copy-mcp-server-config");
-const cliOnboardingTitleEl = document.querySelector<HTMLHeadingElement>("#cli-onboarding-title");
-const cliOnboardingNoteEl = document.querySelector<HTMLParagraphElement>("#cli-onboarding-note");
-const cliOnboardingPillEl = document.querySelector<HTMLSpanElement>("#cli-onboarding-pill");
-const cliOnboardingListEl = document.querySelector<HTMLDivElement>("#cli-onboarding-list");
-const inputRouteTitleEl = document.querySelector<HTMLHeadingElement>("#input-route-title");
-const inputRouteNoteEl = document.querySelector<HTMLParagraphElement>("#input-route-note");
-const inputRoutePillEl = document.querySelector<HTMLSpanElement>("#input-route-pill");
-const inputRouteListEl = document.querySelector<HTMLDivElement>("#input-route-list");
-const serverApiContractTitleEl = document.querySelector<HTMLHeadingElement>("#server-api-contract-title");
-const serverApiContractNoteEl = document.querySelector<HTMLParagraphElement>("#server-api-contract-note");
-const serverApiContractListEl = document.querySelector<HTMLDivElement>("#server-api-contract-list");
-const copyServerApiContractButton = document.querySelector<HTMLButtonElement>("#copy-server-api-contract");
 const connectionGuideTitleEl = document.querySelector<HTMLHeadingElement>("#connection-guide-title");
 const connectionGuideListEl = document.querySelector<HTMLDivElement>("#connection-guide-list");
 const setupStepAuthEl = document.querySelector<HTMLSpanElement>("#setup-step-auth");
@@ -285,9 +173,15 @@ const setupStepDownloadEl = document.querySelector<HTMLSpanElement>("#setup-step
 const uiLanguageLabel = document.querySelector<HTMLLabelElement>("#ui-language-label");
 const advancedSummary = document.querySelector<HTMLElement>("#advanced-summary");
 const apiBaseUrlLabel = document.querySelector<HTMLLabelElement>("#api-base-url-label");
+const elsevierSettingsTitleEl = document.querySelector<HTMLHeadingElement>("#elsevier-settings-title");
+const elsevierSettingsNoteEl = document.querySelector<HTMLParagraphElement>("#elsevier-settings-note");
+const elsevierKeyStatusEl = document.querySelector<HTMLSpanElement>("#elsevier-key-status");
 const elsevierApiKeyInput = document.querySelector<HTMLInputElement>("#elsevier-api-key");
 const elsevierApiKeyLabel = document.querySelector<HTMLLabelElement>("#elsevier-api-key-label");
 const elsevierApiKeyNote = document.querySelector<HTMLParagraphElement>("#elsevier-api-key-note");
+const toggleElsevierKeyButton = document.querySelector<HTMLButtonElement>("#toggle-elsevier-key");
+const clearElsevierKeyButton = document.querySelector<HTMLButtonElement>("#clear-elsevier-key");
+const elsevierApiKeyFeedback = document.querySelector<HTMLParagraphElement>("#elsevier-api-key-feedback");
 const historySection = document.querySelector<HTMLElement>("#history-section");
 const historyList = document.querySelector<HTMLDivElement>("#history-list");
 const historyTitle = document.querySelector<HTMLHeadingElement>("#history-title");
@@ -298,46 +192,6 @@ type HistoryTaskRecord = TaskRecord & { paper_input?: string };
 
 const client = createApiClient(readSettings);
 let uiLanguage: UiLanguage = "en";
-
-const CLI_HANDOFF_GUIDE_COMMAND = [
-  CLI_INSTALL_COMMAND,
-  `# PyPI after republish: ${CLI_PYPI_COMMAND}`,
-  "mdtero setup",
-  "mdtero setup --json",
-  "mdtero doctor --json",
-  "mdtero config academic",
-  "mdtero discover \"<topic>\" --limit 5 --interactive",
-  "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
-  "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-  "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json",
-  "mdtero status <task-id> --wait --timeout 300 --json",
-  "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
-  "mdtero project ingest --json",
-  "mdtero project parse --wait --timeout 300 --json",
-  "mdtero project refresh --wait --timeout 300 --json",
-  ONE_COMMAND_RAG_BOOTSTRAP,
-  "mdtero rag status --json",
-  "mdtero rag build --wait --json",
-  "mdtero rag query \"<question>\" --build-if-needed --json",
-  "# MCP agents: if mcp_tool_plan says build_rag_index, call server_rag_build(wait=true), then rag_query(question).",
-  "# Preserve citation_contract.required_for_final_answer: final RAG answers keep citations and source_nodes.",
-  "mdtero mcp briefing --json",
-  "mdtero mcp serve",
-].join("\n");
-
-const MCP_SERVER_CONFIG = JSON.stringify(
-  {
-    mcpServers: {
-      mdtero: {
-        command: "mdtero",
-        args: ["mcp", "serve"],
-        cwd: "<local-mdtero-project-root>",
-      },
-    },
-  },
-  null,
-  2
-);
 
 function renderHistoryNotice(message: string, color?: string) {
   if (!historyList) return;
@@ -383,6 +237,18 @@ function formatArtifactActionLabel(artifactKey: string): string {
   return `${copy.download} ${label}`;
 }
 
+function renderElsevierKeyState(hasKey: boolean) {
+  if (!elsevierKeyStatusEl) return;
+  const copy = copyFor(uiLanguage);
+  elsevierKeyStatusEl.textContent = hasKey ? copy.elsevierConfigured : copy.elsevierNotConfigured;
+  elsevierKeyStatusEl.dataset.state = hasKey ? "configured" : "empty";
+}
+
+function setElsevierFeedback(message?: string) {
+  if (!elsevierApiKeyFeedback) return;
+  elsevierApiKeyFeedback.textContent = message || "";
+}
+
 function applyLanguage() {
   const copy = copyFor(uiLanguage);
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
@@ -397,34 +263,18 @@ function applyLanguage() {
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
+  if (elsevierSettingsTitleEl) elsevierSettingsTitleEl.textContent = copy.elsevierSettingsTitle;
+  if (elsevierSettingsNoteEl) elsevierSettingsNoteEl.textContent = copy.elsevierSettingsNote;
   if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
   if (elsevierApiKeyInput) elsevierApiKeyInput.placeholder = copy.elsevierApiKeyPlaceholder;
   if (elsevierApiKeyNote) elsevierApiKeyNote.textContent = copy.elsevierApiKeyNote;
+  if (toggleElsevierKeyButton) {
+    toggleElsevierKeyButton.textContent = elsevierApiKeyInput?.type === "text" ? copy.elsevierKeyVisible : copy.elsevierKeyHidden;
+  }
+  if (clearElsevierKeyButton) clearElsevierKeyButton.textContent = copy.clearElsevierKey;
   if (openAccountButton) openAccountButton.textContent = copy.openAccount;
   if (websiteAuthTitleEl) websiteAuthTitleEl.textContent = copy.websiteAuthTitle;
   if (websiteAuthNoteEl) websiteAuthNoteEl.textContent = copy.websiteAuthNote;
-  if (cliHandoffGuideTitleEl) cliHandoffGuideTitleEl.textContent = copy.cliHandoffGuideTitle;
-  if (cliHandoffGuideNoteEl) cliHandoffGuideNoteEl.textContent = copy.cliHandoffGuideNote;
-  if (cliHandoffGuideBoundaryEl) cliHandoffGuideBoundaryEl.textContent = copy.cliHandoffGuideBoundary;
-  if (cliHandoffGuideCommandEl) cliHandoffGuideCommandEl.textContent = CLI_HANDOFF_GUIDE_COMMAND;
-  if (copyCliHandoffGuideButton) copyCliHandoffGuideButton.textContent = copy.copyCliHandoffGuide;
-  if (mcpServerConfigTitleEl) mcpServerConfigTitleEl.textContent = copy.mcpServerConfigTitle;
-  if (mcpServerConfigNoteEl) mcpServerConfigNoteEl.textContent = copy.mcpServerConfigNote;
-  if (mcpServerConfigMetaEl) mcpServerConfigMetaEl.textContent = copy.mcpServerConfigMeta;
-  if (mcpServerConfigCommandEl) mcpServerConfigCommandEl.textContent = MCP_SERVER_CONFIG;
-  if (copyMcpServerConfigButton) copyMcpServerConfigButton.textContent = copy.copyMcpServerConfig;
-  if (cliOnboardingTitleEl) cliOnboardingTitleEl.textContent = copy.cliOnboardingTitle;
-  if (cliOnboardingNoteEl) cliOnboardingNoteEl.textContent = copy.cliOnboardingNote;
-  if (cliOnboardingPillEl) cliOnboardingPillEl.textContent = copy.cliOnboardingPill;
-  if (inputRouteTitleEl) inputRouteTitleEl.textContent = copy.inputRouteTitle;
-  if (inputRouteNoteEl) inputRouteNoteEl.textContent = copy.inputRouteNote;
-  if (inputRoutePillEl) inputRoutePillEl.textContent = copy.inputRoutePill;
-  if (serverApiContractTitleEl) serverApiContractTitleEl.textContent = copy.serverApiContractTitle;
-  if (serverApiContractNoteEl) serverApiContractNoteEl.textContent = copy.serverApiContractNote;
-  if (copyServerApiContractButton) copyServerApiContractButton.textContent = copy.copyServerApiContract;
-  renderInputRouteList();
-  renderServerApiContractList();
-  renderCliOnboardingList();
   if (connectionGuideTitleEl) connectionGuideTitleEl.textContent = copy.guideTitle;
   setStepText(setupStepAuthEl, "1", copy.setupStepAuth);
   setStepText(setupStepParseEl, "2", copy.setupStepParse);
@@ -434,94 +284,6 @@ function applyLanguage() {
   if (historyTitle) historyTitle.textContent = copy.historyTitle;
   if (historyNote) historyNote.textContent = copy.historyNote;
   if (refreshHistoryBtn) refreshHistoryBtn.textContent = copy.historyRefresh;
-}
-
-function renderServerApiContractList() {
-  if (!serverApiContractListEl) return;
-  const copy = copyFor(uiLanguage);
-  serverApiContractListEl.textContent = "";
-  copy.serverApiContract.forEach(([label, value]) => {
-    const item = document.createElement("div");
-    item.className = "server-api-contract-item";
-    const labelEl = document.createElement("span");
-    labelEl.className = "server-api-label";
-    labelEl.textContent = label;
-    const valueEl = document.createElement("code");
-    valueEl.className = "server-api-value";
-    valueEl.textContent = value;
-    item.appendChild(labelEl);
-    item.appendChild(valueEl);
-    serverApiContractListEl.appendChild(item);
-  });
-}
-
-function renderInputRouteList() {
-  if (!inputRouteListEl) return;
-  const copy = copyFor(uiLanguage);
-  inputRouteListEl.textContent = "";
-  copy.inputRoutes.forEach(([title, status, detail, command]) => {
-    const row = document.createElement("div");
-    row.className = "input-route-item";
-    const header = document.createElement("div");
-    header.className = "input-route-header";
-    const titleEl = document.createElement("p");
-    titleEl.className = "onboarding-title";
-    titleEl.textContent = title;
-    const statusEl = document.createElement("span");
-    statusEl.className = "meta-pill input-route-status";
-    statusEl.textContent = status;
-    header.appendChild(titleEl);
-    header.appendChild(statusEl);
-    const detailEl = document.createElement("p");
-    detailEl.className = "meta-label";
-    detailEl.textContent = detail;
-    const commandEl = document.createElement("code");
-    commandEl.className = "onboarding-command";
-    commandEl.textContent = command;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ghost-chip input-route-copy";
-    button.textContent = copy.inputRouteCopy;
-    button.addEventListener("click", async () => {
-      await navigator.clipboard?.writeText(command);
-      button.textContent = copyFor(uiLanguage).inputRouteCopied;
-    });
-    row.appendChild(header);
-    row.appendChild(detailEl);
-    row.appendChild(commandEl);
-    row.appendChild(button);
-    inputRouteListEl.appendChild(row);
-  });
-}
-
-function renderCliOnboardingList() {
-  if (!cliOnboardingListEl) return;
-  const copy = copyFor(uiLanguage);
-  cliOnboardingListEl.textContent = "";
-  copy.cliOnboardingItems.forEach(([title, command, detail], index) => {
-    const row = document.createElement("div");
-    row.className = "onboarding-item";
-    const icon = document.createElement("span");
-    icon.className = "guide-index";
-    icon.textContent = String(index + 1);
-    const body = document.createElement("div");
-    body.className = "onboarding-body";
-    const heading = document.createElement("p");
-    heading.className = "onboarding-title";
-    heading.textContent = title;
-    const commandEl = document.createElement("code");
-    commandEl.className = "onboarding-command";
-    commandEl.textContent = command;
-    const detailEl = document.createElement("p");
-    detailEl.className = "meta-label";
-    detailEl.textContent = detail;
-    body.appendChild(heading);
-    body.appendChild(commandEl);
-    body.appendChild(detailEl);
-    row.appendChild(icon);
-    row.appendChild(body);
-    cliOnboardingListEl.appendChild(row);
-  });
 }
 
 function setStepText(element: HTMLSpanElement | null, index: string, label: string) {
@@ -645,6 +407,7 @@ async function refreshView() {
 
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
   if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey || "";
+  renderElsevierKeyState(Boolean(settings.elsevierApiKey));
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
   if (accountStatus) {
     accountStatus.textContent = settings.email
@@ -696,24 +459,6 @@ openAccountButton?.addEventListener("click", () => {
   void openMdteroAccount();
 });
 
-copyCliHandoffGuideButton?.addEventListener("click", async () => {
-  await navigator.clipboard?.writeText(CLI_HANDOFF_GUIDE_COMMAND);
-  copyCliHandoffGuideButton.textContent = copyFor(uiLanguage).cliHandoffGuideCopied;
-});
-
-copyMcpServerConfigButton?.addEventListener("click", async () => {
-  await navigator.clipboard?.writeText(MCP_SERVER_CONFIG);
-  copyMcpServerConfigButton.textContent = copyFor(uiLanguage).mcpServerConfigCopied;
-});
-
-copyServerApiContractButton?.addEventListener("click", async () => {
-  const contract = copyFor(uiLanguage).serverApiContract
-    .map(([label, value]) => `${label}: ${value}`)
-    .join("\n");
-  await navigator.clipboard?.writeText(contract);
-  copyServerApiContractButton.textContent = copyFor(uiLanguage).serverApiContractCopied;
-});
-
 saveButton?.addEventListener("click", async () => {
   const current = await readSettings();
   await writeSettings(
@@ -723,7 +468,28 @@ saveButton?.addEventListener("click", async () => {
         elsevierApiKey: elsevierApiKeyInput?.value.trim() || undefined,
     })
   );
+  setElsevierFeedback(copyFor(uiLanguage).elsevierKeySaved);
   await refreshView();
+});
+
+toggleElsevierKeyButton?.addEventListener("click", () => {
+  if (!elsevierApiKeyInput || !toggleElsevierKeyButton) return;
+  const copy = copyFor(uiLanguage);
+  const shouldShow = elsevierApiKeyInput.type === "password";
+  elsevierApiKeyInput.type = shouldShow ? "text" : "password";
+  toggleElsevierKeyButton.textContent = shouldShow ? copy.elsevierKeyVisible : copy.elsevierKeyHidden;
+});
+
+clearElsevierKeyButton?.addEventListener("click", async () => {
+  const current = await readSettings();
+  await writeSettings(
+    mergeSettings(current, {
+      elsevierApiKey: undefined
+    })
+  );
+  if (elsevierApiKeyInput) elsevierApiKeyInput.value = "";
+  renderElsevierKeyState(false);
+  setElsevierFeedback(copyFor(uiLanguage).elsevierKeyCleared);
 });
 
 uiLanguageSelect?.addEventListener("change", async () => {
