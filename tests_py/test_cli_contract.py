@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import csv
 import json
+import os
 import shlex
 import subprocess
 import tomllib
@@ -17,7 +18,8 @@ from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
-from mdtero.client import DiscoveryError, DownloadResult, MdteroApiError, MdteroClient, _semantic_scholar_parse_url, translation_source_path_from_task
+import mdtero.client as mdtero_client_module
+from mdtero.client import DiscoveryError, DownloadResult, MdteroApiError, MdteroClient, _local_semantic_scholar_failure, _semantic_scholar_parse_url, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, ingest_project_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -2120,6 +2122,24 @@ def test_discover_explains_semantic_scholar_rate_limit_before_openalex_fallback(
     assert "server OpenAlex fallback" in result["discovery_fallback"]["action_hint"]
 
 
+def test_discover_explains_semantic_scholar_auth_failure_before_openalex_fallback(monkeypatch):
+    def fake_s2(self, query, *, limit):
+        request = httpx.Request("GET", "https://api.semanticscholar.org/graph/v1/paper/search")
+        response = httpx.Response(403, json={"message": "Forbidden"}, request=request)
+        raise httpx.HTTPStatusError("forbidden", request=request, response=response)
+
+    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
+    monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": [{"title": "OpenAlex fallback"}]})
+
+    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
+
+    assert result["source"] == "openalex_server"
+    assert result["local_semantic_scholar_failure"]["status_code"] == 403
+    assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_auth_failed"
+    assert result["discovery_fallback"]["reason_code"] == "semantic_scholar_auth_failed"
+    assert result["items"][0]["title"] == "OpenAlex fallback"
+
+
 def test_discover_marks_semantic_scholar_success_diagnostics(monkeypatch):
     def fake_s2(self, query, *, limit):
         return {"source": "semantic_scholar_local", "items": [{"title": "S2 paper"}]}
@@ -2134,6 +2154,145 @@ def test_discover_marks_semantic_scholar_success_diagnostics(monkeypatch):
         "semantic_scholar_attempted": True,
         "server_openalex_attempted": False,
     }
+
+
+def test_semantic_scholar_search_uses_official_x_api_key_header(monkeypatch):
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(mdtero_client_module, "_throttle_semantic_scholar_request", lambda: None)
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"title": "S2 paper", "year": 2024, "externalIds": {"DOI": "10.1000/s2"}}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, *, headers=None, params=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["params"] = params
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    result = MdteroClient(config=MdteroConfig(academic=AcademicKeys(semantic_scholar_api_key=" s2-secret\n")))._semantic_scholar_search("rag", limit=2)
+
+    assert captured["url"] == "https://api.semanticscholar.org/graph/v1/paper/search"
+    assert captured["headers"] == {"x-api-key": "s2-secret"}
+    assert captured["params"] == {
+        "query": "rag",
+        "limit": 2,
+        "fields": "title,authors,year,url,externalIds,abstract",
+    }
+    assert result["source"] == "semantic_scholar_local"
+    assert result["items"][0]["doi"] == "10.1000/s2"
+
+
+def test_semantic_scholar_search_throttles_to_one_request_per_second(monkeypatch):
+    sleeps: list[float] = []
+    clock = {"now": 100.0}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, *, headers=None, params=None):
+            clock["now"] += 0.01
+            return FakeResponse()
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        clock["now"] += seconds
+
+    monkeypatch.setattr(mdtero_client_module, "_last_semantic_scholar_request_at", 0.0)
+    monkeypatch.setattr(mdtero_client_module.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(mdtero_client_module.time, "sleep", fake_sleep)
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    client = MdteroClient(config=MdteroConfig(academic=AcademicKeys(semantic_scholar_api_key="s2-secret")))
+
+    client._semantic_scholar_search("rag", limit=1)
+    client._semantic_scholar_search("rag", limit=1)
+
+    assert len(sleeps) == 1
+    assert sleeps[0] >= 1.0
+
+
+def test_discover_uses_semantic_scholar_key_from_environment_before_server(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MDTERO_SEMANTIC_SCHOLAR_API_KEY", "s2-env")
+
+    def fake_s2(self, query, *, limit):
+        assert self.config.academic.semantic_scholar_api_key == "s2-env"
+        assert query == "rag"
+        assert limit == 1
+        return {"source": "semantic_scholar_local", "items": [{"title": "S2 env paper"}]}
+
+    def fail_server(*args, **kwargs):  # pragma: no cover - failure guard
+        raise AssertionError("server OpenAlex should not be called when local Semantic Scholar succeeds")
+
+    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
+    monkeypatch.setattr(MdteroClient, "_request", fail_server)
+
+    result = MdteroClient(config=load_config()).discover("rag", limit=1)
+
+    assert result["source"] == "semantic_scholar_local"
+    assert result["items"][0]["title"] == "S2 env paper"
+    assert result["discovery_diagnostics"] == {
+        "semantic_scholar_configured": True,
+        "semantic_scholar_attempted": True,
+        "server_openalex_attempted": False,
+    }
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MDTERO_LIVE_SEMANTIC_SCHOLAR_API_KEY"),
+    reason="set MDTERO_LIVE_SEMANTIC_SCHOLAR_API_KEY to run the live Semantic Scholar smoke",
+)
+def test_live_semantic_scholar_discovery_smoke():
+    client = MdteroClient(
+        config=MdteroConfig(
+            api_key="live-smoke",
+            academic=AcademicKeys(semantic_scholar_api_key=os.environ["MDTERO_LIVE_SEMANTIC_SCHOLAR_API_KEY"]),
+        ),
+        timeout=20.0,
+    )
+
+    try:
+        result = client._semantic_scholar_search("retrieval augmented generation scientific papers", limit=2)
+    except (httpx.HTTPError, ValueError) as exc:
+        payload = _local_semantic_scholar_failure(exc)
+        payload.pop("detail", None)
+        pytest.fail(f"live Semantic Scholar discovery failed: {json.dumps(payload, sort_keys=True)}")
+
+    assert result["source"] == "semantic_scholar_local"
+    assert len(result.get("items") or []) >= 1
+    assert all(item.get("source") == "semantic_scholar_local" for item in result.get("items") or [])
 
 
 def test_discover_marks_openalex_when_semantic_scholar_is_not_configured(monkeypatch):

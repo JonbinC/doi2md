@@ -11,6 +11,9 @@ from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_lo
 from .config import MdteroConfig, load_config
 from .network import ProxyValidationError, assert_required_campus_proxy, proxy_settings_from_config
 
+SEMANTIC_SCHOLAR_MIN_INTERVAL_SECONDS = 1.1
+_last_semantic_scholar_request_at = 0.0
+
 
 class DiscoveryError(RuntimeError):
     def __init__(self, payload: dict[str, Any]) -> None:
@@ -291,9 +294,10 @@ class MdteroClient:
         return response
 
     def _semantic_scholar_search(self, query: str, *, limit: int) -> dict[str, Any]:
-        headers = {"x-api-key": self.config.academic.semantic_scholar_api_key or ""}
+        headers = {"x-api-key": (self.config.academic.semantic_scholar_api_key or "").strip()}
         params = {"query": query, "limit": limit, "fields": "title,authors,year,url,externalIds,abstract"}
         proxy_settings = proxy_settings_from_config(self.config)
+        _throttle_semantic_scholar_request()
         with httpx.Client(timeout=self.timeout, **proxy_settings.httpx_kwargs) as client:
             response = client.get("https://api.semanticscholar.org/graph/v1/paper/search", headers=headers, params=params)
         response.raise_for_status()
@@ -318,6 +322,16 @@ class MdteroClient:
                 }
             )
         return {"items": items, "source": "semantic_scholar_local"}
+
+
+def _throttle_semantic_scholar_request() -> None:
+    global _last_semantic_scholar_request_at
+    now = time.monotonic()
+    wait_seconds = SEMANTIC_SCHOLAR_MIN_INTERVAL_SECONDS - (now - _last_semantic_scholar_request_at)
+    if wait_seconds > 0:
+        time.sleep(wait_seconds)
+        now = time.monotonic()
+    _last_semantic_scholar_request_at = now
 
 
 def _semantic_scholar_external_id(external_ids: Any, key: str) -> str:
