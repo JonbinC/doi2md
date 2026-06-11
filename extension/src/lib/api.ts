@@ -30,6 +30,7 @@ export interface UploadedParseTaskPayload {
   filename?: string;
   sourceDoi?: string;
   sourceInput?: string;
+  artifactKind?: string;
 }
 
 export class MdteroApiError extends Error {
@@ -65,6 +66,7 @@ function buildFulltextUploadBody(params: {
   filename: string;
   sourceDoi?: string;
   sourceInput?: string;
+  artifactKind?: string;
 }) {
   const body = new FormData();
   body.set("paper_file", params.file, params.filename);
@@ -73,6 +75,9 @@ function buildFulltextUploadBody(params: {
   }
   if (params.sourceInput) {
     body.set("source_input", params.sourceInput);
+  }
+  if (params.artifactKind) {
+    body.set("artifact_kind", params.artifactKind);
   }
   return body;
 }
@@ -235,6 +240,9 @@ export function createApiClient(
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
+      if (payload.artifactKind) {
+        body.set("artifact_kind", payload.artifactKind);
+      }
       return request("/api/v1/tasks/upload", {
         method: "POST",
         body
@@ -245,7 +253,8 @@ export function createApiClient(
         file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
+        sourceInput: payload.sourceInput,
+        artifactKind: payload.artifactKind
       });
       return request("/api/v1/tasks/upload", {
         method: "POST",

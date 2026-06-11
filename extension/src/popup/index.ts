@@ -5,6 +5,7 @@ import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
 import {
   createFileParseMessage,
+  createCurrentHtmlParseMessage,
   createDetectMessage,
   createSsotParseMessage,
   createTranslateMessage,
@@ -81,6 +82,9 @@ const COPY = {
     localFileParsing: (filename: string) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
+    captureHtmlButton: "Capture HTML",
+    captureHtmlParsing: "Capturing HTML...",
+    captureHtmlHint: "Use this on a loaded full-text article page. Mdtero uploads the sanitized page HTML through the dedicated HTML parser path.",
     parsingButton: "Parsing...",
     settingsButton: "Settings",
     translateLabel: "Translate to",
@@ -141,6 +145,9 @@ const COPY = {
     localFileParsing: (filename: string) => `正在上传 ${filename}，后端会创建解析任务并在这里轮询...`,
     localFileParseFailed: "本地文件解析失败，请重试。",
     parseButton: "解析论文",
+    captureHtmlButton: "采集 HTML",
+    captureHtmlParsing: "采集中...",
+    captureHtmlHint: "在已加载全文的网页上使用。扩展会采集净化后的页面 HTML，并走后端 HTML 专用解析路径。",
     parsingButton: "解析中...",
     settingsButton: "设置",
     translateLabel: "翻译为",
@@ -197,6 +204,7 @@ const pickHtmlButton = document.querySelector<HTMLButtonElement>("#pick-html-but
 const localFileInputEl = document.querySelector<HTMLInputElement>("#local-file-input");
 const localFileNameEl = document.querySelector<HTMLParagraphElement>("#local-file-name");
 const parseButton = document.querySelector<HTMLButtonElement>("#parse-button");
+const captureHtmlButton = document.querySelector<HTMLButtonElement>("#capture-html-button");
 const openSettingsButton = document.querySelector<HTMLButtonElement>("#open-settings");
 const openSettingsLoginButton = document.querySelector<HTMLButtonElement>("#open-settings-login");
 const translateLanguageLabelEl = document.querySelector<HTMLLabelElement>("#translate-language-label");
@@ -473,6 +481,11 @@ function renderActionButtons() {
   if (parseButton) {
     parseButton.textContent = isParsing ? copy.parsingButton : copy.parseButton;
     parseButton.disabled = isParsing;
+  }
+  if (captureHtmlButton) {
+    captureHtmlButton.textContent = isParsing ? copy.captureHtmlParsing : copy.captureHtmlButton;
+    captureHtmlButton.disabled = isParsing;
+    captureHtmlButton.title = copy.captureHtmlHint;
   }
   if (pickPdfButton) {
     pickPdfButton.disabled = isParsing;
@@ -1007,6 +1020,17 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
   void pollTask(response.result.task_id, "parse");
 }
 
+async function startQueuedParseTask(input: string, taskId: string) {
+  await writePopupState({
+    ...(await readPopupState()),
+    input,
+    pendingTaskId: taskId,
+    pendingTaskKind: "parse"
+  });
+
+  void pollTask(taskId, "parse");
+}
+
 parseButton?.addEventListener("click", async () => {
   if (isParsing) {
     return;
@@ -1048,14 +1072,56 @@ parseButton?.addEventListener("click", async () => {
 
   setCliHandoff(null);
 
-  await writePopupState({
-    ...(await readPopupState()),
-    input,
-    pendingTaskId: response.result.task_id,
-    pendingTaskKind: "parse"
-  });
+  await startQueuedParseTask(input, response.result.task_id);
+});
 
-  void pollTask(response.result.task_id, "parse");
+captureHtmlButton?.addEventListener("click", async () => {
+  if (isParsing) {
+    return;
+  }
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    setResult(getCurrentCopy().noActiveTab);
+    return;
+  }
+
+  const input = inputEl?.value.trim() || tab.url || currentInput || "current-page-html";
+  currentInput = input;
+  setTaskSummary(null);
+  isParsing = true;
+  updateWorkflowState();
+  renderActionButtons();
+  setResult(getCurrentCopy().captureHtmlParsing);
+
+  const settings = await readSettings();
+  if (!settings.token) {
+    isParsing = false;
+    updateWorkflowState();
+    renderActionButtons();
+    setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
+    return;
+  }
+
+  const response = await chrome.runtime.sendMessage(
+    createCurrentHtmlParseMessage(input, {
+      tabId: tab.id,
+      tabUrl: tab.url,
+    })
+  );
+
+  if (!response?.ok) {
+    isParsing = false;
+    updateWorkflowState();
+    renderActionButtons();
+    setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setCliHandoff(input, response?.nextCommand);
+    return;
+  }
+
+  setCliHandoff(null);
+  await startQueuedParseTask(input, response.result.task_id);
 });
 
 translateButton?.addEventListener("click", async () => {

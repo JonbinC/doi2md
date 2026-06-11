@@ -22,6 +22,7 @@ export interface RawUploadTaskRequest {
   filename?: string;
   sourceDoi?: string;
   sourceInput?: string;
+  artifactKind?: "pdf" | "epub" | "html" | "xml" | string;
 }
 
 export type ActionType =
@@ -133,6 +134,7 @@ export interface ActionResult {
   rawArtifact?: Blob;
   filename?: string;
   sourceDoi?: string;
+  artifactKind?: "pdf" | "epub" | "html" | "xml" | string;
   error?: string;
   nextCommand?: string;
   requiresBrowserCapture?: boolean;

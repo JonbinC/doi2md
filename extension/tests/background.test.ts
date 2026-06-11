@@ -183,7 +183,8 @@ describe("extension background routing", () => {
         expect.objectContaining({
           paperFile: expect.any(Blob),
           filename: "demo.epub",
-          sourceInput: "demo.epub"
+          sourceInput: "demo.epub",
+          artifactKind: "epub"
         })
       );
       expect(createRawUploadTask).not.toHaveBeenCalled();
@@ -214,13 +215,69 @@ describe("extension background routing", () => {
         expect.objectContaining({
           paperFile: expect.any(Blob),
           filename: "paper.html",
-          sourceInput: "paper.html"
+          sourceInput: "paper.html",
+          artifactKind: "html"
         })
       );
       expect(createRawUploadTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: true,
         result: { task_id: "task-legacy", status: "queued" }
+      });
+    });
+  });
+
+  it("captures the current page through the dedicated HTML upload path", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    chromeStub.tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      capture: {
+        ok: true,
+        html: "<html><body><article>Captured browser full text</article></body></html>",
+        payloadName: "paper.html",
+        sourceUrl: "https://example.org/fulltext",
+        pageTitle: "Captured browser full text",
+      },
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.current_html.request",
+        input: "10.1000/current-html",
+        pageContext: {
+          tabId: 42,
+          tabUrl: "https://example.org/fulltext",
+        },
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(async () => {
+      expect(fetchRoutePlan).not.toHaveBeenCalled();
+      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        type: "mdtero.capture_html.request",
+      });
+      expect(createRawUploadTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawFile: expect.any(Blob),
+          filename: "paper.html",
+          sourceDoi: "10.1000/current-html",
+          sourceInput: "10.1000/current-html",
+          artifactKind: "html",
+        })
+      );
+      const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
+      await expect(rawArtifact.text()).resolves.toContain("Captured browser full text");
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-v2", status: "queued" },
       });
     });
   });
@@ -433,7 +490,8 @@ describe("extension background routing", () => {
         expect.objectContaining({
           rawFile: expect.any(Blob),
           filename: "paper.html",
-          sourceInput: "10.1000/demo"
+          sourceInput: "10.1000/demo",
+          artifactKind: "html"
         })
       );
       expect(sendResponse).toHaveBeenCalledWith({
@@ -555,7 +613,8 @@ describe("extension background routing", () => {
           rawFile: expect.any(Blob),
           filename: "paper.epub",
           sourceDoi: "10.1080/26395940.2021.1947159",
-          sourceInput: "10.1080/26395940.2021.1947159"
+          sourceInput: "10.1080/26395940.2021.1947159",
+          artifactKind: "epub"
         })
       );
       const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
@@ -642,7 +701,8 @@ describe("extension background routing", () => {
           rawFile: expect.any(Blob),
           filename: "paper.pdf",
           sourceDoi: "10.1109/demo",
-          sourceInput: "10.1109/demo"
+          sourceInput: "10.1109/demo",
+          artifactKind: "pdf"
         })
       );
       const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
@@ -756,7 +816,8 @@ describe("extension background routing", () => {
             rawFile: expect.any(Blob),
             filename: "paper.html",
             sourceDoi: "10.9999/demo-open",
-            sourceInput: "10.9999/demo-open"
+            sourceInput: "10.9999/demo-open",
+            artifactKind: "html"
           })
         );
         const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
@@ -849,7 +910,8 @@ describe("extension background routing", () => {
             rawFile: expect.any(Blob),
             filename: "paper.html",
             sourceDoi: "10.9999/demo-open",
-            sourceInput: "10.9999/demo-open"
+            sourceInput: "10.9999/demo-open",
+            artifactKind: "html"
           })
         );
         const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
@@ -927,7 +989,8 @@ describe("extension background routing", () => {
         expect.objectContaining({
           rawFile: expect.any(Blob),
           filename: "paper.xml",
-          sourceInput: "https://link.springer.com/article/10.1007/s12011-024-04385-0"
+          sourceInput: "https://link.springer.com/article/10.1007/s12011-024-04385-0",
+          artifactKind: "xml"
         })
       );
       expect(sendResponse).toHaveBeenCalledWith({

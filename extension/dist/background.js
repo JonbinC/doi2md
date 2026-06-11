@@ -84,6 +84,9 @@ function buildFulltextUploadBody(params) {
   if (params.sourceInput) {
     body.set("source_input", params.sourceInput);
   }
+  if (params.artifactKind) {
+    body.set("artifact_kind", params.artifactKind);
+  }
   return body;
 }
 function fallbackArtifactFilename(artifact, preferredFilename) {
@@ -221,6 +224,9 @@ function createApiClient(getSettings) {
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
+      if (payload.artifactKind) {
+        body.set("artifact_kind", payload.artifactKind);
+      }
       return request("/api/v1/tasks/upload", {
         method: "POST",
         body
@@ -231,7 +237,8 @@ function createApiClient(getSettings) {
         file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
+        sourceInput: payload.sourceInput,
+        artifactKind: payload.artifactKind
       });
       return request("/api/v1/tasks/upload", {
         method: "POST",
@@ -361,7 +368,8 @@ async function runBrowserFileParseRequest(client2, message) {
   return client2.createUploadedParseTask({
     paperFile: message.file,
     filename,
-    sourceInput: filename
+    sourceInput: filename,
+    artifactKind: message.artifactKind
   });
 }
 
@@ -511,6 +519,7 @@ async function executeFallbackPdfParse(context, routePlan) {
           success: true,
           rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/pdf" }),
           filename: download.payloadName || "paper.pdf",
+          artifactKind: "pdf",
           sourceDoi: inferSourceDoi(context.input)
         };
       }
@@ -542,6 +551,7 @@ async function executeCaptureCurrentTabHtml(context) {
         success: true,
         rawArtifact: new Blob([response.xml.payloadText], { type: "application/xml" }),
         filename: response.xml.payloadName || "paper.xml",
+        artifactKind: "xml",
         sourceDoi: inferSourceDoi(context.input)
       };
     }
@@ -560,6 +570,7 @@ async function executeCaptureCurrentTabHtml(context) {
       success: true,
       rawArtifact: new Blob([capture.html], { type: "text/html" }),
       filename: capture.payloadName || "paper.html",
+      artifactKind: "html",
       sourceDoi: inferSourceDoi(context.input)
     };
   } catch (error) {
@@ -579,6 +590,7 @@ async function executeFetchStructuredXml(context, routePlan) {
               success: true,
               rawArtifact: new Blob([result.payloadText], { type: "application/xml" }),
               filename: result.payloadName,
+              artifactKind: "xml",
               sourceDoi: inferSourceDoi(context.input)
             };
           }
@@ -619,6 +631,7 @@ async function executeFetchEpubAsset(context, routePlan) {
       success: true,
       rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/epub+zip" }),
       filename: download.payloadName || "paper.epub",
+      artifactKind: "epub",
       sourceDoi: inferSourceDoi(context.input)
     };
   } catch (error) {
@@ -650,6 +663,7 @@ async function executeFetchOaRepository(context, routePlan) {
       success: true,
       rawArtifact: new Blob([html], { type: "text/html" }),
       filename: "paper.html",
+      artifactKind: "html",
       sourceDoi: inferSourceDoi(context.input)
     };
   } catch (error) {
@@ -678,6 +692,7 @@ async function executeFetchBrowserSource(context, routePlan) {
           success: true,
           rawArtifact: new Blob([html.payloadText], { type: "text/html" }),
           filename: html.payloadName || "paper.html",
+          artifactKind: "html",
           sourceDoi: inferSourceDoi(context.input)
         };
       }
@@ -781,7 +796,8 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
             rawFile: result.rawArtifact,
             filename: result.filename || "paper.fulltext",
             sourceDoi: result.sourceDoi,
-            sourceInput: context.input
+            sourceInput: context.input,
+            artifactKind: result.artifactKind || inferArtifactKindFromFilename(result.filename)
           });
           return { success: true, taskId: task.task_id, task };
         } catch (error) {
@@ -810,6 +826,14 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
     }
   }
   return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
+}
+function inferArtifactKindFromFilename(filename) {
+  const normalized = String(filename || "").trim().toLowerCase();
+  if (normalized.endsWith(".pdf")) return "pdf";
+  if (normalized.endsWith(".epub")) return "epub";
+  if (normalized.endsWith(".html") || normalized.endsWith(".htm")) return "html";
+  if (normalized.endsWith(".xml") || normalized.endsWith(".nxml") || normalized.endsWith(".tei")) return "xml";
+  return void 0;
 }
 
 // ../shared/src/api-contract.ts
@@ -915,6 +939,39 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     );
     return true;
   }
+  if (message?.type === "mdtero.parse.current_html.request") {
+    (async () => {
+      const settings = await readSettings();
+      if (!settings.token) {
+        throw new Error("Sign in required before parsing or translating.");
+      }
+      const tabId = message.pageContext?.tabId;
+      if (!tabId) {
+        throw new Error("Open the full-text article page in the current tab before HTML capture.");
+      }
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: "mdtero.capture_html.request"
+      });
+      const capture = response?.capture;
+      if (!response?.ok || !capture?.ok || !capture.html) {
+        throw new Error(capture?.failureMessage || "Current-page HTML capture failed.");
+      }
+      return client.createRawUploadTask({
+        rawFile: new Blob([capture.html], { type: "text/html" }),
+        filename: capture.payloadName || "paper.html",
+        sourceDoi: inferSourceDoi2(message.input),
+        sourceInput: message.input || capture.sourceUrl || message.pageContext?.tabUrl,
+        artifactKind: "html"
+      });
+    })().then((result) => sendResponse({ ok: true, result })).catch(
+      (error) => sendResponse({
+        ok: false,
+        error: error.message,
+        nextCommand: buildCliFileParseCommand("paper.html", "html")
+      })
+    );
+    return true;
+  }
   if (message?.type === "mdtero.task.get") {
     client.getTask(message.taskId).then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -967,5 +1024,9 @@ function formatSsotFailure(result) {
 }
 function buildFileParseCommand(filename, artifactKind) {
   return buildCliFileParseCommand(filename, artifactKind);
+}
+function inferSourceDoi2(input) {
+  const trimmed = String(input || "").trim();
+  return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
 }
 //# sourceMappingURL=background.js.map

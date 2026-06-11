@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createFileParseMessage,
+  createCurrentHtmlParseMessage,
   createSsotParseMessage,
   createTranslateMessage
 } from "../src/lib/runtime";
@@ -51,6 +52,24 @@ describe("createSsotParseMessage", () => {
         tabId: 42,
         tabUrl: "https://onlinelibrary.wiley.com/doi/full/10.1002/demo"
       }
+    });
+  });
+});
+
+describe("createCurrentHtmlParseMessage", () => {
+  it("builds the dedicated current-page HTML capture parse message", () => {
+    expect(
+      createCurrentHtmlParseMessage("10.1000/demo", {
+        tabId: 42,
+        tabUrl: "https://example.org/fulltext",
+      })
+    ).toEqual({
+      type: "mdtero.parse.current_html.request",
+      input: "10.1000/demo",
+      pageContext: {
+        tabId: 42,
+        tabUrl: "https://example.org/fulltext",
+      },
     });
   });
 });

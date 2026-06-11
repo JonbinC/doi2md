@@ -289,7 +289,8 @@ describe("createApiClient", () => {
     await client.createRawUploadTask({
       rawFile: new Blob(["<html></html>"], { type: "text/html" }),
       filename: "paper.html",
-      sourceInput: "https://example.org/paper"
+      sourceInput: "https://example.org/paper",
+      artifactKind: "html"
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -303,6 +304,7 @@ describe("createApiClient", () => {
     const fulltextBody = fetchMock.mock.calls[0]?.[1]?.body as FormData;
     expect(fulltextBody.get("paper_file")).toBeTruthy();
     expect(fulltextBody.get("source_input")).toBe("https://example.org/paper");
+    expect(fulltextBody.get("artifact_kind")).toBe("html");
   });
 
   it("surfaces backend detail messages for failed requests", async () => {

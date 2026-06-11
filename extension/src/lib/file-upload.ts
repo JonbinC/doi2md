@@ -5,6 +5,7 @@ interface ParseClientLike {
     paperFile: Blob;
     filename?: string;
     sourceInput?: string;
+    artifactKind?: LocalFileArtifactKind;
   }): Promise<unknown>;
 }
 
@@ -23,5 +24,6 @@ export async function runBrowserFileParseRequest(
     paperFile: message.file,
     filename,
     sourceInput: filename,
+    artifactKind: message.artifactKind,
   });
 }
