@@ -4,7 +4,7 @@
     "description": "The name of the extension"
   },
   "extDescription": {
-    "message": "Sign in with Mdtero Account, parse the current paper page, upload local PDF or EPUB files, track tasks, translate results, and download reusable Markdown outputs.",
+    "message": "Use Mdtero Account to parse the current paper page, upload local PDF or EPUB, track tasks, and download reusable Markdown outputs.",
     "description": "The description of the extension"
   }
 }
