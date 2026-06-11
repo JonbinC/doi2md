@@ -89,6 +89,7 @@ async function executeFallbackPdfParse(
           success: true,
           rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/pdf" }),
           filename: download.payloadName || "paper.pdf",
+          artifactKind: "pdf",
           sourceDoi: inferSourceDoi(context.input),
         };
       }
@@ -132,6 +133,7 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
         success: true,
         rawArtifact: new Blob([response.xml.payloadText], { type: "application/xml" }),
         filename: response.xml.payloadName || "paper.xml",
+        artifactKind: "xml",
         sourceDoi: inferSourceDoi(context.input),
       };
     }
@@ -154,6 +156,7 @@ async function executeCaptureCurrentTabHtml(context: ActionContext): Promise<Act
       success: true,
       rawArtifact: new Blob([capture.html], { type: "text/html" }),
       filename: capture.payloadName || "paper.html",
+      artifactKind: "html",
       sourceDoi: inferSourceDoi(context.input),
     };
   } catch (error) {
@@ -185,6 +188,7 @@ async function executeFetchStructuredXml(
               success: true,
               rawArtifact: new Blob([result.payloadText], { type: "application/xml" }),
               filename: result.payloadName,
+              artifactKind: "xml",
               sourceDoi: inferSourceDoi(context.input),
             };
           }
@@ -239,6 +243,7 @@ async function executeFetchEpubAsset(
       success: true,
       rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/epub+zip" }),
       filename: download.payloadName || "paper.epub",
+      artifactKind: "epub",
       sourceDoi: inferSourceDoi(context.input),
     };
   } catch (error) {
@@ -287,6 +292,7 @@ async function executeFetchOaRepository(
       success: true,
       rawArtifact: new Blob([html], { type: "text/html" }),
       filename: "paper.html",
+      artifactKind: "html",
       sourceDoi: inferSourceDoi(context.input),
     };
   } catch (error) {
@@ -330,6 +336,7 @@ async function executeFetchBrowserSource(
           success: true,
           rawArtifact: new Blob([html.payloadText], { type: "text/html" }),
           filename: html.payloadName || "paper.html",
+          artifactKind: "html",
           sourceDoi: inferSourceDoi(context.input),
         };
       }

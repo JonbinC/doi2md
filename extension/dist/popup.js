@@ -84,6 +84,9 @@ function buildFulltextUploadBody(params) {
   if (params.sourceInput) {
     body.set("source_input", params.sourceInput);
   }
+  if (params.artifactKind) {
+    body.set("artifact_kind", params.artifactKind);
+  }
   return body;
 }
 function fallbackArtifactFilename(artifact, preferredFilename) {
@@ -221,6 +224,9 @@ function createApiClient(getSettings) {
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
+      if (payload.artifactKind) {
+        body.set("artifact_kind", payload.artifactKind);
+      }
       return request("/api/v1/tasks/upload", {
         method: "POST",
         body
@@ -231,7 +237,8 @@ function createApiClient(getSettings) {
         file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
+        sourceInput: payload.sourceInput,
+        artifactKind: payload.artifactKind
       });
       return request("/api/v1/tasks/upload", {
         method: "POST",
@@ -298,6 +305,13 @@ function createSsotParseMessage(input, pageContext) {
     message.pageContext = pageContext;
   }
   return message;
+}
+function createCurrentHtmlParseMessage(input, pageContext) {
+  return {
+    type: "mdtero.parse.current_html.request",
+    input,
+    pageContext
+  };
 }
 function createFileParseMessage(file, artifactKind) {
   const message = {
@@ -956,6 +970,9 @@ var COPY = {
     localFileParsing: (filename) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
+    captureHtmlButton: "Capture HTML",
+    captureHtmlParsing: "Capturing HTML...",
+    captureHtmlHint: "Use this on a loaded full-text article page. Mdtero uploads the sanitized page HTML through the dedicated HTML parser path.",
     parsingButton: "Parsing...",
     settingsButton: "Settings",
     translateLabel: "Translate to",
@@ -1015,6 +1032,9 @@ var COPY = {
     localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u540E\u7AEF\u4F1A\u521B\u5EFA\u89E3\u6790\u4EFB\u52A1\u5E76\u5728\u8FD9\u91CC\u8F6E\u8BE2...`,
     localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
+    captureHtmlButton: "\u91C7\u96C6 HTML",
+    captureHtmlParsing: "\u91C7\u96C6\u4E2D...",
+    captureHtmlHint: "\u5728\u5DF2\u52A0\u8F7D\u5168\u6587\u7684\u7F51\u9875\u4E0A\u4F7F\u7528\u3002\u6269\u5C55\u4F1A\u91C7\u96C6\u51C0\u5316\u540E\u7684\u9875\u9762 HTML\uFF0C\u5E76\u8D70\u540E\u7AEF HTML \u4E13\u7528\u89E3\u6790\u8DEF\u5F84\u3002",
     parsingButton: "\u89E3\u6790\u4E2D...",
     settingsButton: "\u8BBE\u7F6E",
     translateLabel: "\u7FFB\u8BD1\u4E3A",
@@ -1070,6 +1090,7 @@ var pickHtmlButton = document.querySelector("#pick-html-button");
 var localFileInputEl = document.querySelector("#local-file-input");
 var localFileNameEl = document.querySelector("#local-file-name");
 var parseButton = document.querySelector("#parse-button");
+var captureHtmlButton = document.querySelector("#capture-html-button");
 var openSettingsButton = document.querySelector("#open-settings");
 var openSettingsLoginButton = document.querySelector("#open-settings-login");
 var translateLanguageLabelEl = document.querySelector("#translate-language-label");
@@ -1326,6 +1347,11 @@ function renderActionButtons() {
   if (parseButton) {
     parseButton.textContent = isParsing ? copy.parsingButton : copy.parseButton;
     parseButton.disabled = isParsing;
+  }
+  if (captureHtmlButton) {
+    captureHtmlButton.textContent = isParsing ? copy.captureHtmlParsing : copy.captureHtmlButton;
+    captureHtmlButton.disabled = isParsing;
+    captureHtmlButton.title = copy.captureHtmlHint;
   }
   if (pickPdfButton) {
     pickPdfButton.disabled = isParsing;
@@ -1797,6 +1823,15 @@ async function submitLocalFile(file, artifactKind) {
   });
   void pollTask(response.result.task_id, "parse");
 }
+async function startQueuedParseTask(input, taskId) {
+  await writePopupState({
+    ...await readPopupState(),
+    input,
+    pendingTaskId: taskId,
+    pendingTaskKind: "parse"
+  });
+  void pollTask(taskId, "parse");
+}
 parseButton?.addEventListener("click", async () => {
   if (isParsing) {
     return;
@@ -1834,13 +1869,49 @@ parseButton?.addEventListener("click", async () => {
     return;
   }
   setCliHandoff(null);
-  await writePopupState({
-    ...await readPopupState(),
-    input,
-    pendingTaskId: response.result.task_id,
-    pendingTaskKind: "parse"
-  });
-  void pollTask(response.result.task_id, "parse");
+  await startQueuedParseTask(input, response.result.task_id);
+});
+captureHtmlButton?.addEventListener("click", async () => {
+  if (isParsing) {
+    return;
+  }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    setResult(getCurrentCopy().noActiveTab);
+    return;
+  }
+  const input = inputEl?.value.trim() || tab.url || currentInput || "current-page-html";
+  currentInput = input;
+  setTaskSummary(null);
+  isParsing = true;
+  updateWorkflowState();
+  renderActionButtons();
+  setResult(getCurrentCopy().captureHtmlParsing);
+  const settings = await readSettings();
+  if (!settings.token) {
+    isParsing = false;
+    updateWorkflowState();
+    renderActionButtons();
+    setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
+    return;
+  }
+  const response = await chrome.runtime.sendMessage(
+    createCurrentHtmlParseMessage(input, {
+      tabId: tab.id,
+      tabUrl: tab.url
+    })
+  );
+  if (!response?.ok) {
+    isParsing = false;
+    updateWorkflowState();
+    renderActionButtons();
+    setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setCliHandoff(input, response?.nextCommand);
+    return;
+  }
+  setCliHandoff(null);
+  await startQueuedParseTask(input, response.result.task_id);
 });
 translateButton?.addEventListener("click", async () => {
   if (isTranslating) {

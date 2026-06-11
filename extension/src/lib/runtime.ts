@@ -20,6 +20,14 @@ export function createSsotParseMessage(input: string, pageContext?: ParsePageCon
   return message;
 }
 
+export function createCurrentHtmlParseMessage(input: string, pageContext: ParsePageContext) {
+  return {
+    type: "mdtero.parse.current_html.request" as const,
+    input,
+    pageContext,
+  };
+}
+
 export function createFileParseMessage(
   file: File,
   artifactKind: LocalFileArtifactKind

@@ -97,6 +97,42 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "mdtero.parse.current_html.request") {
+    (async () => {
+      const settings = await readSettings();
+      if (!settings.token) {
+        throw new Error("Sign in required before parsing or translating.");
+      }
+      const tabId = message.pageContext?.tabId;
+      if (!tabId) {
+        throw new Error("Open the full-text article page in the current tab before HTML capture.");
+      }
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: "mdtero.capture_html.request",
+      });
+      const capture = response?.capture;
+      if (!response?.ok || !capture?.ok || !capture.html) {
+        throw new Error(capture?.failureMessage || "Current-page HTML capture failed.");
+      }
+      return client.createRawUploadTask({
+        rawFile: new Blob([capture.html], { type: "text/html" }),
+        filename: capture.payloadName || "paper.html",
+        sourceDoi: inferSourceDoi(message.input),
+        sourceInput: message.input || capture.sourceUrl || message.pageContext?.tabUrl,
+        artifactKind: "html",
+      });
+    })()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error: Error) =>
+        sendResponse({
+          ok: false,
+          error: error.message,
+          nextCommand: buildCliFileParseCommand("paper.html", "html"),
+        })
+      );
+    return true;
+  }
+
   if (message?.type === "mdtero.task.get") {
     client
       .getTask(message.taskId)
@@ -163,4 +199,9 @@ function formatSsotFailure(result: {
 
 function buildFileParseCommand(filename?: string, artifactKind?: LocalFileArtifactKind) {
   return buildCliFileParseCommand(filename, artifactKind);
+}
+
+function inferSourceDoi(input?: string): string | undefined {
+  const trimmed = String(input || "").trim();
+  return /^10\.\S+/i.test(trimmed) ? trimmed : undefined;
 }

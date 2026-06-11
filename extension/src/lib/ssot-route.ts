@@ -29,6 +29,7 @@ export interface ParseClientLike {
     filename?: string;
     sourceDoi?: string;
     sourceInput?: string;
+    artifactKind?: string;
   }): Promise<ParseTaskResponse>;
 }
 
@@ -89,6 +90,7 @@ export async function executeSsotActionSequence(
             filename: result.filename || "paper.fulltext",
             sourceDoi: result.sourceDoi,
             sourceInput: context.input,
+            artifactKind: result.artifactKind || inferArtifactKindFromFilename(result.filename),
           });
           return { success: true, taskId: task.task_id, task };
         } catch (error) {
@@ -122,4 +124,13 @@ export async function executeSsotActionSequence(
   }
 
   return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
+}
+
+function inferArtifactKindFromFilename(filename?: string): string | undefined {
+  const normalized = String(filename || "").trim().toLowerCase();
+  if (normalized.endsWith(".pdf")) return "pdf";
+  if (normalized.endsWith(".epub")) return "epub";
+  if (normalized.endsWith(".html") || normalized.endsWith(".htm")) return "html";
+  if (normalized.endsWith(".xml") || normalized.endsWith(".nxml") || normalized.endsWith(".tei")) return "xml";
+  return undefined;
 }

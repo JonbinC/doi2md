@@ -89,6 +89,7 @@ describe("ssot-route", () => {
       filename: "paper.html",
       sourceDoi: "10.1000/demo",
       sourceInput: "10.1000/demo",
+      artifactKind: "html",
     });
     expect(result).toEqual({
       success: true,

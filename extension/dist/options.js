@@ -49,6 +49,9 @@ function buildFulltextUploadBody(params) {
   if (params.sourceInput) {
     body.set("source_input", params.sourceInput);
   }
+  if (params.artifactKind) {
+    body.set("artifact_kind", params.artifactKind);
+  }
   return body;
 }
 function fallbackArtifactFilename(artifact, preferredFilename) {
@@ -186,6 +189,9 @@ function createApiClient(getSettings) {
       if (payload.sourceInput) {
         body.set("source_input", payload.sourceInput);
       }
+      if (payload.artifactKind) {
+        body.set("artifact_kind", payload.artifactKind);
+      }
       return request("/api/v1/tasks/upload", {
         method: "POST",
         body
@@ -196,7 +202,8 @@ function createApiClient(getSettings) {
         file: payload.rawFile,
         filename: payload.filename ?? "paper.fulltext",
         sourceDoi: payload.sourceDoi,
-        sourceInput: payload.sourceInput
+        sourceInput: payload.sourceInput,
+        artifactKind: payload.artifactKind
       });
       return request("/api/v1/tasks/upload", {
         method: "POST",
