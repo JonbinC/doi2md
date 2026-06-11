@@ -14,6 +14,10 @@
   "scripts": {
     "build": "node esbuild.config.mjs",
     "package:dev": "npm run build && node scripts/package-dev.mjs",
+    "package:webstore": "npm run build && node scripts/package-webstore.mjs",
+    "store:chrome-draft": "node scripts/store-draft.mjs chrome-draft",
+    "store:edge-draft": "node scripts/store-draft.mjs edge-draft",
+    "store:draft-all": "node scripts/store-draft.mjs draft-all",
     "test": "vitest run"
   }
 }

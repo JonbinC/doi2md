@@ -11,6 +11,63 @@ npm install
 npm run build
 ```
 
+## Store Draft Uploads
+
+The store workflow builds a root-level Manifest V3 zip for Chrome Web Store and Microsoft Edge Add-ons. It only uploads draft packages; it does not submit for review or publish.
+
+```bash
+npm test
+npm run package:webstore
+```
+
+Chrome draft upload requires these environment variables:
+
+```bash
+export CHROME_WEBSTORE_EXTENSION_ID="knpihhcooldgedbklgjghebijcpejibp"
+export CHROME_WEBSTORE_CLIENT_ID="...apps.googleusercontent.com"
+export CHROME_WEBSTORE_CLIENT_SECRET="..."
+export CHROME_WEBSTORE_REFRESH_TOKEN="..."
+npm run store:chrome-draft
+```
+
+For local operator use, `CHROME_WEBSTORE_TOKEN_FILE` can be used instead of `CHROME_WEBSTORE_REFRESH_TOKEN`; the script refreshes and updates the token JSON file in place.
+
+Edge draft upload requires these environment variables:
+
+```bash
+export EDGE_PRODUCT_ID="710fadac-2015-451f-8be3-e204c39e782e"
+export EDGE_CLIENT_ID="..."
+export EDGE_API_KEY="..."
+npm run store:edge-draft
+```
+
+With both credential sets loaded:
+
+```bash
+npm run store:draft-all
+```
+
+For the maintained operator path, load credentials from Infisical and run the full draft workflow in one command:
+
+```bash
+scripts/store-draft-from-infisical.sh draft-all
+```
+
+Pass `chrome-draft` or `edge-draft` to update only one store.
+
+Keep store credentials in Infisical or another operator secret store. Do not commit OAuth client secrets, refresh tokens, Edge API keys, generated dotenv files, or store upload zips.
+
+Current operator credentials are stored in Infisical under `mdtero-backend/prod` at `/extension-store`. On the SG-ARM host, export them with the Infisical container CLI, then source the temporary dotenv file locally with owner-only permissions:
+
+```bash
+ssh gcp-sg-arm 'sudo docker exec infisical sh -lc '\''tmp=$(mktemp); trap "rm -f $tmp" EXIT; infisical export --domain=http://127.0.0.1:8080 --projectId=df34fed4-1403-4a12-bcde-dbc59caf6d1b --env=prod --path=/extension-store --format=dotenv --output-file="$tmp" >/dev/null; cat "$tmp"'\''' > /tmp/mdtero-extension-store.env
+chmod 600 /tmp/mdtero-extension-store.env
+set -a
+. /tmp/mdtero-extension-store.env
+set +a
+rm -f /tmp/mdtero-extension-store.env
+```
+
 ## Sign In
 
 Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/auth`; the website hands the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The extension no longer maintains its own email, password, or email-code login form.
