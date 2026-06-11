@@ -15,11 +15,11 @@ npm run build
 
 Open the popup or options page and choose **Open Mdtero Account**. Sign in at `https://mdtero.com/auth`; the website hands the extension a `{ type: "mdtero.auth.token", token, email }` message through the trusted auth bridge on Mdtero origins. The extension no longer maintains its own email, password, or email-code login form.
 
-The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com` (plus localhost during development). Publisher pages cannot mint extension tokens, and the extension does not store publisher API keys, TDM keys, or local helper credentials.
+The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com` (plus localhost during development). Publisher pages cannot mint extension tokens. The extension can store your own Elsevier API key locally for Article Retrieval XML, but it does not store Wiley TDM keys, Springer keys, shared backend credentials, or local helper credentials.
 
 ## Parse Papers
 
-Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension creates a backend task, polls it, and shows returned artifacts. Markdown is the primary download when `paper_md` is available; when figure/assets are packaged separately, the backend returns a `paper_bundle` zip.
+Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension first tries browser-side raw acquisition when the route supports it: Elsevier Article Retrieval XML with your key, arXiv PDF, open PDF candidates, open XML/HTML, current-tab HTML capture, and browser-session PDF/EPUB downloads. Captured raw artifacts are uploaded to the backend parse endpoint. When local acquisition is unavailable, the extension falls back to a backend parse task, polls it, and shows returned artifacts.
 
 Supported paths work best for DOI/arXiv pages, open publisher pages, and user-selected PDF/EPUB files. PDF parsing is MinerU-first on the backend and uses the URL API path for uploaded files when available. GROBID is not exposed as a public engine choice in the extension.
 

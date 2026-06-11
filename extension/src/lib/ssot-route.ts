@@ -16,6 +16,7 @@ export interface SsotPageContext {
 
 export interface SsotExecutionContext extends SsotPageContext {
   input: string;
+  elsevierApiKey?: string;
 }
 
 export interface RouteClientLike {
@@ -58,17 +59,8 @@ export async function executeSsotActionSequence(
   requiresBrowserCapture?: boolean;
   requiresUpload?: boolean;
 }> {
-  if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
-    try {
-      const task = await parseClient.createParseTask({ input: context.input });
-      return { success: true, taskId: task.task_id, task };
-    } catch (error) {
-      return {
-        success: false,
-        error: String(error),
-        nextCommand: buildCliParseCommand(context.input),
-      };
-    }
+  if (shouldSubmitServerParse(routePlan)) {
+    return submitServerParse(parseClient, context.input);
   }
 
   for (const action of routePlan.action_sequence) {
@@ -118,6 +110,17 @@ export async function executeSsotActionSequence(
       };
     }
 
+    if (action === "fetch_elsevier_xml") {
+      const serverResult = await submitServerParse(parseClient, context.input);
+      if (serverResult.success) {
+        return serverResult;
+      }
+      return {
+        ...serverResult,
+        error: `${result.error || "Elsevier XML fetch failed"}; backend fallback failed: ${serverResult.error}`,
+      };
+    }
+
     if (routePlan.fail_closed) {
       return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
     }
@@ -125,6 +128,30 @@ export async function executeSsotActionSequence(
 
   return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
 }
+
+async function submitServerParse(parseClient: ParseClientLike, input: string) {
+  try {
+    const task = await parseClient.createParseTask({ input });
+    return { success: true, taskId: task.task_id, task };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      nextCommand: buildCliParseCommand(input),
+    };
+  }
+}
+
+function shouldSubmitServerParse(routePlan: ExtensionRouteResponse): boolean {
+  if (routePlan.route_planner_fallback || routePlan.action_sequence.includes("server_parse")) {
+    return true;
+  }
+  return routePlan.action_sequence.some((action) => SERVER_SIDE_CREDENTIAL_ACTIONS.has(action));
+}
+
+const SERVER_SIDE_CREDENTIAL_ACTIONS = new Set([
+  "fetch_wiley_tdm_pdf",
+]);
 
 function inferArtifactKindFromFilename(filename?: string): string | undefined {
   const normalized = String(filename || "").trim().toLowerCase();

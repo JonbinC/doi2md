@@ -26,35 +26,160 @@ describe("executeAction", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not keep stale publisher API action compatibility in the extension runtime", async () => {
+  it("fetches Elsevier XML with the user's extension API key", async () => {
     const fetchMock = vi.fn();
+    fetchMock.mockResolvedValue(
+      new Response("<full-text-retrieval-response><originalText /></full-text-retrieval-response>", {
+        status: 200,
+        headers: { "Content-Type": "text/xml" },
+      })
+    );
     vi.stubGlobal("fetch", fetchMock);
-    const chromeStub = {
-      tabs: {
-        sendMessage: vi.fn().mockResolvedValue({
-          ok: true,
-          capture: {
-            ok: true,
-            html: "<html><article>Captured publisher page</article></html>",
-            payloadName: "paper.html",
-          },
-        }),
-      },
-    };
-    vi.stubGlobal("chrome", chromeStub);
 
     const result = await executeAction(
       "fetch_elsevier_xml",
       {
         input: "10.1016/j.energy.2026.140192",
-        tabId: 12,
+        elsevierApiKey: "user-elsevier-key",
       },
       {}
     );
 
-    expect(result).toEqual({ success: false, error: "Unknown action: fetch_elsevier_xml" });
-    expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text%2Fxml&view=FULL",
+      {
+        headers: {
+          Accept: "text/xml",
+          "X-ELS-APIKey": "user-elsevier-key",
+        },
+      }
+    );
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.xml");
+    expect(result.artifactKind).toBe("xml");
+    expect(result.sourceDoi).toBe("10.1016/j.energy.2026.140192");
+    await expect(result.rawArtifact?.text()).resolves.toContain("full-text-retrieval-response");
+  });
+
+  it("surfaces missing Elsevier extension key so SSOT can fall back to backend parse", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAction(
+      "fetch_elsevier_xml",
+      {
+        input: "10.1016/j.energy.2026.140192",
+      },
+      {}
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: "Elsevier API key is not configured in the extension.",
+      nextCommand: "mdtero parse 10.1016/j.energy.2026.140192 --trace --wait --timeout 300 --json",
+    });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("downloads arXiv PDF as a raw upload artifact", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAction("native_arxiv_parse", { input: "10.48550/arXiv.1706.03762" }, {});
+
+    expect(fetchMock).toHaveBeenCalledWith("https://arxiv.org/pdf/1706.03762.pdf", {
+      credentials: "include",
+      headers: { Accept: "application/pdf" },
+    });
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("arxiv.pdf");
+    expect(result.artifactKind).toBe("pdf");
+    await expect(result.rawArtifact?.arrayBuffer()).resolves.toHaveProperty("byteLength", 8);
+  });
+
+  it("downloads open PDF candidates before asking for manual upload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAction(
+      "fallback_pdf_parse",
+      { input: "10.1000/demo" },
+      {
+        acquisition_candidates: [
+          {
+            connector: "semantic_scholar_open_access_pdf",
+            format: "pdf",
+            pdf_url: "https://archive.example/paper.pdf",
+          },
+        ],
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith("https://archive.example/paper.pdf", {
+      credentials: "include",
+      headers: { Accept: "application/pdf" },
+    });
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.pdf");
+    expect(result.artifactKind).toBe("pdf");
+  });
+
+  it("downloads Springer PDF routes through the extension raw acquisition path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAction(
+      "fetch_springer_pdf",
+      { input: "10.1007/s12011-024-04385-0" },
+      {}
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith("https://link.springer.com/content/pdf/10.1007/s12011-024-04385-0.pdf", {
+      credentials: "include",
+      headers: { Accept: "application/pdf" },
+    });
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.pdf");
+    expect(result.artifactKind).toBe("pdf");
+  });
+
+  it("downloads OA repository PDFs instead of forcing manual upload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await executeAction(
+      "fetch_oa_repository",
+      { input: "10.1000/demo" },
+      { best_oa_url: "https://repository.example/fulltext.pdf" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith("https://repository.example/fulltext.pdf", {
+      credentials: "include",
+      headers: { Accept: "application/pdf" },
+    });
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.pdf");
+    expect(result.artifactKind).toBe("pdf");
   });
 
   it("downloads EPUB assets through the active browser action", async () => {

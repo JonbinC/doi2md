@@ -332,4 +332,83 @@ describe("ssot-route", () => {
     expect(parseClient.createRawUploadTask).not.toHaveBeenCalled();
     expect(result).toEqual({ success: true, taskId: "task-server", task });
   });
+
+  it("uploads Elsevier XML fetched by the extension action", async () => {
+    const rawArtifact = new Blob(["<full-text-retrieval-response />"], { type: "application/xml" });
+    executeAction.mockResolvedValue({
+      success: true,
+      rawArtifact,
+      filename: "paper.xml",
+      sourceDoi: "10.1016/j.energy.2026.140192",
+      artifactKind: "xml",
+    });
+    const task = { task_id: "task-xml", status: "queued" };
+    const parseClient = {
+      createParseTask: vi.fn(),
+      createRawUploadTask: vi.fn().mockResolvedValue(task),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(
+      parseClient,
+      buildRoutePlan({
+        top_connector: "elsevier_article_retrieval_api",
+        route_kind: "server",
+        acquisition_mode: "server_parse",
+        requires_browser_capture: false,
+        allows_current_tab: false,
+        action_sequence: ["fetch_elsevier_xml"],
+      }),
+      { input: "10.1016/j.energy.2026.140192", elsevierApiKey: "user-key" },
+    );
+
+    expect(executeAction).toHaveBeenCalledWith(
+      "fetch_elsevier_xml",
+      expect.objectContaining({
+        input: "10.1016/j.energy.2026.140192",
+        elsevierApiKey: "user-key",
+      }),
+      expect.objectContaining({ top_connector: "elsevier_article_retrieval_api" }),
+    );
+    expect(parseClient.createParseTask).not.toHaveBeenCalled();
+    expect(parseClient.createRawUploadTask).toHaveBeenCalledWith({
+      rawFile: rawArtifact,
+      filename: "paper.xml",
+      sourceDoi: "10.1016/j.energy.2026.140192",
+      sourceInput: "10.1016/j.energy.2026.140192",
+      artifactKind: "xml",
+    });
+    expect(result).toEqual({ success: true, taskId: "task-xml", task });
+  });
+
+  it("falls back to backend parse when extension Elsevier XML fetch cannot run", async () => {
+    executeAction.mockResolvedValue({
+      success: false,
+      error: "Elsevier API key is not configured in the extension.",
+    });
+    const task = { task_id: "task-server", status: "queued" };
+    const parseClient = {
+      createParseTask: vi.fn().mockResolvedValue(task),
+      createRawUploadTask: vi.fn(),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(
+      parseClient,
+      buildRoutePlan({
+        top_connector: "elsevier_article_retrieval_api",
+        route_kind: "server",
+        acquisition_mode: "server_parse",
+        requires_browser_capture: false,
+        allows_current_tab: false,
+        action_sequence: ["fetch_elsevier_xml"],
+      }),
+      { input: "10.1016/j.energy.2026.140192" },
+    );
+
+    expect(executeAction).toHaveBeenCalledTimes(1);
+    expect(parseClient.createRawUploadTask).not.toHaveBeenCalled();
+    expect(parseClient.createParseTask).toHaveBeenCalledWith({ input: "10.1016/j.energy.2026.140192" });
+    expect(result).toEqual({ success: true, taskId: "task-server", task });
+  });
 });

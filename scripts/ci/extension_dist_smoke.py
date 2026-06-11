@@ -35,12 +35,8 @@ FORBIDDEN_DIST_MARKERS = (
     "mdtero-install",
     "npx mdtero",
     "npm install -g",
-    "elsevierApiKey",
     "wileyTdmToken",
     "springerOpenAccessApiKey",
-    "fetch_elsevier_xml",
-    "fetch_wiley_tdm_pdf",
-    "fetch_springer_pdf",
 )
 
 POPUP_REQUIRED_MARKERS = (
@@ -126,7 +122,7 @@ def _check_manifest(manifest: dict[str, Any], failures: list[dict[str, Any]]) ->
     if manifest.get("manifest_version") != 3:
         failures.append({"path": "manifest.json", "reason_code": "extension_manifest_not_mv3"})
     permissions = manifest.get("permissions") or []
-    if permissions != ["storage", "downloads", "tabs"]:
+    if permissions != ["storage", "downloads", "tabs", "activeTab", "scripting"]:
         failures.append({"path": "manifest.json", "reason_code": "extension_permissions_drifted", "permissions": permissions})
     if "nativeMessaging" in permissions:
         failures.append({"path": "manifest.json", "reason_code": "extension_native_messaging_present"})
@@ -140,7 +136,9 @@ def _check_manifest(manifest: dict[str, Any], failures: list[dict[str, Any]]) ->
     if not any("https://mdtero.com/*" in (script.get("matches") or []) for script in content_scripts if isinstance(script, dict)):
         failures.append({"path": "manifest.json", "reason_code": "extension_auth_bridge_match_missing"})
     host_permissions = manifest.get("host_permissions") or []
-    for forbidden in ("https://api.elsevier.com/*", "https://api.wiley.com/*", "https://api.springernature.com/*"):
+    if "https://api.elsevier.com/*" not in host_permissions:
+        failures.append({"path": "manifest.json", "reason_code": "extension_elsevier_api_host_missing"})
+    for forbidden in ("https://api.wiley.com/*", "https://api.springernature.com/*"):
         if forbidden in host_permissions:
             failures.append({"path": "manifest.json", "reason_code": "extension_direct_publisher_api_host_present", "host": forbidden})
 

@@ -71,6 +71,7 @@ describe("extension options page", () => {
       token: undefined,
       email: undefined,
       uiLanguage: "en",
+      elsevierApiKey: undefined,
     };
     mockReadSettings.mockClear();
     mockWriteSettings.mockClear();
@@ -90,6 +91,8 @@ describe("extension options page", () => {
     expect(document.querySelector("#usage-status")?.textContent).toBe("Balance and quota appear after sign-in.");
     expect(document.querySelector("#helper-status")).toBeNull();
     expect(document.querySelector("#connector-keys-section")).toBeNull();
+    expect(document.querySelector("#elsevier-api-key")).not.toBeNull();
+    expect(document.querySelector("#elsevier-api-key-note")?.textContent).toContain("Stored locally");
     expect(document.querySelector("#shadow-status")).toBeNull();
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(true);
     expect(document.querySelector("#open-account")?.textContent).toBe("Open website OAuth");
@@ -123,8 +126,8 @@ describe("extension options page", () => {
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("server_rag_build(wait=true)");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp briefing --json");
     expect(document.querySelector("#cli-handoff-guide-command")?.textContent).toContain("mdtero mcp serve");
-    expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("does not install Python dependencies");
-    expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("mdtero config academic");
+    expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("your own Elsevier API key");
+    expect(document.querySelector("#cli-handoff-guide-boundary")?.textContent).toContain("Python dependencies stay in the CLI or backend");
     expect(document.querySelector("#input-route-card")).not.toBeNull();
     expect(document.querySelector("#input-route-title")?.textContent).toBe("Input routes");
     expect(document.querySelector("#input-route-note")?.textContent).toContain("shortest path to a Markdown artifact");
@@ -187,7 +190,7 @@ describe("extension options page", () => {
     expect(checklistText).toContain("RAG readiness, citation_contract, and the mcp_tool_plan");
     expect(checklistText).toContain("server_rag_build(wait=true)");
     expect(checklistText).not.toContain("native helper");
-    expect(checklistText).not.toContain("publisher API");
+    expect(checklistText).not.toContain("publisher API / TDM");
     expect(document.querySelector("#password-input")).toBeNull();
     expect(document.querySelector("#code-input")).toBeNull();
   });
@@ -394,12 +397,13 @@ describe("extension options page", () => {
     });
   });
 
-  it("persists advanced API base and language without publisher key fields", async () => {
+  it("persists advanced API base, language, and user-owned Elsevier key", async () => {
     globalThis.chrome = createChromeMock(async () => ({ result: { state: "connected" } })) as any;
 
     await loadOptionsModule();
 
     (document.querySelector("#api-base-url") as HTMLInputElement).value = "https://api.example.test";
+    (document.querySelector("#elsevier-api-key") as HTMLInputElement).value = "elsevier-user-key";
     (document.querySelector("#ui-language") as HTMLSelectElement).value = "zh";
 
     (document.querySelector("#save-settings") as HTMLButtonElement).click();
@@ -409,6 +413,7 @@ describe("extension options page", () => {
       expect.objectContaining({
         apiBaseUrl: "https://api.example.test",
         uiLanguage: "zh",
+        elsevierApiKey: "elsevier-user-key",
       })
     );
     expect(JSON.stringify(mockWriteSettings.mock.calls.at(-1)?.[0])).not.toContain("wileyTdmToken");

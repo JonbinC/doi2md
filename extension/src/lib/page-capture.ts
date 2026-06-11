@@ -268,7 +268,7 @@ export function isLikelyChallengeOrLoginShell(html: string): boolean {
   return classifyAccessShell(html) !== null;
 }
 
-function isLikelyHtmlDocument(text: string): boolean {
+export function isLikelyHtmlDocument(text: string): boolean {
   const lowered = String(text || "").trim().toLowerCase();
   return lowered.startsWith("<!doctype html") || lowered.startsWith("<html") || lowered.includes("<html");
 }

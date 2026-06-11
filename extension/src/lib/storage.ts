@@ -7,6 +7,7 @@ export interface MdteroSettings {
   token?: string;
   email?: string;
   uiLanguage?: UiLanguage;
+  elsevierApiKey?: string;
 }
 
 export interface PopupState {
@@ -65,7 +66,8 @@ export async function readSettings(): Promise<MdteroSettings> {
     apiBaseUrl: current.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     token: current.token,
     email: current.email,
-    uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language)
+    uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
+    elsevierApiKey: current.elsevierApiKey
   };
 }
 
