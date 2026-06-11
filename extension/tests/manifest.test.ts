@@ -107,13 +107,16 @@ describe("extension manifest", () => {
     expect(optionsSource).toContain("trusted auth bridge");
     expect(optionsSource).toContain("Connection guide");
     expect(optionsSource).toContain("Website OAuth is connected");
-    expect(optionsSource).toContain("browser capture, upload, translation, and download settings");
+    expect(optionsSource).toContain("browser-side paper capture");
     expect(optionsSource).toContain("Browser capture reuses the active tab");
     expect(optionsSource).toContain("Elsevier API key");
-    expect(optionsSource).toContain("Wiley TDM");
+    expect(optionsSource).toContain("Elsevier access");
+    expect(optionsSource).not.toContain("Wiley TDM");
     expect(optionsSource).not.toContain("wiley-tdm-token");
     expect(optionsSource).not.toContain("springer-oa-api-key");
     expect(optionsSource).not.toContain("nativeMessaging` is reserved");
+    expect(optionsSource).not.toContain("uv tool install");
+    expect(optionsSource).not.toContain("MCP server");
     expect(optionsSource).not.toContain("CLI-assisted capture");
   });
 

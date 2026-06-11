@@ -1065,7 +1065,7 @@ describe("extension background routing", () => {
     });
   });
 
-  it("returns actionable sign-in guidance when SSOT capture sees institutional access", async () => {
+  it("returns actionable access-shell guidance when SSOT capture sees institutional access", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
     fetchRoutePlan.mockResolvedValue({
@@ -1088,7 +1088,7 @@ describe("extension background routing", () => {
       capture: {
         ok: false,
         failureCode: "login_required",
-        failureMessage: "Page loaded but still requires user sign-in or institutional access."
+        failureMessage: "The tab is open, but Mdtero received a login, access, or subscription page instead of the article. Open the full-text or PDF view in this browser session, or upload the PDF/XML/EPUB."
       }
     });
 
@@ -1115,7 +1115,7 @@ describe("extension background routing", () => {
       expect(createParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
-        error: "Page loaded but still requires user sign-in or institutional access.",
+        error: "The tab is open, but Mdtero received a login, access, or subscription page instead of the article. Open the full-text or PDF view in this browser session, or upload the PDF/XML/EPUB.",
         nextCommand: "mdtero parse https://example.com/paper --trace --wait --timeout 300 --json"
       });
     });
@@ -1144,7 +1144,7 @@ describe("extension background routing", () => {
       capture: {
         ok: false,
         failureCode: "article_body_missing",
-        failureMessage: "Page loaded but no article body markers were detected."
+        failureMessage: "The tab is open, but Mdtero could not find a parsable article body in the captured page. Open the full-text/PDF view or upload the PDF/XML/EPUB."
       }
     });
 
@@ -1171,7 +1171,7 @@ describe("extension background routing", () => {
       expect(createParseTask).not.toHaveBeenCalled();
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
-        error: "Page loaded but no article body markers were detected.",
+        error: "The tab is open, but Mdtero could not find a parsable article body in the captured page. Open the full-text/PDF view or upload the PDF/XML/EPUB.",
         nextCommand: "mdtero parse https://example.com/paper --trace --wait --timeout 300 --json"
       });
     });

@@ -25,7 +25,7 @@
           </div>
           <div class="brand-copy">
             <h1 id="settings-title">Mdtero Extension</h1>
-            <p id="settings-subtitle">Use website OAuth for sign-in, review quota, and manage browser capture, upload, translation, and download settings.</p>
+            <p id="settings-subtitle">Sign in, check quota, and configure browser-side paper capture.</p>
           </div>
           <button id="language-toggle" type="button" class="ghost-chip">中文</button>
         </div>
@@ -48,27 +48,6 @@
         <div id="connection-guide-list" class="guide-list" aria-live="polite"></div>
       </section>
 
-      <section class="card" id="input-route-card">
-        <div class="handoff-guide-header">
-          <div>
-            <h2 id="input-route-title">Input routes</h2>
-            <p id="input-route-note" class="meta-label">Choose the shortest path to a Markdown artifact. The extension covers browser context; the CLI continues local files, RAG, MCP, and agent handoff.</p>
-          </div>
-          <span id="input-route-pill" class="meta-pill">Extension + CLI</span>
-        </div>
-        <div id="input-route-list" class="input-route-list" aria-live="polite"></div>
-        <div class="server-api-contract" id="server-api-contract-card">
-          <div class="handoff-guide-header">
-            <div>
-              <h3 id="server-api-contract-title">Server API contract</h3>
-              <p id="server-api-contract-note" class="meta-label">The same /api/v1 routes back extension capture, CLI upload, task polling, downloads, project import, and backend RAG.</p>
-            </div>
-            <button id="copy-server-api-contract" type="button" class="ghost-chip">Copy API contract</button>
-          </div>
-          <div id="server-api-contract-list" class="server-api-contract-list" aria-live="polite"></div>
-        </div>
-      </section>
-
       <section class="card auth-card">
         <div class="auth-website-panel">
           <h2 id="website-auth-title">Website sign-in</h2>
@@ -77,59 +56,36 @@
         </div>
       </section>
 
-      <section class="card" id="cli-handoff-guide-card">
-        <div class="handoff-guide-header">
+      <section class="card" id="elsevier-settings-card">
+        <div class="setting-card-header">
           <div>
-            <h2 id="cli-handoff-guide-title">Extension + CLI handoff</h2>
-            <p id="cli-handoff-guide-note" class="meta-label">Use the extension for browser context. When a publisher challenge, campus login, or saved file blocks capture, continue in the Python CLI.</p>
+            <h2 id="elsevier-settings-title">Elsevier access</h2>
+            <p id="elsevier-settings-note" class="meta-label">Add your own Elsevier API key to let the extension fetch Article Retrieval XML directly from supported ScienceDirect pages.</p>
           </div>
-          <button id="copy-cli-handoff-guide" type="button" class="ghost-chip">Copy handoff</button>
+          <span id="elsevier-key-status" class="meta-pill">Not configured</span>
         </div>
-        <code id="cli-handoff-guide-command" class="handoff-guide-command">mdtero doctor --json</code>
-        <p id="cli-handoff-guide-boundary" class="meta-label">The extension does not install Python dependencies or store publisher API keys.</p>
-      </section>
-
-      <section class="card" id="mcp-server-config-card">
-        <div class="handoff-guide-header">
-          <div>
-            <h2 id="mcp-server-config-title">Agent MCP server</h2>
-            <p id="mcp-server-config-note" class="meta-label">After setup, start mdtero mcp serve from a local project and paste this stdio server config into your agent.</p>
-          </div>
-          <button id="copy-mcp-server-config" type="button" class="ghost-chip">Copy MCP config</button>
+        <label id="elsevier-api-key-label" for="elsevier-api-key">Elsevier API key</label>
+        <div class="sensitive-input-row">
+          <input id="elsevier-api-key" type="password" autocomplete="off" placeholder="Paste your Elsevier API key" />
+          <button id="toggle-elsevier-key" type="button" class="ghost-chip">Show</button>
         </div>
-        <span id="mcp-server-config-meta" class="meta-pill mcp-meta-pill">FastMCP · stdio · local project root</span>
-        <code id="mcp-server-config-command" class="handoff-guide-command mcp-server-command">{"mcpServers":{"mdtero":{"command":"mdtero","args":["mcp","serve"],"cwd":"&lt;local-mdtero-project-root&gt;"}}}</code>
-      </section>
-
-      <section class="card" id="cli-onboarding-card">
-        <div class="handoff-guide-header">
-          <div>
-            <h2 id="cli-onboarding-title">CLI setup checklist</h2>
-            <p id="cli-onboarding-note" class="meta-label">The Python client handles local acquisition, project queues, Zotero, backend Voyage RAG, MCP, and agent skills.</p>
-          </div>
-          <span id="cli-onboarding-pill" class="meta-pill">Python / uv</span>
+        <p id="elsevier-api-key-note" class="meta-label">Stored only in this browser. Used for Elsevier XML capture before backend fallback.</p>
+        <div class="button-row settings-action-row">
+          <button id="save-settings" type="button" class="secondary-button">Save settings</button>
+          <button id="clear-elsevier-key" type="button" class="ghost-chip">Clear key</button>
         </div>
-        <div id="cli-onboarding-list" class="onboarding-list" aria-live="polite"></div>
-      </section>
-
-      <section class="card">
-        <label id="ui-language-label" for="ui-language">Interface language</label>
-        <select id="ui-language">
-          <option value="zh">中文</option>
-          <option value="en">English</option>
-        </select>
+        <p id="elsevier-api-key-feedback" class="status-line" aria-live="polite"></p>
       </section>
 
       <details class="card">
         <summary id="advanced-summary">Advanced</summary>
         <label id="api-base-url-label" for="api-base-url">API URL</label>
         <input id="api-base-url" type="url" placeholder="http://127.0.0.1:8000" />
-        <div class="field-group">
-          <label id="elsevier-api-key-label" for="elsevier-api-key">Elsevier API key</label>
-          <input id="elsevier-api-key" type="password" autocomplete="off" placeholder="Optional user key" />
-          <p id="elsevier-api-key-note" class="meta-label">Optional. Stored locally in this browser and used only for Elsevier Article Retrieval XML before backend fallback.</p>
-        </div>
-        <button id="save-settings" type="button" class="secondary-button">Save</button>
+        <label id="ui-language-label" for="ui-language">Interface language</label>
+        <select id="ui-language">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
       </details>
 
       <section class="card" id="permissions-card">
