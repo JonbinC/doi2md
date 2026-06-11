@@ -8234,6 +8234,7 @@ def test_public_docs_do_not_advertise_npm_installer_runtime():
     repo_root = Path(__file__).resolve().parents[1]
     docs = [
         repo_root / "README.md",
+        repo_root / "README_CN.md",
         repo_root / "install" / "README.md",
         repo_root / "docs" / "public" / "README.md",
     ]
@@ -8650,19 +8651,29 @@ def test_public_docs_describe_rag_answer_citation_contract():
 def test_public_readme_documents_shared_v1_api_contract():
     repo_root = Path(__file__).resolve().parents[1]
     readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    readme_cn = (repo_root / "README_CN.md").read_text(encoding="utf-8")
 
     assert "Shared `/api/v1` server contract" in readme
     assert "/api/v1/route" in readme
+    assert "/api/v1/extension/route" in readme
     assert "/api/v1/tasks/parse" in readme
     assert "/api/v1/tasks/upload" in readme
     assert "/api/v1/tasks/{task_id}" in readme
     assert "/api/v1/tasks/{task_id}/download/{artifact}" in readme
+    assert "/api/v1/discovery/search" in readme
+    assert "/api/v1/tasks/translate" in readme
+    assert "/api/v1/projects" in readme
     assert "/api/v1/projects/{project_id}/tasks/{task_id}/import" in readme
+    assert "/api/v1/projects/{project_id}/rag/status" in readme
     assert "/api/v1/projects/{project_id}/rag/build" in readme
     assert "/api/v1/projects/{project_id}/rag/query" in readme
     assert "The CLI, extension, dashboard, and MCP briefing expose this contract" in readme
-    assert "所有输入入口共用同一组 `/api/v1` 服务端契约" in readme
-    assert "CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract" in readme
+    assert "[简体中文](./README_CN.md)" in readme
+    assert "English" in readme_cn
+    assert "[English](./README.md)" in readme_cn
+    assert "所有输入入口共用同一组 `/api/v1` 服务端契约" in readme_cn
+    assert "CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract" in readme_cn
+    assert "/api/v1/extension/route" in readme_cn
 
 
 def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
@@ -8775,6 +8786,7 @@ def test_public_docs_describe_agent_safe_redaction_boundary():
         path.read_text(encoding="utf-8")
         for path in [
             repo_root / "README.md",
+            repo_root / "README_CN.md",
             repo_root / "install" / "README.md",
             repo_root / "docs" / "public" / "README.md",
             repo_root / "skills" / "mdtero" / "SKILL.md",
@@ -8801,6 +8813,7 @@ def test_public_docs_and_skill_describe_extension_cli_handoff_contract():
         path.read_text(encoding="utf-8")
         for path in [
             repo_root / "README.md",
+            repo_root / "README_CN.md",
             repo_root / "install" / "README.md",
             repo_root / "docs" / "public" / "README.md",
             repo_root / "skills" / "mdtero" / "SKILL.md",
@@ -8834,6 +8847,7 @@ def test_public_docs_and_skills_use_agent_safe_discovery_add_json():
         path.read_text(encoding="utf-8")
         for path in [
             repo_root / "README.md",
+            repo_root / "README_CN.md",
             repo_root / "install" / "README.md",
             repo_root / "skills" / "mdtero" / "SKILL.md",
             repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
@@ -8894,7 +8908,7 @@ def test_public_docs_describe_setup_agent_detection_and_headless_skip():
     repo_root = Path(__file__).resolve().parents[1]
     combined = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in [repo_root / "README.md", repo_root / "install" / "README.md"]
+        for path in [repo_root / "README.md", repo_root / "README_CN.md", repo_root / "install" / "README.md"]
     )
 
     assert "`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection" in combined
