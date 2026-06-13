@@ -19,15 +19,15 @@ Scope: public `mdtero` CLI against `https://api.mdtero.com`, using the local rep
 - `mdtero download ... paper_md` and `paper_bundle` returned downloaded paths for `vaswani2017attention.md` and `vaswani2017attention.zip`.
 - `mdtero parse --file attention.pdf --json` created PDF task `185f3ee9-5764-480a-b87e-939321aeb27a`.
 - `mdtero status 185f3ee9-5764-480a-b87e-939321aeb27a --wait --timeout 420 --json` completed with `status=succeeded`, `stage=completed`, `reason_code=task_succeeded`.
-- PDF quality reported `provider=mineru_precision`, `selected_pdf_provider=mineru_precision`, `url_fetch_used=true`, `external_upload_used=false`, `mineru_configured=true`, `provider_state=done`, `markdown_status=usable`.
+- PDF quality reported backend file fetch was used and Markdown was usable.
 - `mdtero download 185f3ee9-5764-480a-b87e-939321aeb27a paper_md --output-dir ./pdf-out --json` downloaded `pdf-out/attention-2.md`.
-- `mdtero rag build --json` created/bound server project `10` and completed with `status=succeeded`, `reason_code=indexed`, `embedding_model=voyage-4`, `chunk_count=42`, `embedded_count=42`.
+- `mdtero rag build --json` created/bound server project `10` and completed with `status=succeeded`, `reason_code=indexed`, `chunk_count=42`, `embedded_count=42`.
 - `mdtero rag status --json` reported `status=ready`, `reason_code=indexed`, `pending_embedding_count=0`.
 - `mdtero rag query "What is the main contribution of attention models?" --build-if-needed --json` completed with `status=succeeded`, `reason_code=rag_query_succeeded`, `match_count=5`, `citations=5`, `matches=5`, and an extractive answer.
 - `mdtero mcp briefing --json` returned server RAG ready state and MCP tools including `agent_briefing`, `server_rag_status`, and `rag_query`.
 - `mdtero agent detect --json` returned 5 targets and detected local `codex`, `claude_code`, and `hermes` workspaces.
 
-## Latest ArXiv + Voyage RAG Re-Smoke
+## Latest ArXiv + RAG Re-Smoke
 
 Run directory: `/tmp/mdtero-live-smoke-Y5UD11`. The API key was supplied only through `MDTERO_API_KEY` in the process environment and was not written to this repository or to this report.
 
@@ -45,22 +45,22 @@ For repo-checkout testing without installing the wheel, run the same command thr
 - `mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json` completed with task `394965d4-fef7-4ccb-8503-99d482894cfe`, `status=succeeded`, `stage=completed`, `reason_code=task_succeeded`, `route_kind=source_first`, and `provider_id=arxiv`.
 - `mdtero project refresh --wait --timeout 300 --json` refreshed 1 succeeded task.
 - `mdtero project download --output-dir ./out --json` downloaded `out/vaswani2017attention.zip`.
-- `mdtero rag build --json` created and bound server project `13`, imported 1 task, and returned `status=succeeded`, `reason_code=indexed`, `document_count=1`, `chunk_count=39`, `embedded_count=39`, and `embedding_model=voyage-4`.
+- `mdtero rag build --json` created and bound server project `13`, imported 1 task, and returned `status=succeeded`, `reason_code=indexed`, `document_count=1`, `chunk_count=39`, and `embedded_count=39`.
 - `mdtero rag status --json` returned `status=ready`, `reason_code=indexed`, `pending_embedding_count=0`, and next commands for `mdtero rag query "<question>" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`.
 - `mdtero rag query "What is the core contribution of this paper?" --build-if-needed --json` returned `status=succeeded`, `reason_code=rag_query_succeeded`, `citation_count=5`, `match_count=5`, and an extractive answer grounded in the Transformer paper.
 
-This re-smoke proves the current public CLI can complete the arXiv source-first parse, artifact download, server-project bootstrap, task import, backend Voyage embedding build, RAG status, and RAG query path against production.
+This re-smoke proves the current public CLI can complete the arXiv source-first parse, artifact download, server-project bootstrap, task import, backend RAG build, RAG status, and RAG query path against production.
 
 ## Failed / Needs Operator Fix
 
 - `mdtero translate <parse-task-id> --to zh-CN --json` successfully created task `b2a1cc21-5af5-4e04-b4b4-fa88acd8ce7a`, but final status was `failed` with `reason_code=translation_provider_chain_failed`.
-- The production task error summary was: `codex: translation_provider_auth_failed; mimo: translation_provider_auth_failed; claude_code: translation_provider_auth_failed; local_legacy: translation_provider_rate_limited`.
+- The production task error summary showed provider authentication/rate-limit failures without exposing provider credentials.
 - The returned action hint correctly says operators need to refresh provider API keys, restore quota, or disable the failing provider before retrying.
 
 ## Notes
 
 - Use `mdtero smoke --json --timeout 600 --interval 2` for future CLI production smoke tests after installing the public package. Use `uv run --project /path/to/doi2md mdtero smoke --json --timeout 600 --interval 2` when testing from a repository checkout and running from a temporary project directory. `uv --directory /path/to/doi2md run mdtero ...` changes the command working directory to the repo and can place downloaded artifacts under the repo.
-- This smoke proves the production CLI path for discovery, DOI parsing, PDF upload with MinerU URL API, artifact download, server-side Voyage RAG, MCP briefing, and agent detection. It does not prove browser-extension interactive login or Chrome/Edge upload UI; those still need browser-level smoke.
+- This smoke proves the production CLI path for discovery, DOI parsing, PDF upload, artifact download, server-side RAG, MCP briefing, and agent detection. It does not prove browser-extension interactive login or Chrome/Edge upload UI; those still need browser-level smoke.
 
 ## Repository Gates Re-run After Cleanup
 

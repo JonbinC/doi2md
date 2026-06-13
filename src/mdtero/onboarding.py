@@ -75,7 +75,7 @@ def build_input_route_contract() -> dict[str, Any]:
                     "mdtero download <task-id> paper_bundle --output-dir ./mdtero-output --json",
                 ],
                 "evidence_fields": ["selected_provider", "parser_strategy", "reason_code", "download_artifacts"],
-                "action_hint": "Use direct upload for local user files. PDFs use the backend MinerU-first path; EPUB/XML/HTML bypass browser capture when already saved.",
+                "action_hint": "Use direct upload for local user files. PDFs are handled by the backend; EPUB/XML/HTML bypass browser capture when already saved.",
             },
             {
                 "id": "browser_extension_handoff",
@@ -106,10 +106,10 @@ def build_input_route_contract() -> dict[str, Any]:
                     "mdtero mcp serve",
                 ],
                 "evidence_fields": ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"],
-                "action_hint": "Use the one-command bootstrap query after succeeded Markdown artifacts; it can bind/import/build backend Voyage RAG before handing the same local project context to FastMCP.",
+                "action_hint": "Use the one-command bootstrap query after succeeded Markdown artifacts; it can bind/import/build backend RAG before handing the same local project context to FastMCP.",
             },
         ],
-        "separate_smoke_required": ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"],
+        "separate_smoke_required": ["pdf_upload", "epub_upload", "browser_extension_mv3"],
     }
 
 
@@ -229,11 +229,11 @@ def build_onboarding_checklist(
         },
         {
             "id": "rag",
-            "title": "Build backend Voyage RAG",
+            "title": "Build backend RAG",
             "status": "ready_after_parse",
             "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
             "secondary_commands": [GENERIC_RAG_QUERY_COMMAND, "mdtero rag status --json", "mdtero rag build --wait --json"],
-            "action_hint": "Voyage runs on the Mdtero backend; no local RAG provider key or manual server project id is required.",
+            "action_hint": "RAG runs on the Mdtero backend; no local RAG provider key or manual server project id is required.",
         },
         {
             "id": "mcp",

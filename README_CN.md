@@ -95,10 +95,10 @@ Agent 规则：
 
 - 在 parse、project、RAG 或 MCP 工作前先运行 `mdtero doctor --json`；它会返回安全的认证/依赖/学术 key/Zotero/project/RAG 摘要和 safe `next_commands`，且不会回显 secret。
 - 跟随 setup、doctor、parse、status、project refresh、RAG status 和 MCP tools 返回的 `next_commands`。
-- 保留 `task_id`、`selected_provider`、`parser_strategy`、`client_acquisition`、`parse_outcome`、`quality_label`、`preferred_artifact`、`download_artifacts`、`reason_code`、`action_hint`、`translation_attempts`、`citation_contract`、`citations` 和 `source_nodes`。
+- 保留任务 id、路由诊断、质量标签、首选 artifact、下载 artifact、reason code、action hint、translation attempts、citation contract、citations 和 source nodes。
 - 把 copied task handoff JSON 和 `dashboard_handoff_json` 当作起始状态，然后先用 `task_status` 或 `server_rag_status` 校验，再继续执行。
 - 当 dashboard 创建的 key 或本地 config 已可用时，不要让用户把长期 secret 粘贴到 prompt 里。
-- 不要把 API key、signed URL、bearer token、OSS token 或 provider credentials 写进 prompt 和日志。
+- 不要把 API key、signed URL、bearer token、对象存储 token 或服务凭据写进 prompt 和日志。
 
 首选 MCP 入口是 `agent_briefing`。它会返回账户状态、项目健康、可下载成果、失败项、RAG 状态、扩展/CLI 交接、推荐下一步命令，以及结构化 `mcp_tool_plan` playbook。这个 playbook 带 `step`、`tool`、`when`、`arguments`、`success_signal` 和 `failure_fields`，让本地 agent 按状态选择 `project_init`、`project_add`、`submit_parse`、`task_status`、`download_artifact`、`request_translation`、`server_rag_status`、`server_rag_build` 或 `rag_query`。
 
@@ -174,7 +174,7 @@ clawhub install mdtero
 
 ## RAG 和证据契约
 
-服务端 Voyage RAG 的主路径是：
+服务端 RAG 的主路径是：
 
 ```bash
 mdtero rag query "What are the strongest findings?" --build-if-needed --json
@@ -216,11 +216,11 @@ mdtero mcp serve
 当前 alpha 已验证：
 
 - API-key login、`mdtero doctor`、`mdtero doctor --json` 和本地配置；JSON 诊断包含安全的 auth/dependency/academic/Zotero/project/RAG 摘要和 `next_commands`，不会回显 secret。
-- `mdtero smoke --json` 部署 smoke；它创建隔离项目，跑 discovery、arXiv/DOI parse、task polling、artifact download、服务端 Voyage RAG build/status/query，验证 `mdtero mcp briefing --json` 暴露 `agent_briefing`、`server_rag_status`、`server_rag_build` 和 `rag_query`，失败时返回 step 级 `reason_code`、`action_hint`、task ids、paths、server project id，以及顶层 `primary_failure`、`failed_steps` 和恢复 `next_commands`。
+- `mdtero smoke --json` 部署 smoke；它创建隔离项目，跑 discovery、arXiv/DOI parse、task polling、artifact download、服务端 RAG build/status/query，验证 `mdtero mcp briefing --json` 暴露 `agent_briefing`、`server_rag_status`、`server_rag_build` 和 `rag_query`，失败时返回 step 级 `reason_code`、`action_hint`、task ids、paths、server project id，以及顶层 `primary_failure`、`failed_steps` 和恢复 `next_commands`。
 - 可选学术 key setup，既支持交互式 `mdtero config academic`，也支持 `--semantic-scholar-key <key> --json` 等无头 flags；JSON 输出只报告 configured/missing，不回显 secret。
 - DOI/arXiv parse、状态轮询、Markdown/bundle 下载。
 - DOI/URL 批量解析：`mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`，写出 `manifest.csv` 和 `failed.csv`。
-- PDF 上传走后端 MinerU URL API 路径，解析成功时返回 Markdown 和 zip artifacts。
+- PDF 上传走后端文档解析路径，解析成功时返回 Markdown 和 zip artifacts。
 - 本地 project init/add/remove/list/status、BibTeX 导入去重、project parse/refresh/download，以及 agent-readable JSON。
 - Zotero 元数据导入本地 Mdtero project，并把成功解析任务的 note/tag 保守同步回 Zotero。
 - Discovery 配置 Semantic Scholar 时走本地 Semantic Scholar，否则走后端 OpenAlex fallback。Semantic Scholar 不可用时，`--json` 返回 `local_semantic_scholar_failure` 和 `discovery_fallback`，agent 可保留 reason code 后继续走 OpenAlex。
@@ -229,7 +229,7 @@ mdtero mcp serve
 - 从 parse task id 或本地 Markdown 发起服务端翻译。
 - 本地 FastMCP project context server，包括 `agent_briefing` tool，用于一次返回账户状态、项目健康、可下载成果、失败项、RAG 状态、agent skill 检测/安装/待安装状态、推荐命令和 `mcp_tool_plan`。
 - TUI dashboard command palette，提供可复制的 setup、discovery、parse、Zotero、RAG、MCP 和 agent-install 命令，并高亮当前下一步。
-- 面向 agent 的 CLI JSON 和 MCP payload 会在返回本地 agent 前清洗 signed MinerU/OSS URLs、bearer/API-key headers、Mdtero API keys 和常见 token query parameters，同时保留 `reason_code`、`action_hint`、`next_commands` 和证据字段。
+- 面向 agent 的 CLI JSON 和 MCP payload 会在返回本地 agent 前清洗 signed artifact URLs、bearer/API-key headers、Mdtero API keys 和常见 token query parameters，同时保留 `reason_code`、`action_hint`、`next_commands` 和证据字段。
 - Codex、Claude Code、Gemini CLI、Hermes 和 OpenCode 的 agent skill 安装。
 
 ## Shared `/api/v1` 服务端契约
@@ -249,22 +249,22 @@ mdtero mcp serve
 | 服务端项目 create/list/read | `/api/v1/projects` |
 | 把解析 Markdown 导入服务端项目 | `/api/v1/projects/{project_id}/tasks/{task_id}/import` |
 | RAG status | `/api/v1/projects/{project_id}/rag/status` |
-| 构建后端 Voyage RAG | `/api/v1/projects/{project_id}/rag/build` |
-| 查询后端 Voyage RAG | `/api/v1/projects/{project_id}/rag/query` |
+| 构建后端 RAG | `/api/v1/projects/{project_id}/rag/build` |
+| 查询后端 RAG | `/api/v1/projects/{project_id}/rag/query` |
 
-CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract，保证浏览器抓取、CLI 重试、raw upload、任务轮询、下载、项目导入和后端 Voyage RAG 交接保持一致。
+CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract，保证浏览器抓取、CLI 重试、raw upload、任务轮询、下载、项目导入和后端 RAG 交接保持一致。
 
 ## 产品边界
 
-Mdtero Account 是 Mdtero API keys、quota、billing、history 和 install prompts 的 control plane。Academic source keys 留在本地 `mdtero config academic` 配置中。Python client 负责本地 project state、BibTeX/Zotero 导入、TUI、MCP context 和 agent skill installation。后端负责 parsing、MinerU PDF processing、OpenAlex fallback discovery、LLM translation、task artifacts 和 server-side RAG。
+Mdtero Account 是 Mdtero API keys、quota、billing、history 和 install prompts 的 control plane。Academic source keys 留在本地 `mdtero config academic` 配置中。Python client 负责本地 project state、BibTeX/Zotero 导入、TUI、MCP context 和 agent skill installation。后端负责 parsing、discovery fallback、translation、task artifacts 和 server-side RAG。
 
 浏览器扩展保持为浏览器入口。它不内置 `curl_cffi`、`pyzotero` 或 `fastmcp` 等 Python 依赖；只负责 browser-context capture 和用户选择的文件上传/下载。当 publisher challenge、校园网或浏览器登录态阻止自动采集时，把 DOI、URL 或已保存 PDF/EPUB/XML/HTML 文件交给 Python CLI。
 
 已知边界：
 
 - `mdtero zotero sync` 是保守同步，不改写 Zotero 文献元数据。
-- `mdtero rag query --build-if-needed --json` 是服务端 Voyage RAG 主路径。`mdtero rag build`、`mdtero project create-server` 和 `mdtero project ingest` 只作为显式恢复/调试命令保留。
-- GROBID 不是公开产品选项。PDF 解析以后端 MinerU-first 为主，内部 fallback 行为由服务端负责。
+- `mdtero rag query --build-if-needed --json` 是服务端 RAG 主路径。`mdtero rag build`、`mdtero project create-server` 和 `mdtero project ingest` 只作为显式恢复/调试命令保留。
+- Parser engine selection 不是公开产品选项。PDF 解析由后端处理，内部 fallback 行为由服务端负责。
 
 ## 仓库结构
 

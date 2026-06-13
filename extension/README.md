@@ -80,7 +80,7 @@ The options page keeps CLI setup out of the extension product surface. It focuse
 
 Start from a DOI, the current paper tab, or a local PDF/EPUB. The extension first tries browser-side raw acquisition when the route supports it: Elsevier Article Retrieval XML with your key, arXiv PDF, open PDF candidates, open XML/HTML, current-tab HTML capture, and browser-session PDF/EPUB downloads. Captured raw artifacts are uploaded to the backend parse endpoint. When local acquisition is unavailable, the extension falls back to a backend parse task, polls it, and shows returned artifacts.
 
-Supported paths work best for DOI/arXiv pages, open publisher pages, and user-selected PDF/EPUB files. PDF parsing is MinerU-first on the backend and uses the URL API path for uploaded files when available. GROBID is not exposed as a public engine choice in the extension.
+Supported paths work best for DOI/arXiv pages, open publisher pages, and user-selected PDF/EPUB files. PDF parsing is handled by the backend, and parser engine selection is not exposed as a public extension option.
 
 ## Translate
 
@@ -104,11 +104,11 @@ mdtero setup --json
 
 During alpha, use the GitHub command above because the old PyPI `mdtero` package still points at a retired backend bundle. Use `uv tool install mdtero` only after the public client is republished there.
 
-`mdtero setup --json` returns a secret-safe onboarding checklist for local agents: website OAuth or trusted headless auth, optional academic keys, Semantic Scholar versus OpenAlex discovery, project creation, DOI/file/batch parsing, Zotero intake, backend Voyage RAG, FastMCP briefing/serve, and interactive agent skill install.
+`mdtero setup --json` returns a secret-safe onboarding checklist for local agents: website OAuth or trusted headless auth, optional academic keys, discovery, project creation, DOI/file/batch parsing, Zotero intake, backend RAG, FastMCP briefing/serve, and interactive agent skill install.
 
 ## 中文版
 
-Mdtero 浏览器扩展只保留主线能力：登录、当前页/DOI 解析、PDF/EPUB 上传、任务轮询、翻译和下载。解析、MinerU PDF 处理、打包、额度和翻译都由后端完成；扩展不内置 Python 依赖，也不暴露 GROBID 引擎选择。
+Mdtero 浏览器扩展只保留主线能力：登录、当前页/DOI 解析、PDF/EPUB 上传、任务轮询、翻译和下载。解析、打包、额度和翻译都由后端完成；扩展不内置 Python 依赖，也不暴露 parser engine selection。
 
 常规路径：
 

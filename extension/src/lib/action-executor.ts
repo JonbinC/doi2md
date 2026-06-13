@@ -38,9 +38,6 @@ export async function executeAction(
     case "fetch_elsevier_xml":
       return executeFetchElsevierXml(context);
 
-    case "fetch_springer_pdf":
-      return executeFetchSpringerPdf(context, routePlan);
-
     case "fetch_structured_xml":
       return executeFetchStructuredXml(context, routePlan);
 
@@ -190,27 +187,6 @@ async function executeFallbackPdfParse(
     error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
     nextCommand: buildCliParseCommand(context.input),
   };
-}
-
-async function executeFetchSpringerPdf(
-  context: ActionContext,
-  routePlan: {
-    top_connector?: string;
-    user_message?: string;
-    acquisition_candidates?: AcquisitionCandidate[];
-    client_handoff_candidates?: ClientHandoffCandidate[];
-  }
-): Promise<ActionResult> {
-  const candidateUrl = pickPdfCandidateUrls(routePlan)[0] || buildSpringerPdfUrl(context.input);
-  if (!candidateUrl) {
-    return {
-      success: false,
-      requiresUpload: true,
-      error: routePlan.user_message || "No Springer PDF URL available for this route.",
-      nextCommand: buildCliParseCommand(context.input),
-    };
-  }
-  return downloadPdfFromUrl(candidateUrl, context, "paper.pdf");
 }
 
 async function downloadPdfFromUrl(url: string, context: ActionContext, filename: string): Promise<ActionResult> {
@@ -529,25 +505,6 @@ function inferArxivId(input: string): string | undefined {
 
 function buildArxivPdfUrl(arxivId: string): string {
   return `https://arxiv.org/pdf/${arxivId.replace(/\.pdf$/i, "")}.pdf`;
-}
-
-function buildSpringerPdfUrl(input: string): string | undefined {
-  const trimmed = String(input || "").trim();
-  try {
-    const parsed = new URL(trimmed);
-    const pdfMatch = parsed.pathname.match(/\/content\/pdf\/(.+?\.pdf)$/i);
-    if (pdfMatch?.[1]) {
-      return parsed.toString();
-    }
-    const articleMatch = parsed.pathname.match(/\/article\/(10\..+)$/i);
-    if (articleMatch?.[1]) {
-      return `https://link.springer.com/content/pdf/${decodeURIComponent(articleMatch[1])}.pdf`;
-    }
-  } catch {
-    // Not a URL; try DOI below.
-  }
-  const doi = inferSourceDoi(trimmed);
-  return doi ? `https://link.springer.com/content/pdf/${doi}.pdf` : undefined;
 }
 
 function looksLikePdfBytes(bytes: Uint8Array): boolean {

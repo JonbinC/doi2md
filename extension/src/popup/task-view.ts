@@ -84,8 +84,6 @@ export function getTaskProcessingSummary(
 ): string[] {
   const diagnostic = normalizeTaskFailureDiagnostic(task);
   const result = task?.result;
-  const provider = firstPresentString(task?.selected_provider, result?.selected_provider);
-  const strategy = firstPresentString(task?.parser_strategy, result?.parser_strategy);
   const acquisition = summarizeClientAcquisition(task?.client_acquisition || result?.client_acquisition);
   const outcome = summarizeParseOutcome(task?.parse_outcome || result?.parse_outcome);
   const reason = diagnostic.reasonCode ?? firstPresentString(task?.reason_code, result?.reason_code);
@@ -94,9 +92,8 @@ export function getTaskProcessingSummary(
   const artifacts = summarizeDownloadArtifacts(result);
   const lines: string[] = [];
 
-  if (provider || strategy) {
-    const value = [provider, strategy].filter(Boolean).join(" · ");
-    lines.push(language === "zh" ? `处理路径：${value}` : `Processing path: ${value}`);
+  if (task?.selected_provider || result?.selected_provider || task?.parser_strategy || result?.parser_strategy) {
+    lines.push(language === "zh" ? "处理路径：后端解析" : "Processing path: Backend parsing");
   }
   if (acquisition) {
     lines.push(language === "zh" ? `本地/浏览器抓取：${acquisition}` : `Acquisition: ${acquisition}`);
@@ -493,8 +490,6 @@ export interface CliHandoffContext {
   status?: string;
   stage?: string;
   kind?: "parse" | "translate";
-  selectedProvider?: string;
-  parserStrategy?: string;
   clientAcquisition?: string;
   parseOutcome?: string;
   reasonCode?: string;
@@ -617,7 +612,7 @@ export function formatCliHandoffClipboard(
     ...(parseHandoff
       ? [
           "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-          "Preserve task_id, selected_provider, parser_strategy, reason_code, action_hint, client_acquisition, parse_outcome, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+          "Preserve task_id, reason_code, action_hint, acquisition diagnostics, parse diagnostics, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
           "",
         ]
       : []),
@@ -687,8 +682,6 @@ export function buildTaskHandoffContext(
     status: task?.status,
     stage: task?.stage,
     kind: task?.task_kind ?? kind,
-    selectedProvider: firstPresentString(task?.selected_provider, task?.result?.selected_provider),
-    parserStrategy: firstPresentString(task?.parser_strategy, task?.result?.parser_strategy),
     clientAcquisition: summarizeObjectForHandoff(task?.client_acquisition || task?.result?.client_acquisition),
     parseOutcome: summarizeObjectForHandoff(task?.parse_outcome || task?.result?.parse_outcome),
     reasonCode: diagnostic.reasonCode || task?.reason_code || task?.result?.reason_code || undefined,
@@ -708,8 +701,6 @@ function formatHandoffContextLines(context?: CliHandoffContext | null): string[]
   appendContextLine(lines, "status", context.status);
   appendContextLine(lines, "stage", context.stage);
   appendContextLine(lines, "kind", context.kind);
-  appendContextLine(lines, "selected_provider", context.selectedProvider);
-  appendContextLine(lines, "parser_strategy", context.parserStrategy);
   appendContextLine(lines, "client_acquisition", context.clientAcquisition);
   appendContextLine(lines, "parse_outcome", context.parseOutcome);
   appendContextLine(lines, "reason_code", context.reasonCode);
