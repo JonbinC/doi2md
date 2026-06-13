@@ -151,7 +151,7 @@ def initialize_project_for_agent(name: str | None = None, project_root: Path | N
         "project_file": str(path),
         "server_project_id": state.server_project_id,
         "paper_count": len(state.papers),
-        "action_hint": "Local Mdtero project is initialized. Add DOI/URL/file targets, then parse and build server-side Voyage RAG.",
+        "action_hint": "Local Mdtero project is initialized. Add DOI/URL/file targets, then parse and build server-side RAG.",
         "next_commands": _dedupe_commands([
             commands["project_status"],
             commands["discover_interactive"],
@@ -341,7 +341,7 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
         elif succeeded:
             status = "needs_server_binding"
             reason_code = "server_project_not_linked"
-            action_hint = f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create or reuse the backend project id, import completed artifacts, build the Voyage index, and query without copying a server project id."
+            action_hint = f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create or reuse the backend project id, import completed artifacts, build the RAG index, and query without copying a server project id."
             next_commands = _dedupe_commands([commands["project_status"], ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["mcp_briefing"]])
         elif running:
             status = "waiting_for_parse"
@@ -356,7 +356,7 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
         elif failed:
             status = "needs_attention"
             reason_code = "project_has_failed_items"
-            action_hint = "Fix failed parse items before building server-side Voyage RAG."
+            action_hint = "Fix failed parse items before building server-side RAG."
             next_commands = _dedupe_commands([commands["project_status"], "mdtero project parse --include-failed --wait --timeout 300 --json", commands["refresh"]])
         else:
             status = "empty"
@@ -379,7 +379,7 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
             "id": server_project_id,
             "linked": bool(server_project_id),
             "owned_by": "mdtero_backend",
-            "provider": "voyage",
+            "provider": "backend_rag",
         },
         "local_project_name_is_server_project_id": False,
         "binding_source": "local_project_file" if server_project_id else None,
@@ -414,7 +414,7 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
     if state.server_project_id and succeeded:
         status = "ready"
         reason_code = "ready"
-        action_hint = "Local project has succeeded parse tasks and a linked server project. Ingest or refresh server-side Voyage RAG, then query through CLI or MCP."
+        action_hint = "Local project has succeeded parse tasks and a linked server project. Ingest or refresh server-side RAG, then query through CLI or MCP."
         next_commands = [
             commands.get("ingest_for_rag", "mdtero project ingest --json"),
             ONE_COMMAND_RAG_BOOTSTRAP,
@@ -426,22 +426,22 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
     elif not state.server_project_id and succeeded:
         status = "not_ready"
         reason_code = "server_project_not_linked"
-        action_hint = f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build backend Voyage RAG, and query without a manual server project id."
+        action_hint = f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build backend RAG, and query without a manual server project id."
         next_commands = [ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["rag_build"]]
     elif running:
         status = "not_ready"
         reason_code = "project_has_running_tasks"
-        action_hint = "Wait for running parse tasks to finish before building or querying server-side Voyage RAG."
+        action_hint = "Wait for running parse tasks to finish before building or querying server-side RAG."
         next_commands = [commands["refresh"], commands["rag_status"]]
     elif pending:
         status = "not_ready"
         reason_code = "project_has_pending_items"
-        action_hint = "Submit pending papers and refresh task status before building server-side Voyage RAG."
+        action_hint = "Submit pending papers and refresh task status before building server-side RAG."
         next_commands = [commands["parse_pending"], commands["refresh"], commands["rag_query"]]
     else:
         status = "not_ready"
         reason_code = "no_succeeded_tasks"
-        action_hint = "Parse at least one paper successfully before building or querying server-side Voyage RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project."
+        action_hint = "Parse at least one paper successfully before building or querying server-side RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project."
         next_commands = _rag_recovery_commands(commands)
 
     return redact_sensitive_payload({
@@ -474,7 +474,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "server_project_id": None,
             "local_ready_for_ingest_count": 0,
             "local_paper_count": 0,
-            "action_hint": "Run `mdtero project init --name <name>` before server-side Voyage RAG.",
+            "action_hint": "Run `mdtero project init --name <name>` before server-side RAG.",
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
             "project_bridge": build_project_bridge(root),
         }
@@ -487,7 +487,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "server_project_id": None,
             "local_ready_for_ingest_count": local_ready,
             "local_paper_count": len(state.papers),
-            "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side Voyage RAG, and query without a manual server project id.",
+            "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side RAG, and query without a manual server project id.",
             "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["rag_build"], commands["rag_query"]],
             "project_bridge": build_project_bridge(root),
         }
@@ -557,7 +557,7 @@ def build_server_rag_for_agent(
             "reason_code": "project_not_initialized",
             "project": root.resolve().name,
             "server_project_id": None,
-            "action_hint": "Initialize a local Mdtero project before building server-side Voyage RAG.",
+            "action_hint": "Initialize a local Mdtero project before building server-side RAG.",
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
         }
     aligned_state, project_mismatch = _align_mcp_server_project_id(root, state, project_id, commands)
@@ -574,14 +574,14 @@ def build_server_rag_for_agent(
     result.setdefault("project", state.name)
     result.setdefault("server_project_id", project_id)
     result.setdefault("bootstrap", {key: value for key, value in bootstrap.items() if key != "build"})
-    result.setdefault("action_hint", "Server-side Voyage RAG build was submitted. Use status_after_build when wait=true, then query with rag_query(question).")
+    result.setdefault("action_hint", "Server-side RAG build was submitted. Use status_after_build when wait=true, then query with rag_query(question).")
     result.setdefault("next_commands", [commands["rag_status"], commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
     if wait:
         status_after_build = _wait_for_agent_rag_ready(active_client, project_id, timeout=timeout, interval=interval)
         result["status_after_build"] = status_after_build
         if _rag_status_payload_is_ready(status_after_build):
             result.setdefault("ready_for_query", True)
-            result["action_hint"] = "Server-side Voyage RAG is query-ready. Ask a grounded project question with rag_query(question)."
+            result["action_hint"] = "Server-side RAG is query-ready. Ask a grounded project question with rag_query(question)."
             result["next_commands"] = [commands["rag_status"], commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]]
         else:
             result.setdefault("ready_for_query", False)
@@ -631,7 +631,7 @@ def query_server_rag(
             "server_project_id": None,
             "question": cleaned_question,
             "answer": None,
-            "action_hint": "Initialize a local Mdtero project before querying server-side Voyage RAG.",
+            "action_hint": "Initialize a local Mdtero project before querying server-side RAG.",
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
         }
     if not cleaned_question:
@@ -660,7 +660,7 @@ def query_server_rag(
             "server_project_id": None,
             "question": cleaned_question,
             "answer": None,
-            "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create, bind, import, build, and query server-side Voyage RAG from one agent-safe command.",
+            "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create, bind, import, build, and query server-side RAG from one agent-safe command.",
             "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
         }
     try:
@@ -1051,7 +1051,7 @@ def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, command
             "local_ready_for_ingest_count": 0,
             "local_paper_count": len(state.papers),
             "answer": None,
-            "action_hint": "Parse at least one paper successfully before querying server-side Voyage RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project.",
+            "action_hint": "Parse at least one paper successfully before querying server-side RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project.",
             "next_commands": _rag_recovery_commands(commands),
         }
 
@@ -1136,7 +1136,7 @@ def _bootstrap_server_rag_for_build(client: Any, root: Path, state: Any, command
             "server_project_id": project_id or state.server_project_id,
             "local_ready_for_ingest_count": 0,
             "local_paper_count": len(state.papers),
-            "action_hint": "Parse at least one paper successfully before building server-side Voyage RAG.",
+            "action_hint": "Parse at least one paper successfully before building server-side RAG.",
             "next_commands": _rag_recovery_commands(commands),
         }
 
@@ -1227,7 +1227,7 @@ def ingest_project_for_agent(
             "failed_count": 0,
             "items": [],
             "failures": [],
-            "action_hint": "Initialize a local Mdtero project before importing parsed tasks into backend Voyage RAG.",
+            "action_hint": "Initialize a local Mdtero project before importing parsed tasks into backend RAG.",
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
         })
 
@@ -1250,7 +1250,7 @@ def ingest_project_for_agent(
                 "reused_server_project": False,
                 "bound_local_project": bool(state.server_project_id),
             },
-            "action_hint": "Parse at least one paper successfully before importing documents into backend Voyage RAG.",
+            "action_hint": "Parse at least one paper successfully before importing documents into backend RAG.",
             "next_commands": _rag_recovery_commands(commands),
         })
 
@@ -1285,7 +1285,7 @@ def ingest_project_for_agent(
     action_hint = (
         "Some succeeded parse tasks could not be imported into the server project. Report failures with reason_code/action_hint, then retry project_ingest or fix task ownership."
         if failures
-        else "Succeeded parse tasks were imported into the backend project. Build or query server-side Voyage RAG next."
+        else "Succeeded parse tasks were imported into the backend project. Build or query server-side RAG next."
     )
     return redact_sensitive_payload({
         "status": status,
@@ -1430,7 +1430,7 @@ def _bootstrap_failure_payload(state: Any, commands: dict[str, Any], exc: Except
         "server_project_id": state.server_project_id,
         "answer": None,
         "error_type": exc.__class__.__name__,
-        "action_hint": f"Retry `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can create or bind the server project before querying server-side Voyage RAG.",
+        "action_hint": f"Retry `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can create or bind the server project before querying server-side RAG.",
         "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
     }
 
@@ -1460,14 +1460,14 @@ def _rag_query_exception_detail(exc: Exception) -> dict[str, Any]:
 def _public_rag_action_hint(reason_code: str, server_hint: object | None = None) -> str:
     if reason_code == "voyage_not_configured":
         return (
-            "Server-side Voyage RAG is not available for this Mdtero deployment yet. "
+            "Server-side RAG is not available for this Mdtero deployment yet. "
             "This is a Mdtero backend operations issue, not a user-side API key setup step; "
             "rerun `mdtero rag status --json` after the backend RAG service is configured."
         )
     hint = redact_sensitive_text(server_hint).strip()
     if hint:
         return hint
-    return f"Server RAG query failed. Check `mdtero rag status --json`; retry `{ONE_COMMAND_RAG_BOOTSTRAP}` if the server-side Voyage index is not ready."
+    return f"Server RAG query failed. Check `mdtero rag status --json`; retry `{ONE_COMMAND_RAG_BOOTSTRAP}` if the server-side RAG index is not ready."
 
 
 def _rag_query_failure_next_commands(detail: dict[str, Any], commands: dict[str, Any]) -> list[str]:
@@ -1855,7 +1855,7 @@ def _build_mcp_tool_plan(
         plan.append({
             "step": "submit_pending_parse",
             "tool": "submit_parse",
-            "purpose": "Submit one pending DOI/URL/local input to Mdtero and wait for the parse task so the project can later be ingested into server-side Voyage RAG.",
+            "purpose": "Submit one pending DOI/URL/local input to Mdtero and wait for the parse task so the project can later be ingested into server-side RAG.",
             "when": "health.pending_count is greater than zero.",
             "arguments": {"input_value": pending[0].input, "wait": True, "timeout": 300, "interval": 2},
             "success_signal": "status is succeeded and final_task.preferred_artifact or download_artifacts includes paper_md/paper_bundle.",
@@ -1897,7 +1897,7 @@ def _build_mcp_tool_plan(
             "when": "ready_artifacts is non-empty or a task has status=succeeded.",
             "arguments": {"task_id": succeeded_task_id, "artifact": None, "output_dir": "./mdtero-output"},
             "success_signal": "status is downloaded and path points at a local artifact.",
-            "next_on_success": "Call request_translation for translated Markdown, or rag_query to build/query backend Voyage RAG.",
+            "next_on_success": "Call request_translation for translated Markdown, or rag_query to build/query backend RAG.",
             "failure_fields": ["reason_code", "action_hint", "next_commands", "message"],
         })
         plan.append({
@@ -1915,7 +1915,7 @@ def _build_mcp_tool_plan(
         plan.append({
             "step": "ingest_project_documents",
             "tool": "project_ingest",
-            "purpose": "Import succeeded parse tasks into the bound or newly created backend project before building Voyage embeddings.",
+            "purpose": "Import succeeded parse tasks into the bound or newly created backend project before building the RAG index.",
             "when": "ready_artifacts is non-empty and rag.agent_summary.ready_for_query is false.",
             "arguments": {"project_id": server_rag.get("server_project_id") or None},
             "success_signal": "status is succeeded and imported_count is greater than zero, or failures include reason_code/action_hint for each task.",
@@ -1929,7 +1929,7 @@ def _build_mcp_tool_plan(
         plan.append({
             "step": "query_rag",
             "tool": "rag_query",
-            "purpose": "Ask a grounded project question against server-side Voyage RAG and return answer, citations, source_nodes, matches, and evidence_pack.context_markdown.",
+            "purpose": "Ask a grounded project question against server-side RAG and return answer, citations, source_nodes, matches, and evidence_pack.context_markdown.",
             "when": "rag.agent_summary.ready_for_query is true, or the user asks a question about the project.",
             "arguments": {"question": "<project question>"},
             "success_signal": "reason_code is rag_query_succeeded and evidence_pack.context_markdown plus citations are present.",
@@ -1941,7 +1941,7 @@ def _build_mcp_tool_plan(
         plan.append({
             "step": "prepare_rag",
             "tool": "server_rag_build" if needs_build else "server_rag_status",
-            "purpose": "Build or inspect the backend Voyage index, preserving readiness and provider diagnostics for the next agent step.",
+            "purpose": "Build or inspect the backend RAG index, preserving readiness and provider diagnostics for the next agent step.",
             "when": "rag.agent_summary.ready_for_query is false or rag.reason_code is not indexed/rag_query_succeeded.",
             "arguments": {"wait": True, "timeout": 300, "interval": 2} if needs_build else {},
             "success_signal": "status_after_build.ready_for_query is true, or readiness.next_step and next_commands identify ingest/build/query/provider-blocked state.",
@@ -2035,7 +2035,7 @@ def _build_agent_playbook(
     return redact_sensitive_payload({
         "version": "2026-05-agent-playbook-v1",
         "mode": "mcp_tools_first",
-        "objective": "Move the current Mdtero workspace from local inputs to parsed artifacts, backend Voyage RAG, and FastMCP handoff without guessing state.",
+        "objective": "Move the current Mdtero workspace from local inputs to parsed artifacts, backend RAG, and FastMCP handoff without guessing state.",
         "current_phase": phase,
         "first_action": {
             "tool": first_tool,
@@ -2046,7 +2046,7 @@ def _build_agent_playbook(
         "stop_conditions": [
             "A tool returns reason_code/action_hint that requires user credentials, publisher login, or backend operations.",
             "A parse/upload/translation/RAG task remains queued beyond the requested timeout; return task_id and next_commands instead of looping indefinitely.",
-            "RAG provider state is provider_blocked or voyage_not_configured; do not ask the user for VOYAGE_API_KEY because RAG is a backend Mdtero operation.",
+            "RAG provider state is provider_blocked or provider-not-configured; do not ask the user for a local RAG provider key because RAG is a backend Mdtero operation.",
         ],
         "success_signals": [
             "parse task succeeded with paper_md or paper_bundle in download_artifacts",
@@ -2219,7 +2219,7 @@ def _dashboard_handoff_json_payload(commands: dict[str, Any]) -> dict[str, Any]:
             str(commands.get("mcp_briefing") or "mdtero mcp briefing --json"),
             str(commands.get("serve_mcp") or "mdtero mcp serve"),
         ],
-        "redaction_policy": "Dashboard handoff JSON must already redact signed URLs, bearer/API keys, OSS tokens, and Mdtero secrets; agents should not ask the user to paste unredacted secrets.",
+        "redaction_policy": "Dashboard handoff JSON must already redact signed URLs, bearer/API keys, storage tokens, and Mdtero secrets; agents should not ask the user to paste unredacted secrets.",
         "agent_instruction": "Treat dashboard handoff JSON as a starting state, not proof of current server state. Call task_status first, preserve all expected_fields, then continue with download_artifact, request_translation, or rag_query according to next_commands and reason_code.",
     }
 
@@ -2228,7 +2228,7 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
     setup_command = str(commands.get("login_api_key") or "mdtero setup --api-key --json")
     return {
         "source": "dashboard_api_key_dialog",
-        "purpose": "Continue Mdtero CLI, backend Voyage RAG, and FastMCP setup from a newly created dashboard API key without placing the one-time secret in shell history.",
+        "purpose": "Continue Mdtero CLI, backend RAG, and FastMCP setup from a newly created dashboard API key without placing the one-time secret in shell history.",
         "auth_boundary": {
             "workstation": "Use browser OAuth with `mdtero setup` for a normal Mac or desktop workstation.",
             "headless": "Use `mdtero setup --api-key --json` only for trusted headless servers or agent sessions; paste the one-time secret only when the CLI prompts for it.",
@@ -2289,12 +2289,12 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
             "expected_tools": ["agent_briefing", "project_status", "project_add", "server_rag_status", "server_rag_build", "rag_query"],
         },
         "rag": {
-            "owner": "backend_voyage",
-            "local_voyage_key_required": False,
+            "owner": "backend_rag",
+            "local_rag_provider_key_required": False,
             "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
             "fallback_commands": [str(commands.get("rag_status") or "mdtero rag status --json"), str(commands.get("rag_build") or "mdtero rag build --wait --json"), GENERIC_RAG_QUERY_COMMAND],
         },
-        "redaction_policy": "Do not print or store Mdtero API key secrets, provider API keys, bearer tokens, signed URLs, OSS tokens, or Infisical tokens in prompts, logs, MCP output, or CI.",
+        "redaction_policy": "Do not print or store Mdtero API key secrets, provider API keys, bearer tokens, signed URLs, storage tokens, or Infisical tokens in prompts, logs, MCP output, or CI.",
         "agent_instruction": "Run doctor first, follow next_commands, preserve reason_code/action_hint fields, and ask the user to paste the one-time API key only into the secure mdtero setup prompt if authentication is missing.",
     }
 
@@ -2382,12 +2382,12 @@ def _server_rag_action_hint(status: dict[str, Any], commands: dict[str, Any]) ->
     if readiness.get("provider_blocked"):
         return _public_rag_action_hint(reason_code or "server_rag_status_failed", server_hint)
     if readiness.get("ready_for_query"):
-        return "Server-side Voyage RAG is ready. Query it with `mdtero rag query \"<question>\" --build-if-needed --json` or expose the project through MCP."
+        return "Server-side RAG is ready. Query it with `mdtero rag query \"<question>\" --build-if-needed --json` or expose the project through MCP."
     if readiness.get("needs_build") or readiness.get("next_step") == "build":
-        return server_hint or f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to build or refresh the server-side Voyage index and query the project."
+        return server_hint or f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to build or refresh the server-side RAG index and query the project."
     if readiness.get("needs_ingest") or readiness.get("next_step") == "ingest":
-        return server_hint or f"Import succeeded parse tasks with `mdtero project ingest --json`, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can build backend Voyage RAG and query in one step."
-    return server_hint or f"Check server-side Voyage RAG status, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` if the project is not query-ready."
+        return server_hint or f"Import succeeded parse tasks with `mdtero project ingest --json`, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can build backend RAG and query in one step."
+    return server_hint or f"Check server-side RAG status, then run `{ONE_COMMAND_RAG_BOOTSTRAP}` if the project is not query-ready."
 
 
 def _server_rag_agent_summary(status: dict[str, Any]) -> dict[str, Any]:

@@ -334,8 +334,8 @@ describe("getTaskProcessingSummary", () => {
     expect(
       getTaskProcessingSummary(
         {
-          selected_provider: "mineru_precision",
-          parser_strategy: "mineru_precision_ast",
+          selected_provider: "backend_parser",
+          parser_strategy: "backend_parser_ast",
           client_acquisition: {
             source: "curl_cffi",
             artifact_kind: "pdf",
@@ -356,7 +356,7 @@ describe("getTaskProcessingSummary", () => {
         "en"
       )
     ).toEqual([
-      "Processing path: mineru_precision · mineru_precision_ast",
+      "Processing path: Backend parsing",
       "Acquisition: curl_cffi · pdf · HTTP 200 · application/pdf",
       "Outcome: fulltext_accepted",
       "Preferred artifact: paper_md",
@@ -518,10 +518,10 @@ describe("getCliHandoffNote", () => {
     const text = getTaskFailureText(
       {
         error_message:
-          "MinerU failed at https://mineru.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok",
+          "Backend parser failed at https://artifact.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok",
         error_code: "uploaded_pdf_v2_parse_failed",
-        reason_code: "mineru_urlapi_timeout",
-        action_hint: "Retry later; Bearer voyage-secret-token api_key=raw-key",
+        reason_code: "backend_parser_timeout",
+        action_hint: "Retry later; Bearer provider-secret-token api_key=raw-key",
         next_commands: ["mdtero parse --file paper.pdf --json"],
         result: {
           translation_attempts: [
@@ -543,7 +543,7 @@ describe("getCliHandoffNote", () => {
     expect(text).not.toContain("OSSAccessKeyId=abc");
     expect(text).not.toContain("Signature=sig");
     expect(text).not.toContain("security-token=tok");
-    expect(text).not.toContain("voyage-secret-token");
+    expect(text).not.toContain("provider-secret-token");
     expect(text).not.toContain("codex-secret-token");
     expect(text).not.toContain("raw-key");
   });
@@ -580,7 +580,7 @@ describe("getDownloadFailureText", () => {
   it("surfaces backend download failure detail without leaking signed URLs", () => {
     const text = getDownloadFailureText(
       new Error(
-        "artifact not available. Reason: parser_failed Next: retry https://mineru.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok"
+        "artifact not available. Reason: parser_failed Next: retry https://artifact.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok"
       ),
       "Download failed. Please try again.",
       "en"
@@ -669,9 +669,9 @@ describe("getTaskFailureText", () => {
     expect(
       getTaskFailureText(
         {
-          error_message: "MinerU timed out while fetching the PDF.",
+          error_message: "Backend parser timed out while fetching the PDF.",
           error_code: "uploaded_pdf_v2_parse_failed",
-          reason_code: "mineru_urlapi_timeout",
+          reason_code: "backend_parser_timeout",
           action_hint: "Retry later or upload a smaller PDF.",
           next_commands: ["mdtero parse --file paper.pdf --trace --json"]
         },
@@ -679,7 +679,7 @@ describe("getTaskFailureText", () => {
         "en"
       )
     ).toBe(
-      "MinerU timed out while fetching the PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+      "Backend parser timed out while fetching the PDF. Reason: backend_parser_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
     );
   });
 
@@ -791,14 +791,14 @@ describe("getTaskFailureText", () => {
       getTranslationAttemptSummary(
         [
           {
-            provider: "mimo",
+            provider: "translation_provider_a",
             reason_code: "translation_provider_auth_failed",
             provider_status_code: 401
           }
         ],
         "zh"
       )
-    ).toBe("服务端尝试：mimo: translation_provider_auth_failed 401");
+    ).toBe("服务端尝试：translation_provider_a: translation_provider_auth_failed 401");
   });
 
   it("summarizes skipped translation provider configuration attempts", () => {
@@ -812,10 +812,10 @@ describe("getTaskFailureText", () => {
           result: {
             translation_attempts: [
               {
-                provider: "mimo",
+                provider: "translation_provider_a",
                 status: "skipped",
                 reason_code: "translation_provider_not_configured",
-                message: "missing MIMO_API_KEY"
+                message: "missing TRANSLATION_PROVIDER_API_KEY"
               },
               {
                 provider: "codex",
@@ -830,7 +830,7 @@ describe("getTaskFailureText", () => {
         "en"
       )
     ).toContain(
-      "Provider attempts: mimo: translation_provider_not_configured skipped missing MIMO_API_KEY; codex: translation_provider_not_configured skipped missing CODEX_API_KEY or OPENAI_API_KEY"
+      "Provider attempts: translation_provider_a: translation_provider_not_configured skipped missing TRANSLATION_PROVIDER_API_KEY; codex: translation_provider_not_configured skipped missing CODEX_API_KEY or OPENAI_API_KEY"
     );
   });
 
@@ -919,7 +919,7 @@ describe("getTaskFailureText", () => {
       "# Mdtero CLI handoff",
       "",
       "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-      "Preserve task_id, selected_provider, parser_strategy, reason_code, action_hint, client_acquisition, parse_outcome, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      "Preserve task_id, reason_code, action_hint, acquisition diagnostics, parse diagnostics, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
       "",
       "Run these commands in order:",
       "1. mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
@@ -952,8 +952,8 @@ describe("getTaskFailureText", () => {
         status: "failed",
         stage: "failed",
         task_kind: "parse",
-        selected_provider: "mineru_precision",
-        parser_strategy: "mineru_precision_ast",
+        selected_provider: "backend_parser",
+        parser_strategy: "backend_parser_ast",
         client_acquisition: {
           source: "curl_cffi",
           artifact_kind: "pdf",
@@ -986,8 +986,8 @@ describe("getTaskFailureText", () => {
 
     expect(text).toContain("Failure context for agent:");
     expect(text).toContain("- task_id: task-failed-1");
-    expect(text).toContain("- selected_provider: mineru_precision");
-    expect(text).toContain("- parser_strategy: mineru_precision_ast");
+    expect(text).not.toContain("selected_provider");
+    expect(text).not.toContain("parser_strategy");
     expect(text).toContain("- client_acquisition: source=curl_cffi, artifact_kind=pdf, status_code=200, url=https://oss.example.com/paper.pdf?token=[redacted]");
     expect(text).toContain("- parse_outcome: outcome_code=fulltext_rejected, reason_code=client_acquisition_challenge_page");
     expect(text).toContain("- reason_code: client_acquisition_challenge_page");

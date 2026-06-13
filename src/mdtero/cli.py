@@ -2262,7 +2262,7 @@ def _rag_query_build_not_ready(project_id: str, question: str, bootstrap: dict[s
         "server_project_id": project_id,
         "question": question,
         "bootstrap": bootstrap,
-        "action_hint": "Server-side Voyage RAG build has not become query-ready yet. Keep polling `mdtero rag status --json`, then retry the one-command RAG query.",
+        "action_hint": "Server-side RAG build has not become query-ready yet. Keep polling `mdtero rag status --json`, then retry the one-command RAG query.",
         "next_commands": [RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
 
@@ -2319,14 +2319,14 @@ def _smoke_coverage_contract(args: argparse.Namespace) -> dict[str, Any]:
             "doi_or_url_route_parse_status",
             "artifact_download" if not getattr(args, "skip_download", False) else "artifact_download_skipped",
             "translation_task" if not getattr(args, "skip_translate", False) else "translation_skipped",
-            "server_voyage_rag_build_query" if not getattr(args, "skip_rag", False) else "rag_skipped",
+            "server_rag_build_query" if not getattr(args, "skip_rag", False) else "rag_skipped",
             "mcp_agent_briefing_contract" if not getattr(args, "skip_rag", False) else "mcp_briefing_skipped",
         ],
         "requires_separate_smoke": [
             {
-                "id": "pdf_mineru_urlapi",
+                "id": "pdf_upload",
                 "command": f"mdtero parse --file <paper.pdf> --trace --wait --timeout {timeout} --json",
-                "reason": "PDF/MinerU URL API requires a user-selected local PDF and should not be implied by DOI smoke.",
+                "reason": "PDF upload requires a user-selected local PDF and should not be implied by DOI smoke.",
             },
             {
                 "id": "epub_upload",
@@ -2542,7 +2542,7 @@ def _rag_no_succeeded_tasks_payload(state: Any, *, command: str, question: str |
         "project": state.name,
         "local_ready_for_ingest_count": 0,
         "local_paper_count": len(state.papers),
-        "action_hint": "Parse at least one paper successfully before building or querying server-side Voyage RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project.",
+        "action_hint": "Parse at least one paper successfully before building or querying server-side RAG. Use the arXiv smoke DOI, direct file upload, or browser-extension handoff, then refresh the local project.",
         "next_commands": _rag_recovery_commands(),
     }
     if question is not None:
@@ -2623,7 +2623,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         "server_project_id": None,
         "local_ready_for_ingest_count": indexed,
         "local_paper_count": len(state.papers),
-        "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side Voyage RAG, and query without copying a server project id.",
+        "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side RAG, and query without copying a server project id.",
         "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
     ensure_rag_contract(payload)
@@ -2951,7 +2951,7 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
     if reason_code == "server_project_id_missing":
         action_hint = f"The server project creation response did not include an id. Check the backend project API contract, then rerun `{ONE_COMMAND_RAG_BOOTSTRAP}`."
     else:
-        action_hint = str(detail.get("action_hint") or f"Retry `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can create or link a server project before running server-side Voyage RAG.")
+        action_hint = str(detail.get("action_hint") or f"Retry `{ONE_COMMAND_RAG_BOOTSTRAP}` so the CLI can create or link a server project before running server-side RAG.")
     next_commands = _detail_next_commands(detail) or [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero project create-server --json", RAG_INGEST_COMMAND, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND]
     return {
         "status": "failed",
@@ -2969,7 +2969,7 @@ def _rag_bootstrap_failure(command: str, exc: Exception) -> dict[str, Any]:
 def _public_rag_action_hint(command: str, reason_code: str, server_hint: object | None = None) -> str:
     if reason_code == "voyage_not_configured":
         return (
-            "Server-side Voyage RAG is not available for this Mdtero deployment yet. "
+            "Server-side RAG is not available for this Mdtero deployment yet. "
             "This is a Mdtero backend operations issue, not a user-side API key setup step; "
             "rerun `mdtero rag status --json` after the backend RAG service is configured."
         )
@@ -3020,7 +3020,7 @@ def _rag_action_hint(command: str, reason_code: str) -> str:
     if reason_code == "voyage_not_configured":
         return _public_rag_action_hint(command, reason_code)
     if reason_code == "rag_index_not_built":
-        return f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` from the local project so the CLI can build server-side Voyage RAG and query in one step."
+        return f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` from the local project so the CLI can build server-side RAG and query in one step."
     if reason_code == "project_has_no_chunks":
         return f"Import succeeded parse tasks with `{RAG_INGEST_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}`."
     if reason_code == "forbidden":
@@ -3238,7 +3238,7 @@ def _server_project_id(args: argparse.Namespace) -> str:
     state = load_project(Path.cwd())
     if state.server_project_id:
         return state.server_project_id
-    raise SystemExit(f"No server project is linked. Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create, bind, import, build, and query server-side Voyage RAG.")
+    raise SystemExit(f"No server project is linked. Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create, bind, import, build, and query server-side RAG.")
 
 
 def _server_project_id_or_report(args: argparse.Namespace, *, command: str) -> str | None:
@@ -3271,7 +3271,7 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
         "project": state.name,
         "local_ready_for_ingest_count": sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id),
         "local_paper_count": len(state.papers),
-        "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side Voyage RAG, and query without copying a server project id.",
+        "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side RAG, and query without copying a server project id.",
         "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
 

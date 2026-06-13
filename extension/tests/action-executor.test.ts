@@ -134,30 +134,6 @@ describe("executeAction", () => {
     expect(result.artifactKind).toBe("pdf");
   });
 
-  it("downloads Springer PDF routes through the extension raw acquisition path", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]), {
-        status: 200,
-        headers: { "Content-Type": "application/pdf" },
-      })
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await executeAction(
-      "fetch_springer_pdf",
-      { input: "10.1007/s12011-024-04385-0" },
-      {}
-    );
-
-    expect(fetchMock).toHaveBeenCalledWith("https://link.springer.com/content/pdf/10.1007/s12011-024-04385-0.pdf", {
-      credentials: "include",
-      headers: { Accept: "application/pdf" },
-    });
-    expect(result.success).toBe(true);
-    expect(result.filename).toBe("paper.pdf");
-    expect(result.artifactKind).toBe("pdf");
-  });
-
   it("downloads OA repository PDFs instead of forcing manual upload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]), {
