@@ -29,7 +29,6 @@ export type ActionType =
   | "capture_current_tab_html"
   | "native_arxiv_parse"
   | "fetch_elsevier_xml"
-  | "fetch_springer_pdf"
   | "fetch_structured_xml"
   | "fetch_remote_html"
   | "fetch_epub_asset"

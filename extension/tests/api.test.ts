@@ -335,9 +335,9 @@ describe("createApiClient", () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({
         detail: {
-          message: "MinerU failed at https://mineru.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok",
-          reason_code: "mineru_urlapi_timeout",
-          action_hint: "Retry with Bearer voyage-secret-token or api_key=raw-key"
+          message: "Backend parser failed at https://artifact.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok",
+          reason_code: "backend_parser_timeout",
+          action_hint: "Retry with Bearer provider-secret-token or api_key=raw-key"
         }
       }), {
         status: 503,
@@ -355,13 +355,13 @@ describe("createApiClient", () => {
     );
 
     await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.toThrow(
-      /MinerU failed at \[redacted-url\]/
+      /Backend parser failed at \[redacted-url\]/
     );
     await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.toThrow(
       /Bearer \[redacted\]/
     );
     await expect(client.createParseTask({ input: "10.1000/demo" })).rejects.not.toThrow(
-      /Signature=sig|security-token=tok|voyage-secret-token|raw-key/
+      /Signature=sig|security-token=tok|provider-secret-token|raw-key/
     );
   });
 
@@ -371,8 +371,8 @@ describe("createApiClient", () => {
       new Response(
         JSON.stringify({
           detail: {
-            error_message: "MinerU URL API timed out while fetching the uploaded PDF.",
-            reason_code: "mineru_urlapi_timeout",
+            error_message: "Backend parser timed out while fetching the uploaded PDF.",
+            reason_code: "backend_parser_timeout",
             action_hint: "Retry later or upload the PDF again from the browser extension.",
             next_commands: ["mdtero parse --file paper.pdf --wait --timeout 300 --json"]
           }
@@ -394,7 +394,7 @@ describe("createApiClient", () => {
     );
 
     await expect(client.downloadArtifact("task-123", "paper_md")).rejects.toThrow(
-      "MinerU URL API timed out while fetching the uploaded PDF. Reason: mineru_urlapi_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+      "Backend parser timed out while fetching the uploaded PDF. Reason: backend_parser_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
     );
   });
 

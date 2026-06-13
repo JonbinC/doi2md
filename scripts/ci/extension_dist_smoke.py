@@ -39,6 +39,16 @@ FORBIDDEN_DIST_MARKERS = (
     "springerOpenAccessApiKey",
 )
 
+OPTIONS_FORBIDDEN_MARKERS = (
+    "CLI setup checklist",
+    "mdtero setup --json",
+    "mdtero agent install --interactive",
+    "FastMCP",
+    "stdio",
+    "mcpServers",
+    "mdtero mcp serve",
+)
+
 POPUP_REQUIRED_MARKERS = (
     "Website OAuth",
     "Parse / Upload",
@@ -55,15 +65,16 @@ POPUP_REQUIRED_MARKERS = (
 OPTIONS_REQUIRED_MARKERS = (
     "Website sign-in",
     "Connection guide",
-    "CLI setup checklist",
-    "mdtero setup --json",
-    "mdtero agent install --interactive",
-    "FastMCP",
-    "stdio",
-    "mcpServers",
-    "mdtero mcp serve",
     "Website OAuth is connected",
-    "browser capture, upload, translation, and download settings",
+    "Elsevier access",
+    "Elsevier API key",
+    "Interface language",
+    "API URL",
+    "Why Mdtero asks for these permissions",
+    "browser-side paper capture",
+    "Parse / Upload",
+    "Translate",
+    "Download",
 )
 
 
@@ -86,6 +97,7 @@ def run_smoke(dist_root: Path = DIST_ROOT) -> dict[str, Any]:
 
     _check_required_markers(dist_root, "popup", [dist_root / "popup.html", dist_root / "popup.js"], POPUP_REQUIRED_MARKERS, failures)
     _check_required_markers(dist_root, "options", [dist_root / "options.html", dist_root / "options.js"], OPTIONS_REQUIRED_MARKERS, failures)
+    _check_forbidden_markers("options", [dist_root / "options.html", dist_root / "options.js"], OPTIONS_FORBIDDEN_MARKERS, failures)
 
     payload: dict[str, Any] = {
         "status": "failed" if failures else "succeeded",
@@ -148,6 +160,13 @@ def _check_required_markers(dist_root: Path, surface: str, paths: list[Path], ma
     for marker in markers:
         if marker not in text:
             failures.append({"surface": surface, "marker": marker, "reason_code": "extension_required_marker_missing"})
+
+
+def _check_forbidden_markers(surface: str, paths: list[Path], markers: tuple[str, ...], failures: list[dict[str, Any]]) -> None:
+    text = "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in paths if path.exists())
+    for marker in markers:
+        if marker in text:
+            failures.append({"surface": surface, "marker": marker, "reason_code": "extension_forbidden_marker_present"})
 
 
 def main() -> int:
