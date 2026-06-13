@@ -365,7 +365,7 @@ def _health_payload(
     elif rag.get("server_status") == "ready":
         status = "ready"
         headline = "Project RAG ready"
-        detail = "Server-side Voyage RAG is ready for queries and MCP agent context."
+        detail = "Server-side RAG is ready for queries and MCP agent context."
     elif ready_artifacts:
         status = "results_ready"
         headline = "Results ready"
@@ -468,7 +468,7 @@ def _mcp_task_tools_payload(tool_names: list[str]) -> list[dict[str, str]]:
         "task_status": "Poll task status and sync local project state",
         "download_artifact": "Download preferred Markdown/ZIP/translation artifact for a task",
         "request_translation": "Translate parse task or Markdown with provider-attempt diagnostics",
-        "rag_query": "Bootstrap/query server-side Voyage RAG with evidence pack",
+        "rag_query": "Bootstrap/query server-side RAG with evidence pack",
     }
     return [
         {"tool": name, "purpose": labels[name]}
@@ -562,12 +562,12 @@ def _dashboard_setup_handoff_payload(payload: Any) -> dict[str, Any]:
             "expected_tools": [str(tool) for tool in mcp.get("expected_tools") or [] if str(tool).strip()],
         },
         "rag": {
-            "owner": str(rag.get("owner") or "backend_voyage"),
-            "local_voyage_key_required": bool(rag.get("local_voyage_key_required", False)),
+            "owner": str(rag.get("owner") or "backend_rag"),
+            "local_rag_provider_key_required": bool(rag.get("local_rag_provider_key_required", False)),
             "primary_command": str(rag.get("primary_command") or ONE_COMMAND_RAG_BOOTSTRAP),
             "fallback_commands": [str(command) for command in rag.get("fallback_commands") or [] if str(command).strip()],
         },
-        "redaction_policy": str(payload.get("redaction_policy") or "Do not print Mdtero API keys, provider keys, bearer tokens, signed URLs, OSS tokens, or Infisical tokens."),
+        "redaction_policy": str(payload.get("redaction_policy") or "Do not print Mdtero API keys, provider keys, bearer tokens, signed URLs, storage tokens, or Infisical tokens."),
         "agent_instruction": str(payload.get("agent_instruction") or "Run doctor first, preserve reason_code/action_hint, and paste the API key only into the secure setup prompt."),
     }
 
@@ -679,7 +679,7 @@ def _launch_bundle_payload(
         },
         {
             "label": "RAG + MCP",
-            "purpose": "Create or reuse the server Voyage RAG project, query grounded evidence, then brief local FastMCP agents.",
+            "purpose": "Create or reuse the server RAG project, query grounded evidence, then brief local FastMCP agents.",
             "commands": rag_commands,
         },
         {
@@ -808,7 +808,7 @@ def _command_palette_payload(
         {"area": "Project", "use": "Download ready Markdown/ZIP", "command": commands.get("download_markdown")},
         {"area": "Zotero", "use": "Import Zotero metadata", "command": commands.get("zotero_import")},
         {"area": "Zotero", "use": "Sync Mdtero results back", "command": commands.get("zotero_sync")},
-        {"area": "RAG", "use": "One-command Voyage bootstrap and query", "command": ONE_COMMAND_RAG_BOOTSTRAP},
+        {"area": "RAG", "use": "One-command backend RAG bootstrap and query", "command": ONE_COMMAND_RAG_BOOTSTRAP},
         {"area": "RAG", "use": "Explicit recovery build when bootstrap query is not enough", "command": rag_build_command},
         {"area": "RAG", "use": "Check server RAG readiness", "command": commands.get("rag_status")},
         {"area": "RAG", "use": "Ask grounded project question", "command": commands.get("rag_query")},
@@ -896,7 +896,7 @@ def _dashboard_setup_handoff_panel(model: dict[str, Any]) -> Panel:
     table.add_row("Secret boundary", "full_secret_included=false; paste the one-time API key only into the secure CLI prompt")
     table.add_row("Dashboard retention", str(auth_boundary.get("dashboard_secret_retention") or "full secret shown once, prefix kept after close")[:140])
     table.add_row("Copy action", str(api_key.get("copy_secret_action") or "Copy secret in dashboard, paste only into mdtero setup prompt")[:140])
-    table.add_row("Backend RAG", f"{rag.get('owner') or 'backend_voyage'}; local VOYAGE_API_KEY required: {rag.get('local_voyage_key_required', False)}")
+    table.add_row("Backend RAG", f"{rag.get('owner') or 'backend_rag'}; local provider key required: {rag.get('local_rag_provider_key_required', False)}")
     table.add_row("MCP first tool", str(mcp.get("first_tool") or "agent_briefing"))
     next_commands = handoff.get("next_commands") if isinstance(handoff.get("next_commands"), list) else []
     if next_commands:

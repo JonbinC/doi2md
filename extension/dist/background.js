@@ -512,8 +512,6 @@ async function executeAction(action, context, routePlan) {
       return executeNativeArxivParse(context);
     case "fetch_elsevier_xml":
       return executeFetchElsevierXml(context);
-    case "fetch_springer_pdf":
-      return executeFetchSpringerPdf(context, routePlan);
     case "fetch_structured_xml":
       return executeFetchStructuredXml(context, routePlan);
     case "fetch_remote_html":
@@ -636,18 +634,6 @@ async function executeFallbackPdfParse(context, routePlan) {
     error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
     nextCommand: buildCliParseCommand(context.input)
   };
-}
-async function executeFetchSpringerPdf(context, routePlan) {
-  const candidateUrl = pickPdfCandidateUrls(routePlan)[0] || buildSpringerPdfUrl(context.input);
-  if (!candidateUrl) {
-    return {
-      success: false,
-      requiresUpload: true,
-      error: routePlan.user_message || "No Springer PDF URL available for this route.",
-      nextCommand: buildCliParseCommand(context.input)
-    };
-  }
-  return downloadPdfFromUrl(candidateUrl, context, "paper.pdf");
 }
 async function downloadPdfFromUrl(url, context, filename) {
   try {
@@ -887,23 +873,6 @@ function inferArxivId(input) {
 }
 function buildArxivPdfUrl(arxivId) {
   return `https://arxiv.org/pdf/${arxivId.replace(/\.pdf$/i, "")}.pdf`;
-}
-function buildSpringerPdfUrl(input) {
-  const trimmed = String(input || "").trim();
-  try {
-    const parsed = new URL(trimmed);
-    const pdfMatch = parsed.pathname.match(/\/content\/pdf\/(.+?\.pdf)$/i);
-    if (pdfMatch?.[1]) {
-      return parsed.toString();
-    }
-    const articleMatch = parsed.pathname.match(/\/article\/(10\..+)$/i);
-    if (articleMatch?.[1]) {
-      return `https://link.springer.com/content/pdf/${decodeURIComponent(articleMatch[1])}.pdf`;
-    }
-  } catch {
-  }
-  const doi = inferSourceDoi(trimmed);
-  return doi ? `https://link.springer.com/content/pdf/${doi}.pdf` : void 0;
 }
 function looksLikePdfBytes(bytes) {
   return bytes.length >= 5 && bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70 && bytes[4] === 45;

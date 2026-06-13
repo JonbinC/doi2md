@@ -161,7 +161,7 @@ def build_rag_next_best_action(payload: dict[str, Any]) -> dict[str, Any]:
     if readiness.get("provider_blocked"):
         action = "check_backend_provider"
         scope = "backend_operations"
-        hint = "Backend Voyage RAG is blocked; users should wait for backend provider configuration rather than setting a local Voyage key."
+        hint = "Backend RAG is blocked; users should wait for backend provider configuration rather than setting a local RAG provider key."
     elif readiness.get("ready_for_query"):
         action = "query"
         scope = "user_or_agent"
@@ -169,7 +169,7 @@ def build_rag_next_best_action(payload: dict[str, Any]) -> dict[str, Any]:
     elif readiness.get("needs_build"):
         action = "build"
         scope = "user_or_agent"
-        hint = "Imported chunks exist but embeddings are incomplete; prefer the one-command RAG bootstrap query so the CLI can build backend Voyage RAG and query without a separate server project id step."
+        hint = "Imported chunks exist but embeddings are incomplete; prefer the one-command RAG bootstrap query so the CLI can build backend RAG and query without a separate server project id step."
     elif readiness.get("needs_ingest"):
         action = "ingest"
         scope = "user_or_agent"
@@ -250,7 +250,7 @@ def build_dashboard_rag_handoff_contract(payload: dict[str, Any] | None = None) 
             "mdtero mcp briefing --json",
             "mdtero mcp serve",
         ],
-        "redaction_policy": "Dashboard RAG handoff JSON must not contain provider secrets, API keys, signed URLs, OSS tokens, or bearer tokens; agents should validate live status instead of asking for unredacted credentials.",
+        "redaction_policy": "Dashboard RAG handoff JSON must not contain provider secrets, API keys, signed URLs, storage tokens, or bearer tokens; agents should validate live status instead of asking for unredacted credentials.",
         "agent_instruction": "Treat Dashboard RAG handoff JSON as a starting state, not proof of current server state. Call server_rag_status first, preserve all expected_fields, then ingest, build, query, or start MCP according to readiness and next_best_action.",
     }
 
@@ -286,7 +286,7 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         {
             "step": "inspect_rag_status",
             "tool": "server_rag_status",
-            "purpose": "Read backend Voyage RAG readiness before build/query decisions.",
+            "purpose": "Read backend RAG readiness before build/query decisions.",
             "when": "Always call first for a server project or after a failed build/query.",
             "arguments": {"project_id": project_id},
             "success_signal": "readiness.next_step, agent_summary, reason_code, and next_commands are present.",
@@ -299,7 +299,7 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         plan.append({
             "step": "create_or_link_server_project",
             "tool": "project_bridge",
-            "purpose": "Create or bind the local Mdtero project to a server project before server-side Voyage RAG can ingest, build, or query.",
+            "purpose": "Create or bind the local Mdtero project to a server project before server-side RAG can ingest, build, or query.",
             "when": "reason_code is server_project_not_linked or server_project_id is missing.",
             "arguments": {"project_id": project_id},
             "success_signal": "server_project_id is present in the local project and `mdtero rag status --json` can inspect it.",
@@ -310,7 +310,7 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         plan.append({
             "step": "check_backend_provider",
             "tool": "server_rag_status",
-            "purpose": "Surface the backend Voyage provider state; users should not provide a local Voyage key.",
+            "purpose": "Surface the backend RAG provider state; users should not provide a local RAG provider key.",
             "when": "readiness.provider_blocked is true or reason_code starts with voyage_.",
             "arguments": {"selected_provider": payload.get("selected_provider") or "voyage"},
             "success_signal": "provider_state becomes configured and provider_configured is true.",
@@ -321,7 +321,7 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         plan.append({
             "step": "ingest_project_documents",
             "tool": "project_ingest",
-            "purpose": "Import succeeded parse Markdown artifacts into the server project before building Voyage embeddings.",
+            "purpose": "Import succeeded parse Markdown artifacts into the server project before building the RAG index.",
             "when": "readiness.needs_ingest is true or reason_code is project_has_no_chunks.",
             "arguments": {"project_id": project_id},
             "success_signal": "summary.chunk_count is greater than zero.",
@@ -332,7 +332,7 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         plan.append({
             "step": "build_rag_index",
             "tool": "server_rag_build",
-            "purpose": "Build backend Voyage embeddings through the local FastMCP wrapper and wait until the server project is query-ready.",
+            "purpose": "Build the backend RAG index through the local FastMCP wrapper and wait until the server project is query-ready.",
             "when": "readiness.needs_build is true or reason_code is rag_index_not_built/rag_index_partial.",
             "arguments": {"project_id": project_id, "wait": True, "timeout": 300, "interval": 2},
             "success_signal": "status_after_build.ready_for_query is true, or readiness.ready_for_query becomes true after build polling.",
@@ -354,7 +354,7 @@ def build_rag_agent_tool_plan(payload: dict[str, Any]) -> list[dict[str, Any]]:
         plan.append({
             "step": "query_rag",
             "tool": "rag_query",
-            "purpose": "Ask grounded project questions against server-side Voyage RAG and use evidence_pack/source_nodes/citations as the evidence surface.",
+            "purpose": "Ask grounded project questions against server-side RAG and use evidence_pack/source_nodes/citations as the evidence surface.",
             "when": "readiness.ready_for_query is true, or after rag_build succeeds.",
             "arguments": {"project_id": project_id, "question": "<project question>", "limit": 5},
             "success_signal": "reason_code is rag_query_succeeded/no_matches and evidence_pack plus citations are present.",

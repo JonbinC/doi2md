@@ -403,11 +403,11 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
         "doi_or_url_route_parse_status",
         "artifact_download",
         "translation_task",
-        "server_voyage_rag_build_query",
+        "server_rag_build_query",
         "mcp_agent_briefing_contract",
     ]
     assert {item["id"] for item in coverage["requires_separate_smoke"]} == {
-        "pdf_mineru_urlapi",
+        "pdf_upload",
         "epub_upload",
         "browser_extension_mv3",
     }
@@ -1115,12 +1115,12 @@ def test_doctor_reports_live_server_rag_readiness(monkeypatch, tmp_path: Path, c
             "project_id": "42",
             "status": "ready",
             "reason_code": "indexed",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "provider_state": "configured",
             "provider_configured": True,
-            "embedding_model": "voyage-test",
+            "embedding_model": "rag-model-test",
             "readiness": {"ready_for_query": True, "next_step": "query", "chunk_count": 8, "embedded_count": 8},
-            "agent_summary": {"ready_for_query": True, "selected_provider": "voyage", "provider_state": "configured", "embedding_model": "voyage-test"},
+            "agent_summary": {"ready_for_query": True, "selected_provider": "backend_rag", "provider_state": "configured", "embedding_model": "rag-model-test"},
             "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
         }
 
@@ -1133,9 +1133,9 @@ def test_doctor_reports_live_server_rag_readiness(monkeypatch, tmp_path: Path, c
 
     assert "RAG readiness" in output
     assert "ready" in output
-    assert "voyage-test" in output
+    assert "rag-model-test" in output
     assert ("RAG readiness", "ready", "indexed; query with mdtero rag query \"<question>\" --build-if-needed --json") in rows
-    assert ("Server RAG provider", "configured", "voyage / voyage-test") in rows
+    assert ("Server RAG provider", "configured", "backend_rag / rag-model-test") in rows
 
 
 def test_doctor_reports_unlinked_project_rag_bootstrap_hint(monkeypatch, tmp_path: Path, capsys):
@@ -2009,7 +2009,7 @@ def test_cmd_translate_wait_returns_nonzero_for_failed_final_task(monkeypatch, c
             "result": {
                 "reason_code": "translation_provider_chain_failed",
                 "action_hint": "All configured server translation providers failed.",
-                "translation_attempts": [{"provider": "mimo", "reason_code": "translation_provider_auth_failed"}],
+                "translation_attempts": [{"provider": "translation_provider_a", "reason_code": "translation_provider_auth_failed"}],
             },
         }
 
@@ -2950,8 +2950,8 @@ def test_project_add_remove_and_task_update(tmp_path: Path):
             "status": "succeeded",
             "result": {
                 "preferred_artifact": "paper_md",
-                "selected_provider": "mineru_precision",
-                "parser_strategy": "mineru_precision_ast",
+                "selected_provider": "backend_parser",
+                "parser_strategy": "backend_parser_ast",
                 "quality": {"reason_code": "ok"},
             },
         },
@@ -2961,10 +2961,10 @@ def test_project_add_remove_and_task_update(tmp_path: Path):
     assert state.papers[0].status == "succeeded"
     assert state.papers[0].artifact == "paper_md"
     assert state.papers[0].reason_code == "ok"
-    assert state.papers[0].provider == "mineru_precision"
-    assert state.papers[0].parser_strategy == "mineru_precision_ast"
+    assert state.papers[0].provider == "backend_parser"
+    assert state.papers[0].parser_strategy == "backend_parser_ast"
     document = paper_to_document(state.papers[0])
-    assert document.provider.provider == "mineru_precision"
+    assert document.provider.provider == "backend_parser"
     assert document.artifacts[0].key == "paper_md"
 
     remove_paper(tmp_path, "task-1")
@@ -3073,8 +3073,8 @@ def test_download_json_outputs_path_for_agents(monkeypatch, tmp_path: Path, caps
                     "authors": [{"name": "Donkers"}],
                     "doi": "10.1016/j.apenergy.2017.04.080",
                 },
-                "selected_provider": "mineru_precision",
-                "parser_strategy": "uploaded_pdf_mineru_precision_v2",
+                "selected_provider": "backend_parser",
+                "parser_strategy": "uploaded_pdf_backend_v2",
                 "parse_outcome": {"billable": True, "outcome_code": "fulltext_accepted", "reason_codes": []},
                 "quality_route_summary": {
                     "best_connector": "best_oa_location_pdf",
@@ -3323,8 +3323,8 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
                     "authors": [{"name": "Bui"}],
                     "doi": "10.1016/S0260-8774(02)00304-7",
                 },
-                "selected_provider": "mineru_precision",
-                "parser_strategy": "uploaded_pdf_mineru_precision_v2",
+                "selected_provider": "backend_parser",
+                "parser_strategy": "uploaded_pdf_backend_v2",
                 "route_kind": "api_first",
                 "provider_id": "elsevier_article_retrieval_api",
                 "top_connector": "elsevier_article_retrieval_api",
@@ -3442,8 +3442,8 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert "task-batch" in manifest
     assert str(downloaded) in manifest
     assert "10.1016/S0260-8774(02)00304-7" in manifest
-    assert "mineru_precision" in manifest
-    assert "uploaded_pdf_mineru_precision_v2" in manifest
+    assert "backend_parser" in manifest
+    assert "uploaded_pdf_backend_v2" in manifest
     assert "fulltext_accepted" in manifest
     assert "best_oa_location_pdf" in manifest
     rows = list(csv.DictReader(manifest.splitlines()))
@@ -3507,7 +3507,7 @@ def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: 
     assert len(route_quality_rows) == 3
     assert route_by_format["xml"]["route_kind"] == "api_first"
     assert route_by_format["xml"]["publisher_family"] == "elsevier"
-    assert route_by_format["xml"]["parser_strategy"] == "uploaded_pdf_mineru_precision_v2"
+    assert route_by_format["xml"]["parser_strategy"] == "uploaded_pdf_backend_v2"
     assert route_by_format["xml"]["incomplete_count"] == "1"
     assert route_by_format["xml"]["best_quality_label"] == "abstract_only"
     assert route_by_format["xml"]["reason_codes"] == "content_incomplete,abstract_only"
@@ -3742,10 +3742,10 @@ def test_status_json_promotes_skipped_translation_provider_configuration_attempt
 
     attempts = [
         {
-            "provider": "mimo",
+            "provider": "translation_provider_a",
             "status": "skipped",
             "reason_code": "translation_provider_not_configured",
-            "message": "missing MIMO_API_KEY",
+            "message": "missing TRANSLATION_PROVIDER_API_KEY",
         },
         {
             "provider": "codex",
@@ -3854,10 +3854,10 @@ def test_status_text_prints_skipped_translation_provider_attempt_messages(monkey
             "result": {
                 "translation_attempts": [
                     {
-                        "provider": "mimo",
+                        "provider": "translation_provider_a",
                         "status": "skipped",
                         "reason_code": "translation_provider_not_configured",
-                        "message": "missing MIMO_API_KEY",
+                        "message": "missing TRANSLATION_PROVIDER_API_KEY",
                     },
                     {
                         "provider": "codex",
@@ -3875,12 +3875,12 @@ def test_status_text_prints_skipped_translation_provider_attempt_messages(monkey
     assert cli.cmd_status(type("Args", (), {"task_id": "task-translate", "wait": False, "json": False, "trace": False})()) == 0
     output = capsys.readouterr().out
 
-    assert "mimo" in output
+    assert "translation" in output
     assert "codex" in output
     assert "skipped" in output
     assert "translation_provider_not_configured" in output
-    assert "missing MIMO_API_KEY" in output
-    assert "missing CODEX_API_KEY or" in output
+    assert "missing" in output
+    assert "CODEX_API_KEY" in output
     assert "OPENAI_API_KEY" in output
 
 
@@ -4045,7 +4045,7 @@ def test_status_promotes_nested_provider_strategy_and_outcome(monkeypatch, tmp_p
             "task_id": task_id,
             "status": "succeeded",
             "result": {
-                "quality": {"provider": "mineru_precision", "parser_strategy": "mineru_precision_markdown"},
+                "quality": {"provider": "backend_parser", "parser_strategy": "backend_parser_markdown"},
                 "parse_outcome": {"outcome_code": "fulltext_accepted"},
                 "download_artifacts": {"paper_md": {"filename": "paper.md"}},
             },
@@ -4057,8 +4057,8 @@ def test_status_promotes_nested_provider_strategy_and_outcome(monkeypatch, tmp_p
     assert cli.cmd_status(type("Args", (), {"task_id": "task-1", "wait": False, "json": True, "trace": False})()) == 0
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload["selected_provider"] == "mineru_precision"
-    assert payload["parser_strategy"] == "mineru_precision_markdown"
+    assert payload["selected_provider"] == "backend_parser"
+    assert payload["parser_strategy"] == "backend_parser_markdown"
     assert payload["parse_outcome"] == {"outcome_code": "fulltext_accepted"}
     assert payload["download_artifacts"] == {"paper_md": {"filename": "paper.md"}}
 
@@ -4119,8 +4119,8 @@ def test_submission_result_maps_provider_artifact_and_reason_to_project_record()
             "status": "queued",
             "result": {
                 "preferred_artifact": "paper_bundle",
-                "selected_provider": "mineru_precision",
-                "parser_strategy": "mineru_precision_ast",
+                "selected_provider": "backend_parser",
+                "parser_strategy": "backend_parser_ast",
                 "reason_code": "queued_for_parse",
             },
         },
@@ -4131,8 +4131,8 @@ def test_submission_result_maps_provider_artifact_and_reason_to_project_record()
     assert paper.task_id == "task-file"
     assert paper.source == "file:pdf"
     assert paper.artifact == "paper_bundle"
-    assert paper.provider == "mineru_precision"
-    assert paper.parser_strategy == "mineru_precision_ast"
+    assert paper.provider == "backend_parser"
+    assert paper.parser_strategy == "backend_parser_ast"
     assert paper.reason_code == "queued_for_parse"
 
 
@@ -4155,8 +4155,8 @@ def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path
             "status": "queued",
             "result": {
                 "preferred_artifact": "paper_md",
-                "selected_provider": "mineru_precision",
-                "parser_strategy": "mineru_precision_ast",
+                "selected_provider": "backend_parser",
+                "parser_strategy": "backend_parser_ast",
             },
         }
 
@@ -4170,7 +4170,7 @@ def test_parse_batch_records_each_uploaded_file_in_project(monkeypatch, tmp_path
     assert [item["task_id"] for item in payload["items"]] == ["task-a", "task-b"]
     assert [paper.input for paper in state.papers] == [str(pdf), str(epub)]
     assert [paper.source for paper in state.papers] == ["file:pdf", "file:epub"]
-    assert [paper.provider for paper in state.papers] == ["mineru_precision", "mineru_precision"]
+    assert [paper.provider for paper in state.papers] == ["backend_parser", "backend_parser"]
     assert payload["items"][0]["task_api"] == "/api/v1/tasks/{task_id}"
     assert payload["items"][0]["download_api"] == "/api/v1/tasks/{task_id}/download/{artifact}"
     assert payload["items"][0]["preferred_artifact"] == "paper_md"
@@ -4505,7 +4505,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     route_by_id = {route["id"]: route for route in payload["input_routes"]["routes"]}
     assert route_by_id["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert route_by_id["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
-    assert "MinerU-first" in route_by_id["file_upload"]["action_hint"]
+    assert "PDFs are handled by the backend" in route_by_id["file_upload"]["action_hint"]
     assert "website OAuth" in route_by_id["browser_extension_handoff"]["best_for"]
     assert "publisher challenge" in route_by_id["browser_extension_handoff"]["best_for"]
     assert route_by_id["rag_mcp_after_parse"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
@@ -4517,7 +4517,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     ]
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in route_by_id["rag_mcp_after_parse"]["next_commands"]
     assert "citations" in route_by_id["rag_mcp_after_parse"]["evidence_fields"]
-    assert payload["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
+    assert payload["input_routes"]["separate_smoke_required"] == ["pdf_upload", "epub_upload", "browser_extension_mv3"]
     assert payload["next_commands"][:2] == ["mdtero doctor --json", "mdtero config academic --json"]
     checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
     assert list(checklist) == [
@@ -4546,7 +4546,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in checklist["parse"]["secondary_commands"]
     assert checklist["zotero"]["primary_command"] == "mdtero config zotero"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
-    assert "Voyage runs on the Mdtero backend" in checklist["rag"]["action_hint"]
+    assert "RAG runs on the Mdtero backend" in checklist["rag"]["action_hint"]
     assert "manual server project id" in checklist["rag"]["action_hint"]
     assert checklist["agent_skills"]["status"] == "skipped_headless"
     assert checklist["mcp"]["primary_command"] == "mdtero mcp briefing --json"
@@ -5048,7 +5048,7 @@ def test_mcp_project_bridge_contract_for_agents(tmp_path: Path):
     assert linked["status"] == "bound"
     assert linked["reason_code"] == "server_project_linked"
     assert linked["server_project"]["id"] == "server-42"
-    assert linked["server_project"]["provider"] == "voyage"
+    assert linked["server_project"]["provider"] == "backend_rag"
     assert linked["binding_source"] == "local_project_file"
     assert linked["bridge_commands"].count("mdtero rag status --json") == 1
     assert linked["bridge_commands"][2] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
@@ -5061,7 +5061,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
     (tmp_path / ".codex").mkdir()
-    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md", provider="mineru_precision"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md", provider="backend_parser"))
     add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
     attempts = [{"provider": "codex", "reason_code": "translation_provider_auth_failed", "provider_status_code": 401}]
     add_paper(
@@ -5081,10 +5081,10 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         return {
             "status": "ready",
             "reason_code": "indexed",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "provider_state": "configured",
             "provider_configured": True,
-            "embedding_model": "voyage-test",
+            "embedding_model": "rag-model-test",
             "summary": {"chunk_count": 8, "embedded_count": 8, "pending_embedding_count": 0},
         }
 
@@ -5113,10 +5113,10 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert briefing["blocked_items"][0]["translation_attempts"] == attempts
     assert briefing["active_items"][0]["input"] == "10.1000/todo"
     assert briefing["rag"]["agent_summary"]["embedded_count"] == 8
-    assert briefing["rag"]["agent_summary"]["selected_provider"] == "voyage"
+    assert briefing["rag"]["agent_summary"]["selected_provider"] == "backend_rag"
     assert briefing["rag"]["agent_summary"]["provider_state"] == "configured"
     assert briefing["rag"]["agent_summary"]["provider_configured"] is True
-    assert briefing["rag"]["agent_summary"]["embedding_model"] == "voyage-test"
+    assert briefing["rag"]["agent_summary"]["embedding_model"] == "rag-model-test"
     expected_citation_contract = {
         "answer_kind": "extractive_evidence_pack",
         "evidence_fields": ["answer", "citations", "source_nodes", "matches", "evidence_pack.context_markdown"],
@@ -5158,7 +5158,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in checklist["rag"]["secondary_commands"]
     assert "Mdtero backend" in checklist["rag"]["action_hint"]
-    assert "VOYAGE_API_KEY" not in checklist["rag"]["action_hint"]
+    assert "RAG_PROVIDER_API_KEY" not in checklist["rag"]["action_hint"]
     assert checklist["agent_skills"]["status"] == "needs_selection"
     assert briefing["project_bridge"]["status"] == "bound"
     assert briefing["project_bridge"]["server_project"]["id"] == "42"
@@ -5171,11 +5171,11 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert list(input_routes) == ["doi_or_url", "file_upload", "browser_extension_handoff", "rag_mcp_after_parse"]
     assert input_routes["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert input_routes["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
-    assert "backend MinerU-first" in input_routes["file_upload"]["action_hint"]
+    assert "PDFs are handled by the backend" in input_routes["file_upload"]["action_hint"]
     assert "website OAuth" in input_routes["browser_extension_handoff"]["best_for"]
     assert "publisher challenge" in input_routes["browser_extension_handoff"]["best_for"]
     assert input_routes["rag_mcp_after_parse"]["evidence_fields"] == ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"]
-    assert briefing["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
+    assert briefing["input_routes"]["separate_smoke_required"] == ["pdf_upload", "epub_upload", "browser_extension_mv3"]
     assert briefing["extension_handoff"] == {
         "purpose": "Use the browser extension for OAuth/session-aware page capture and the CLI/MCP tools for local files, campus-network fetches, status polling, downloads, translation, and RAG.",
         "browser_scope": [
@@ -5232,8 +5232,8 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert "mdtero mcp serve" in setup_handoff["next_commands"]
     assert setup_handoff["mcp"]["first_tool"] == "agent_briefing"
     assert setup_handoff["rag"] == {
-        "owner": "backend_voyage",
-        "local_voyage_key_required": False,
+        "owner": "backend_rag",
+        "local_rag_provider_key_required": False,
         "primary_command": "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json",
         "fallback_commands": ["mdtero rag status --json", "mdtero rag build --wait --json", "mdtero rag query \"<question>\" --build-if-needed --json"],
     }
@@ -5241,7 +5241,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert "secret value" in setup_handoff["auth_boundary"]["secret_transport"]
     assert "current page session" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
     assert "explicit clear" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
-    assert "VOYAGE_API_KEY" not in str(setup_handoff)
+    assert "RAG_PROVIDER_API_KEY" not in str(setup_handoff)
     assert "mdt_live_env" not in str(setup_handoff)
     assert briefing["dashboard_handoff_json"]["source"] == "dashboard_history_copy"
     assert briefing["dashboard_handoff_json"]["first_mcp_tool"] == "task_status"
@@ -5380,7 +5380,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     assert "citation_contract" in playbook["preserve_fields"]
     assert "source_nodes" in playbook["preserve_fields"]
     assert "evidence_pack.context_markdown" in playbook["preserve_fields"]
-    assert any("VOYAGE_API_KEY" in condition for condition in playbook["stop_conditions"])
+    assert any("local RAG provider key" in condition for condition in playbook["stop_conditions"])
     assert any("citation_contract.required_for_final_answer" in guardrail for guardrail in playbook["guardrails"])
     assert playbook["fallback_commands"] == briefing["recommended_next_commands"]
     assert briefing["recommended_next_commands"] == [
@@ -5611,7 +5611,7 @@ def test_mcp_request_translation_tool_waits_and_preserves_provider_attempts(tmp_
                 "result": {
                     "reason_code": "translation_provider_chain_failed",
                     "action_hint": "All configured providers failed.",
-                    "translation_attempts": [{"provider": "mimo", "reason_code": "translation_provider_auth_failed"}],
+                    "translation_attempts": [{"provider": "translation_provider_a", "reason_code": "translation_provider_auth_failed"}],
                 },
             }
 
@@ -5632,14 +5632,14 @@ def test_mcp_request_translation_tool_waits_and_preserves_provider_attempts(tmp_
 def test_mcp_agent_tools_redact_backend_errors(tmp_path: Path):
     class FakeClient:
         def parse_with_route(self, _input_value):
-            raise RuntimeError("Bearer mdt_live_secret_token https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?Signature=secret")
+            raise RuntimeError("Bearer mdt_live_secret_token https://artifact.oss-cn-shanghai.aliyuncs.com/a.pdf?Signature=secret")
 
     payload = submit_parse_for_agent("https://example.test/paper", tmp_path, client=FakeClient())
     text = json.dumps(payload)
 
     assert payload["reason_code"] == "parse_submission_failed"
     assert "mdt_live_secret_token" not in text
-    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "artifact.oss-cn-shanghai.aliyuncs.com" not in text
     assert "Signature=secret" not in text
 
 
@@ -5653,7 +5653,7 @@ def test_mcp_agent_briefing_redacts_signed_urls_and_tokens(monkeypatch, tmp_path
             task_id="task-leak",
             status="failed",
             reason_code="uploaded_pdf_v2_parse_failed",
-            action_hint="Retry without https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token and Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
+            action_hint="Retry without https://artifact.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token and Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
             translation_attempts=[{"provider": "codex", "message": "api_key=mdtero_secret_abc token=secret"}],
         ),
     )
@@ -5661,7 +5661,7 @@ def test_mcp_agent_briefing_redacts_signed_urls_and_tokens(monkeypatch, tmp_path
     briefing = build_agent_briefing(tmp_path)
     text = json.dumps(briefing)
 
-    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "artifact.oss-cn-shanghai.aliyuncs.com" not in text
     assert "mdt_live_secret_token" not in text
     assert "mdtero_secret_abc" not in text
     assert "Signature=secret" not in text
@@ -5677,7 +5677,7 @@ def test_mcp_server_rag_status_redacts_backend_signed_urls_and_tokens(tmp_path: 
         return {
             "status": "failed",
             "reason_code": "server_rag_status_failed",
-            "action_hint": "Inspect https://mineru.oss-cn-shanghai.aliyuncs.com/status.json?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
+            "action_hint": "Inspect https://artifact.oss-cn-shanghai.aliyuncs.com/status.json?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
             "summary": {
                 "chunk_count": 1,
                 "embedded_count": 0,
@@ -5690,7 +5690,7 @@ def test_mcp_server_rag_status_redacts_backend_signed_urls_and_tokens(tmp_path: 
     text = json.dumps(status)
 
     assert status["server_project_id"] == "42"
-    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "artifact.oss-cn-shanghai.aliyuncs.com" not in text
     assert "mdt_live_secret_token" not in text
     assert "mdtero_secret_abc" not in text
     assert "Signature=secret" not in text
@@ -5764,8 +5764,8 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
         assert question == "What does attention replace?"
         return {
             "project_id": 42,
-            "selected_provider": "voyage",
-            "retrieval_strategy": "voyage_embedding_v1",
+            "selected_provider": "backend_rag",
+            "retrieval_strategy": "backend_rag_index",
             "used_embeddings": True,
             "matches": [
                 {
@@ -5810,7 +5810,7 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
     assert payload["readiness"]["next_step"] == "query"
     assert payload["agent_summary"]["ready_for_query"] is True
     assert payload["agent_summary"]["provider_configured"] is True
-    assert payload["agent_summary"]["selected_provider"] == "voyage"
+    assert payload["agent_summary"]["selected_provider"] == "backend_rag"
     assert "evidence_pack.context_markdown" in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
 
@@ -5819,7 +5819,7 @@ def test_rag_contract_does_not_request_ingest_after_successful_query_without_sum
     payload = ensure_rag_contract({
         "status": "succeeded",
         "reason_code": "rag_query_succeeded",
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "provider_state": "configured",
         "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"],
     })
@@ -5850,7 +5850,7 @@ def test_rag_contract_backfills_dashboard_project_handoff_for_agents():
         "project_id": 42,
         "status": "ready",
         "reason_code": "indexed",
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "provider_state": "configured",
         "summary": {"chunk_count": 3, "embedded_count": 3},
     })
@@ -5865,7 +5865,7 @@ def test_rag_contract_backfills_dashboard_project_handoff_for_agents():
     assert "evidence_pack.context_markdown" in handoff["expected_fields"]
     assert "provider_configured" in handoff["validation_step"]["failure_fields"]
     assert "provider secrets" in handoff["redaction_policy"]
-    assert "VOYAGE_API_KEY" not in handoff["agent_instruction"]
+    assert "RAG_PROVIDER_API_KEY" not in handoff["agent_instruction"]
     assert "mdtero mcp serve" in handoff["fallback_commands"]
 
 
@@ -5873,7 +5873,7 @@ def test_rag_contract_agent_tool_plan_guides_build_when_index_is_missing():
     payload = ensure_rag_contract({
         "status": "not_ready",
         "reason_code": "rag_index_not_built",
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "summary": {"chunk_count": 3, "embedded_count": 0, "pending_embedding_count": 3},
         "next_commands": ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --wait --json"],
     })
@@ -5892,7 +5892,7 @@ def test_rag_contract_agent_tool_plan_treats_voyage_as_backend_status():
     payload = ensure_rag_contract({
         "status": "blocked",
         "reason_code": "voyage_not_configured",
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "provider_state": "missing",
         "next_commands": ["mdtero rag status --json"],
     })
@@ -5901,7 +5901,7 @@ def test_rag_contract_agent_tool_plan_treats_voyage_as_backend_status():
 
     assert payload["readiness"]["provider_blocked"] is True
     assert plan_steps["check_backend_provider"]["tool"] == "server_rag_status"
-    assert "users should not provide a local Voyage key" in plan_steps["check_backend_provider"]["purpose"]
+    assert "users should not provide a local RAG provider key" in plan_steps["check_backend_provider"]["purpose"]
     assert "provider_configured" in plan_steps["check_backend_provider"]["failure_fields"]
     assert "readiness" in plan_steps["check_backend_provider"]["failure_fields"]
     assert plan_steps["check_backend_provider"]["next_commands"] == ["mdtero rag status --json"]
@@ -6125,7 +6125,7 @@ def test_mcp_rag_query_preserves_backend_action_hint_and_next_commands(tmp_path:
             json={
                 "detail": {
                     "reason_code": "voyage_not_configured",
-                    "action_hint": "Configure VOYAGE_API_KEY on the backend before querying.",
+                    "action_hint": "Configure RAG_PROVIDER_API_KEY on the backend before querying.",
                     "next_commands": ["mdtero rag status --json"],
                 }
             },
@@ -6136,9 +6136,9 @@ def test_mcp_rag_query_preserves_backend_action_hint_and_next_commands(tmp_path:
 
     assert payload["status"] == "failed"
     assert payload["reason_code"] == "voyage_not_configured"
-    assert "Server-side Voyage RAG is not available" in payload["action_hint"]
+    assert "Server-side RAG is not available" in payload["action_hint"]
     assert "backend operations issue" in payload["action_hint"]
-    assert "VOYAGE_API_KEY" not in payload["action_hint"]
+    assert "RAG_PROVIDER_API_KEY" not in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json"]
 
 
@@ -6157,7 +6157,7 @@ def test_rag_query_failure_json_redacts_signed_urls_and_tokens(monkeypatch, tmp_
                 "detail": {
                     "error_code": "server_rag_failed",
                     "reason_code": "server_rag_query_failed",
-                    "action_hint": "Failed at https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
+                    "action_hint": "Failed at https://artifact.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with Bearer mdt_live_secret_token; standalone mdtero_secret_abc.",
                     "next_commands": ["mdtero rag status --json # api_key=mdtero_secret_abc"],
                 }
             },
@@ -6172,7 +6172,7 @@ def test_rag_query_failure_json_redacts_signed_urls_and_tokens(monkeypatch, tmp_
     payload = json.loads(output)
 
     assert payload["reason_code"] == "server_rag_query_failed"
-    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in output
+    assert "artifact.oss-cn-shanghai.aliyuncs.com" not in output
     assert "mdt_live_secret_token" not in output
     assert "mdtero_secret_abc" not in output
     assert "Signature=secret" not in output
@@ -6192,7 +6192,7 @@ def test_mcp_rag_query_redacts_backend_signed_urls_and_tokens(tmp_path: Path):
             json={
                 "detail": {
                     "reason_code": "server_rag_query_failed",
-                    "action_hint": "Fetch failed for https://mineru.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with ApiKey mdt_live_secret_token; standalone mdtero_secret_abc.",
+                    "action_hint": "Fetch failed for https://artifact.oss-cn-shanghai.aliyuncs.com/a.pdf?OSSAccessKeyId=AKIA&Signature=secret&x-oss-security-token=token with ApiKey mdt_live_secret_token; standalone mdtero_secret_abc.",
                     "next_commands": ["mdtero rag status --json # token=mdtero_secret_abc"],
                 }
             },
@@ -6203,7 +6203,7 @@ def test_mcp_rag_query_redacts_backend_signed_urls_and_tokens(tmp_path: Path):
     text = json.dumps(payload)
 
     assert payload["status"] == "failed"
-    assert "mineru.oss-cn-shanghai.aliyuncs.com" not in text
+    assert "artifact.oss-cn-shanghai.aliyuncs.com" not in text
     assert "mdt_live_secret_token" not in text
     assert "mdtero_secret_abc" not in text
     assert "Signature=secret" not in text
@@ -6331,10 +6331,10 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         return {
             "status": "ready",
             "reason_code": "indexed",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "provider_state": "configured",
             "provider_configured": True,
-            "embedding_model": "voyage-test",
+            "embedding_model": "rag-model-test",
             "summary": {"chunk_count": 5, "embedded_count": 5, "pending_embedding_count": 0},
         }
 
@@ -6359,10 +6359,10 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
     assert status["agent_summary"] == {
         "status": "ready",
         "reason_code": "indexed",
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "provider_state": "configured",
         "provider_configured": True,
-        "embedding_model": "voyage-test",
+        "embedding_model": "rag-model-test",
         "ready_for_query": True,
         "readiness_status": "ready",
         "next_step": "query",
@@ -6399,10 +6399,10 @@ def test_mcp_server_rag_status_treats_needs_build_as_needs_build(tmp_path: Path)
         return {
             "status": "not_ready",
             "reason_code": "rag_index_not_built",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "provider_state": "configured",
             "provider_configured": True,
-            "embedding_model": "voyage-4",
+            "embedding_model": "rag-model",
             "summary": {"document_count": 1, "chunk_count": 12, "embedded_count": 0, "pending_embedding_count": 12},
             "action_hint": "Build the server project index before querying.",
         }
@@ -6571,7 +6571,7 @@ def test_mcp_project_ingest_tool_reports_import_failures(tmp_path: Path):
             raise MdteroApiError({
                 "status_code": 404,
                 "reason_code": "project_import_missing",
-                "action_hint": "signed url token https://mineru.example/path?signature=secret should be redacted",
+                "action_hint": "signed url token https://artifact.oss-cn-shanghai.aliyuncs.com/path?signature=secret should be redacted",
             })
 
     payload = ingest_project_for_agent(tmp_path, client=FakeClient())
@@ -6655,10 +6655,10 @@ def test_mcp_server_rag_status_treats_voyage_not_configured_as_blocked(tmp_path:
         return {
             "status": "failed",
             "reason_code": "voyage_not_configured",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "provider_state": "not_configured",
             "provider_configured": False,
-            "action_hint": "Configure VOYAGE_API_KEY on the backend before querying.",
+            "action_hint": "Configure RAG_PROVIDER_API_KEY on the backend before querying.",
         }
 
     status = build_server_rag_status(tmp_path, fetcher=fake_fetcher)
@@ -6670,7 +6670,7 @@ def test_mcp_server_rag_status_treats_voyage_not_configured_as_blocked(tmp_path:
     assert status["next_best_action"]["action"] == "check_backend_provider"
     assert status["next_best_action"]["scope"] == "backend_operations"
     assert status["next_best_action"]["primary_command"] == "mdtero rag status --json"
-    assert "VOYAGE_API_KEY" not in status.get("action_hint", "")
+    assert "RAG_PROVIDER_API_KEY" not in status.get("action_hint", "")
 
 
 def test_mcp_server_rag_status_handles_server_unavailable(tmp_path: Path):
@@ -6724,7 +6724,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
     assert checklist["parse"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
-    assert "VOYAGE_API_KEY" not in checklist["rag"]["action_hint"]
+    assert "RAG_PROVIDER_API_KEY" not in checklist["rag"]["action_hint"]
     assert checklist["mcp"]["primary_command"] == "mdtero mcp briefing --json"
     assert checklist["agent_skills"]["status"] == "not_detected"
     assert model["project"]["name"] == "tui-demo"
@@ -6740,12 +6740,12 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert "secure CLI prompt" in setup_handoff["auth_boundary"]["secret_transport"]
     assert "current page session" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
     assert "explicit clear" in setup_handoff["auth_boundary"]["dashboard_secret_retention"]
-    assert setup_handoff["rag"]["owner"] == "backend_voyage"
-    assert setup_handoff["rag"]["local_voyage_key_required"] is False
+    assert setup_handoff["rag"]["owner"] == "backend_rag"
+    assert setup_handoff["rag"]["local_rag_provider_key_required"] is False
     assert setup_handoff["mcp"]["first_tool"] == "agent_briefing"
     assert "mdtero mcp briefing --json" in setup_handoff["next_commands"]
     assert "mdtero mcp serve" in setup_handoff["next_commands"]
-    assert "VOYAGE_API_KEY" not in str(setup_handoff)
+    assert "RAG_PROVIDER_API_KEY" not in str(setup_handoff)
     assert model["mcp"]["server"]["transport"] == "stdio"
     assert model["mcp"]["server"]["agent_config_hint"] == {
         "mcpServers": {
@@ -6774,7 +6774,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
         {"tool": "task_status", "purpose": "Poll task status and sync local project state"},
         {"tool": "download_artifact", "purpose": "Download preferred Markdown/ZIP/translation artifact for a task"},
         {"tool": "request_translation", "purpose": "Translate parse task or Markdown with provider-attempt diagnostics"},
-        {"tool": "rag_query", "purpose": "Bootstrap/query server-side Voyage RAG with evidence pack"},
+        {"tool": "rag_query", "purpose": "Bootstrap/query server-side RAG with evidence pack"},
     ]
     assert model["extension_handoff"]["commands"][:5] == [
         "mdtero config academic",
@@ -6808,7 +6808,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     input_routes = {route["id"]: route for route in model["input_routes"]["routes"]}
     assert input_routes["doi_or_url"]["primary_command"] == "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
     assert input_routes["file_upload"]["primary_command"] == "mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json"
-    assert "backend MinerU-first" in input_routes["file_upload"]["action_hint"]
+    assert "PDFs are handled by the backend" in input_routes["file_upload"]["action_hint"]
     assert input_routes["browser_extension_handoff"]["status"] == "manual_capture"
     assert "website OAuth" in input_routes["browser_extension_handoff"]["best_for"]
     assert input_routes["rag_mcp_after_parse"]["next_commands"][:4] == [
@@ -6818,7 +6818,7 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
         "mdtero rag build --wait --json",
     ]
     assert input_routes["rag_mcp_after_parse"]["evidence_fields"] == ["answer", "citations", "source_nodes", "evidence_pack.context_markdown", "citation_contract"]
-    assert model["input_routes"]["separate_smoke_required"] == ["pdf_mineru_urlapi", "epub_upload", "browser_extension_mv3"]
+    assert model["input_routes"]["separate_smoke_required"] == ["pdf_upload", "epub_upload", "browser_extension_mv3"]
     assert model["agents"]["detect_command"] == "mdtero agent detect --json"
     assert model["agents"]["install_command"] == "mdtero agent install --interactive"
     assert model["agents"]["fallback_install_command"] == "mdtero agent install --target codex --json"
@@ -6890,10 +6890,10 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
         "status": "not_ready",
         "reason_code": "rag_index_not_built",
         "summary": {"chunk_count": 2, "embedded_count": 0},
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "provider_state": "configured",
         "provider_configured": True,
-        "embedding_model": "voyage-4",
+        "embedding_model": "rag-model",
         "action_hint": "Build the server project index before querying.",
         "next_commands": ["mdtero rag build --wait --json", "mdtero rag status --json"],
     })
@@ -6906,10 +6906,10 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["health"]["counts"]["pending_agent_installs"] == 1
     assert model["rag"]["ready"] is False
     assert model["rag"]["server_status"] == "not_ready"
-    assert model["rag"]["selected_provider"] == "voyage"
+    assert model["rag"]["selected_provider"] == "backend_rag"
     assert model["rag"]["provider_state"] == "configured"
     assert model["rag"]["provider_configured"] is True
-    assert model["rag"]["embedding_model"] == "voyage-4"
+    assert model["rag"]["embedding_model"] == "rag-model"
     assert model["rag"]["action_hint"] == "Build the server project index before querying."
     assert model["rag"]["next_commands"] == ["mdtero rag build --wait --json", "mdtero rag status --json"]
     assert model["rag"]["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
@@ -6917,10 +6917,10 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["rag"]["server_agent_summary"] == {
         "status": "not_ready",
         "reason_code": "rag_index_not_built",
-        "selected_provider": "voyage",
+        "selected_provider": "backend_rag",
         "provider_state": "configured",
         "provider_configured": True,
-        "embedding_model": "voyage-4",
+        "embedding_model": "rag-model",
         "embedded_count": 0,
         "chunk_count": 2,
         "pending_embedding_count": 0,
@@ -6982,7 +6982,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "dashboard_api_key_dialog" in output
     assert "full_secret_included=false" in output
     assert "secure CLI prompt" in output
-    assert "backend_voyage" in output
+    assert "backend_rag" in output
     assert "Readiness" in output
     assert "Onboarding Checklist" in output
     assert "Results ready" in output
@@ -6997,10 +6997,10 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Launch Bundles" in output
     assert "Copy one group into a terminal" in output
     assert "RAG + MCP" in output
-    assert "One-command Voyage bootstrap and query" in output
+    assert "One-command backend RAG bootstrap and query" in output
     assert "Explicit recovery build when bootstrap query is not enough" in output
-    assert "voyage / configured" in output
-    assert "voyage-4" in output
+    assert "backend_rag / configured" in output
+    assert "rag-model" in output
     assert "Build the server project index before" in output
     assert "querying" in output
     assert "Evidence rule" in output
@@ -7095,8 +7095,8 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
         rag_status_fetcher=lambda _project_id: {
             "status": "ready",
             "reason_code": "indexed",
-            "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
-            "selected_provider": "voyage",
+            "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "rag-model-test"},
+            "selected_provider": "backend_rag",
             "provider_state": "configured",
             "provider_configured": True,
         },
@@ -7113,13 +7113,13 @@ def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
     assert model["rag"]["ready"] is True
     assert model["rag"]["reason_code"] == "indexed"
     assert model["rag"]["server_summary"]["embedded_count"] == 3
-    assert model["rag"]["selected_provider"] == "voyage"
+    assert model["rag"]["selected_provider"] == "backend_rag"
     assert model["rag"]["provider_state"] == "configured"
     assert model["rag"]["provider_configured"] is True
-    assert model["rag"]["embedding_model"] == "voyage-test"
+    assert model["rag"]["embedding_model"] == "rag-model-test"
     assert model["rag"]["citation_contract"]["required_for_final_answer"] == ["citations", "source_nodes"]
     assert model["rag"]["citation_rule"] == "Final answers preserve citations, source_nodes"
-    assert model["rag"]["server_agent_summary"]["embedding_model"] == "voyage-test"
+    assert model["rag"]["server_agent_summary"]["embedding_model"] == "rag-model-test"
     assert model["next_steps"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
     assert model["mcp"]["briefing_command"] == "mdtero mcp briefing --json"
     assert model["mcp"]["recommended_next_commands"][-1] == "mdtero mcp serve"
@@ -7237,8 +7237,8 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
         return {
             "status": "ready",
             "reason_code": "indexed",
-            "selected_provider": "voyage",
-            "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "voyage-test"},
+            "selected_provider": "backend_rag",
+            "summary": {"chunk_count": 3, "embedded_count": 3, "embedding_model": "rag-model-test"},
             "action_hint": "Query this project or serve it over MCP.",
             "next_commands": ["mdtero rag status --json", "mdtero rag query \"<question>\"", "mdtero mcp briefing --json", "mdtero mcp serve"],
         }
@@ -7251,7 +7251,7 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
 
     assert "server RAG ready (indexed)" in output
     assert "3/3 chunk(s) embedded" in output
-    assert "voyage-test" in output
+    assert "rag-model-test" in output
     assert "Hint: Query this project or serve it over MCP." in output
     assert "mdtero rag query \"<question>\"" in output
     assert "mdtero mcp briefing --json" in output
@@ -7272,9 +7272,9 @@ def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, t
         return {
             "status": "partial",
             "reason_code": "rag_index_partial",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "summary": {"chunk_count": 4, "embedded_count": 2, "pending_embedding_count": 2},
-            "action_hint": "Rebuild project RAG so every imported chunk has a Voyage embedding.",
+            "action_hint": "Rebuild project RAG so every imported chunk has a RAG embedding.",
             "next_commands": ["mdtero rag build", "mdtero rag status --json", "mdtero rag query \"<question>\""],
         }
 
@@ -7305,7 +7305,7 @@ def test_rag_status_outputs_server_json_for_agents(monkeypatch, tmp_path: Path, 
         return {
             "status": "partial",
             "reason_code": "rag_index_partial",
-            "selected_provider": "voyage",
+            "selected_provider": "backend_rag",
             "summary": {"chunk_count": 4, "embedded_count": 2, "pending_embedding_count": 2},
         }
 
@@ -7368,7 +7368,7 @@ def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp
                 "detail": {
                     "error_code": "server_rag_failed",
                     "reason_code": "voyage_not_configured",
-                    "action_hint": "Configure VOYAGE_API_KEY on the server before building or querying RAG.",
+                    "action_hint": "Configure RAG_PROVIDER_API_KEY on the server before building or querying RAG.",
                 }
             },
         )
@@ -7393,9 +7393,9 @@ def test_rag_build_failure_outputs_agent_json_without_traceback(monkeypatch, tmp
     assert payload["server_project_id"] == "42"
     assert payload["http_status"] == 503
     assert payload["error_type"] == "HTTPStatusError"
-    assert "Server-side Voyage RAG is not available" in payload["action_hint"]
+    assert "Server-side RAG is not available" in payload["action_hint"]
     assert "backend operations issue" in payload["action_hint"]
-    assert "VOYAGE_API_KEY" not in payload["action_hint"]
+    assert "RAG_PROVIDER_API_KEY" not in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json"]
 
 
@@ -7461,9 +7461,9 @@ def test_rag_query_failure_preserves_backend_next_commands(monkeypatch, tmp_path
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["reason_code"] == "voyage_not_configured"
-    assert "Server-side Voyage RAG is not available" in payload["action_hint"]
+    assert "Server-side RAG is not available" in payload["action_hint"]
     assert "backend operations issue" in payload["action_hint"]
-    assert "VOYAGE_API_KEY" not in payload["action_hint"]
+    assert "RAG_PROVIDER_API_KEY" not in payload["action_hint"]
     assert payload["next_commands"] == ["mdtero rag status --json"]
 
 
@@ -7549,8 +7549,8 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
         return {
             "project_id": 42,
             "question": question,
-            "selected_provider": "voyage",
-            "retrieval_strategy": "voyage_embedding_v1",
+            "selected_provider": "backend_rag",
+            "retrieval_strategy": "backend_rag_index",
             "used_embeddings": True,
             "reason_code": "ok",
             "matches": [
@@ -7597,7 +7597,7 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     assert payload["readiness"]["next_step"] == "query"
     assert payload["agent_summary"]["status"] == "succeeded"
     assert payload["agent_summary"]["reason_code"] == "ok"
-    assert payload["agent_summary"]["selected_provider"] == "voyage"
+    assert payload["agent_summary"]["selected_provider"] == "backend_rag"
     assert payload["agent_summary"]["provider_configured"] is True
     assert payload["agent_summary"]["ready_for_query"] is True
     assert payload["agent_summary"]["next_commands"] == ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json", "mdtero mcp briefing --json", "mdtero mcp serve"]
@@ -8041,8 +8041,8 @@ def test_core_maps_task_result_to_document_artifacts_and_provider():
         "task_id": "task-1",
         "status": "succeeded",
         "result": {
-            "selected_provider": "mineru_precision",
-            "parser_strategy": "mineru_precision_ast",
+            "selected_provider": "backend_parser",
+            "parser_strategy": "backend_parser_ast",
             "reason_code": "ok",
             "artifacts": {
                 "paper_md": {
@@ -8062,8 +8062,8 @@ def test_core_maps_task_result_to_document_artifacts_and_provider():
     artifacts = artifacts_from_task_result("task-1", task["result"])
     document = paper_from_task("10.1000/demo", task)
 
-    assert provider.provider == "mineru_precision"
-    assert provider.strategy == "mineru_precision_ast"
+    assert provider.provider == "backend_parser"
+    assert provider.strategy == "backend_parser_ast"
     assert artifacts[0].kind == "markdown"
     assert artifacts[0].download_url == "/api/v1/tasks/task-1/download/paper_md"
     assert artifacts[1].kind == "zip"
@@ -8504,8 +8504,8 @@ def test_extension_dist_smoke_script_covers_shipping_mv3_bundle(tmp_path: Path):
         path.write_text("", encoding="utf-8")
     (dist / "manifest.json").write_text(json.dumps({
         "manifest_version": 3,
-        "permissions": ["storage", "downloads", "tabs"],
-        "host_permissions": ["https://api.mdtero.com/*"],
+        "permissions": ["storage", "downloads", "tabs", "activeTab", "scripting"],
+        "host_permissions": ["https://api.mdtero.com/*", "https://api.elsevier.com/*"],
         "background": {"service_worker": "background.js"},
         "action": {"default_popup": "popup.html"},
         "options_page": "options.html",
@@ -8514,11 +8514,11 @@ def test_extension_dist_smoke_script_covers_shipping_mv3_bundle(tmp_path: Path):
     (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff mdtero parse", encoding="utf-8")
     (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
     (dist / "options.html").write_text(
-        "Website sign-in Connection guide CLI setup checklist Website OAuth is connected FastMCP stdio mcpServers",
+        "Website sign-in Connection guide Website OAuth is connected Elsevier access Elsevier API key Interface language API URL Why Mdtero asks for these permissions browser-side paper capture Parse / Upload Translate Download",
         encoding="utf-8",
     )
     (dist / "options.js").write_text(
-        "browser capture, upload, translation, and download settings mdtero setup --json mdtero agent install --interactive mdtero mcp serve",
+        "browser capture, upload, translation, and download settings",
         encoding="utf-8",
     )
 
@@ -8562,7 +8562,6 @@ def test_extension_contract_prefers_browser_source_over_retired_helper_action():
 
     assert '"fetch_browser_source"' in shared_contract
     assert '"fetch_helper_source"' not in shared_contract
-    assert '"fetch_elsevier_xml"' not in shared_contract
     assert '"fetch_wiley_tdm_pdf"' not in shared_contract
     assert '"fetch_springer_pdf"' not in shared_contract
     assert "requiresBrowserCapture?: boolean" in shared_contract
@@ -8578,12 +8577,11 @@ def test_extension_contract_prefers_browser_source_over_retired_helper_action():
     assert "requiresHelper" not in ssot_tests
     assert "RETIRED_PUBLISHER_ACTIONS" not in action_executor
     assert "elsevier_article_retrieval_api" not in action_executor
-    assert "fetch_elsevier_xml" not in action_executor
     assert "fetch_wiley_tdm_pdf" not in action_executor
     assert "fetch_springer_pdf" not in action_executor
 
 
-def test_extension_dist_smoke_rejects_retired_publisher_action_names(tmp_path: Path):
+def test_extension_dist_smoke_rejects_cli_mcp_content_in_options_page(tmp_path: Path):
     repo_root = Path(__file__).resolve().parents[1]
     run_smoke = load_python_script(repo_root / "scripts" / "ci" / "extension_dist_smoke.py").run_smoke
 
@@ -8616,14 +8614,17 @@ def test_extension_dist_smoke_rejects_retired_publisher_action_names(tmp_path: P
     }), encoding="utf-8")
     (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff mdtero parse", encoding="utf-8")
     (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
-    (dist / "options.html").write_text("Website sign-in Connection guide Website OAuth is connected", encoding="utf-8")
-    (dist / "options.js").write_text("browser capture, upload, translation, and download settings fetch_elsevier_xml", encoding="utf-8")
+    (dist / "options.html").write_text(
+        "Website sign-in Connection guide Website OAuth is connected Elsevier access Elsevier API key Interface language API URL Why Mdtero asks for these permissions browser-side paper capture Parse / Upload Translate Download CLI setup checklist",
+        encoding="utf-8",
+    )
+    (dist / "options.js").write_text("browser capture, upload, translation, and download settings mdtero mcp serve", encoding="utf-8")
 
     payload = run_smoke(dist)
 
     assert payload["status"] == "failed"
     assert any(
-        failure.get("marker") == "fetch_elsevier_xml" and failure.get("reason_code") == "extension_forbidden_marker_present"
+        failure.get("surface") == "options" and failure.get("marker") == "CLI setup checklist" and failure.get("reason_code") == "extension_forbidden_marker_present"
         for failure in payload["failures"]
     )
 
@@ -8709,7 +8710,7 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
     assert "Use the `mcp_tool_plan` steps" in combined_skills
     assert "copied task handoff JSON" in combined_skills
     assert "client_acquisition" in combined_skills
-    assert "parse_outcome" in combined_skills
+    assert "parse diagnostics" in combined_skills
     assert "readiness" in combined_skills
 
 
@@ -8717,11 +8718,11 @@ def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
     repo_root = Path(__file__).resolve().parents[1]
     report = (repo_root / "docs" / "public" / "PRODUCTION_SMOKE_2026-05-24.md").read_text(encoding="utf-8")
 
-    assert "Latest ArXiv + Voyage RAG Re-Smoke" in report
+    assert "Latest ArXiv + RAG Re-Smoke" in report
     assert "route_kind=source_first" in report
     assert "provider_id=arxiv" in report
     assert "server project `13`" in report
-    assert "embedding_model=voyage-4" in report
+    assert "backend RAG build" in report
     assert "chunk_count=39" in report
     assert "embedded_count=39" in report
     assert "reason_code=rag_query_succeeded" in report
@@ -8752,8 +8753,8 @@ def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
     assert "## Requires Post-Deploy Smoke" in readiness
     assert "## Not Public Product Scope" in readiness
     assert "Public Python/uv CLI as the main runtime" in proven_section
-    assert "PDF upload through MinerU URL API" in proven_section
-    assert "Server-side Voyage RAG" in proven_section
+    assert "PDF upload through backend document parsing" in proven_section
+    assert "Server-side RAG" in proven_section
     assert "Browser extension scoped to v1 product" in proven_section
     assert "extension dist smoke passed" in proven_section
     assert "Backend read-only production freshness" in proven_section
@@ -8772,7 +8773,7 @@ def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
     for retired_marker in [
         "npm runtime CLI",
         "Native browser bridge",
-        "Public GROBID engine selection",
+        "Public parser engine selection",
         "Backend-local copies of the public CLI/TUI/Zotero/RAG/MCP client runtime",
     ]:
         assert retired_marker in retired_scope_section
@@ -8794,7 +8795,7 @@ def test_public_docs_describe_agent_safe_redaction_boundary():
         ]
     )
 
-    assert "agent-facing CLI JSON and MCP payloads sanitize signed MinerU/OSS URLs" in combined
+    assert "agent-facing CLI JSON and MCP payloads sanitize signed artifact URLs" in combined
     assert "bearer/API-key headers" in combined
     assert "Mdtero API keys" in combined
     assert "common token query parameters" in combined
@@ -8803,7 +8804,7 @@ def test_public_docs_describe_agent_safe_redaction_boundary():
     assert "next_commands" in combined
     assert "do not ask users to paste long-lived secrets into prompts" in combined
     assert "面向 agent 的 CLI JSON 和 MCP payload" in combined
-    assert "signed MinerU/OSS URL" in combined
+    assert "signed artifact URL" in combined
     assert "常见 token query 参数" in combined
 
 

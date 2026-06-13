@@ -494,8 +494,6 @@ function getSourceArtifactKeys(result) {
 function getTaskProcessingSummary(task, language = "en") {
   const diagnostic = normalizeTaskFailureDiagnostic(task);
   const result = task?.result;
-  const provider = firstPresentString(task?.selected_provider, result?.selected_provider);
-  const strategy = firstPresentString(task?.parser_strategy, result?.parser_strategy);
   const acquisition = summarizeClientAcquisition(task?.client_acquisition || result?.client_acquisition);
   const outcome = summarizeParseOutcome(task?.parse_outcome || result?.parse_outcome);
   const reason = diagnostic.reasonCode ?? firstPresentString(task?.reason_code, result?.reason_code);
@@ -503,9 +501,8 @@ function getTaskProcessingSummary(task, language = "en") {
   const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
   const artifacts = summarizeDownloadArtifacts(result);
   const lines = [];
-  if (provider || strategy) {
-    const value = [provider, strategy].filter(Boolean).join(" \xB7 ");
-    lines.push(language === "zh" ? `\u5904\u7406\u8DEF\u5F84\uFF1A${value}` : `Processing path: ${value}`);
+  if (task?.selected_provider || result?.selected_provider || task?.parser_strategy || result?.parser_strategy) {
+    lines.push(language === "zh" ? "\u5904\u7406\u8DEF\u5F84\uFF1A\u540E\u7AEF\u89E3\u6790" : "Processing path: Backend parsing");
   }
   if (acquisition) {
     lines.push(language === "zh" ? `\u672C\u5730/\u6D4F\u89C8\u5668\u6293\u53D6\uFF1A${acquisition}` : `Acquisition: ${acquisition}`);
@@ -818,7 +815,7 @@ function formatCliHandoffClipboard(primaryCommand, planCommands, context) {
     "",
     ...parseHandoff ? [
       "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-      "Preserve task_id, selected_provider, parser_strategy, reason_code, action_hint, client_acquisition, parse_outcome, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      "Preserve task_id, reason_code, action_hint, acquisition diagnostics, parse diagnostics, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
       ""
     ] : [],
     ...contextLines.length ? ["Failure context for agent:", ...contextLines, ""] : [],
@@ -847,8 +844,6 @@ function buildTaskHandoffContext(task, kind) {
     status: task?.status,
     stage: task?.stage,
     kind: task?.task_kind ?? kind,
-    selectedProvider: firstPresentString(task?.selected_provider, task?.result?.selected_provider),
-    parserStrategy: firstPresentString(task?.parser_strategy, task?.result?.parser_strategy),
     clientAcquisition: summarizeObjectForHandoff(task?.client_acquisition || task?.result?.client_acquisition),
     parseOutcome: summarizeObjectForHandoff(task?.parse_outcome || task?.result?.parse_outcome),
     reasonCode: diagnostic.reasonCode || task?.reason_code || task?.result?.reason_code || void 0,
@@ -867,8 +862,6 @@ function formatHandoffContextLines(context) {
   appendContextLine(lines, "status", context.status);
   appendContextLine(lines, "stage", context.stage);
   appendContextLine(lines, "kind", context.kind);
-  appendContextLine(lines, "selected_provider", context.selectedProvider);
-  appendContextLine(lines, "parser_strategy", context.parserStrategy);
   appendContextLine(lines, "client_acquisition", context.clientAcquisition);
   appendContextLine(lines, "parse_outcome", context.parseOutcome);
   appendContextLine(lines, "reason_code", context.reasonCode);

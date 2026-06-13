@@ -95,10 +95,10 @@ Agent rules:
 
 - Start with `mdtero doctor --json` before parse, project, RAG, or MCP work; it returns safe auth/dependency/academic/Zotero/project/RAG summaries plus safe `next_commands` without echoing secrets.
 - Follow `next_commands` returned by setup, doctor, parse, status, project refresh, RAG status, and MCP tools.
-- Preserve `task_id`, `selected_provider`, `parser_strategy`, `client_acquisition`, `parse_outcome`, `quality_label`, `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, `translation_attempts`, `citation_contract`, `citations`, and `source_nodes`.
+- Preserve task ids, route diagnostics, quality labels, preferred artifacts, download artifacts, reason codes, action hints, translation attempts, citation contracts, citations, and source nodes.
 - Treat copied task handoff JSON and `dashboard_handoff_json` as starting state, then validate it with `task_status` or `server_rag_status` before continuing.
 - Do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used.
-- Keep API keys, signed URLs, bearer tokens, OSS tokens, and provider credentials out of prompts and logs.
+- Keep API keys, signed URLs, bearer tokens, storage tokens, and service credentials out of prompts and logs.
 
 The preferred MCP entry point is `agent_briefing`. It returns account status, project health, ready downloads, blocked items, RAG status, extension/CLI handoff, recommended next commands, and a structured `mcp_tool_plan` playbook with `step`, `tool`, `when`, `arguments`, `success_signal`, and `failure_fields`. Use the plan to choose `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, `server_rag_build`, or `rag_query`.
 
@@ -174,7 +174,7 @@ clawhub install mdtero
 
 ## RAG And Evidence Contract
 
-The primary server-side Voyage RAG path is:
+The primary server-side RAG path is:
 
 ```bash
 mdtero rag query "What are the strongest findings?" --build-if-needed --json
@@ -216,11 +216,11 @@ This path preserves `client_acquisition`, raw upload, status polling, `reason_co
 Validated in the current alpha:
 
 - API-key login, `mdtero doctor`, `mdtero doctor --json`, and local config; JSON diagnostics include safe auth/dependency/academic/Zotero/project/RAG summaries plus `next_commands` without echoing secrets.
-- Deploy smoke with `mdtero smoke --json`; it creates an isolated project, runs discovery, arXiv/DOI parse with task polling, artifact download, server-side Voyage RAG build/status/query, validates `mdtero mcp briefing --json` exposes `agent_briefing`, `server_rag_status`, `server_rag_build`, and `rag_query`, and returns step-level `reason_code`, `action_hint`, task ids, paths, server project id, plus top-level `primary_failure`, `failed_steps`, and recovery `next_commands` when a smoke step fails.
+- Deploy smoke with `mdtero smoke --json`; it creates an isolated project, runs discovery, arXiv/DOI parse with task polling, artifact download, server-side RAG build/status/query, validates `mdtero mcp briefing --json` exposes `agent_briefing`, `server_rag_status`, `server_rag_build`, and `rag_query`, and returns step-level `reason_code`, `action_hint`, task ids, paths, server project id, plus top-level `primary_failure`, `failed_steps`, and recovery `next_commands` when a smoke step fails.
 - Optional academic-key setup through either the interactive `mdtero config academic` flow or headless flags such as `--semantic-scholar-key <key> --json`; JSON output reports configured keys without echoing secrets.
 - DOI/arXiv parse with task polling and Markdown/bundle download.
 - Batch DOI/URL parse with `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`, writing `manifest.csv` and `failed.csv`.
-- PDF upload through the backend MinerU URL API path, returning Markdown and zip artifacts when parsing succeeds.
+- PDF upload through the backend document parsing path, returning Markdown and zip artifacts when parsing succeeds.
 - Local project init/add/remove/list/status, BibTeX import with de-duplication, project parse/refresh/download, and agent-readable JSON for project management commands.
 - Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`.
 - Discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback. If Semantic Scholar is unavailable, `--json` reports `local_semantic_scholar_failure` and `discovery_fallback` so agents can continue with OpenAlex while preserving the reason code.
@@ -229,7 +229,7 @@ Validated in the current alpha:
 - Server-side translation requests from parse task ids or local Markdown files.
 - Local FastMCP project context server, including the `agent_briefing` tool for one-call account status, project health, ready downloads, blocked items, RAG status, detected/installed/pending agent skills, recommended next commands, and `mcp_tool_plan`.
 - TUI dashboard command palette for copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands, with current next commands highlighted for workstation or local-agent handoff.
-- Agent-facing CLI JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents. They keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible.
+- Agent-facing CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents. They keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible.
 - Agent skill installation for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode.
 
 ## Shared `/api/v1` server contract
@@ -247,22 +247,22 @@ Validated in the current alpha:
 | Server project create/list/read | `/api/v1/projects` |
 | Import parsed Markdown into a server project | `/api/v1/projects/{project_id}/tasks/{task_id}/import` |
 | RAG status | `/api/v1/projects/{project_id}/rag/status` |
-| Build backend Voyage RAG | `/api/v1/projects/{project_id}/rag/build` |
-| Query backend Voyage RAG | `/api/v1/projects/{project_id}/rag/query` |
+| Build backend RAG | `/api/v1/projects/{project_id}/rag/build` |
+| Query backend RAG | `/api/v1/projects/{project_id}/rag/query` |
 
-The CLI, extension, dashboard, and MCP briefing expose this contract so browser capture, CLI retry, raw upload, task polling, download, project import, and backend Voyage RAG handoff stay aligned.
+The CLI, extension, dashboard, and MCP briefing expose this contract so browser capture, CLI retry, raw upload, task polling, download, project import, and backend RAG handoff stay aligned.
 
 ## Product Boundary
 
-Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local `mdtero config academic` configuration. The Python client owns local project state, BibTeX/Zotero import, TUI, MCP context, and agent skill installation. The backend owns parsing, MinerU PDF processing, OpenAlex fallback discovery, LLM translation, task artifacts, and server-side RAG.
+Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local `mdtero config academic` configuration. The Python client owns local project state, BibTeX/Zotero import, TUI, MCP context, and agent skill installation. The backend owns parsing, discovery fallback, translation, task artifacts, and server-side RAG.
 
 The browser extension stays a browser surface. It does not ship Python dependencies such as `curl_cffi`, `pyzotero`, or `fastmcp`; it only handles browser-context capture and user-selected file upload/download. When a publisher challenge, campus network, or logged-in browser session blocks automatic capture, hand the DOI, URL, or saved PDF/EPUB/XML/HTML file to the Python CLI.
 
 Known boundaries:
 
 - `mdtero zotero sync` is conservative and does not rewrite Zotero bibliographic metadata.
-- `mdtero rag query --build-if-needed --json` is the primary server-side Voyage RAG path. `mdtero rag build`, `mdtero project create-server`, and `mdtero project ingest` remain available for explicit recovery/debug workflows.
-- GROBID is not a public product option. PDF parsing is MinerU-first on the backend, with internal fallback behavior owned by the service.
+- `mdtero rag query --build-if-needed --json` is the primary server-side RAG path. `mdtero rag build`, `mdtero project create-server`, and `mdtero project ingest` remain available for explicit recovery/debug workflows.
+- Parser engine selection is not a public product option. PDF parsing is handled by the backend, with internal fallback behavior owned by the service.
 
 ## Repo Map
 

@@ -17,14 +17,14 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
 - `mdtero doctor --json` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
-- CLI JSON and MCP payloads sanitize signed MinerU/OSS URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
+- CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
 - when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --timeout 300 --json` to inspect `client_acquisition` and final task state
 - local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --trace --wait --timeout 600 --json`
 - keep user-provided files and licensed browser-context capture on the user's own machine when required
 - use the browser extension only for browser-context capture and user-triggered upload/download flows
 - if extension capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`; after a successful parse, continue with `mdtero rag query "What are the strongest findings?" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`; preserve `client_acquisition`, raw upload status, `reason_code`, `action_hint`, `next_commands`, and the MCP server startup contract in the handoff back to the user
-- if the dashboard provides copied task handoff JSON, treat it as a starting state rather than live truth: preserve `task_id`, `selected_provider`, `parser_strategy`, `client_acquisition`, `parse_outcome`, `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, and `next_commands`; call `task_status(task_id)` or `mdtero status <task-id> --json` first, then continue with `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query` according to the returned state
+- if the dashboard provides copied task handoff JSON, treat it as a starting state rather than live truth: preserve task ids, route diagnostics, parse diagnostics, preferred artifacts, download artifacts, reason codes, action hints, and next commands; call `task_status(task_id)` or `mdtero status <task-id> --json` first, then continue with `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query` according to the returned state
 
 ## CLI Workflow
 
@@ -37,7 +37,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - submit a project queue: `mdtero project parse --wait --timeout 300 --json`
 - refresh project tasks: `mdtero project refresh --wait --timeout 300 --json`
 - download project Markdown: `mdtero project download --output-dir ./mdtero-output --json`
-- bootstrap server-side Voyage RAG and query from one command: `mdtero rag query "What are the strongest findings?" --build-if-needed --json`
+- bootstrap server-side RAG and query from one command: `mdtero rag query "What are the strongest findings?" --build-if-needed --json`
 - use a reusable project question when automating: `mdtero rag query "<question>" --build-if-needed --json`
 - explicit recovery/debug commands remain available: `mdtero rag build --wait --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
 - parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
@@ -75,14 +75,14 @@ Before starting a long agent workflow, run `mdtero mcp briefing --json` for a on
 - `request_translation(task_id_or_markdown_path, target_language="zh-CN", wait=False)`: request backend translation for a completed parse task or local Markdown file and return provider-attempt diagnostics when translation fails
 - `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
 - `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
-- `project_ingest(project_id=None)`: import succeeded parse tasks into the bound or newly created backend project before building Voyage embeddings; preserve per-task `failures` with `reason_code` and `action_hint`
-- `server_rag_build(wait=true)`: build backend Voyage RAG for the bound project and wait until `status_after_build.ready_for_query` is true before querying
-- `rag_query(question)`: ask server-side Voyage RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. Preserve `citation_contract.required_for_final_answer` and keep its required `citations` plus `source_nodes` in the final answer. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
+- `project_ingest(project_id=None)`: import succeeded parse tasks into the bound or newly created backend project before building the RAG index; preserve per-task `failures` with `reason_code` and `action_hint`
+- `server_rag_build(wait=true)`: build backend RAG for the bound project and wait until `status_after_build.ready_for_query` is true before querying
+- `rag_query(question)`: ask server-side RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. Preserve `citation_contract.required_for_final_answer` and keep its required `citations` plus `source_nodes` in the final answer. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
 - `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
 
 Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `project_ingest`, `server_rag_status`, `server_rag_build`, and `rag_query`. When the plan says `ingest_project_documents`, call `project_ingest(project_id=None)` first; when it says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, `failures`, or `readiness` before retrying.
 
-If `agent_briefing` includes `dashboard_handoff_json`, use its `expected_fields`, `validation_step`, and `tool_sequence` as the contract for dashboard-to-agent continuation. The copied JSON should already redact signed URLs, bearer/API keys, OSS tokens, and Mdtero secrets; do not request unredacted credentials in chat.
+If `agent_briefing` includes `dashboard_handoff_json`, use its `expected_fields`, `validation_step`, and `tool_sequence` as the contract for dashboard-to-agent continuation. The copied JSON should already redact signed URLs, bearer/API keys, storage tokens, and Mdtero secrets; do not request unredacted credentials in chat.
 
 If `agent_briefing` or the dashboard API key dialog provides `dashboard_setup_handoff_json`, treat it as the setup contract for a newly created one-time key. Preserve `auth_boundary`, `first_cli_command`, `next_commands`, `mcp`, `rag`, and `redaction_policy`; verify `api_key.full_secret_included` is false. Ask the user to paste the one-time secret only into the secure `mdtero setup --api-key --json` prompt, then rerun `mdtero doctor --json` and `mdtero mcp briefing --json`. Do not paste the secret into shell commands, MCP output, logs, or this chat.
 

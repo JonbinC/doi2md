@@ -9,10 +9,10 @@ This matrix records what is proven by the current worktree and what still needs 
 | Public Python/uv CLI as the main runtime | `pyproject.toml` exposes `mdtero`; public release gate passed with `202 passed`; install docs use `uv tool install git+https://github.com/JonbinC/doi2md.git` and exclude npm runtime commands. |
 | Setup, doctor, academic keys, and agent-safe diagnostics | CLI contract tests cover setup/doctor/config flows; docs require `mdtero doctor --json`; redaction tests cover Mdtero keys, bearer headers, signed URLs, and token query params. |
 | DOI/URL parse, raw upload, status, download, project mode | Public CLI contract tests cover parse/status/download/project flows; live production smoke completed arXiv parse, project refresh, and artifact download. |
-| PDF upload through MinerU URL API | Production smoke completed PDF upload with `provider=mineru_precision`, `url_fetch_used=true`, `mineru_configured=true`, and Markdown download. |
+| PDF upload through backend document parsing | Production smoke completed PDF upload, backend file fetch, and Markdown download. |
 | Discovery | Production smoke completed server OpenAlex discovery; CLI contract covers local Semantic Scholar when configured and OpenAlex fallback otherwise. |
 | Zotero import and conservative sync | Public CLI tests cover pyzotero mock import/sync; docs state sync writes Mdtero notes/tags only and does not rewrite bibliographic metadata. |
-| Server-side Voyage RAG | Production smoke completed server project bootstrap, task import, Voyage build, status, and query with `embedding_model=voyage-4`; CLI/MCP tests cover not-ready and ready paths. |
+| Server-side RAG | Production smoke completed server project bootstrap, task import, index build, status, and query; CLI/MCP tests cover not-ready and ready paths. |
 | FastMCP and agent skill handoff | Public CLI tests cover MCP briefing/tools and Python-based agent install; `mdtero smoke --json` now validates the MCP briefing exposes `agent_briefing`, `server_rag_status`, and `rag_query` after RAG setup; docs and skills no longer require npm for agent skill installation. |
 | Browser extension scoped to v1 product | Extension release gate passed with `138 passed`; build passed; extension dist smoke passed; manifest/workspace tests assert no native messaging, no publisher key storage, no old helper UI, no retired publisher-specific action names, v1 task/upload/translate/download paths, and CLI handoff for DOI/URL plus failed local PDF/EPUB uploads. |
 | Website/dashboard docs and UI | Nextmdtero release gate passed with `101 passed`; build passed; docs build passed; 11 production route artifacts verified; dashboard tests cover API-key copy dialog, install prompts, RAG/MCP workflow, redaction, extension handoff, and deploy route smoke tooling. |
@@ -33,5 +33,5 @@ This matrix records what is proven by the current worktree and what still needs 
 
 - npm runtime CLI and per-agent npm installers.
 - Native browser bridge, native host, and helper-bundle upload workflows.
-- Public GROBID engine selection. Uploaded PDFs use the backend MinerU-first path; GROBID remains internal compatibility only.
+- Public parser engine selection. Uploaded PDFs use the backend parsing path; internal fallback behavior is service-owned.
 - Backend-local copies of the public CLI/TUI/Zotero/RAG/MCP client runtime.
