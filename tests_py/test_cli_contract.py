@@ -7790,6 +7790,9 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
     from mdtero import cli
 
     init_project(tmp_path, name="local-demo")
+    add_paper(tmp_path, PaperRecord(input="10.1000/ready", task_id="task-ready", status="succeeded", artifact="paper_md", provider="backend_parser"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/todo", status="pending"))
+    add_paper(tmp_path, PaperRecord(input="10.1000/bad", task_id="task-bad", status="failed", reason_code="publisher_blocked", action_hint="Use extension capture."))
     monkeypatch.chdir(tmp_path)
 
     assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": True})()) == 0
@@ -7801,6 +7804,11 @@ def test_rag_status_outputs_unlinked_json_for_agents(monkeypatch, tmp_path: Path
     assert payload["next_commands"] == ["mdtero rag query \"What are the strongest findings?\" --build-if-needed --json", "mdtero rag status --json", "mdtero rag build --wait --json", "mdtero rag query \"<question>\" --build-if-needed --json"]
     assert payload["agent_tool_plan"][0]["step"] == "inspect_rag_status"
     assert any(step["step"] == "create_or_link_server_project" for step in payload["agent_tool_plan"])
+    assert payload["local_rag_coverage"]["paper_count"] == 3
+    assert payload["local_rag_coverage"]["ready_for_ingest_count"] == 1
+    assert payload["local_rag_coverage"]["blocked_count"] == 2
+    assert payload["local_rag_coverage"]["ready"][0]["input"] == "10.1000/ready"
+    assert {item["reason_code"] for item in payload["local_rag_coverage"]["blocked"]} == {"not_submitted", "publisher_blocked"}
 
 
 def test_rag_build_unlinked_project_auto_creates_ingests_and_builds(monkeypatch, tmp_path: Path, capsys):
@@ -8107,6 +8115,40 @@ def test_zotero_item_maps_to_project_paper():
     assert paper.title == "A paper"
     assert paper.source == "zotero"
     assert paper.zotero_key == "ABC"
+
+
+def test_zotero_import_json_reports_skipped_item_reasons(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    class FakeClient:
+        pass
+
+    def fake_make_client(_cfg):
+        return FakeClient()
+
+    def fake_items(_client, *, collection_id=None, limit=50):
+        assert collection_id == "COLL"
+        assert limit == 2
+        return [
+            {"key": "OK", "data": {"title": "Ready", "DOI": "10.1000/ready"}},
+            {"key": "NOID", "data": {"title": "No DOI", "itemType": "journalArticle"}},
+        ]
+
+    monkeypatch.setattr("mdtero.config.load_config", lambda: MdteroConfig(zotero=ZoteroConfig(library_id="123", api_key="key")))
+    monkeypatch.setattr("mdtero.zotero.make_zotero_client", fake_make_client)
+    monkeypatch.setattr("mdtero.zotero.list_zotero_items", fake_items)
+    monkeypatch.chdir(tmp_path)
+
+    args = type("Args", (), {"collection": "COLL", "limit": 2, "library_id": None, "library_type": None, "api_key": None, "json": True})()
+    assert cli.cmd_zotero_import(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["imported_count"] == 1
+    assert payload["skipped_count"] == 1
+    assert payload["imported"][0] == {"input": "10.1000/ready", "title": "Ready", "doi": "10.1000/ready", "zotero_key": "OK"}
+    assert payload["skipped"][0]["zotero_key"] == "NOID"
+    assert payload["skipped"][0]["reason_code"] == "missing_doi_or_url"
+    assert "mdtero parse --file" in payload["skipped"][0]["action_hint"]
 
 
 def test_zotero_sync_creates_note_for_succeeded_zotero_papers():

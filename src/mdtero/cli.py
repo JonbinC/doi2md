@@ -43,6 +43,7 @@ from .projects import (
     paper_from_submission,
     project_path,
     project_pending_papers,
+    project_rag_local_coverage,
     project_task_ids,
     remove_paper,
     save_project,
@@ -2080,7 +2081,7 @@ def _enrich_translate_submission(result: dict[str, Any]) -> dict[str, Any]:
 
 def cmd_zotero_import(args: argparse.Namespace) -> int:
     from .config import load_config
-    from .zotero import list_zotero_items, make_zotero_client, paper_from_zotero_item
+    from .zotero import list_zotero_items, make_zotero_client, paper_from_zotero_item, zotero_item_skip_reason
 
     cfg = load_config()
     if args.library_id:
@@ -2092,14 +2093,18 @@ def cmd_zotero_import(args: argparse.Namespace) -> int:
     client = make_zotero_client(cfg)
     imported = 0
     skipped = 0
+    imported_items: list[dict[str, Any]] = []
+    skipped_items: list[dict[str, Any]] = []
     for item in list_zotero_items(client, collection_id=args.collection, limit=args.limit):
         paper = paper_from_zotero_item(item)
         if paper is None:
             skipped += 1
+            skipped_items.append(zotero_item_skip_reason(item))
             continue
         add_paper(Path.cwd(), paper)
         imported += 1
-    payload = {"imported_count": imported, "skipped_count": skipped}
+        imported_items.append({"input": paper.input, "title": paper.title, "doi": paper.doi, "zotero_key": paper.zotero_key})
+    payload = {"imported_count": imported, "skipped_count": skipped, "imported": imported_items, "skipped": skipped_items}
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -2275,6 +2280,21 @@ def _rag_status_payload_is_ready(payload: dict[str, Any]) -> bool:
 
 def _local_ready_for_rag_count(state: Any) -> int:
     return sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+
+
+def _rag_local_coverage_payload(state: Any) -> dict[str, Any]:
+    try:
+        return project_rag_local_coverage(state)
+    except Exception:
+        return {
+            "paper_count": len(getattr(state, "papers", []) or []),
+            "ready_for_ingest_count": _local_ready_for_rag_count(state),
+            "blocked_count": 0,
+            "pending_count": 0,
+            "failed_count": 0,
+            "ready": [],
+            "blocked": [],
+        }
 
 
 def _rag_recovery_commands() -> list[str]:
@@ -2554,6 +2574,7 @@ def _rag_no_succeeded_tasks_payload(state: Any, *, command: str, question: str |
 def cmd_rag_status(args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
     indexed = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.artifact)
+    local_coverage = _rag_local_coverage_payload(state)
     console = Console()
     project_id = args.project_id or state.server_project_id
     if project_id:
@@ -2574,6 +2595,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
                 "server_project_id": project_id,
                 "local_ready_for_ingest_count": indexed,
                 "local_paper_count": len(state.papers),
+                "local_rag_coverage": local_coverage,
                 "error_type": exc.__class__.__name__,
                 "http_status": http_status,
                 "action_hint": f"Server RAG status is unavailable. Deploy the backend /api/v1 project RAG routes, then rerun `{ONE_COMMAND_RAG_BOOTSTRAP}` or inspect with `{RAG_STATUS_COMMAND}`.",
@@ -2597,6 +2619,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         result.setdefault("server_project_id", str(project_id))
         result.setdefault("local_ready_for_ingest_count", indexed)
         result.setdefault("local_paper_count", len(state.papers))
+        result.setdefault("local_rag_coverage", local_coverage)
         ensure_rag_contract(result)
         if args.json:
             print(json.dumps(redact_sensitive_payload(result), indent=2, ensure_ascii=False))
@@ -2623,6 +2646,7 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         "server_project_id": None,
         "local_ready_for_ingest_count": indexed,
         "local_paper_count": len(state.papers),
+        "local_rag_coverage": local_coverage,
         "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side RAG, and query without copying a server project id.",
         "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
     }
