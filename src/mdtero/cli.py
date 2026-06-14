@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import tempfile
 import time
@@ -153,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--limit", type=int, default=10)
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
-    discover.add_argument("--interactive", action="store_true", help="Show results and prompt for numbers to add to the current project.")
+    discover.add_argument("--interactive", action="store_true", help="Open a discovery session with paging, refinement, and project-add prompts.")
     discover.add_argument("--json", action="store_true")
 
     project = sub.add_parser("project")
@@ -1522,14 +1523,23 @@ def cmd_discover(args: argparse.Namespace) -> int:
         return 2
     project_add = None
     if args.interactive:
-        selection = _prompt_discovery_selection(result)
         try:
+            result = _run_discovery_interactive_session(query=query, page_size=args.limit, initial_result=result)
+            selection = str(result.get("interactive_selection") or "")
             project_add = _add_discovery_results_to_project(result, selection=selection)
         except ValueError as exc:
             if args.json:
                 print(json.dumps({"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}, indent=2, ensure_ascii=False))
             else:
                 Console().print(f"Invalid selection: {exc}")
+            return 2
+        except (ProxyValidationError, DiscoveryError) as exc:
+            payload = exc.payload
+            if args.json:
+                print(json.dumps(payload, indent=2, ensure_ascii=False))
+            else:
+                Console().print(f"Discovery failed: {payload.get('reason_code') or payload.get('error_code')}")
+                Console().print(str(payload.get("action_hint") or ""))
             return 2
         result["project_add"] = project_add
     elif args.add:
@@ -1558,18 +1568,122 @@ def _discover_query(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _prompt_discovery_selection(result: dict[str, Any]) -> str:
+def _run_discovery_interactive_session(*, query: str, page_size: int, initial_result: dict[str, Any]) -> dict[str, Any]:
     console = Console(stderr=True)
-    _print_discovery_table(result, console=console)
-    console.print("Select result numbers to add to the current project. Use spaces for multi-select, `all` for all results, or Enter to skip.")
-    return Prompt.ask("Add papers", default="", console=console).strip()
+    client = MdteroClient()
+    session_query = query
+    safe_page_size = max(int(page_size or 1), 1)
+    loaded_limit = safe_page_size
+    page = 1
+    result = dict(initial_result)
+    selection = ""
+    action = "skip"
+
+    while True:
+        _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=loaded_limit)
+        _print_discovery_fallback_notice(result, console=console)
+        _print_discovery_table(result, console=console)
+        console.print("Commands: numbers add selected results; `a` adds this page; `all` adds loaded results; `n` next; `p` previous; `r <query>` refine; Enter/q skip.")
+        reply = Prompt.ask("Discover", default="", console=console).strip()
+        lowered = reply.lower()
+        if lowered in {"", "q", "quit", "skip"}:
+            selection = ""
+            action = "skip"
+            break
+        if lowered in {"n", "next"}:
+            page += 1
+            loaded_limit = max(loaded_limit, page * safe_page_size)
+            result = client.discover(session_query, limit=loaded_limit)
+            continue
+        if lowered in {"p", "prev", "previous"}:
+            page = max(1, page - 1)
+            continue
+        if lowered.startswith("r ") or lowered.startswith("refine "):
+            _, refined = reply.split(maxsplit=1)
+            session_query = refined.strip()
+            if not session_query:
+                continue
+            page = 1
+            loaded_limit = safe_page_size
+            result = client.discover(session_query, limit=loaded_limit)
+            continue
+        if lowered in {"a", "page"}:
+            selection = _discovery_current_page_selection(result)
+            action = "add_page"
+            break
+        if lowered in {"all", "*"}:
+            selection = "all"
+            action = "add_loaded"
+            break
+        selection = reply
+        action = "add_selection"
+        break
+
+    _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=loaded_limit)
+    result["interactive_selection"] = selection
+    result["interactive_action"] = action
+    return result
+
+
+def _annotate_discovery_session(result: dict[str, Any], *, query: str, page: int, page_size: int, loaded_limit: int) -> None:
+    items = [item for item in result.get("items") or [] if isinstance(item, dict)]
+    total = len(items)
+    safe_page_size = max(page_size, 1)
+    safe_page = max(page, 1)
+    start = min((safe_page - 1) * safe_page_size, total)
+    end = min(start + safe_page_size, total)
+    has_previous = safe_page > 1
+    has_next = total >= loaded_limit and end >= total
+    query_arg = shlex.quote(query)
+    result["discovery_session"] = {
+        "query": query,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "loaded_limit": loaded_limit,
+        "loaded_count": total,
+        "visible_range": [start + 1 if total else 0, end],
+        "pagination_mode": "client_expand_limit",
+        "has_previous": has_previous,
+        "has_next": has_next,
+        "commands": {
+            "next": f"mdtero discover {query_arg} --limit {loaded_limit + safe_page_size} --interactive",
+            "refine": f"mdtero discover \"<refined query>\" --limit {safe_page_size} --interactive",
+            "add_current_page": f"mdtero discover {query_arg} --limit {loaded_limit} --add --select {_discovery_current_page_selection(result)} --json",
+            "add_loaded": f"mdtero discover {query_arg} --limit {loaded_limit} --add --select all --json",
+        },
+    }
 
 
 def _print_discovery_table(result: dict[str, Any], *, console: Console | None = None) -> None:
     table = Table("No", "Year", "Title", "DOI", "Source")
-    for index, item in enumerate(result.get("items") or [], start=1):
+    session = result.get("discovery_session") if isinstance(result.get("discovery_session"), dict) else {}
+    items = [item for item in result.get("items") or [] if isinstance(item, dict)]
+    start, end = _discovery_visible_bounds(result)
+    for index, item in enumerate(items[start:end], start=start + 1):
         table.add_row(str(index), str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
-    (console or Console()).print(table)
+    target = console or Console()
+    if session:
+        target.print(f"Discovery: {session.get('query') or ''} · page {session.get('page')} · showing {session.get('visible_range', ['-', '-'])[0]}-{session.get('visible_range', ['-', '-'])[1]} of {session.get('loaded_count', 0)} loaded")
+    target.print(table)
+
+
+def _discovery_visible_bounds(result: dict[str, Any]) -> tuple[int, int]:
+    items = [item for item in result.get("items") or [] if isinstance(item, dict)]
+    session = result.get("discovery_session") if isinstance(result.get("discovery_session"), dict) else None
+    if not session:
+        return 0, len(items)
+    page_size = max(int(session.get("page_size") or len(items) or 1), 1)
+    page = max(int(session.get("page") or 1), 1)
+    start = min((page - 1) * page_size, len(items))
+    end = min(start + page_size, len(items))
+    return start, end
+
+
+def _discovery_current_page_selection(result: dict[str, Any]) -> str:
+    start, end = _discovery_visible_bounds(result)
+    if end <= start:
+        return ""
+    return ",".join(str(index) for index in range(start + 1, end + 1))
 
 
 def _print_discovery_fallback_notice(result: dict[str, Any], *, console: Console | None = None) -> None:

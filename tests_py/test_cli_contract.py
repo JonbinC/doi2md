@@ -1601,6 +1601,70 @@ def test_discover_interactive_adds_prompted_results_to_project(monkeypatch, tmp_
 
     assert payload["project_add"]["added_count"] == 2
     assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
+    assert payload["discovery_session"]["pagination_mode"] == "client_expand_limit"
+    assert payload["discovery_session"]["commands"]["next"] == "mdtero discover 'rag papers' --limit 6 --interactive"
+
+
+def test_discover_interactive_can_page_and_add_current_page(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="discover-demo")
+    monkeypatch.chdir(tmp_path)
+    prompts = iter(["n", "a"])
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: next(prompts))
+    calls: list[tuple[str, int]] = []
+
+    def fake_discover(self, query, *, limit=10):
+        calls.append((query, limit))
+        return {
+            "source": "openalex_server",
+            "items": [
+                {"title": f"Paper {index}", "doi": f"10.1000/{index}", "source": "openalex"}
+                for index in range(1, limit + 1)
+            ],
+        }
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    args = type("Args", (), {"query": "rag papers", "limit": 2, "add": False, "select": "", "interactive": True, "json": True})()
+
+    assert cli.cmd_discover(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
+
+    assert calls == [("rag papers", 2), ("rag papers", 4)]
+    assert payload["interactive_action"] == "add_page"
+    assert payload["interactive_selection"] == "3,4"
+    assert payload["project_add"]["selection"] == [3, 4]
+    assert payload["discovery_session"]["page"] == 2
+    assert payload["discovery_session"]["visible_range"] == [3, 4]
+    assert [paper.input for paper in state.papers] == ["10.1000/3", "10.1000/4"]
+
+
+def test_discover_interactive_can_refine_query_before_selecting(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    init_project(tmp_path, name="discover-demo")
+    monkeypatch.chdir(tmp_path)
+    prompts = iter(["r graph transformers", "1"])
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: next(prompts))
+    calls: list[tuple[str, int]] = []
+
+    def fake_discover(self, query, *, limit=10):
+        calls.append((query, limit))
+        suffix = "initial" if query == "rag papers" else "refined"
+        return {"source": "openalex_server", "items": [{"title": suffix, "doi": f"10.1000/{suffix}", "source": "openalex"}]}
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    args = type("Args", (), {"query": "rag papers", "limit": 1, "add": False, "select": "", "interactive": True, "json": True})()
+
+    assert cli.cmd_discover(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    state = load_project(tmp_path)
+
+    assert calls == [("rag papers", 1), ("graph transformers", 1)]
+    assert payload["discovery_session"]["query"] == "graph transformers"
+    assert payload["items"][0]["title"] == "refined"
+    assert [paper.input for paper in state.papers] == ["10.1000/refined"]
 
 
 def test_discover_accepts_unquoted_multi_word_query(monkeypatch, capsys):

@@ -47,7 +47,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
 - parse a text file of DOI/URL targets and download Markdown: `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`
 - search discovery: `mdtero discover "<query>" --json`; unquoted multi-word queries are also accepted by the CLI
-- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive`
+- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive` (`n`/`p` page, `r <query>` refines, numbers add selections, `a` adds the current page)
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3 --json`
 - poll status: `mdtero status <task-id> --wait --timeout 300 --json`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`; downloads use metadata-based filenames, append `.low_quality.md` for low-confidence Markdown, and update `manifest.csv`
