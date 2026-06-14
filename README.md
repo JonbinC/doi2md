@@ -39,6 +39,8 @@ The script prefers `uv`, falls back to `pipx install --force git+https://github.
 
 `mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection in the interactive flow. It detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces and can install selected agent skills during onboarding. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` skips agent detection; run `mdtero agent install --interactive` later on the workstation where the agent lives. Do not put the API key value directly in shell history.
 
+For an agent-first install, create a fresh API key in Mdtero Account/Dashboard, then give the trusted agent this order: install the Python runtime and skill, run `mdtero setup --api-key --json`, paste the secret only at the secure prompt, verify `mdtero doctor --json`, ask whether the user has an Elsevier key, then continue with discovery, parse, and translation. Elsevier should be configured first for publisher-heavy English literature reviews when the user has valid ScienceDirect/Elsevier access; it improves routing but does not bypass licensed-access requirements.
+
 ## Human Workflow
 
 Use this path when you are working directly from a terminal or local workstation:
@@ -110,6 +112,7 @@ mdtero doctor --json
 mdtero login
 mdtero setup --api-key --json
 mdtero config academic
+mdtero config academic --elsevier-key <key> --json
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero project init --json
 mdtero project status --json

@@ -4759,8 +4759,12 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert checklist["auth"]["primary_command"] == "mdtero doctor --json"
     assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
     assert checklist["local_dependencies"]["status"] in {"ready", "needs_install"}
-    assert checklist["academic_keys"]["status"] == "optional"
+    assert checklist["academic_keys"]["status"] == "recommended"
     assert "https://dev.elsevier.com/apikey/manage" in checklist["academic_keys"]["links"]["elsevier_api_key"]
+    assert checklist["academic_keys"]["recommended_order"][:2] == ["elsevier_api_key", "semantic_scholar_api_key"]
+    assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
+    assert checklist["academic_keys"]["elsevier_guidance"]["configure_command"] == "mdtero config academic --elsevier-key <key> --json"
+    assert "does not bypass licensed-access requirements" in checklist["academic_keys"]["elsevier_guidance"]["action_hint"]
     assert checklist["discovery"]["status"] == "server_openalex"
     assert checklist["discovery"]["primary_command"] == "mdtero discover \"<topic>\" --limit 5 --interactive"
     assert "space-bar multi-select" in checklist["discovery"]["action_hint"]
@@ -4800,7 +4804,8 @@ def test_setup_json_onboarding_uses_local_semantic_scholar_when_configured(monke
     assert "s2-secret" not in output
     assert payload["academic"]["discover_source"] == "local_semantic_scholar"
     assert payload["input_routes"]["routes"][0]["id"] == "doi_or_url"
-    assert checklist["academic_keys"]["status"] == "enhanced"
+    assert checklist["academic_keys"]["status"] == "partial"
+    assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
     assert checklist["discovery"]["status"] == "local_semantic_scholar"
     assert checklist["agent_skills"]["status"] == "not_detected"
 

@@ -9,13 +9,16 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 1. Install the Python runtime with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`; use PyPI only after the public client is republished
 2. Run `mdtero setup`
-3. Use `mdtero setup --api-key --json` when the environment is headless
-4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; use its `next_commands` before guessing recovery steps
-5. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime; for human setup, use `mdtero agent install --interactive`
+3. Use `mdtero setup --api-key --json` when the environment is headless; ask the user to create a fresh API key in Mdtero Account/Dashboard and paste the secret only into the secure CLI prompt, never into a shell command or chat transcript
+4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; do not treat setup as complete until it reports `authenticated: true`
+5. Ask whether the user can provide an Elsevier API key. For publisher-heavy English literature reviews, configure it first with `mdtero config academic` or `mdtero config academic --elsevier-key <key> --json`; this improves ScienceDirect/Elsevier routing but does not bypass licensed access
+6. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime; for human setup, use `mdtero agent install --interactive`
 
 ## Setup Rules
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
+- for headless servers, the user should create a fresh dashboard API key, run `mdtero setup --api-key --json`, paste the secret only at the password prompt, then verify with `mdtero doctor --json`
+- Elsevier is the first academic key to ask about for most publisher-heavy literature-review workflows; keep academic source keys local with `mdtero config academic`
 - `mdtero doctor --json` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
 - CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
