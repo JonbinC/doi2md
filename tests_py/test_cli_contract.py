@@ -7097,6 +7097,14 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["mcp"]["agent_playbook"]["current_phase"] == "build_or_query_rag"
     assert model["mcp"]["agent_playbook"]["first_action"]["tool"] == "rag_query"
     assert model["mcp"]["agent_playbook"]["first_action"]["command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert model["agent_workflow"]["mode"] == "mcp_tools_first"
+    assert model["agent_workflow"]["phase"] == "build_or_query_rag"
+    assert model["agent_workflow"]["first_action"]["tool"] == "rag_query"
+    assert model["agent_workflow"]["first_action"]["command"] == "mdtero rag query \"<question>\" --build-if-needed --json"
+    assert model["agent_workflow"]["state_summary"]["ready_artifacts"] == 1
+    assert model["agent_workflow"]["rag_coverage"]["ready_for_ingest_count"] == 1
+    assert "source_nodes" in model["agent_workflow"]["preserve_fields"]
+    assert "Stop and report reason_code/action_hint" in model["agent_workflow"]["stop_condition"]
     assert any(step["step"] == "download_artifact" for step in model["mcp"]["agent_playbook"]["ordered_steps"])
     assert any(step["step"] == "prepare_rag" for step in model["mcp"]["agent_playbook"]["ordered_steps"])
     assert "evidence_pack.context_markdown" in model["mcp"]["agent_playbook"]["preserve_fields"]
@@ -7135,6 +7143,9 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     console.print(rendered)
     output = console.export_text()
     assert "Mdtero Control Console" in output
+    assert "Agent Workflow" in output
+    assert "First MCP tool" in output
+    assert "RAG coverage" in output
     assert "Launch path" in output
     assert "build_rag" in output
     assert "Dashboard Setup Handoff" in output
@@ -7234,6 +7245,13 @@ def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path:
     assert model["handoff"]["blocked_items"][0]["reason_code"] == "translation_provider_chain_failed"
     assert model["handoff"]["blocked_items"][0]["action_hint"] == "Refresh provider API keys or quota."
     assert model["handoff"]["blocked_items"][0]["translation_attempts"] == attempts
+    assert model["agent_workflow"]["phase"] == "resolve_blocked_items"
+    assert model["agent_workflow"]["first_action"]["tool"] == "task_status"
+    assert model["agent_workflow"]["first_action"]["command"] == "mdtero project parse --include-failed --wait --timeout 300 --json"
+    assert model["agent_workflow"]["first_action"]["tool"] != "rag_query"
+    assert model["agent_workflow"]["state_summary"]["blocked_items"] == 1
+    assert model["agent_workflow"]["blocking_items"][0]["reason_code"] == "translation_provider_chain_failed"
+    assert "codex:translation_provider_auth_failed" in model["agent_workflow"]["blocking_items"][0]["action_hint"]
     assert "mdtero project parse --include-failed --wait --timeout 300 --json" in model["handoff"]["recommended_next_commands"]
     console = Console(record=True, width=140)
     console.print(rendered)
