@@ -9,10 +9,11 @@ from .config import MdteroConfig
 ACADEMIC_OPTIONS: list[dict[str, str]] = [
     {
         "index": "1",
-        "label": "Elsevier key",
+        "label": "Elsevier key (recommended first for publisher-heavy literature)",
         "url": "https://dev.elsevier.com/apikey/manage",
         "field": "elsevier_api_key",
         "prompt": "Elsevier API key",
+        "hint": "Improves ScienceDirect/Elsevier routing when the user has valid Elsevier API access or institutional entitlement; it does not bypass publisher access rules.",
     },
     {
         "index": "2",
@@ -20,6 +21,7 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
         "url": "https://onlinelibrary.wiley.com/library-info/resources/text-and-datamining",
         "field": "wiley_tdm_token",
         "prompt": "Wiley TDM token",
+        "hint": "Use when the user's Wiley access includes TDM rights.",
     },
     {
         "index": "3",
@@ -27,6 +29,7 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
         "url": "https://www.semanticscholar.org/product/api#api-key-form",
         "field": "semantic_scholar_api_key",
         "prompt": "Semantic Scholar API key",
+        "hint": "Improves local discovery; without it, discovery uses the backend OpenAlex fallback.",
     },
 ]
 
@@ -138,6 +141,19 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
         "application_links": {
             str(option["field"]): option["url"] for option in ACADEMIC_OPTIONS
         },
+        "recommended_order": ["elsevier_api_key", "semantic_scholar_api_key", "wiley_tdm_token"],
+        "priority_hints": {
+            str(option["field"]): option["hint"] for option in ACADEMIC_OPTIONS
+        },
+        "elsevier_guidance": {
+            "status": "configured" if configured["elsevier_api_key"] else "recommended",
+            "action_hint": (
+                "Elsevier is configured. Keep using `mdtero doctor --json` and parse trace output to confirm the selected route for each paper."
+                if configured["elsevier_api_key"]
+                else "For English literature-review work, configure an Elsevier key first when the user has ScienceDirect/Elsevier access. It improves publisher routing but does not bypass licensed-access requirements."
+            ),
+            "configure_command": "mdtero config academic --elsevier-key <key> --json",
+        },
         "next_commands": [
             "mdtero discover \"<topic>\" --limit 5 --json",
             "mdtero config academic --json",
@@ -187,11 +203,13 @@ def build_onboarding_checklist(
         },
         {
             "id": "academic_keys",
-            "title": "Optional academic resource keys",
-            "status": "enhanced" if any(configured_academic.values()) else "optional",
+            "title": "Academic source keys (Elsevier first)",
+            "status": "elsevier_ready" if configured_academic.get("elsevier_api_key") else ("partial" if any(configured_academic.values()) else "recommended"),
             "primary_command": "mdtero config academic",
-            "action_hint": "Configure Elsevier, Wiley TDM, or Semantic Scholar keys only when you have them. Without Semantic Scholar, discovery uses server OpenAlex.",
+            "action_hint": "For publisher-heavy literature reviews, ask whether the user can provide an Elsevier API key and configure it first. Academic keys stay local; without Semantic Scholar, discovery uses server OpenAlex.",
             "links": academic.get("application_links", {}),
+            "recommended_order": academic.get("recommended_order", ["elsevier_api_key", "semantic_scholar_api_key", "wiley_tdm_token"]),
+            "elsevier_guidance": academic.get("elsevier_guidance", {}),
         },
         {
             "id": "discovery",

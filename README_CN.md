@@ -39,6 +39,8 @@ curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 
 `mdtero setup` 会在交互流程里处理登录、可选学术 key 配置和本地 agent 工作区检测。它会检测本地 Codex/Claude/Gemini/Hermes/OpenCode 工作区，并可在 onboarding 时安装选中的 agent skill。无头 setup 使用 `mdtero setup --api-key --json` 或 `MDTERO_API_KEY`，会跳过 agent 检测；之后在 agent 所在工作站上运行 `mdtero agent install --interactive`。不要把 API key 值直接写进 shell history。
 
+如果用户先把任务交给 agent，推荐先在 Mdtero Account/Dashboard 创建一把新的 API key，然后让可信 agent 按顺序执行：安装 Python runtime 和 skill，运行 `mdtero setup --api-key --json`，只在安全提示中粘贴 secret，用 `mdtero doctor --json` 验证，再询问用户是否有 Elsevier key，之后继续检索、解析和翻译。英文文献综述优先配置 Elsevier key；它在用户已有有效 ScienceDirect/Elsevier access 时增强路由，但不会绕过出版社授权。
+
 ## 人类工作流
 
 直接从终端或本地工作站使用时，常用路径如下：
@@ -110,6 +112,7 @@ mdtero doctor --json
 mdtero login
 mdtero setup --api-key --json
 mdtero config academic
+mdtero config academic --elsevier-key <key> --json
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero project init --json
 mdtero project status --json

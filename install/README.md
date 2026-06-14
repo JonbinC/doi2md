@@ -15,6 +15,8 @@ During alpha, this GitHub command is the stable public install path. The old PyP
 
 `mdtero setup` is the preferred human onboarding flow: it authenticates, offers optional academic-key setup, detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces, and can install selected agent skills before showing next commands. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` intentionally skips agent detection; run `mdtero agent install --interactive` later on the machine that owns the agent workspace. Do not put the API key value directly in shell history.
 
+For an agent-first path, create a fresh API key in Mdtero Account/Dashboard, ask the trusted agent to run `mdtero setup --api-key --json`, paste the secret only at the secure prompt, verify with `mdtero doctor --json`, then ask whether the user has an Elsevier key. Configure Elsevier first for ScienceDirect-heavy literature reviews when the user has valid access; it improves routing but does not bypass licensed-access requirements.
+
 For a one-command install:
 
 ```bash
@@ -61,6 +63,7 @@ mdtero doctor
 mdtero discover "thermochemical energy storage" --limit 5
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3 --json
+mdtero config academic --elsevier-key <key> --json
 mdtero config academic --semantic-scholar-key <key> --json
 mdtero parse 10.48550/arXiv.1706.03762
 mdtero parse https://example.org/open-paper --trace

@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     config = sub.add_parser("config")
     config.set_defaults(func=_print_nested_help(config))
     config_sub = config.add_subparsers(dest="config_command")
-    academic_config = _cmd(config_sub, "academic", "Configure optional academic resource keys.", cmd_config_academic)
+    academic_config = _cmd(config_sub, "academic", "Configure local academic source keys; ask about Elsevier first for publisher-heavy literature reviews.", cmd_config_academic)
     academic_config.add_argument("--elsevier-key", help="Save an Elsevier API key without opening the interactive prompt.")
     academic_config.add_argument("--wiley-tdm-token", help="Save a Wiley TDM token without opening the interactive prompt.")
     academic_config.add_argument("--semantic-scholar-key", help="Save a Semantic Scholar API key without opening the interactive prompt.")
@@ -3415,10 +3415,12 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
 
 
 def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
-    console.print("\nStep 2: optional academic resource keys.")
+    console.print("\nStep 2: academic source keys.")
+    console.print("Elsevier is recommended first for publisher-heavy English literature reviews when you have ScienceDirect/Elsevier API access. These keys stay in local Mdtero config and do not bypass licensed-access requirements.")
     for option in ACADEMIC_OPTIONS:
-        console.print(f"  ({option['index']}) {option['label']}: {option['url']}")
-    console.print("Press Enter to skip. Choose one or more numbers, for example `1 3`.")
+        hint = f" — {option['hint']}" if option.get("hint") else ""
+        console.print(f"  ({option['index']}) {option['label']}: {option['url']}{hint}")
+    console.print("Press Enter to skip for now. Choose one or more numbers, for example `1 3`; choose `1` first when Elsevier access matters.")
     while True:
         selection = Prompt.ask("Configure optional keys", default="").strip()
         try:
@@ -3438,6 +3440,10 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
         console.print("Discover will use local Semantic Scholar first, with server OpenAlex as fallback.")
     else:
         console.print("Discover will use server OpenAlex. Add Semantic Scholar later with `mdtero config academic` if needed.")
+    if cfg.academic.elsevier_api_key:
+        console.print("Elsevier key configured. Use `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` to confirm the selected route per paper.")
+    else:
+        console.print("Elsevier key is not configured. For many ScienceDirect-heavy literature reviews, add it later with `mdtero config academic --elsevier-key <key> --json` when the user has a valid key.")
 
 
 def _academic_config_summary(cfg: MdteroConfig, *, path: Path, saved: bool) -> dict[str, Any]:
