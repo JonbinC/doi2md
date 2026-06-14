@@ -16,7 +16,7 @@ from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config
 from .mcp import build_agent_briefing, build_agent_commands, build_rag_context
 from .onboarding import GENERIC_RAG_QUERY_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, build_academic_onboarding_summary, build_input_route_contract
-from .projects import ProjectState, ensure_project
+from .projects import ProjectState, ensure_project, project_rag_local_coverage
 from .rag_contract import ensure_rag_contract
 
 WORKSTATION_SETUP_COMMAND = "mdtero setup"
@@ -41,7 +41,9 @@ def build_dashboard_model(
     running = [paper for paper in project.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     succeeded = [paper for paper in project.papers if paper.status == "succeeded"]
     failed = [paper for paper in project.papers if paper.status == "failed"]
+    local_rag_coverage = project_rag_local_coverage(project)
     rag = _tui_rag_payload(build_rag_context(root), project.server_project_id, rag_status_fetcher=rag_status_fetcher)
+    rag.setdefault("local_rag_coverage", local_rag_coverage)
     commands = build_agent_commands(root)["commands"]
     briefing = build_agent_briefing(root, rag_status_fetcher=rag_status_fetcher, config=cfg, agent_root=agent_root)
     dashboard_setup_handoff = _dashboard_setup_handoff_payload(briefing.get("dashboard_setup_handoff_json"))
@@ -79,6 +81,27 @@ def build_dashboard_model(
         "active_items": briefing["active_items"],
         "recommended_next_commands": briefing["recommended_next_commands"],
     }
+    mcp_payload = {
+        "briefing_command": commands["mcp_briefing"],
+        "serve_command": commands["serve_mcp"],
+        "primary_tool": "agent_briefing",
+        "dashboard_setup_handoff_json": dashboard_setup_handoff,
+        "server": briefing.get("mcp_server"),
+        "tools": briefing["mcp_tools"],
+        "task_tools": _mcp_task_tools_payload(briefing["mcp_tools"]),
+        "tool_plan": _mcp_tool_plan_payload(briefing.get("mcp_tool_plan") or []),
+        "agent_playbook": _agent_playbook_payload(briefing.get("agent_playbook") or {}),
+        "recommended_next_commands": briefing["recommended_next_commands"],
+    }
+    agent_workflow = _agent_workflow_payload(
+        cfg=cfg,
+        project=project,
+        rag=rag,
+        handoff=handoff,
+        mcp=mcp_payload,
+        launch_summary=launch_summary,
+        next_steps=next_steps,
+    )
     return {
         "health": _health_payload(
             cfg=cfg,
@@ -136,18 +159,8 @@ def build_dashboard_model(
             "fallback_install_command": "mdtero agent install --target codex --json",
             "interactive_hint": "Use spaces to multi-select detected workspaces in `mdtero agent install --interactive`.",
         },
-        "mcp": {
-            "briefing_command": commands["mcp_briefing"],
-            "serve_command": commands["serve_mcp"],
-            "primary_tool": "agent_briefing",
-            "dashboard_setup_handoff_json": dashboard_setup_handoff,
-            "server": briefing.get("mcp_server"),
-            "tools": briefing["mcp_tools"],
-            "task_tools": _mcp_task_tools_payload(briefing["mcp_tools"]),
-            "tool_plan": _mcp_tool_plan_payload(briefing.get("mcp_tool_plan") or []),
-            "agent_playbook": _agent_playbook_payload(briefing.get("agent_playbook") or {}),
-            "recommended_next_commands": briefing["recommended_next_commands"],
-        },
+        "mcp": mcp_payload,
+        "agent_workflow": agent_workflow,
         "extension_handoff": extension_handoff,
         "dashboard_setup_handoff_json": dashboard_setup_handoff,
         "input_routes": input_routes,
@@ -173,6 +186,7 @@ def build_dashboard_model(
 def render_dashboard_text(model: dict[str, Any]) -> Group:
     return Group(
         _hero_panel(model),
+        _agent_workflow_panel(model),
         _onboarding_panel(model),
         _dashboard_setup_handoff_panel(model),
         Columns([_account_panel(model), _project_panel(model)], equal=True, expand=True),
@@ -397,6 +411,174 @@ def _health_payload(
             "pending_agent_installs": len(pending_agent_installs),
         },
     }
+
+
+def _agent_workflow_payload(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    handoff: dict[str, Any],
+    mcp: dict[str, Any],
+    launch_summary: dict[str, Any],
+    next_steps: list[str],
+) -> dict[str, Any]:
+    playbook = mcp.get("agent_playbook") if isinstance(mcp.get("agent_playbook"), dict) else {}
+    first_action = playbook.get("first_action") if isinstance(playbook.get("first_action"), dict) else {}
+    coverage = rag.get("local_rag_coverage") if isinstance(rag.get("local_rag_coverage"), dict) else {}
+    blocked_items = handoff.get("blocked_items") if isinstance(handoff.get("blocked_items"), list) else []
+    active_items = handoff.get("active_items") if isinstance(handoff.get("active_items"), list) else []
+    ready_artifacts = handoff.get("ready_artifacts") if isinstance(handoff.get("ready_artifacts"), list) else []
+    action = _agent_workflow_first_action(
+        cfg=cfg,
+        project=project,
+        rag=rag,
+        handoff=handoff,
+        mcp=mcp,
+        playbook_first_action=first_action,
+        next_steps=next_steps,
+    )
+    if not cfg.is_authenticated:
+        phase = "authenticate"
+        objective = "Authenticate before handing parse, RAG, or MCP work to an agent."
+    elif blocked_items:
+        phase = "resolve_blocked_items"
+        objective = "Inspect blocked parse or translation items before retrying downstream RAG."
+    elif active_items:
+        phase = "refresh_or_wait"
+        objective = "Refresh or wait for active project tasks, then download ready artifacts."
+    elif not project.papers:
+        phase = "add_sources"
+        objective = "Add papers through discovery, DOI/URL parse, file upload, BibTeX, or Zotero import."
+    else:
+        phase = str(playbook.get("current_phase") or launch_summary.get("primary_path") or "inspect_project")
+        objective = str(playbook.get("objective") or _agent_workflow_objective(project, rag, handoff))
+    return {
+        "mode": "mcp_tools_first",
+        "phase": phase,
+        "objective": objective,
+        "first_action": {
+            "tool": action["tool"],
+            "command": action["command"],
+            "reason_code": action["reason_code"],
+        },
+        "fallback_commands": _dedupe_commands([action["command"], *next_steps, "mdtero mcp briefing --json", "mdtero mcp serve"]),
+        "state_summary": {
+            "project": project.name,
+            "papers": len(project.papers),
+            "ready_artifacts": len(ready_artifacts),
+            "active_items": len(active_items),
+            "blocked_items": len(blocked_items),
+            "rag_ready_for_ingest": int(coverage.get("ready_for_ingest_count") or rag.get("ready_for_ingest_count") or 0),
+            "rag_blocked": int(coverage.get("blocked_count") or 0),
+            "server_rag": str(rag.get("server_status") or rag.get("reason_code") or "not_linked"),
+        },
+        "blocking_items": [_agent_workflow_blocker(item) for item in blocked_items[:3]],
+        "rag_coverage": {
+            "ready_for_ingest_count": int(coverage.get("ready_for_ingest_count") or 0),
+            "blocked_count": int(coverage.get("blocked_count") or 0),
+            "pending_count": int(coverage.get("pending_count") or 0),
+            "failed_count": int(coverage.get("failed_count") or 0),
+            "blocked_reasons": _coverage_reason_counts(coverage.get("blocked") if isinstance(coverage.get("blocked"), list) else []),
+        },
+        "preserve_fields": [
+            "task_id",
+            "reason_code",
+            "action_hint",
+            "next_commands",
+            "download_artifacts",
+            "citation_contract",
+            "citations",
+            "source_nodes",
+            "evidence_pack.context_markdown",
+        ],
+        "stop_condition": "Stop and report reason_code/action_hint when the first tool or command returns a failed or blocked state.",
+    }
+
+
+def _agent_workflow_first_action(
+    *,
+    cfg: MdteroConfig,
+    project: ProjectState,
+    rag: dict[str, Any],
+    handoff: dict[str, Any],
+    mcp: dict[str, Any],
+    playbook_first_action: dict[str, Any],
+    next_steps: list[str],
+) -> dict[str, str]:
+    blocked_items = handoff.get("blocked_items") if isinstance(handoff.get("blocked_items"), list) else []
+    active_items = handoff.get("active_items") if isinstance(handoff.get("active_items"), list) else []
+    commands = mcp.get("recommended_next_commands") if isinstance(mcp.get("recommended_next_commands"), list) else []
+    fallback_command = str(playbook_first_action.get("command") or (next_steps[0] if next_steps else "mdtero mcp briefing --json"))
+    fallback_tool = str(playbook_first_action.get("tool") or mcp.get("primary_tool") or "agent_briefing")
+    fallback_reason = str(playbook_first_action.get("reason_code") or rag.get("reason_code") or "inspect_state")
+
+    if not cfg.is_authenticated:
+        return {
+            "tool": "agent_commands",
+            "command": _first_command(commands, next_steps, contains="setup") or "mdtero setup --api-key --json",
+            "reason_code": "authentication_required",
+        }
+    if blocked_items:
+        return {
+            "tool": "task_status",
+            "command": _first_command(commands, next_steps, contains="--include-failed") or "mdtero project parse --include-failed --wait --timeout 300 --json",
+            "reason_code": str(blocked_items[0].get("reason_code") or "blocked_items_present") if isinstance(blocked_items[0], dict) else "blocked_items_present",
+        }
+    if active_items:
+        return {
+            "tool": "task_status",
+            "command": _first_command(commands, next_steps, contains="project refresh") or "mdtero project refresh --wait --timeout 300 --json",
+            "reason_code": "active_items_present",
+        }
+    if not project.papers:
+        return {
+            "tool": "project_add",
+            "command": _first_command(commands, next_steps, contains="project add") or _first_command(commands, next_steps, contains="discover") or "mdtero project add <doi-or-url> --json",
+            "reason_code": "project_has_no_papers",
+        }
+    return {"tool": fallback_tool, "command": fallback_command, "reason_code": fallback_reason}
+
+
+def _first_command(*groups: list[Any], contains: str) -> str | None:
+    for group in groups:
+        for command in group:
+            text = str(command)
+            if contains in text:
+                return text
+    return None
+
+
+def _agent_workflow_objective(project: ProjectState, rag: dict[str, Any], handoff: dict[str, Any]) -> str:
+    if not project.papers:
+        return "Add papers through discovery, DOI/URL parse, file upload, BibTeX, or Zotero import."
+    if handoff.get("blocked_items"):
+        return "Inspect blocked parse or translation items before retrying downstream RAG."
+    if handoff.get("active_items"):
+        return "Refresh or wait for active project tasks, then download ready artifacts."
+    if rag.get("server_status") == "ready":
+        return "Ask grounded RAG questions and preserve citations plus source_nodes in final answers."
+    if rag.get("ready_for_ingest_count", 0) > 0 or (rag.get("local_rag_coverage") or {}).get("ready_for_ingest_count", 0) > 0:
+        return "Import succeeded artifacts, build server-side RAG, then query through CLI or MCP."
+    return "Parse at least one paper successfully before starting RAG."
+
+
+def _agent_workflow_blocker(item: dict[str, Any]) -> dict[str, str]:
+    return {
+        "item": _brief_item_label(item),
+        "reason_code": str(item.get("reason_code") or "unknown"),
+        "action_hint": _blocked_next_hint(item),
+    }
+
+
+def _coverage_reason_counts(items: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        reason = str(item.get("reason_code") or "unknown")
+        counts[reason] = counts.get(reason, 0) + 1
+    return counts
 
 
 def _operator_summary(
@@ -866,6 +1048,47 @@ def _hero_panel(model: dict[str, Any]) -> Panel:
         card_values.append("")
     cards.add_row(*card_values[:4])
     return Panel(Group(grid, cards), title="Mdtero Control Console", border_style="yellow")
+
+
+def _agent_workflow_panel(model: dict[str, Any]) -> Panel:
+    workflow = model.get("agent_workflow") if isinstance(model.get("agent_workflow"), dict) else {}
+    first_action = workflow.get("first_action") if isinstance(workflow.get("first_action"), dict) else {}
+    state = workflow.get("state_summary") if isinstance(workflow.get("state_summary"), dict) else {}
+    coverage = workflow.get("rag_coverage") if isinstance(workflow.get("rag_coverage"), dict) else {}
+    blockers = workflow.get("blocking_items") if isinstance(workflow.get("blocking_items"), list) else []
+
+    top = Table.grid(expand=True)
+    top.add_column(ratio=1)
+    top.add_column(ratio=2)
+    top.add_row("Phase", str(workflow.get("phase") or "inspect_project"))
+    top.add_row("Objective", str(workflow.get("objective") or "Run mdtero mcp briefing --json first."))
+    top.add_row("First MCP tool", str(first_action.get("tool") or "agent_briefing"))
+    top.add_row("Command fallback", str(first_action.get("command") or "mdtero mcp briefing --json"))
+    top.add_row("Stop condition", str(workflow.get("stop_condition") or "Preserve failure fields and report blocked state.")[:140])
+
+    status = Table("Signal", "Value", expand=True)
+    status.add_row("Project", f"{state.get('project') or '-'} · {state.get('papers', 0)} paper(s)")
+    status.add_row("Work queue", f"{state.get('ready_artifacts', 0)} ready / {state.get('active_items', 0)} active / {state.get('blocked_items', 0)} blocked")
+    status.add_row("RAG coverage", f"{coverage.get('ready_for_ingest_count', 0)} ready / {coverage.get('blocked_count', 0)} blocked")
+    status.add_row("Server RAG", str(state.get("server_rag") or "not_linked"))
+    reasons = coverage.get("blocked_reasons") if isinstance(coverage.get("blocked_reasons"), dict) else {}
+    if reasons:
+        status.add_row("Blocked reasons", ", ".join(f"{key}:{value}" for key, value in reasons.items()))
+
+    blocked = Table("Blocked item", "Reason", "Next", expand=True)
+    if blockers:
+        for item in blockers:
+            if not isinstance(item, dict):
+                continue
+            blocked.add_row(str(item.get("item") or "-"), str(item.get("reason_code") or "-"), str(item.get("action_hint") or "-")[:110])
+    else:
+        blocked.add_row("none", "-", "Continue with the first action above")
+
+    preserve = workflow.get("preserve_fields") if isinstance(workflow.get("preserve_fields"), list) else []
+    footer = Table.grid(expand=True)
+    footer.add_column(ratio=1)
+    footer.add_row("Preserve: " + ", ".join(str(field) for field in preserve[:8]))
+    return Panel(Group(top, status, blocked, footer), title="Agent Workflow", border_style="bright_blue")
 
 
 def _onboarding_panel(model: dict[str, Any]) -> Panel:
