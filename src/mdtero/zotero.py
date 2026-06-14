@@ -41,6 +41,30 @@ def paper_from_zotero_item(item: dict[str, Any]) -> PaperRecord | None:
     return PaperRecord(input=input_value, title=title or None, doi=doi or None, source="zotero", zotero_key=zotero_key)
 
 
+def zotero_item_skip_reason(item: dict[str, Any]) -> dict[str, Any]:
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    key = str(item.get("key") or data.get("key") or "").strip() or None
+    title = str(data.get("title") or "").strip() or None
+    item_type = str(data.get("itemType") or item.get("itemType") or "").strip() or None
+    doi = str(data.get("DOI") or data.get("doi") or "").strip()
+    url = str(data.get("url") or "").strip()
+    reason_code = "missing_data" if not data else "missing_doi_or_url"
+    action_hint = (
+        "Zotero item data was missing or malformed; skip this item or retry Zotero import."
+        if reason_code == "missing_data"
+        else "Add a DOI or URL to this Zotero item, or parse an authorized local attachment directly with `mdtero parse --file <paper.pdf>`."
+    )
+    return {
+        "zotero_key": key,
+        "title": title,
+        "item_type": item_type,
+        "doi_present": bool(doi),
+        "url_present": bool(url),
+        "reason_code": reason_code,
+        "action_hint": action_hint,
+    }
+
+
 def build_sync_note(paper: PaperRecord) -> dict[str, Any]:
     task_id = escape(paper.task_id or "")
     title = escape(paper.title or paper.input)

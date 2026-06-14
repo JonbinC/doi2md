@@ -145,6 +145,36 @@ def project_task_ids(state: ProjectState) -> list[str]:
     return [paper.task_id for paper in state.papers if paper.task_id]
 
 
+def project_rag_local_coverage(state: ProjectState) -> dict[str, Any]:
+    ready: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+    pending: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+
+    for paper in state.papers:
+        item = _paper_rag_coverage_item(paper)
+        if item["ready_for_ingest"]:
+            ready.append(item)
+        elif paper.status == "failed":
+            failed.append(item)
+            blocked.append(item)
+        elif paper.status in {"pending", "created", "queued", "running"} or not paper.task_id:
+            pending.append(item)
+            blocked.append(item)
+        else:
+            blocked.append(item)
+
+    return {
+        "paper_count": len(state.papers),
+        "ready_for_ingest_count": len(ready),
+        "blocked_count": len(blocked),
+        "pending_count": len(pending),
+        "failed_count": len(failed),
+        "ready": ready,
+        "blocked": blocked,
+    }
+
+
 def import_bib(root: Path, paths: list[Path]) -> dict:
     imported = 0
     skipped = 0
@@ -232,6 +262,40 @@ def paper_to_document(paper: PaperRecord) -> PaperDocument:
         ),
         artifacts=artifacts,
     )
+
+
+def _paper_rag_coverage_item(paper: PaperRecord) -> dict[str, Any]:
+    ready = paper.status == "succeeded" and bool(paper.task_id) and bool(paper.artifact)
+    if ready:
+        reason_code = "ready_for_ingest"
+        action_hint = None
+    elif paper.status == "succeeded" and paper.task_id and not paper.artifact:
+        reason_code = "missing_downloadable_artifact"
+        action_hint = "Refresh the task, then download or ingest a Markdown artifact before RAG."
+    elif paper.status == "failed":
+        reason_code = paper.reason_code or "parse_failed"
+        action_hint = paper.action_hint or "Fix the parse failure, then rerun project refresh before RAG."
+    elif not paper.task_id:
+        reason_code = "not_submitted"
+        action_hint = "Submit this project paper with `mdtero project parse --wait --timeout 300 --json`."
+    else:
+        reason_code = f"task_{paper.status or 'not_ready'}"
+        action_hint = paper.action_hint or "Wait for the task to finish or refresh project status before RAG."
+    return {
+        "input": paper.input,
+        "task_id": paper.task_id,
+        "status": paper.status,
+        "title": paper.title,
+        "doi": paper.doi,
+        "artifact": paper.artifact,
+        "provider": paper.provider,
+        "parser_strategy": paper.parser_strategy,
+        "source": paper.source,
+        "zotero_key": paper.zotero_key,
+        "ready_for_ingest": ready,
+        "reason_code": reason_code,
+        "action_hint": action_hint,
+    }
 
 
 def _paper_record_from_payload(payload: dict[str, Any]) -> PaperRecord:
