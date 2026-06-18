@@ -438,6 +438,7 @@ function getReconnectablePendingTranslationTask(state, detectedInput, parseMarkd
 // src/lib/supported-page.ts
 var SUPPORTED_PAPER_URL_PATTERNS = [
   "arxiv.org",
+  "cnki.net",
   "dl.acm.org",
   "ieeexplore.ieee.org",
   "nature.com",

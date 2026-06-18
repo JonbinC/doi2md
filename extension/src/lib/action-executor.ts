@@ -143,9 +143,14 @@ async function executeFallbackPdfParse(
   }
 
   if (!candidate) {
+    const currentPageResult = await downloadCurrentPagePdfFromTab(context);
+    if (currentPageResult?.success) {
+      return currentPageResult;
+    }
     return {
       success: false,
-      requiresUpload: true,
+      requiresBrowserCapture: Boolean(context.tabId),
+      requiresUpload: !context.tabId,
       error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
       nextCommand: buildCliParseCommand(context.input),
     };
@@ -173,6 +178,11 @@ async function executeFallbackPdfParse(
     }
   }
 
+  const currentPageResult = await downloadCurrentPagePdfFromTab(context);
+  if (currentPageResult?.success) {
+    return currentPageResult;
+  }
+
   const sourceLabel = candidate.source || candidate.connector || "publisher PDF candidate";
   const artifactUrl = candidate.artifact_url ? ` Candidate: ${candidate.artifact_url}` : "";
   const reason = candidate.reason || routePlan.user_message || "This PDF candidate should be acquired from the user's browser session.";
@@ -182,11 +192,35 @@ async function executeFallbackPdfParse(
 
   return {
     success: false,
-    requiresBrowserCapture: requiresBrowser,
-    requiresUpload: !requiresBrowser,
+    requiresBrowserCapture: requiresBrowser || Boolean(context.tabId),
+    requiresUpload: !requiresBrowser && !context.tabId,
     error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
     nextCommand: buildCliParseCommand(context.input),
   };
+}
+
+async function downloadCurrentPagePdfFromTab(context: ActionContext): Promise<ActionResult | null> {
+  if (!context.tabId) {
+    return null;
+  }
+  try {
+    const response = await sendTabMessageWithInjection(context.tabId, {
+      type: "mdtero.download_current_page_pdf.request",
+    });
+    const download = response?.download;
+    if (response?.ok && download?.ok && download.payloadBase64) {
+      return {
+        success: true,
+        rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/pdf" }),
+        filename: download.payloadName || "paper.pdf",
+        artifactKind: "pdf",
+        sourceDoi: inferSourceDoi(context.input),
+      };
+    }
+  } catch {
+    // The caller will surface the normal browser/upload fallback guidance.
+  }
+  return null;
 }
 
 async function downloadPdfFromUrl(url: string, context: ActionContext, filename: string): Promise<ActionResult> {

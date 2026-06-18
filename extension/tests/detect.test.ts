@@ -47,4 +47,22 @@ describe("detectPaperInput", () => {
       })
     ).toEqual({ kind: "arxiv", value: "https://arxiv.org/pdf/2401.00001.pdf" });
   });
+
+  it("detects CNKI article pages as browser-session URL inputs", () => {
+    expect(
+      detectPaperInput({
+        url: "https://kns.cnki.net/kcms2/article/abstract?v=demo",
+        html: "<html></html>"
+      })
+    ).toEqual({ kind: "cnki", value: "https://kns.cnki.net/kcms2/article/abstract?v=demo" });
+  });
+
+  it("detects IEEE article pages as browser-session URL inputs when DOI metadata is absent", () => {
+    expect(
+      detectPaperInput({
+        url: "https://ieeexplore.ieee.org/document/9919149",
+        html: "<html></html>"
+      })
+    ).toEqual({ kind: "ieee", value: "https://ieeexplore.ieee.org/document/9919149" });
+  });
 });

@@ -30,6 +30,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         throw new Error("Sign in required before parsing or translating.");
       }
 
+      if (shouldTryCurrentPagePdf(message.input, message.pageContext?.tabUrl)) {
+        const currentPagePdfResult = await tryCurrentPagePdfParse(message.input, message.pageContext);
+        if (currentPagePdfResult) {
+          return currentPagePdfResult;
+        }
+      }
+
       // Fetch canonical route plan from backend SSOT
       const routePlan = await fetchRoutePlanFromSsot(
         routerSSOT,
@@ -206,4 +213,59 @@ function buildFileParseCommand(filename?: string, artifactKind?: LocalFileArtifa
 function inferSourceDoi(input?: string): string | undefined {
   const trimmed = String(input || "").trim();
   return /^10\.\S+/i.test(trimmed) ? trimmed : undefined;
+}
+
+function shouldTryCurrentPagePdf(input?: string, tabUrl?: string): boolean {
+  return isCnkiArticleUrl(input) || isCnkiArticleUrl(tabUrl) || isIeeeArticleUrl(input) || isIeeeArticleUrl(tabUrl);
+}
+
+function isCnkiArticleUrl(value?: string): boolean {
+  try {
+    const parsed = new URL(String(value || ""));
+    return parsed.hostname.endsWith("cnki.net") && /\/kcms2\/article\/(?:abstract|detail)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isIeeeArticleUrl(value?: string): boolean {
+  try {
+    const parsed = new URL(String(value || ""));
+    return parsed.hostname.endsWith("ieeexplore.ieee.org") && /\/(?:abstract\/)?document\/\d+|\/stamp\/stamp\.jsp|\/stampPDF\/getPDF\.jsp/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function tryCurrentPagePdfParse(
+  input: string,
+  pageContext?: { tabId?: number; tabUrl?: string }
+) {
+  const tabId = pageContext?.tabId;
+  if (!tabId) {
+    return null;
+  }
+  const response = await sendTabMessageWithInjection(tabId, {
+    type: "mdtero.download_current_page_pdf.request",
+  });
+  const download = response?.download;
+  if (!response?.ok || !download?.ok || !download.payloadBase64) {
+    return null;
+  }
+  return client.createRawUploadTask({
+    rawFile: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/pdf" }),
+    filename: download.payloadName || "paper.pdf",
+    sourceDoi: inferSourceDoi(input),
+    sourceInput: input || download.sourceUrl || pageContext?.tabUrl,
+    artifactKind: "pdf",
+  });
+}
+
+function base64ToBytes(payloadBase64: string): Uint8Array {
+  const decoded = globalThis.atob(payloadBase64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
 }

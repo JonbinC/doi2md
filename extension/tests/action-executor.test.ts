@@ -277,6 +277,38 @@ describe("executeAction", () => {
     });
   });
 
+  it("downloads inferred current-page PDFs when no route candidate is available", async () => {
+    const chromeStub = {
+      tabs: {
+        sendMessage: vi.fn().mockResolvedValue({
+          ok: true,
+          download: {
+            ok: true,
+            payloadBase64: "JVBERi0xLjc=",
+            payloadName: "paper.pdf",
+          },
+        }),
+      },
+    };
+    vi.stubGlobal("chrome", chromeStub);
+
+    const result = await executeAction(
+      "fallback_pdf_parse",
+      {
+        input: "https://kns.cnki.net/kcms2/article/abstract?v=demo",
+        tabId: 42,
+      },
+      {}
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.filename).toBe("paper.pdf");
+    expect(result.rawArtifact?.type).toBe("application/pdf");
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: "mdtero.download_current_page_pdf.request",
+    });
+  });
+
   it("fetches planned HTML candidates before falling back to current-tab capture", async () => {
     const chromeStub = {
       tabs: {

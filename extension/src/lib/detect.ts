@@ -23,7 +23,9 @@ function matchMetaContent(html: string, metaNames: string[]): string | null {
 export type DetectedPaperInput =
   | { kind: "doi"; value: string }
   | { kind: "sciencedirect"; value: string }
-  | { kind: "arxiv"; value: string };
+  | { kind: "arxiv"; value: string }
+  | { kind: "ieee"; value: string }
+  | { kind: "cnki"; value: string };
 
 export function detectPaperInput(input: {
   url: string;
@@ -51,10 +53,36 @@ export function detectPaperInput(input: {
     return { kind: "sciencedirect", value: input.url };
   }
 
+  if (isIeeeArticlePage(input.url)) {
+    return { kind: "ieee", value: input.url };
+  }
+
+  if (isCnkiArticlePage(input.url)) {
+    return { kind: "cnki", value: input.url };
+  }
+
   const htmlMatch = input.html.match(DOI_PATTERN);
   if (htmlMatch) {
     return { kind: "doi", value: htmlMatch[0] };
   }
 
   return null;
+}
+
+function isCnkiArticlePage(url: string): boolean {
+  try {
+    const parsed = new URL(String(url || ""));
+    return parsed.hostname.endsWith("cnki.net") && /\/kcms2\/article\/(?:abstract|detail)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isIeeeArticlePage(url: string): boolean {
+  try {
+    const parsed = new URL(String(url || ""));
+    return parsed.hostname.endsWith("ieeexplore.ieee.org") && /\/(?:abstract\/)?document\/\d+|\/stamp\/(?:stamp\.jsp)|\/stampPDF\/getPDF\.jsp/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
 }

@@ -22,6 +22,7 @@ describe("extension manifest", () => {
       "https://api.elsevier.com/*",
       "https://doi.org/*",
       "*://*.arxiv.org/*",
+      "*://*.cnki.net/*",
       "*://*.dl.acm.org/*",
       "*://*.ieeexplore.ieee.org/*",
       "*://*.nature.com/*",
@@ -44,6 +45,7 @@ describe("extension manifest", () => {
     expect(manifest.content_scripts?.[0]?.run_at).toBe("document_start");
     expect(manifest.content_scripts?.[1]?.matches).toEqual([
       "*://*.arxiv.org/*",
+      "*://*.cnki.net/*",
       "*://*.dl.acm.org/*",
       "*://*.ieeexplore.ieee.org/*",
       "*://*.nature.com/*",
