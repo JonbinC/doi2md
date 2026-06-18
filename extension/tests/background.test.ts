@@ -614,6 +614,117 @@ describe("extension background routing", () => {
     });
   });
 
+  it("parses CNKI current-page PDFs through browser-session download without route planning", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    chromeStub.tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      download: {
+        ok: true,
+        payloadBase64: "JVBERi0xLjc=",
+        payloadName: "paper.pdf",
+        sourceUrl: "https://kns.cnki.net/kcms2/article/download?filename=paper.pdf"
+      }
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.ssot.request",
+        input: "https://kns.cnki.net/kcms2/article/abstract?v=demo",
+        pageContext: {
+          tabId: 42,
+          tabUrl: "https://kns.cnki.net/kcms2/article/abstract?v=demo",
+          tabTitle: "CNKI Paper"
+        }
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(async () => {
+      expect(fetchRoutePlan).not.toHaveBeenCalled();
+      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        type: "mdtero.download_current_page_pdf.request",
+      });
+      expect(createRawUploadTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawFile: expect.any(Blob),
+          filename: "paper.pdf",
+          sourceInput: "https://kns.cnki.net/kcms2/article/abstract?v=demo",
+          artifactKind: "pdf"
+        })
+      );
+      const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
+      expect(rawArtifact.type).toBe("application/pdf");
+      expect(new TextDecoder().decode(new Uint8Array(await rawArtifact.arrayBuffer()))).toBe("%PDF-1.7");
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-v2", status: "queued" }
+      });
+    });
+  });
+
+  it("parses IEEE current-page PDFs through browser-session download before route planning", async () => {
+    const chromeStub = createChromeStub();
+    vi.stubGlobal("chrome", chromeStub);
+    chromeStub.tabs.sendMessage.mockResolvedValue({
+      ok: true,
+      download: {
+        ok: true,
+        payloadBase64: "JVBERi0xLjc=",
+        payloadName: "paper.pdf",
+        sourceUrl: "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149"
+      }
+    });
+
+    await import("../src/background");
+
+    const listener = chromeStub.__messageListeners[0];
+    const sendResponse = vi.fn();
+
+    listener?.(
+      {
+        type: "mdtero.parse.ssot.request",
+        input: "10.1109/demo",
+        pageContext: {
+          tabId: 42,
+          tabUrl: "https://ieeexplore.ieee.org/document/9919149",
+          tabTitle: "IEEE Paper"
+        }
+      },
+      {},
+      sendResponse
+    );
+
+    await vi.waitFor(async () => {
+      expect(fetchRoutePlan).not.toHaveBeenCalled();
+      expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        type: "mdtero.download_current_page_pdf.request",
+      });
+      expect(createRawUploadTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawFile: expect.any(Blob),
+          filename: "paper.pdf",
+          sourceDoi: "10.1109/demo",
+          sourceInput: "10.1109/demo",
+          artifactKind: "pdf"
+        })
+      );
+      const rawArtifact = createRawUploadTask.mock.calls[0]?.[0]?.rawFile as Blob;
+      expect(rawArtifact.type).toBe("application/pdf");
+      expect(new TextDecoder().decode(new Uint8Array(await rawArtifact.arrayBuffer()))).toBe("%PDF-1.7");
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        result: { task_id: "task-v2", status: "queued" }
+      });
+    });
+  });
+
   it("executes SSOT EPUB routes through browser download and raw artifact upload", async () => {
     const chromeStub = createChromeStub();
     vi.stubGlobal("chrome", chromeStub);
@@ -748,7 +859,7 @@ describe("extension background routing", () => {
         input: "10.1109/demo",
         pageContext: {
           tabId: 42,
-          tabUrl: "https://ieeexplore.ieee.org/document/9919149",
+          tabUrl: "https://doi.org/10.1109/demo",
           tabTitle: "IEEE Paper"
         }
       },

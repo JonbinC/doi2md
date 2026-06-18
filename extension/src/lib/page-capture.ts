@@ -38,6 +38,11 @@ export type PdfDownloadResult =
       failureMessage: string;
     };
 
+export interface PdfCandidateInput {
+  pageUrl: string;
+  html: string;
+}
+
 export type XmlFetchResult =
   | {
       ok: true;
@@ -433,13 +438,285 @@ export async function downloadEpubArtifact(artifactUrl: string): Promise<EpubDow
 }
 
 export async function downloadPdfArtifact(artifactUrl: string): Promise<PdfDownloadResult> {
-  const result = await downloadBinaryArtifact(artifactUrl, {
-    accept: "application/pdf,application/octet-stream,*/*;q=0.8",
-    artifactLabel: "PDF",
-    payloadName: "paper.pdf",
-    validate: (bytes) => looksLikePdfBytes(bytes),
+  return downloadPdfArtifactFromUrl(artifactUrl, new Set(), 0);
+}
+
+export async function downloadCurrentPagePdfArtifact(input: PdfCandidateInput): Promise<PdfDownloadResult> {
+  const candidates = inferCurrentPagePdfCandidateUrls(input);
+  let lastFailure = "Browser page context could not infer a downloadable PDF artifact from the current page.";
+
+  for (const candidate of candidates) {
+    const result = await downloadPdfArtifact(candidate);
+    if (result.ok) {
+      return result;
+    }
+    lastFailure = result.failureMessage;
+  }
+
+  return {
+    ok: false,
+    failureCode: "artifact_download_missing",
+    failureMessage: lastFailure
+  };
+}
+
+export function inferCurrentPagePdfCandidateUrls(input: PdfCandidateInput): string[] {
+  const pageUrl = String(input.pageUrl || "").trim();
+  const html = String(input.html || "");
+  const candidates: string[] = [];
+
+  for (const candidate of inferIeeePdfUrls(pageUrl, html)) {
+    pushUniqueCandidate(candidates, candidate);
+  }
+  pushUniqueCandidate(candidates, inferScienceDirectPdfUrl(pageUrl));
+  for (const candidate of inferCnkiPdfUrls(pageUrl, html)) {
+    pushUniqueCandidate(candidates, candidate);
+  }
+  for (const candidate of extractPdfUrlsFromHtml(pageUrl, html)) {
+    pushUniqueCandidate(candidates, candidate);
+  }
+
+  return candidates;
+}
+
+function inferIeeePdfUrls(pageUrl: string, html: string): string[] {
+  const candidates: string[] = [];
+  try {
+    const parsed = new URL(pageUrl);
+    if (!parsed.hostname.endsWith("ieeexplore.ieee.org")) {
+      return [];
+    }
+    if (/\/stampPDF\/getPDF\.jsp/i.test(parsed.pathname)) {
+      pushUniqueCandidate(candidates, parsed.toString());
+    }
+    if (/\/stamp\/stamp\.jsp/i.test(parsed.pathname)) {
+      pushUniqueCandidate(candidates, parsed.toString());
+    }
+    const documentMatch = parsed.pathname.match(/\/(?:abstract\/)?document\/(\d+)/i);
+    const arnumber = documentMatch?.[1] || parsed.searchParams.get("arnumber") || "";
+    if (arnumber) {
+      pushUniqueCandidate(candidates, buildIeeeStampPdfUrl(arnumber));
+    }
+  } catch {
+    return candidates;
+  }
+  const metaPdf = matchMetaContent(html, ["citation_pdf_url"]);
+  if (metaPdf) {
+    pushUniqueCandidate(candidates, normalizeCandidateUrl(metaPdf, pageUrl));
+  }
+  for (const candidate of extractUrlsBySelectors(pageUrl, html, [
+    "a[href*='stamp/stamp.jsp']",
+    "a[href*='stampPDF']",
+    "iframe[src*='stampPDF']",
+    "iframe[src*='stamp/stamp.jsp']",
+    "embed[src*='stampPDF']",
+    "object[data*='stampPDF']"
+  ])) {
+    pushUniqueCandidate(candidates, candidate);
+  }
+  return candidates;
+}
+
+function buildIeeeStampPdfUrl(arnumber: string): string {
+  return `https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=${encodeURIComponent(arnumber)}&ref=`;
+}
+
+function inferScienceDirectPdfUrl(pageUrl: string): string {
+  try {
+    const parsed = new URL(pageUrl);
+    if (!parsed.hostname.endsWith("sciencedirect.com")) {
+      return "";
+    }
+    if (parsed.pathname.includes("/pdfft")) {
+      return parsed.toString();
+    }
+    const piiMatch = parsed.pathname.match(/\/science\/article\/pii\/([^/?#]+)/i);
+    if (!piiMatch?.[1]) {
+      return "";
+    }
+    parsed.pathname = `/science/article/pii/${piiMatch[1]}/pdfft`;
+    parsed.search = "?isDTMRedir=true&download=true";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function inferCnkiPdfUrls(pageUrl: string, html: string): string[] {
+  try {
+    const parsed = new URL(pageUrl);
+    if (!parsed.hostname.endsWith("cnki.net")) {
+      return [];
+    }
+  } catch {
+    return [];
+  }
+  return extractUrlsBySelectors(pageUrl, html, [
+    "#pdfDown",
+    ".btn-dlpdf a",
+    "a[href*=\"pdf\"]",
+    "a[href*=\"Pdf\"]"
+  ]);
+}
+
+function extractPdfUrlsFromHtml(pageUrl: string, html: string): string[] {
+  const urls: string[] = [];
+  const metaPdf = matchMetaContent(html, ["citation_pdf_url"]);
+  if (metaPdf) {
+    pushUniqueCandidate(urls, normalizeCandidateUrl(metaPdf, pageUrl));
+  }
+  for (const candidate of extractUrlsBySelectors(pageUrl, html, [
+    "iframe[src*='/pdf']",
+    "iframe[src*='.pdf']",
+    "iframe[src*='stampPDF']",
+    "embed[src*='/pdf']",
+    "embed[src*='.pdf']",
+    "object[data*='/pdf']",
+    "object[data*='.pdf']"
+  ])) {
+    pushUniqueCandidate(urls, candidate);
+  }
+  for (const candidate of extractUrlsBySelectors(pageUrl, html, [
+    "a.download-link",
+    "a[data-test=\"pdf-link\"]",
+    "a[href*=\"/pdfft\"]",
+    "a[href*=\"stampPDF\"]",
+    "a[href*=\"stamp.jsp\"]",
+    "a[href*=\"/pdf\"]",
+    "a[href*=\".pdf\"]"
+  ])) {
+    pushUniqueCandidate(urls, candidate);
+  }
+  return urls.filter((url) => looksLikePdfCandidateUrl(url));
+}
+
+function extractUrlsBySelectors(pageUrl: string, html: string, selectors: string[]): string[] {
+  if (typeof DOMParser === "undefined") {
+    return extractHrefCandidatesWithRegex(pageUrl, html);
+  }
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const urls: string[] = [];
+  for (const selector of selectors) {
+    document.querySelectorAll(selector).forEach((node) => {
+      const value =
+        node.getAttribute("href") ||
+        node.getAttribute("src") ||
+        node.getAttribute("data") ||
+        node.getAttribute("data-href") ||
+        node.getAttribute("data-url") ||
+        node.getAttribute("data-pdf-url") ||
+        "";
+      const normalized = normalizeCandidateUrl(value, pageUrl);
+      if (normalized) {
+        pushUniqueCandidate(urls, normalized);
+      }
+    });
+  }
+  return urls;
+}
+
+function extractHrefCandidatesWithRegex(pageUrl: string, html: string): string[] {
+  const urls: string[] = [];
+  const pattern = /(?:href|data-href|data-url|data-pdf-url)=["']([^"']+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null) {
+    const normalized = normalizeCandidateUrl(match[1], pageUrl);
+    if (normalized) {
+      pushUniqueCandidate(urls, normalized);
+    }
+  }
+  return urls;
+}
+
+function normalizeCandidateUrl(value: string, pageUrl: string): string {
+  const normalized = decodeHtmlAttribute(String(value || "").trim());
+  if (!normalized || normalized === "#" || /^javascript:/i.test(normalized)) {
+    return "";
+  }
+  try {
+    return new URL(normalized, pageUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+function looksLikePdfCandidateUrl(url: string): boolean {
+  const lowered = String(url || "").toLowerCase();
+  return lowered.includes("/pdfft") || lowered.includes("stamppdf") || lowered.includes("stamp.jsp") || lowered.includes("/pdf") || lowered.includes(".pdf");
+}
+
+async function downloadPdfArtifactFromUrl(
+  artifactUrl: string,
+  visited: Set<string>,
+  depth: number
+): Promise<PdfDownloadResult> {
+  const normalizedUrl = String(artifactUrl || "").trim();
+  if (!normalizedUrl || visited.has(normalizedUrl) || depth > 2) {
+    return {
+      ok: false,
+      failureCode: "artifact_download_missing",
+      failureMessage: "Browser page context could not download the PDF artifact."
+    };
+  }
+  visited.add(normalizedUrl);
+
+  const response = await fetch(normalizedUrl, {
+    credentials: "include",
+    headers: {
+      Accept: "application/pdf,application/octet-stream,text/html,*/*;q=0.8"
+    }
   });
-  return result as PdfDownloadResult;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      failureCode: "artifact_download_missing",
+      failureMessage: `Browser page context could not download the PDF artifact (${response.status}).`
+    };
+  }
+
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (looksLikePdfBytes(bytes)) {
+    return {
+      ok: true,
+      payloadBase64: arrayBufferToBase64(buffer),
+      payloadName: "paper.pdf",
+      sourceUrl: normalizedUrl
+    };
+  }
+
+  const text = bytesToText(bytes);
+  if (isLikelyHtmlDocument(text)) {
+    for (const candidate of inferPdfCandidateUrlsFromGatewayHtml(response.url || normalizedUrl, text)) {
+      const result = await downloadPdfArtifactFromUrl(candidate, visited, depth + 1);
+      if (result.ok) {
+        return result;
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    failureCode: "artifact_download_missing",
+    failureMessage: "Browser page context downloaded a response that was not a valid PDF artifact."
+  };
+}
+
+function inferPdfCandidateUrlsFromGatewayHtml(pageUrl: string, html: string): string[] {
+  const candidates: string[] = [];
+  for (const candidate of inferIeeePdfUrls(pageUrl, html)) {
+    pushUniqueCandidate(candidates, candidate);
+  }
+  for (const candidate of extractPdfUrlsFromHtml(pageUrl, html)) {
+    pushUniqueCandidate(candidates, candidate);
+  }
+  return candidates;
+}
+
+function bytesToText(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 262144)));
 }
 
 async function downloadBinaryArtifact(

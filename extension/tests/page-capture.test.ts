@@ -7,7 +7,9 @@ import {
   fetchHtmlArtifact,
   fetchXmlArtifact,
   downloadEpubArtifact,
+  downloadCurrentPagePdfArtifact,
   downloadPdfArtifact,
+  inferCurrentPagePdfCandidateUrls,
   isLikelyChallengeOrLoginShell
 } from "../src/lib/page-capture";
 import {
@@ -191,6 +193,104 @@ describe("downloadPdfArtifact", () => {
         ok: false,
         failureCode: "artifact_download_missing",
         failureMessage: "Browser page context downloaded a response that was not a valid PDF artifact."
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("follows IEEE stamp gateway iframe shells to the real PDF endpoint", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).includes("/stamp/stamp.jsp")) {
+        return {
+          ok: true,
+          url: String(input),
+          arrayBuffer: async () => new TextEncoder().encode(`<html><body><iframe src="/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref="></iframe></body></html>`).buffer
+        } as Response;
+      }
+      expect(String(input)).toBe("https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref=");
+      return {
+        ok: true,
+        url: String(input),
+        arrayBuffer: async () => Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]).buffer
+      } as Response;
+    }) as typeof fetch;
+
+    try {
+      const result = await downloadPdfArtifact("https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149");
+      expect(result).toEqual({
+        ok: true,
+        payloadBase64: "JVBERi0xLjc=",
+        payloadName: "paper.pdf",
+        sourceUrl: "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref="
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("inferCurrentPagePdfCandidateUrls", () => {
+  it("infers IEEE stampPDF URLs from document pages", () => {
+    expect(
+      inferCurrentPagePdfCandidateUrls({
+        pageUrl: "https://ieeexplore.ieee.org/document/9919149",
+        html: "<html></html>"
+      })
+    ).toContain("https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref=");
+  });
+
+  it("extracts IEEE citation PDF and iframe candidates from browser pages", () => {
+    const candidates = inferCurrentPagePdfCandidateUrls({
+      pageUrl: "https://ieeexplore.ieee.org/document/9919149",
+      html: `<html><head><meta name="citation_pdf_url" content="https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&amp;arnumber=9919149"></head><body><iframe src="/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref="></iframe></body></html>`
+    });
+    expect(candidates).toContain("https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149");
+    expect(candidates).toContain("https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref=");
+  });
+
+  it("infers ScienceDirect pdfft URLs from PII pages", () => {
+    expect(
+      inferCurrentPagePdfCandidateUrls({
+        pageUrl: "https://www.sciencedirect.com/science/article/pii/S0016236126004512",
+        html: "<html></html>"
+      })
+    ).toContain("https://www.sciencedirect.com/science/article/pii/S0016236126004512/pdfft?isDTMRedir=true&download=true");
+  });
+
+  it("extracts CNKI PDF download links from authorized detail pages", () => {
+    expect(
+      inferCurrentPagePdfCandidateUrls({
+        pageUrl: "https://kns.cnki.net/kcms2/article/abstract?v=demo",
+        html: `<html><body><a id="pdfDown" href="/kcms2/article/download?filename=paper.pdf">PDF</a></body></html>`
+      })
+    ).toContain("https://kns.cnki.net/kcms2/article/download?filename=paper.pdf");
+  });
+});
+
+describe("downloadCurrentPagePdfArtifact", () => {
+  it("downloads an inferred browser-session PDF candidate", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      expect(String(input)).toBe("https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref=");
+      expect(init?.credentials).toBe("include");
+      return {
+        ok: true,
+        arrayBuffer: async () => Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]).buffer
+      } as Response;
+    }) as typeof fetch;
+
+    try {
+      const result = await downloadCurrentPagePdfArtifact({
+        pageUrl: "https://ieeexplore.ieee.org/document/9919149",
+        html: "<html></html>"
+      });
+      expect(result).toEqual({
+        ok: true,
+        payloadBase64: "JVBERi0x",
+        payloadName: "paper.pdf",
+        sourceUrl: "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=9919149&ref="
       });
     } finally {
       globalThis.fetch = originalFetch;

@@ -16,6 +16,7 @@
     "https://api.elsevier.com/*",
     "https://doi.org/*",
     "*://*.arxiv.org/*",
+    "*://*.cnki.net/*",
     "*://*.dl.acm.org/*",
     "*://*.ieeexplore.ieee.org/*",
     "*://*.nature.com/*",
@@ -62,6 +63,7 @@
     {
       "matches": [
         "*://*.arxiv.org/*",
+        "*://*.cnki.net/*",
         "*://*.dl.acm.org/*",
         "*://*.ieeexplore.ieee.org/*",
         "*://*.nature.com/*",

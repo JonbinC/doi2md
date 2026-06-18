@@ -596,9 +596,14 @@ async function executeFallbackPdfParse(context, routePlan) {
     }
   }
   if (!candidate) {
+    const currentPageResult2 = await downloadCurrentPagePdfFromTab(context);
+    if (currentPageResult2?.success) {
+      return currentPageResult2;
+    }
     return {
       success: false,
-      requiresUpload: true,
+      requiresBrowserCapture: Boolean(context.tabId),
+      requiresUpload: !context.tabId,
       error: routePlan.user_message || "PDF upload required. Please download and upload the PDF manually.",
       nextCommand: buildCliParseCommand(context.input)
     };
@@ -623,17 +628,43 @@ async function executeFallbackPdfParse(context, routePlan) {
     } catch {
     }
   }
+  const currentPageResult = await downloadCurrentPagePdfFromTab(context);
+  if (currentPageResult?.success) {
+    return currentPageResult;
+  }
   const sourceLabel = candidate.source || candidate.connector || "publisher PDF candidate";
   const artifactUrl = candidate.artifact_url ? ` Candidate: ${candidate.artifact_url}` : "";
   const reason = candidate.reason || routePlan.user_message || "This PDF candidate should be acquired from the user's browser session.";
   const capability = routePlan.publisher_capabilities?.access_mode ? ` Access: ${routePlan.publisher_capabilities.access_mode}.` : "";
   return {
     success: false,
-    requiresBrowserCapture: requiresBrowser,
-    requiresUpload: !requiresBrowser,
+    requiresBrowserCapture: requiresBrowser || Boolean(context.tabId),
+    requiresUpload: !requiresBrowser && !context.tabId,
     error: `${reason} Source: ${sourceLabel}.${capability}${artifactUrl}`,
     nextCommand: buildCliParseCommand(context.input)
   };
+}
+async function downloadCurrentPagePdfFromTab(context) {
+  if (!context.tabId) {
+    return null;
+  }
+  try {
+    const response = await sendTabMessageWithInjection(context.tabId, {
+      type: "mdtero.download_current_page_pdf.request"
+    });
+    const download = response?.download;
+    if (response?.ok && download?.ok && download.payloadBase64) {
+      return {
+        success: true,
+        rawArtifact: new Blob([base64ToBytes(download.payloadBase64)], { type: "application/pdf" }),
+        filename: download.payloadName || "paper.pdf",
+        artifactKind: "pdf",
+        sourceDoi: inferSourceDoi(context.input)
+      };
+    }
+  } catch {
+  }
+  return null;
 }
 async function downloadPdfFromUrl(url, context, filename) {
   try {
@@ -1086,6 +1117,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
+      if (shouldTryCurrentPagePdf(message.input, message.pageContext?.tabUrl)) {
+        const currentPagePdfResult = await tryCurrentPagePdfParse(message.input, message.pageContext);
+        if (currentPagePdfResult) {
+          return currentPagePdfResult;
+        }
+      }
       const routePlan = await fetchRoutePlanFromSsot(
         routerSSOT,
         message.input,
@@ -1234,5 +1271,52 @@ function buildFileParseCommand(filename, artifactKind) {
 function inferSourceDoi2(input) {
   const trimmed = String(input || "").trim();
   return /^10\.\S+/i.test(trimmed) ? trimmed : void 0;
+}
+function shouldTryCurrentPagePdf(input, tabUrl) {
+  return isCnkiArticleUrl(input) || isCnkiArticleUrl(tabUrl) || isIeeeArticleUrl(input) || isIeeeArticleUrl(tabUrl);
+}
+function isCnkiArticleUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    return parsed.hostname.endsWith("cnki.net") && /\/kcms2\/article\/(?:abstract|detail)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+function isIeeeArticleUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    return parsed.hostname.endsWith("ieeexplore.ieee.org") && /\/(?:abstract\/)?document\/\d+|\/stamp\/stamp\.jsp|\/stampPDF\/getPDF\.jsp/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+async function tryCurrentPagePdfParse(input, pageContext) {
+  const tabId = pageContext?.tabId;
+  if (!tabId) {
+    return null;
+  }
+  const response = await sendTabMessageWithInjection(tabId, {
+    type: "mdtero.download_current_page_pdf.request"
+  });
+  const download = response?.download;
+  if (!response?.ok || !download?.ok || !download.payloadBase64) {
+    return null;
+  }
+  return client.createRawUploadTask({
+    rawFile: new Blob([base64ToBytes2(download.payloadBase64)], { type: "application/pdf" }),
+    filename: download.payloadName || "paper.pdf",
+    sourceDoi: inferSourceDoi2(input),
+    sourceInput: input || download.sourceUrl || pageContext?.tabUrl,
+    artifactKind: "pdf"
+  });
+}
+function base64ToBytes2(payloadBase64) {
+  const decoded = globalThis.atob(payloadBase64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
 }
 //# sourceMappingURL=background.js.map
