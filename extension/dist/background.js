@@ -535,7 +535,7 @@ function shellQuoteRouteInput(value) {
 }
 
 // src/lib/features.ts
-var PROXY_FEATURES_ENABLED = true ? true : true;
+var PROXY_FEATURES_ENABLED = true ? false : true;
 
 // src/lib/file-upload.ts
 async function runBrowserFileParseRequest(client2, message) {

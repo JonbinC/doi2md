@@ -1,0 +1,60 @@
+name: Publish mdtero to PyPI
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "cli/v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mdtero-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish public mdtero client
+    runs-on: linux-small
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List required secret names
+        run: |
+          cat <<'MSG'
+          Forgejo secrets used by this workflow:
+          - PYPI_API_TOKEN: PyPI token for the mdtero project
+          MSG
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run secret guard
+        run: python scripts/ci/secret_guard.py
+
+      - name: Run Python contract tests
+        run: uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py -q
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PYPI_API_TOKEN:-}" ]]; then
+            echo "PYPI_API_TOKEN is required on Forgejo for PyPI publish." >&2
+            exit 1
+          fi
+          uv publish --token "$PYPI_API_TOKEN"

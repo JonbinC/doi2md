@@ -388,7 +388,7 @@ function triggerBlobDownload(blob, filename, deps = defaultDeps) {
 }
 
 // src/lib/features.ts
-var PROXY_FEATURES_ENABLED = true ? true : true;
+var PROXY_FEATURES_ENABLED = true ? false : true;
 
 // ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";

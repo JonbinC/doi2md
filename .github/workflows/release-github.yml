@@ -1,0 +1,110 @@
+name: Release GitHub Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "Release kind"
+        required: true
+        type: choice
+        options:
+          - extension
+          - cli
+      version:
+        description: "Semver, for example 0.1.10 or 0.2.0a11"
+        required: true
+  push:
+    tags:
+      - "extension/v*"
+      - "cli/v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-github-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve release coordinates
+    runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.meta.outputs.kind }}
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - id: meta
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            kind="${{ inputs.kind }}"
+            version="${{ inputs.version }}"
+          else
+            ref="${GITHUB_REF_NAME}"
+            kind="${ref%%/*}"
+            version="${ref#*/}"
+            version="${version#v}"
+          fi
+          printf 'kind=%s\n' "$kind" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s/v%s\n' "$kind" "$version" >> "$GITHUB_OUTPUT"
+
+  extension:
+    needs: resolve
+    if: needs.resolve.outputs.kind == 'extension'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Build Web Store package
+        working-directory: extension
+        run: |
+          npm ci
+          npm test
+          npm run package:webstore
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: Mdtero Browser Extension v${{ needs.resolve.outputs.version }}
+          body: |
+            Browser extension v${{ needs.resolve.outputs.version }}.
+
+            - Chrome Web Store draft/review is managed separately.
+            - Edge Add-ons draft/review is managed separately.
+            - Attach `mdtero-extension-webstore.zip` for manual sideload or store upload.
+          files: extension/releases/mdtero-extension-webstore.zip
+          generate_release_notes: false
+
+  cli:
+    needs: resolve
+    if: needs.resolve.outputs.kind == 'cli'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Build Python artifacts
+        run: |
+          python scripts/ci/secret_guard.py
+          uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py -q
+          uv build
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: mdtero CLI v${{ needs.resolve.outputs.version }}
+          body: |
+            Public Python CLI/TUI v${{ needs.resolve.outputs.version }}.
+
+            Install:
+            - `uv tool install mdtero==${{ needs.resolve.outputs.version }}`
+            - or `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git@${{ needs.resolve.outputs.tag }}`
+          files: |
+            dist/*
+          generate_release_notes: false

@@ -57,34 +57,6 @@
         </div>
       </section>
 
-
-      <section class="card" id="proxy-settings-card">
-        <div class="setting-card-header">
-          <div>
-            <h2 id="proxy-settings-title">Campus proxy</h2>
-            <p id="proxy-settings-note" class="meta-label">Route browser traffic through HTTP, HTTPS, or SOCKS proxies when your campus network requires it.</p>
-          </div>
-          <span id="proxy-status" class="meta-pill" data-state="empty">Direct</span>
-        </div>
-        <label class="checkbox-row" for="proxy-enabled">
-          <input id="proxy-enabled" type="checkbox" />
-          <span id="proxy-enabled-label">Enable proxy for extension traffic</span>
-        </label>
-        <label id="proxy-url-label" for="proxy-url">Proxy URL</label>
-        <input id="proxy-url" type="text" autocomplete="off" placeholder="socks5h://127.0.0.1:1080" />
-        <label class="checkbox-row" for="require-campus-proxy">
-          <input id="require-campus-proxy" type="checkbox" />
-          <span id="require-campus-proxy-label">Require AS786/Jisc/Nottingham outlet check</span>
-        </label>
-        <p id="proxy-url-note" class="meta-label">Supported schemes: http, https, socks4, socks4a, socks5, socks5h. Localhost bypass stays enabled.</p>
-        <div class="button-row settings-action-row">
-          <button id="save-proxy-settings" type="button" class="secondary-button">Save proxy</button>
-          <button id="test-proxy-settings" type="button" class="ghost-chip">Test outlet</button>
-          <button id="clear-proxy-settings" type="button" class="ghost-chip">Clear proxy</button>
-        </div>
-        <p id="proxy-feedback" class="status-line" aria-live="polite"></p>
-      </section>
-
       <section class="card" id="elsevier-settings-card">
         <div class="setting-card-header">
           <div>

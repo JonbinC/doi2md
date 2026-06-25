@@ -1,0 +1,59 @@
+name: Publish mdtero to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version override for manual smoke (defaults to pyproject.toml)."
+        required: false
+        default: ""
+  push:
+    tags:
+      - "cli/v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-mdtero-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish public mdtero client
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run secret guard
+        run: python scripts/ci/secret_guard.py
+
+      - name: Run Python contract tests
+        run: uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py -q
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Smoke installed wheel
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/mdtero-wheel-smoke
+          /tmp/mdtero-wheel-smoke/bin/pip install dist/mdtero-*.whl
+          /tmp/mdtero-wheel-smoke/bin/mdtero --version
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: false

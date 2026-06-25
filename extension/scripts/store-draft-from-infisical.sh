@@ -3,9 +3,9 @@ set -euo pipefail
 
 command="${1:-draft-all}"
 case "$command" in
-  chrome-draft|edge-draft|draft-all) ;;
+  chrome-draft|edge-draft|edge-submit|edge-release|draft-all) ;;
   *)
-    printf 'Usage: %s [chrome-draft|edge-draft|draft-all]\n' "$0" >&2
+    printf 'Usage: %s [chrome-draft|edge-draft|edge-submit|edge-release|draft-all]\n' "$0" >&2
     exit 64
     ;;
 esac
