@@ -1,0 +1,98 @@
+name: Release Campus Relay
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Relay semver to release, for example 0.1.0"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: relay/go.sum
+      - working-directory: relay
+        run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+            artifact: mdtero-relay-darwin-arm64
+          - goos: darwin
+            goarch: amd64
+            artifact: mdtero-relay-darwin-amd64
+          - goos: linux
+            goarch: arm64
+            artifact: mdtero-relay-linux-arm64
+          - goos: linux
+            goarch: amd64
+            artifact: mdtero-relay-linux-amd64
+          - goos: windows
+            goarch: amd64
+            artifact: mdtero-relay-windows-amd64
+          - goos: windows
+            goarch: arm64
+            artifact: mdtero-relay-windows-arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: relay/go.sum
+      - name: Build archive
+        working-directory: relay
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          RELAY_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/v${RELAY_VERSION}"
+          output="dist/v${RELAY_VERSION}/mdtero-relay"
+          if [[ "$GOOS" == "windows" ]]; then
+            output="${output}.exe"
+          fi
+          go build -trimpath -ldflags "-s -w" -o "$output" ./cmd/mdtero-relay
+          if [[ "$GOOS" == "windows" ]]; then
+            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay.exe
+          else
+            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: relay/dist/v${{ inputs.version }}/${{ matrix.artifact }}.tgz
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          path: relay/dist/v${{ inputs.version }}
+      - run: |
+          set -euo pipefail
+          target="relay/dist/v${{ inputs.version }}"
+          mkdir -p "$target"
+          find relay/dist -name '*.tgz' -exec cp {} "$target/" \;
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: relay/v${{ inputs.version }}
+          name: mdtero-relay v${{ inputs.version }}
+          files: relay/dist/v${{ inputs.version }}/*.tgz

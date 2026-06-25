@@ -227,7 +227,7 @@ Validated in the current alpha:
 - PDF upload through the backend document parsing path, returning Markdown and zip artifacts when parsing succeeds.
 - Local project init/add/remove/list/status, BibTeX import with de-duplication, project parse/refresh/download, and agent-readable JSON for project management commands.
 - Zotero metadata import into a local Mdtero project, plus reverse sync of succeeded parse task notes/tags back to Zotero items imported after `0.2.0a7`.
-- Discovery through local Semantic Scholar when configured, otherwise the backend OpenAlex fallback. `mdtero discover "<query>" --limit 5 --interactive` opens a paging/refinement session where users can add selected results to the local project queue. If Semantic Scholar is unavailable, `--json` reports `local_semantic_scholar_failure` and `discovery_fallback` so agents can continue with OpenAlex while preserving the reason code.
+- Discovery uses the Mdtero server OpenAlex API. `mdtero discover "<query>" --limit 5 --interactive` opens a paging/refinement session where users can add selected results to the local project queue.
 - `status`, waited parse results, and downloads expose `quality_label` / `quality_warning` for low-content artifacts such as `metadata_only`, `abstract_only`, `section_only_fulltext`, and `low_confidence_parse`; Markdown downloads default to `author_year_shorttitle.md`, append `.low_quality.md` for low-confidence full text, and update `manifest.csv`.
 - Local route acquisition with `curl_cffi` for backend-planned HTML/XML/EPUB/PDF source fetches, with `httpx` fallback and visible `client_acquisition` trace output.
 - Server-side translation requests from parse task ids or local Markdown files.

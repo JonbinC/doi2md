@@ -267,8 +267,22 @@ export function createApiClient(
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
-    getTask(taskId: string) {
-      return request(`/api/v1/tasks/${taskId}`, undefined, { requireAuth: true }).then((response) => response.json() as Promise<TaskRecord>);
+    getTask(taskId: string, options?: { etag?: string | null }) {
+      const headers = new Headers();
+      if (options?.etag) {
+        headers.set("If-None-Match", options.etag);
+      }
+      return request(`/api/v1/tasks/${taskId}`, { headers }, { requireAuth: true }).then(async (response) => {
+        const etag = response.headers.get("ETag");
+        if (response.status === 304) {
+          return { notModified: true as const, etag };
+        }
+        return {
+          notModified: false as const,
+          result: await response.json() as TaskRecord,
+          etag,
+        };
+      });
     },
     downloadArtifact(taskId: string, artifact: string, preferredFilename?: string | null) {
       return request(`/api/v1/tasks/${taskId}/download/${artifact}`, undefined, { requireAuth: true }).then(async (response) => ({

@@ -4,11 +4,17 @@ Mdtero Extension is the browser surface for login, current-page/DOI parse, user-
 
 ## Install
 
-Build or install the packaged extension, then load the extension folder in a Chromium browser. The extension needs storage for your Mdtero token, downloads for Markdown/zip/translation artifacts, tabs for supported paper pages, and host access for Mdtero plus scholarly sources it may inspect from the active tab.
+Build or install the packaged extension, then load the extension folder in a Chromium browser. The extension needs storage for your Mdtero token, tabs for supported paper pages, and host access for Mdtero plus scholarly sources it may inspect from the active tab. Artifact downloads use the browser's normal save flow and do not require the `downloads` permission.
 
 ```bash
 npm install
-npm run build
+npm run build:dev
+```
+
+For Chrome Web Store drafts, build the store profile instead. It omits the campus proxy permission and settings surface to reduce review friction:
+
+```bash
+npm run build:store
 ```
 
 ## Store Draft Uploads
@@ -18,6 +24,12 @@ The store workflow builds a root-level Manifest V3 zip for Chrome Web Store and 
 ```bash
 npm test
 npm run package:webstore
+```
+
+For local sideloading with campus proxy support:
+
+```bash
+npm run package:dev
 ```
 
 Chrome draft upload requires these environment variables:
@@ -74,7 +86,7 @@ Open the popup or options page and choose **Open Mdtero Account**. Sign in at `h
 
 The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com` (plus localhost during development). Publisher pages cannot mint extension tokens. The extension can store your own Elsevier API key locally for Article Retrieval XML, but it does not store Wiley TDM keys, Springer keys, shared backend credentials, or local helper credentials.
 
-The options page keeps CLI setup out of the extension product surface. It focuses on Mdtero Account status, quota, direct Elsevier key configuration, interface language, API URL, permissions, and account history.
+The options page keeps CLI setup out of the extension product surface. It focuses on Mdtero Account status, quota, direct Elsevier key configuration, interface language, API URL, permissions, and account history. Campus proxy controls exist only in the development build (`npm run build:dev` / `npm run package:dev`); the Web Store build omits the `proxy` permission.
 
 ## Parse Papers
 

@@ -1,0 +1,268 @@
+name: Release Campus Relay
+
+on:
+  push:
+    tags:
+      - "relay/v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Relay semver to release, for example 0.1.0"
+        required: true
+        default: "0.1.0"
+      publish_site:
+        description: "Copy install scripts and binaries into the nextmdtero site repo"
+        required: false
+        default: "yes"
+        type: choice
+        options:
+          - "yes"
+          - "no"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-relay-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      publish_site: ${{ steps.publish.outputs.value }}
+    steps:
+      - name: Resolve relay version
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#relay/v}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Resolve site publish flag
+        id: publish
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.publish_site }}" != "yes" ]]; then
+            echo "value=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    name: Test relay
+    needs: prepare
+    runs-on: linux-small
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: relay/go.sum
+
+      - name: Test relay module
+        working-directory: relay
+        run: go test ./...
+
+  build:
+    name: Build ${{ matrix.artifact }}
+    needs:
+      - prepare
+      - test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+            artifact: mdtero-relay-darwin-arm64
+          - goos: darwin
+            goarch: amd64
+            artifact: mdtero-relay-darwin-amd64
+          - goos: linux
+            goarch: arm64
+            artifact: mdtero-relay-linux-arm64
+          - goos: linux
+            goarch: amd64
+            artifact: mdtero-relay-linux-amd64
+          - goos: windows
+            goarch: amd64
+            artifact: mdtero-relay-windows-amd64
+          - goos: windows
+            goarch: arm64
+            artifact: mdtero-relay-windows-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: relay/go.sum
+
+      - name: Build archive
+        working-directory: relay
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          RELAY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/v${RELAY_VERSION}"
+          output="dist/v${RELAY_VERSION}/mdtero-relay"
+          if [[ "$GOOS" == "windows" ]]; then
+            output="${output}.exe"
+          fi
+          go build -trimpath -ldflags "-s -w" -o "$output" ./cmd/mdtero-relay
+          if [[ "$GOOS" == "windows" ]]; then
+            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay.exe
+          else
+            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: relay/dist/v${{ needs.prepare.outputs.version }}/${{ matrix.artifact }}.tgz
+          if-no-files-found: error
+
+  release:
+    name: Attach release assets
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: relay/dist/v${{ needs.prepare.outputs.version }}
+
+      - name: Flatten artifact layout
+        env:
+          RELAY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          target="relay/dist/v${RELAY_VERSION}"
+          mkdir -p "$target"
+          find relay/dist -name '*.tgz' -exec cp {} "$target/" \;
+          ls -la "$target"
+
+      - name: Create Forgejo release
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          RELAY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${FORGEJO_TOKEN:-}" ]]; then
+            echo "FORGEJO_TOKEN is not configured; skipping Forgejo release attachment."
+            exit 0
+          fi
+          tag="relay/v${RELAY_VERSION}"
+          api="${GITHUB_API_URL}"
+          owner="${GITHUB_REPOSITORY%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          release_id="$(curl -fsS \
+            -H "Authorization: token ${FORGEJO_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${api}/repos/${owner}/${repo}/releases" \
+            -d "{\"tag_name\":\"${tag}\",\"name\":\"mdtero-relay v${RELAY_VERSION}\",\"body\":\"Campus relay native binaries for macOS, Linux, and Windows.\"}" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+          for archive in relay/dist/v${RELAY_VERSION}/*.tgz; do
+            curl -fsS \
+              -H "Authorization: token ${FORGEJO_TOKEN}" \
+              -H "Content-Type: application/gzip" \
+              --data-binary @"${archive}" \
+              "${api}/repos/${owner}/${repo}/releases/${release_id}/assets?name=$(basename "${archive}")"
+          done
+
+  publish-site:
+    name: Publish site install assets
+    needs:
+      - prepare
+      - release
+    if: ${{ needs.prepare.outputs.publish_site == 'yes' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout public repo
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: relay/dist/v${{ needs.prepare.outputs.version }}
+
+      - name: Flatten artifact layout
+        env:
+          RELAY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          target="relay/dist/v${RELAY_VERSION}"
+          mkdir -p "$target"
+          find relay/dist -name '*.tgz' -exec cp {} "$target/" \;
+
+      - name: Verify nextmdtero publish token
+        id: site
+        env:
+          NEXTMDTERO_REPO_TOKEN: ${{ secrets.NEXTMDTERO_REPO_TOKEN }}
+          NEXTMDTERO_REPO: ${{ vars.NEXTMDTERO_REPO }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NEXTMDTERO_REPO_TOKEN:-}" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "NEXTMDTERO_REPO_TOKEN is not configured; site assets were built but not pushed."
+            exit 0
+          fi
+          if [[ -z "${NEXTMDTERO_REPO:-}" ]]; then
+            echo "NEXTMDTERO_REPO is required when NEXTMDTERO_REPO_TOKEN is set." >&2
+            exit 1
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout nextmdtero site repo
+        if: steps.site.outputs.publish == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.NEXTMDTERO_REPO }}
+          token: ${{ secrets.NEXTMDTERO_REPO_TOKEN }}
+          path: nextmdtero
+
+      - name: Publish relay assets to site
+        if: steps.site.outputs.publish == 'true'
+        env:
+          RELAY_VERSION: ${{ needs.prepare.outputs.version }}
+          MDTERO_SITE_ROOT: ${{ github.workspace }}/nextmdtero
+        run: bash relay/scripts/publish-site-assets.sh "${RELAY_VERSION}"
+
+      - name: Commit and push site assets
+        if: steps.site.outputs.publish == 'true'
+        working-directory: nextmdtero
+        env:
+          RELAY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No site asset changes to publish."
+            exit 0
+          fi
+          git config user.name "mdtero-release-bot"
+          git config user.email "release-bot@mdtero.com"
+          git add public/relay public/relay.ps1 public/releases/relay
+          git commit -m "Publish mdtero-relay v${RELAY_VERSION} install assets"
+          git push

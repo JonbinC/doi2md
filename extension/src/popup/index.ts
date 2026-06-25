@@ -1,6 +1,6 @@
 import type { TaskRecord } from "@mdtero/shared";
 
-import { createApiClient } from "../lib/api";
+import { createApiClient, isMdteroApiError } from "../lib/api";
 import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
 import {
@@ -16,10 +16,12 @@ import { sendTabMessageWithInjection } from "../lib/tab-messaging";
 import {
   getReconnectablePendingTranslationTask,
   getPendingPopupTask,
+  mergeSettings,
   readPopupState,
   readRecentTasks,
   readSettings,
   resolveUiLanguage,
+  SETTINGS_KEY,
   upsertRecentTasks,
   writePopupState,
   writeRecentTasks,
@@ -66,6 +68,10 @@ const COPY = {
     signInButton: "Open website OAuth",
     connectionPillSignedOut: "Website OAuth",
     connectionPillSignedIn: "Connected",
+    paperInputEyebrow: "Paper input",
+    fileIntakeEyebrow: "Local files",
+    actionsEyebrow: "Actions",
+    sessionExpired: "Session expired. Please sign in again through website OAuth.",
     workflowAuth: "Login",
     workflowParse: "Parse / Upload",
     workflowTranslate: "Translate",
@@ -79,6 +85,7 @@ const COPY = {
     fileIntakeNote: "Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
+    pickHtmlButton: "Use HTML",
     fileNameEmpty: "No local file selected.",
     localFileParsing: (filename: string) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
@@ -129,6 +136,10 @@ const COPY = {
     signInButton: "打开网页登录",
     connectionPillSignedOut: "网页登录",
     connectionPillSignedIn: "已连接",
+    paperInputEyebrow: "论文输入",
+    fileIntakeEyebrow: "本地文件",
+    actionsEyebrow: "操作",
+    sessionExpired: "登录已过期，请重新通过网页登录授权。",
     workflowAuth: "登录",
     workflowParse: "解析 / 上传",
     workflowTranslate: "翻译",
@@ -142,6 +153,7 @@ const COPY = {
     fileIntakeNote: "如果你手里已经有 PDF、EPUB 或保存的 HTML 页面，也可以继续走同一条 Markdown 解析链。上传后由后端自动解析。",
     pickPdfButton: "选择 PDF",
     pickEpubButton: "选择 EPUB",
+    pickHtmlButton: "选择 HTML",
     fileNameEmpty: "尚未选择本地文件。",
     localFileParsing: (filename: string) => `正在上传 ${filename}，后端会创建解析任务并在这里轮询...`,
     localFileParseFailed: "本地文件解析失败，请重试。",
@@ -189,6 +201,10 @@ const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-to
 const accountEmailEl = document.querySelector<HTMLParagraphElement>("#account-email");
 const usageStatusEl = document.querySelector<HTMLParagraphElement>("#usage-status");
 const connectionPillEl = document.querySelector<HTMLParagraphElement>("#connection-pill");
+const heroCtaRowEl = document.querySelector<HTMLDivElement>("#hero-cta-row");
+const paperInputEyebrowEl = document.querySelector<HTMLDivElement>("#paper-input-eyebrow");
+const fileIntakeEyebrowEl = document.querySelector<HTMLDivElement>("#file-intake-eyebrow");
+const actionsEyebrowEl = document.querySelector<HTMLDivElement>("#actions-eyebrow");
 const workflowAuthEl = document.querySelector<HTMLSpanElement>("#workflow-auth");
 const workflowParseEl = document.querySelector<HTMLSpanElement>("#workflow-parse");
 const workflowTranslateEl = document.querySelector<HTMLSpanElement>("#workflow-translate");
@@ -429,6 +445,37 @@ async function saveArtifact(taskId: string, artifactKey: string, preferredFilena
   }
 }
 
+function updateAccountChrome(settings: { token?: string; email?: string }) {
+  isSignedIn = Boolean(settings.token);
+  if (connectionPillEl) {
+    connectionPillEl.textContent = settings.token
+      ? getCurrentCopy().connectionPillSignedIn
+      : getCurrentCopy().connectionPillSignedOut;
+    connectionPillEl.dataset.state = settings.token ? "signed-in" : "signed-out";
+  }
+  if (heroCtaRowEl) {
+    heroCtaRowEl.dataset.signedIn = settings.token ? "true" : "false";
+  }
+  if (accountEmailEl) {
+    accountEmailEl.textContent = settings.email
+      ? getCurrentCopy().signedIn(settings.email)
+      : getCurrentCopy().guest;
+  }
+}
+
+async function clearStaleAuth() {
+  const current = await readSettings();
+  if (!current.token) {
+    return;
+  }
+  await writeSettings(mergeSettings(current, { token: undefined, email: undefined }));
+  updateAccountChrome({ token: undefined, email: undefined });
+  if (usageStatusEl) {
+    usageStatusEl.textContent = getCurrentCopy().sessionExpired;
+  }
+  updateWorkflowState();
+}
+
 function applyLanguage() {
   const copy = getCurrentCopy();
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
@@ -439,12 +486,16 @@ function applyLanguage() {
   if (workflowParseEl) workflowParseEl.textContent = copy.workflowParse;
   if (workflowTranslateEl) workflowTranslateEl.textContent = copy.workflowTranslate;
   if (workflowDownloadEl) workflowDownloadEl.textContent = copy.workflowDownload;
+  if (paperInputEyebrowEl) paperInputEyebrowEl.textContent = copy.paperInputEyebrow;
+  if (fileIntakeEyebrowEl) fileIntakeEyebrowEl.textContent = copy.fileIntakeEyebrow;
+  if (actionsEyebrowEl) actionsEyebrowEl.textContent = copy.actionsEyebrow;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
   if (fileIntakeTitleEl) fileIntakeTitleEl.textContent = copy.fileIntakeTitle;
   if (fileIntakeNoteEl) fileIntakeNoteEl.textContent = copy.fileIntakeNote;
   if (pickPdfButton) pickPdfButton.textContent = copy.pickPdfButton;
   if (pickEpubButton) pickEpubButton.textContent = copy.pickEpubButton;
+  if (pickHtmlButton) pickHtmlButton.textContent = copy.pickHtmlButton;
   if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
     localFileNameEl.textContent = copy.fileNameEmpty;
   }
@@ -473,6 +524,11 @@ function applyLanguage() {
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
+  if (connectionPillEl) {
+    connectionPillEl.textContent = isSignedIn
+      ? copy.connectionPillSignedIn
+      : copy.connectionPillSignedOut;
+  }
   updateWorkflowState();
   renderActionButtons();
 }
@@ -736,10 +792,21 @@ async function hydrateSavedState(detectedInput: string) {
   renderActionButtons();
 }
 
+const TASK_POLL_BASE_MS = 2500;
+const taskPollCache = new Map<string, { task: TaskRecord; etag: string | null; unchangedStreak: number }>();
+
+function nextTaskPollDelayMs(unchangedStreak: number): number {
+  const backoff = Math.min(unchangedStreak * 500, 3500);
+  const jitter = Math.floor(Math.random() * 1000) - 500;
+  return Math.max(1000, TASK_POLL_BASE_MS + backoff + jitter);
+}
+
 async function pollTask(taskId: string, kind: "parse" | "translate") {
+  const cached = taskPollCache.get(taskId);
   const response = await chrome.runtime.sendMessage({
     type: "mdtero.task.get",
-    taskId
+    taskId,
+    etag: cached?.etag
   });
   if (!response?.ok) {
     setResult(response?.error ?? getCurrentCopy().parseFailed);
@@ -762,7 +829,22 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     return;
   }
 
-  const task = response.result as TaskRecord;
+  let unchangedStreak = cached?.unchangedStreak ?? 0;
+  let task: TaskRecord;
+  if (response.notModified) {
+    if (!cached?.task) {
+      setResult(getCurrentCopy().parseFailed);
+      return;
+    }
+    unchangedStreak += 1;
+    task = cached.task;
+    taskPollCache.set(taskId, { task, etag: response.etag ?? cached.etag, unchangedStreak });
+  } else {
+    unchangedStreak = 0;
+    task = response.result as TaskRecord;
+    taskPollCache.set(taskId, { task, etag: response.etag ?? null, unchangedStreak: 0 });
+  }
+
   if (task.status === "failed") {
     setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     setResult(
@@ -809,7 +891,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     window.setTimeout(() => {
       void pollTask(taskId, kind);
-    }, 1500);
+    }, nextTaskPollDelayMs(unchangedStreak));
     updateWorkflowState();
     return;
   }
@@ -858,17 +940,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
 
 async function refreshUsage() {
   const settings = await readSettings();
-  isSignedIn = Boolean(settings.token);
-  if (connectionPillEl) {
-    connectionPillEl.textContent = settings.token
-      ? getCurrentCopy().connectionPillSignedIn
-      : getCurrentCopy().connectionPillSignedOut;
-  }
-  if (accountEmailEl) {
-    accountEmailEl.textContent = settings.email
-      ? getCurrentCopy().signedIn(settings.email)
-      : getCurrentCopy().guest;
-  }
+  updateAccountChrome(settings);
 
   if (!settings.token) {
     if (usageStatusEl) {
@@ -887,6 +959,10 @@ async function refreshUsage() {
       accountEmailEl.textContent = getCurrentCopy().signedIn(usage.email);
     }
   } catch (error) {
+    if (isMdteroApiError(error) && (error.status === 401 || error.status === 403)) {
+      await clearStaleAuth();
+      return;
+    }
     if (usageStatusEl) {
       usageStatusEl.textContent = getUsageStatusText(null, uiLanguage, (error as Error).message);
     }
@@ -1137,6 +1213,13 @@ translateButton?.addEventListener("click", async () => {
     return;
   }
 
+  const settings = await readSettings();
+  if (!settings.token) {
+    setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
+    return;
+  }
+
   const previous = await readPopupState();
   const markdownRef = parsedMarkdownRef(lastParsedMarkdownSource);
   const reconnectableTask = getReconnectablePendingTranslationTask(
@@ -1280,3 +1363,16 @@ void (async () => {
   await detectCurrentTab();
   await updatePreflightHint();
 })();
+
+chrome.storage.onChanged?.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+    return;
+  }
+  void refreshUsage();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void refreshUsage();
+  }
+});

@@ -12,9 +12,11 @@
     "vitest": "^4.1.7"
   },
   "scripts": {
-    "build": "node esbuild.config.mjs",
-    "package:dev": "npm run build && node scripts/package-dev.mjs",
-    "package:webstore": "npm run build && node scripts/package-webstore.mjs",
+    "build": "MDTERO_EXTENSION_PROFILE=store node esbuild.config.mjs",
+    "build:dev": "MDTERO_EXTENSION_PROFILE=dev node esbuild.config.mjs",
+    "build:store": "MDTERO_EXTENSION_PROFILE=store node esbuild.config.mjs",
+    "package:dev": "npm run build:dev && node scripts/package-dev.mjs",
+    "package:webstore": "npm run build:store && node scripts/package-webstore.mjs",
     "store:chrome-draft": "node scripts/store-draft.mjs chrome-draft",
     "store:edge-draft": "node scripts/store-draft.mjs edge-draft",
     "store:draft-all": "node scripts/store-draft.mjs draft-all",

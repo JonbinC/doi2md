@@ -27,7 +27,8 @@ vi.mock("../src/lib/api", () => ({
 
 vi.mock("../src/lib/storage", () => ({
   readSettings,
-  writeSettings
+  writeSettings,
+  SETTINGS_KEY: "mdtero_settings"
 }));
 
 function createChromeStub() {
@@ -52,6 +53,17 @@ function createChromeStub() {
     scripting: {
       executeScript: vi.fn().mockResolvedValue(undefined),
     },
+    storage: {
+      onChanged: {
+        addListener: vi.fn()
+      }
+    },
+    proxy: {
+      settings: {
+        clear: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined)
+      }
+    },
     __messageListeners: messageListeners
   };
 }
@@ -60,13 +72,22 @@ describe("extension background routing", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    readSettings.mockResolvedValue({ token: "demo-token", email: "demo@example.com" });
+    readSettings.mockResolvedValue({
+      token: "demo-token",
+      email: "demo@example.com",
+      proxyEnabled: false,
+      requireCampusProxy: false
+    });
     writeSettings.mockResolvedValue(undefined);
     createParseTask.mockResolvedValue({ task_id: "task-generic", status: "queued" });
     createUploadedParseTask.mockResolvedValue({ task_id: "task-legacy", status: "queued" });
     createRawUploadTask.mockResolvedValue({ task_id: "task-v2", status: "queued" });
     createTranslateTask.mockResolvedValue({ task_id: "task-translate", status: "queued" });
-    getTask.mockResolvedValue({ task_id: "task-1", status: "queued" });
+    getTask.mockResolvedValue({
+      notModified: false,
+      result: { task_id: "task-1", status: "queued" },
+      etag: '"task-1-etag"'
+    });
     downloadArtifact.mockResolvedValue({ blob: new Blob(["# Demo\n\nBody"]), filename: "demo.md" });
     fetchRoutePlan.mockReset();
   });

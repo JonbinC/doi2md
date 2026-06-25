@@ -45,11 +45,15 @@ function createChromeMock() {
     },
     runtime: {
       getManifest: () => ({ version: "0.1.5" }),
+      sendMessage: vi.fn(async () => ({ ok: true, result: { ok: true, summary: { asn: "AS786", city: "Nottingham" } } })),
     },
     storage: {
       local: {
         get: vi.fn(async () => ({})),
         set: vi.fn(async () => undefined),
+      },
+      onChanged: {
+        addListener: vi.fn(),
       },
     },
   };
@@ -60,9 +64,9 @@ async function flushUi() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function loadOptionsModule() {
+async function loadOptionsModule(htmlPath = "src/options/index.html") {
   vi.resetModules();
-  document.documentElement.innerHTML = readFileSync(resolve("src/options/index.html"), "utf8");
+  document.documentElement.innerHTML = readFileSync(resolve(htmlPath), "utf8");
   await import("../src/options/index.ts");
   await flushUi();
 }
@@ -95,6 +99,7 @@ describe("extension options page", () => {
     expect(document.querySelector("#connection-guide-title")?.textContent).toBe("Connection guide");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("upload a local PDF/EPUB");
     expect(document.querySelector("#elsevier-settings-title")?.textContent).toBe("Elsevier access");
+    expect(document.querySelector("#proxy-settings-card")).toBeNull();
     expect(document.querySelector("#elsevier-settings-note")?.textContent).toContain("Article Retrieval XML");
     expect(document.querySelector("#elsevier-key-status")?.textContent).toBe("Not configured");
     expect(document.querySelector("#elsevier-api-key-note")?.textContent).toContain("Stored only in this browser");
@@ -265,5 +270,13 @@ describe("extension options page", () => {
     expect(input.value).toBe("");
     expect(document.querySelector("#elsevier-key-status")?.textContent).toBe("Not configured");
     expect(document.querySelector("#elsevier-api-key-feedback")?.textContent).toContain("cleared");
+  });
+
+  it("shows campus proxy controls only in the development options surface", async () => {
+    await loadOptionsModule("src/options/index.dev.html");
+
+    expect(document.querySelector("#proxy-settings-title")?.textContent).toBe("Campus proxy");
+    expect(document.querySelector("#proxy-url")?.getAttribute("placeholder")).toBe("socks5h://127.0.0.1:1080");
+    expect(document.querySelector("#save-proxy-settings")?.textContent).toBe("Save proxy");
   });
 });

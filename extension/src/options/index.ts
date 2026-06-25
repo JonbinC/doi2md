@@ -1,12 +1,14 @@
 import type { TaskRecord } from "@mdtero/shared";
 
-import { createApiClient } from "../lib/api";
+import { createApiClient, isMdteroApiError } from "../lib/api";
 import { MDTERO_ACCOUNT_URL } from "../lib/auth-bridge";
 import { triggerBlobDownload } from "../lib/download";
+import { PROXY_FEATURES_ENABLED } from "../lib/features";
 import {
   mergeSettings,
   readSettings,
   resolveUiLanguage,
+  SETTINGS_KEY,
   writeSettings,
   type UiLanguage
 } from "../lib/storage";
@@ -17,11 +19,14 @@ const COPY = {
     subtitle: "Sign in, check quota, and configure browser-side paper capture.",
     permissionsTitle: "Why Mdtero asks for these permissions",
     permissionsTabs: "`tabs` lets the extension read the current paper page and open website OAuth when you sign in.",
-    permissionsDownloads: "`downloads` saves Markdown files, translations, ZIP bundles, and uploaded-source results back to your machine.",
+    permissionsStorage: "`storage` keeps your Mdtero token, preferences, and task history on this device.",
     permissionsCapture: "Browser capture reuses the active tab only when you ask Mdtero to parse the current paper page.",
     permissionsHosts: "Host permissions stay limited to Mdtero Auth, supported scholarly pages, and files you choose to upload.",
     notSignedIn: "Not signed in with website OAuth.",
     usagePending: "Balance and quota appear after sign-in.",
+    connectionPillSignedOut: "Website OAuth",
+    connectionPillSignedIn: "Connected",
+    sessionExpired: "Session expired. Please sign in again through website OAuth.",
     signedIn: (email: string) => `Signed in as ${email}`,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
@@ -48,6 +53,25 @@ const COPY = {
     uiLanguage: "Interface language",
     advanced: "Advanced",
     apiUrl: "API URL",
+    proxySettingsTitle: "Campus proxy",
+    proxySettingsNote: "Route browser traffic through HTTP, HTTPS, or SOCKS proxies when your campus network requires it.",
+    proxyDirect: "Direct",
+    proxyConfigured: "Proxy on",
+    proxyEnabledLabel: "Enable proxy for extension traffic",
+    proxyUrlLabel: "Proxy URL",
+    proxyUrlPlaceholder: "socks5h://127.0.0.1:1080",
+    proxyUrlNote: "Supported schemes: http, https, socks4, socks4a, socks5, socks5h. Localhost bypass stays enabled.",
+    requireCampusProxyLabel: "Require AS786/Jisc/Nottingham outlet check",
+    saveProxy: "Save proxy",
+    testProxy: "Test outlet",
+    clearProxy: "Clear proxy",
+    proxySaved: "Proxy settings saved.",
+    proxyCleared: "Proxy settings cleared.",
+    proxyInvalid: "Proxy URL is invalid or uses an unsupported scheme.",
+    proxyTesting: "Testing outlet...",
+    proxyTestOk: (summary: { ip?: string; city?: string; asn?: string }) =>
+      `Campus outlet OK${summary.ip ? `: ${summary.ip}` : ""}${summary.city ? ` · ${summary.city}` : ""}${summary.asn ? ` · ${summary.asn}` : ""}.`,
+    proxyTestFailed: "Campus proxy outlet check failed.",
     elsevierSettingsTitle: "Elsevier access",
     elsevierSettingsNote: "Add your own Elsevier API key to let the extension fetch Article Retrieval XML directly from supported ScienceDirect pages.",
     elsevierConfigured: "Configured",
@@ -84,11 +108,14 @@ const COPY = {
     subtitle: "使用网页登录授权扩展，并管理浏览器抓取、上传、翻译和下载设置。",
     permissionsTitle: "为什么 Mdtero 需要这些权限",
     permissionsTabs: "`tabs` 用来读取当前论文页，并在登录时打开网页登录页。",
-    permissionsDownloads: "`downloads` 用来把 Markdown、译文、ZIP 包和上传文件的解析结果保存回你的电脑。",
+    permissionsStorage: "`storage` 用来在本机保存你的 Mdtero 令牌、偏好设置和任务历史。",
     permissionsCapture: "浏览器补抓取只会在你主动解析当前论文页时复用当前标签页。",
     permissionsHosts: "站点权限只覆盖 Mdtero 登录页、受支持的学术页面，以及你主动选择上传的文件。",
     notSignedIn: "尚未通过网页登录授权扩展。",
     usagePending: "请在 mdtero.com/auth 登录以同步余额、额度和历史。",
+    connectionPillSignedOut: "网页登录",
+    connectionPillSignedIn: "已连接",
+    sessionExpired: "登录已过期，请重新通过网页登录授权。",
     signedIn: (email: string) => `已登录：${email}`,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
@@ -115,6 +142,25 @@ const COPY = {
     uiLanguage: "界面语言",
     advanced: "高级设置",
     apiUrl: "API 地址",
+    proxySettingsTitle: "校园代理",
+    proxySettingsNote: "当你的校园网需要通过 HTTP、HTTPS 或 SOCKS 代理访问时，在这里配置。",
+    proxyDirect: "直连",
+    proxyConfigured: "已启用",
+    proxyEnabledLabel: "为扩展流量启用代理",
+    proxyUrlLabel: "代理 URL",
+    proxyUrlPlaceholder: "socks5h://127.0.0.1:1080",
+    proxyUrlNote: "支持 http、https、socks4、socks4a、socks5、socks5h。本地 localhost 仍会直连。",
+    requireCampusProxyLabel: "要求 AS786/Jisc/Nottingham 出口校验",
+    saveProxy: "保存代理",
+    testProxy: "测试出口",
+    clearProxy: "清除代理",
+    proxySaved: "代理设置已保存。",
+    proxyCleared: "代理设置已清除。",
+    proxyInvalid: "代理 URL 无效或使用了不支持的协议。",
+    proxyTesting: "正在测试出口...",
+    proxyTestOk: (summary: { ip?: string; city?: string; asn?: string }) =>
+      `校园出口正常${summary.ip ? `：${summary.ip}` : ""}${summary.city ? ` · ${summary.city}` : ""}${summary.asn ? ` · ${summary.asn}` : ""}。`,
+    proxyTestFailed: "校园代理出口校验失败。",
     elsevierSettingsTitle: "Elsevier 访问",
     elsevierSettingsNote: "添加你自己的 Elsevier API key，让扩展可以直接从支持的 ScienceDirect 页面获取 Article Retrieval XML。",
     elsevierConfigured: "已配置",
@@ -152,7 +198,7 @@ const titleEl = document.querySelector<HTMLHeadingElement>("#settings-title");
 const subtitleEl = document.querySelector<HTMLParagraphElement>("#settings-subtitle");
 const permissionsTitleEl = document.querySelector<HTMLHeadingElement>("#permissions-title");
 const permissionsTabsEl = document.querySelector<HTMLParagraphElement>("#permissions-tabs");
-const permissionsDownloadsEl = document.querySelector<HTMLParagraphElement>("#permissions-downloads");
+const permissionsStorageEl = document.querySelector<HTMLParagraphElement>("#permissions-storage");
 const permissionsCaptureEl = document.querySelector<HTMLParagraphElement>("#permissions-capture");
 const permissionsHostsEl = document.querySelector<HTMLParagraphElement>("#permissions-hosts");
 const languageToggleEl = document.querySelector<HTMLButtonElement>("#language-toggle");
@@ -160,6 +206,7 @@ const apiBaseUrlInput = document.querySelector<HTMLInputElement>("#api-base-url"
 const uiLanguageSelect = document.querySelector<HTMLSelectElement>("#ui-language");
 const accountStatus = document.querySelector<HTMLParagraphElement>("#account-status");
 const usageStatus = document.querySelector<HTMLParagraphElement>("#usage-status");
+const connectionPillEl = document.querySelector<HTMLParagraphElement>("#connection-pill");
 const saveButton = document.querySelector<HTMLButtonElement>("#save-settings");
 const openAccountButton = document.querySelector<HTMLButtonElement>("#open-account");
 const websiteAuthTitleEl = document.querySelector<HTMLHeadingElement>("#website-auth-title");
@@ -182,6 +229,20 @@ const elsevierApiKeyNote = document.querySelector<HTMLParagraphElement>("#elsevi
 const toggleElsevierKeyButton = document.querySelector<HTMLButtonElement>("#toggle-elsevier-key");
 const clearElsevierKeyButton = document.querySelector<HTMLButtonElement>("#clear-elsevier-key");
 const elsevierApiKeyFeedback = document.querySelector<HTMLParagraphElement>("#elsevier-api-key-feedback");
+const proxySettingsTitleEl = document.querySelector<HTMLHeadingElement>("#proxy-settings-title");
+const proxySettingsNoteEl = document.querySelector<HTMLParagraphElement>("#proxy-settings-note");
+const proxyStatusEl = document.querySelector<HTMLSpanElement>("#proxy-status");
+const proxyEnabledInput = document.querySelector<HTMLInputElement>("#proxy-enabled");
+const proxyEnabledLabelEl = document.querySelector<HTMLSpanElement>("#proxy-enabled-label");
+const proxyUrlLabelEl = document.querySelector<HTMLLabelElement>("#proxy-url-label");
+const proxyUrlInput = document.querySelector<HTMLInputElement>("#proxy-url");
+const proxyUrlNoteEl = document.querySelector<HTMLParagraphElement>("#proxy-url-note");
+const requireCampusProxyInput = document.querySelector<HTMLInputElement>("#require-campus-proxy");
+const requireCampusProxyLabelEl = document.querySelector<HTMLSpanElement>("#require-campus-proxy-label");
+const saveProxyButton = document.querySelector<HTMLButtonElement>("#save-proxy-settings");
+const testProxyButton = document.querySelector<HTMLButtonElement>("#test-proxy-settings");
+const clearProxyButton = document.querySelector<HTMLButtonElement>("#clear-proxy-settings");
+const proxyFeedbackEl = document.querySelector<HTMLParagraphElement>("#proxy-feedback");
 const historySection = document.querySelector<HTMLElement>("#history-section");
 const historyList = document.querySelector<HTMLDivElement>("#history-list");
 const historyTitle = document.querySelector<HTMLHeadingElement>("#history-title");
@@ -249,6 +310,24 @@ function setElsevierFeedback(message?: string) {
   elsevierApiKeyFeedback.textContent = message || "";
 }
 
+function setProxyFeedback(message?: string, tone?: "success" | "error") {
+  if (!proxyFeedbackEl) {
+    return;
+  }
+  proxyFeedbackEl.textContent = message || "";
+  proxyFeedbackEl.dataset.tone = tone || "";
+}
+
+function renderProxyState(settings: { proxyEnabled?: boolean; proxyUrl?: string }) {
+  if (!proxyStatusEl) {
+    return;
+  }
+  const copy = copyFor(uiLanguage);
+  const enabled = Boolean(settings.proxyEnabled && settings.proxyUrl?.trim());
+  proxyStatusEl.textContent = enabled ? copy.proxyConfigured : copy.proxyDirect;
+  proxyStatusEl.dataset.state = enabled ? "configured" : "empty";
+}
+
 function applyLanguage() {
   const copy = copyFor(uiLanguage);
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
@@ -256,13 +335,25 @@ function applyLanguage() {
   if (subtitleEl) subtitleEl.textContent = copy.subtitle;
   if (permissionsTitleEl) permissionsTitleEl.textContent = copy.permissionsTitle;
   if (permissionsTabsEl) permissionsTabsEl.textContent = copy.permissionsTabs;
-  if (permissionsDownloadsEl) permissionsDownloadsEl.textContent = copy.permissionsDownloads;
+  if (permissionsStorageEl) permissionsStorageEl.textContent = copy.permissionsStorage;
   if (permissionsCaptureEl) permissionsCaptureEl.textContent = copy.permissionsCapture;
   if (permissionsHostsEl) permissionsHostsEl.textContent = copy.permissionsHosts;
   if (languageToggleEl) languageToggleEl.textContent = toggleLanguageLabel(uiLanguage);
   if (uiLanguageLabel) uiLanguageLabel.textContent = copy.uiLanguage;
   if (advancedSummary) advancedSummary.textContent = copy.advanced;
   if (apiBaseUrlLabel) apiBaseUrlLabel.textContent = copy.apiUrl;
+  if (PROXY_FEATURES_ENABLED) {
+    if (proxySettingsTitleEl) proxySettingsTitleEl.textContent = copy.proxySettingsTitle;
+    if (proxySettingsNoteEl) proxySettingsNoteEl.textContent = copy.proxySettingsNote;
+    if (proxyEnabledLabelEl) proxyEnabledLabelEl.textContent = copy.proxyEnabledLabel;
+    if (proxyUrlLabelEl) proxyUrlLabelEl.textContent = copy.proxyUrlLabel;
+    if (proxyUrlInput) proxyUrlInput.placeholder = copy.proxyUrlPlaceholder;
+    if (proxyUrlNoteEl) proxyUrlNoteEl.textContent = copy.proxyUrlNote;
+    if (requireCampusProxyLabelEl) requireCampusProxyLabelEl.textContent = copy.requireCampusProxyLabel;
+    if (saveProxyButton) saveProxyButton.textContent = copy.saveProxy;
+    if (testProxyButton) testProxyButton.textContent = copy.testProxy;
+    if (clearProxyButton) clearProxyButton.textContent = copy.clearProxy;
+  }
   if (elsevierSettingsTitleEl) elsevierSettingsTitleEl.textContent = copy.elsevierSettingsTitle;
   if (elsevierSettingsNoteEl) elsevierSettingsNoteEl.textContent = copy.elsevierSettingsNote;
   if (elsevierApiKeyLabel) elsevierApiKeyLabel.textContent = copy.elsevierApiKey;
@@ -400,6 +491,35 @@ async function refreshHistory() {
   }
 }
 
+function updateConnectionPill(isSignedIn: boolean) {
+  if (!connectionPillEl) {
+    return;
+  }
+  const copy = copyFor(uiLanguage);
+  connectionPillEl.textContent = isSignedIn ? copy.connectionPillSignedIn : copy.connectionPillSignedOut;
+  connectionPillEl.dataset.state = isSignedIn ? "signed-in" : "signed-out";
+}
+
+async function clearStaleAuth() {
+  const current = await readSettings();
+  if (!current.token) {
+    return;
+  }
+  await writeSettings(mergeSettings(current, { token: undefined, email: undefined }));
+  if (accountStatus) {
+    accountStatus.textContent = copyFor(uiLanguage).notSignedIn;
+  }
+  if (usageStatus) {
+    usageStatus.textContent = copyFor(uiLanguage).sessionExpired;
+  }
+  updateConnectionPill(false);
+  renderConnectionGuide(false);
+  if (historySection) {
+    historySection.hidden = true;
+    historySection.style.display = "none";
+  }
+}
+
 async function refreshView() {
   const settings = await readSettings();
   uiLanguage = resolveUiLanguage(settings.uiLanguage, globalThis.navigator?.language);
@@ -407,6 +527,12 @@ async function refreshView() {
 
   if (apiBaseUrlInput) apiBaseUrlInput.value = settings.apiBaseUrl;
   if (elsevierApiKeyInput) elsevierApiKeyInput.value = settings.elsevierApiKey || "";
+  if (PROXY_FEATURES_ENABLED) {
+    if (proxyEnabledInput) proxyEnabledInput.checked = Boolean(settings.proxyEnabled);
+    if (proxyUrlInput) proxyUrlInput.value = settings.proxyUrl || "";
+    if (requireCampusProxyInput) requireCampusProxyInput.checked = Boolean(settings.requireCampusProxy);
+    renderProxyState(settings);
+  }
   renderElsevierKeyState(Boolean(settings.elsevierApiKey));
   if (uiLanguageSelect) uiLanguageSelect.value = uiLanguage;
   if (accountStatus) {
@@ -415,6 +541,7 @@ async function refreshView() {
       : copyFor(uiLanguage).notSignedIn;
   }
   renderConnectionGuide(Boolean(settings.token));
+  updateConnectionPill(Boolean(settings.token));
 
   if (!settings.token) {
     if (usageStatus) {
@@ -437,7 +564,14 @@ async function refreshView() {
     if (usageStatus) {
       usageStatus.textContent = formatUsageSummary(usage);
     }
+    if (accountStatus && usage.email) {
+      accountStatus.textContent = copyFor(uiLanguage).signedIn(usage.email);
+    }
   } catch (error) {
+    if (isMdteroApiError(error) && (error.status === 401 || error.status === 403)) {
+      await clearStaleAuth();
+      return;
+    }
     if (usageStatus) {
       usageStatus.textContent = (error as Error).message;
     }
@@ -471,6 +605,89 @@ saveButton?.addEventListener("click", async () => {
   setElsevierFeedback(copyFor(uiLanguage).elsevierKeySaved);
   await refreshView();
 });
+
+if (PROXY_FEATURES_ENABLED) {
+  saveProxyButton?.addEventListener("click", async () => {
+    const { parseProxyUrl } = await import("../lib/proxy");
+    const copy = copyFor(uiLanguage);
+    const current = await readSettings();
+    const proxyUrl = proxyUrlInput?.value.trim() || "";
+    const proxyEnabled = Boolean(proxyEnabledInput?.checked);
+    const requireCampusProxy = Boolean(requireCampusProxyInput?.checked);
+
+    if (proxyEnabled && proxyUrl) {
+      try {
+        parseProxyUrl(proxyUrl);
+      } catch {
+        setProxyFeedback(copy.proxyInvalid, "error");
+        return;
+      }
+    }
+
+    await writeSettings(
+      mergeSettings(current, {
+        proxyEnabled: proxyEnabled && Boolean(proxyUrl),
+        proxyUrl: proxyUrl || undefined,
+        requireCampusProxy
+      })
+    );
+    setProxyFeedback(copy.proxySaved, "success");
+    await refreshView();
+  });
+
+  testProxyButton?.addEventListener("click", async () => {
+    const copy = copyFor(uiLanguage);
+    setProxyFeedback(copy.proxyTesting);
+    if (saveProxyButton) {
+      saveProxyButton.disabled = true;
+    }
+    if (testProxyButton) {
+      testProxyButton.disabled = true;
+    }
+    try {
+      const current = await readSettings();
+      const proxyUrl = proxyUrlInput?.value.trim() || "";
+      const proxyEnabled = Boolean(proxyEnabledInput?.checked);
+      await writeSettings(
+        mergeSettings(current, {
+          proxyEnabled: proxyEnabled && Boolean(proxyUrl),
+          proxyUrl: proxyUrl || undefined,
+          requireCampusProxy: Boolean(requireCampusProxyInput?.checked)
+        })
+      );
+      const response = await chrome.runtime.sendMessage({ type: "mdtero.proxy.test.request" });
+      if (!response?.ok || !response.result?.ok) {
+        setProxyFeedback(response?.result?.message || response?.error || copy.proxyTestFailed, "error");
+        return;
+      }
+      setProxyFeedback(copy.proxyTestOk(response.result.summary || {}), "success");
+    } finally {
+      if (saveProxyButton) {
+        saveProxyButton.disabled = false;
+      }
+      if (testProxyButton) {
+        testProxyButton.disabled = false;
+      }
+    }
+  });
+
+  clearProxyButton?.addEventListener("click", async () => {
+    const copy = copyFor(uiLanguage);
+    const current = await readSettings();
+    await writeSettings(
+      mergeSettings(current, {
+        proxyEnabled: false,
+        proxyUrl: undefined,
+        requireCampusProxy: false
+      })
+    );
+    if (proxyEnabledInput) proxyEnabledInput.checked = false;
+    if (proxyUrlInput) proxyUrlInput.value = "";
+    if (requireCampusProxyInput) requireCampusProxyInput.checked = false;
+    setProxyFeedback(copy.proxyCleared, "success");
+    await refreshView();
+  });
+}
 
 toggleElsevierKeyButton?.addEventListener("click", () => {
   if (!elsevierApiKeyInput || !toggleElsevierKeyButton) return;
@@ -515,3 +732,10 @@ languageToggleEl?.addEventListener("click", async () => {
 });
 
 void refreshView();
+
+chrome.storage.onChanged?.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+    return;
+  }
+  void refreshView();
+});

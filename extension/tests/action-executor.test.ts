@@ -117,7 +117,7 @@ describe("executeAction", () => {
       {
         acquisition_candidates: [
           {
-            connector: "semantic_scholar_open_access_pdf",
+            connector: "openalex_pdf_url",
             format: "pdf",
             pdf_url: "https://archive.example/paper.pdf",
           },

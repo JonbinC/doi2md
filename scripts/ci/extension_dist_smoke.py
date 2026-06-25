@@ -134,7 +134,7 @@ def _check_manifest(manifest: dict[str, Any], failures: list[dict[str, Any]]) ->
     if manifest.get("manifest_version") != 3:
         failures.append({"path": "manifest.json", "reason_code": "extension_manifest_not_mv3"})
     permissions = manifest.get("permissions") or []
-    if permissions != ["storage", "downloads", "tabs", "activeTab", "scripting"]:
+    if permissions != ["storage", "tabs", "activeTab", "scripting"]:
         failures.append({"path": "manifest.json", "reason_code": "extension_permissions_drifted", "permissions": permissions})
     if "nativeMessaging" in permissions:
         failures.append({"path": "manifest.json", "reason_code": "extension_native_messaging_present"})

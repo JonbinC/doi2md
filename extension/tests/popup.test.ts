@@ -364,6 +364,19 @@ describe("getTaskProcessingSummary", () => {
     ]);
   });
 
+  it("shows queue position when task is still queued", () => {
+    expect(
+      getTaskProcessingSummary(
+        {
+          queue: { position: 3, depth: 5, ahead: 2 },
+          status: "queued",
+          stage: "queued"
+        },
+        "en"
+      )
+    ).toEqual(["Queue position: 3 (2 ahead)"]);
+  });
+
   it("localizes failure diagnostics and redacts sensitive hints", () => {
     expect(
       getTaskProcessingSummary(
