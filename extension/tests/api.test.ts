@@ -540,7 +540,7 @@ describe("createApiClient", () => {
           error_code: null,
           error_message: null
         }),
-        { status: 200 }
+        { status: 200, headers: { ETag: '"task-2-etag"' } }
       )
     ];
     fetchMock.mockImplementation(async () => fetchResponses.shift() as Response);
@@ -554,7 +554,9 @@ describe("createApiClient", () => {
 
     const history = await client.getMyTasks();
     const firstTask: TaskRecord = history.items[0];
-    const detail: TaskRecord = await client.getTask("task-2");
+    const detailResponse = await client.getTask("task-2");
+    expect(detailResponse.notModified).toBe(false);
+    const detail: TaskRecord = detailResponse.result;
 
     expect(firstTask.task_kind).toBe("parse");
     expect(firstTask.input_summary).toBe("10.1000/example");

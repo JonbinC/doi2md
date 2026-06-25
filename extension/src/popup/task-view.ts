@@ -91,6 +91,14 @@ export function getTaskProcessingSummary(
   const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
   const artifacts = summarizeDownloadArtifacts(result);
   const lines: string[] = [];
+  const queue = (task as TaskRecord | null | undefined)?.queue;
+  if (queue?.position) {
+    lines.push(
+      language === "zh"
+        ? `队列位置：${queue.position}${queue.ahead ? `（前面还有 ${queue.ahead} 个）` : ""}`
+        : `Queue position: ${queue.position}${queue.ahead ? ` (${queue.ahead} ahead)` : ""}`
+    );
+  }
 
   if (task?.selected_provider || result?.selected_provider || task?.parser_strategy || result?.parser_strategy) {
     lines.push(language === "zh" ? "处理路径：后端解析" : "Processing path: Backend parsing");

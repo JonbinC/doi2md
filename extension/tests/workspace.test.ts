@@ -58,6 +58,9 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="connection-guide-card"');
     expect(optionsHtml).toContain('id="connection-guide-list"');
     expect(optionsHtml).toContain('id="elsevier-settings-card"');
+    expect(optionsHtml).not.toContain('id="proxy-settings-card"');
+    const devOptionsHtml = readFileSync(resolve("src/options/index.dev.html"), "utf-8");
+    expect(devOptionsHtml).toContain('id="proxy-settings-card"');
     expect(optionsHtml).toContain('id="elsevier-key-status"');
     expect(optionsHtml).toContain('id="toggle-elsevier-key"');
     expect(optionsHtml).toContain('id="clear-elsevier-key"');
@@ -146,7 +149,7 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('class="panel panel-options"');
     expect(styles).toContain("html { min-width: 380px; min-height: 600px; }");
     expect(styles).toContain(".panel-popup { width: 380px; height: 600px; min-height: 600px; max-width: 100vw; overflow: hidden; }");
-    expect(styles).toContain(".panel-popup .shell { height: 600px; max-height: 600px; overflow-y: auto; }");
+    expect(styles).toContain(".panel-popup .shell { height: 600px; max-height: 600px; overflow-y: auto; scroll-behavior: smooth;");
     expect(styles).toContain(".workflow-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
     expect(styles).toContain('.workflow-strip span[data-state="active"]');
     expect(styles).toContain('.workflow-strip span[data-state="done"]');

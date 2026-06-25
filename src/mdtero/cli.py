@@ -23,7 +23,7 @@ from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
-from .network import ProxyValidationError, proxy_settings_from_config
+from .network import ProxyValidationError, SUPPORTED_PROXY_SCHEMES, assert_required_campus_proxy, normalize_proxy_url, proxy_settings_from_config
 from .onboarding import (
     ACADEMIC_OPTIONS,
     GENERIC_RAG_QUERY_COMMAND,
@@ -56,7 +56,7 @@ from .redact import redact_sensitive_payload, redact_sensitive_text
 from .workflow import parse_trace_from_route, status_trace, upload_trace
 
 DEFAULT_WAIT_TIMEOUT_SECONDS = 600.0
-DEFAULT_WAIT_INTERVAL_SECONDS = 2.0
+DEFAULT_WAIT_INTERVAL_SECONDS = 3.0
 SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
 SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
 API_KEY_PROMPT_SENTINEL = "__mdtero_prompt_for_api_key__"
@@ -123,12 +123,26 @@ def build_parser() -> argparse.ArgumentParser:
     academic_config = _cmd(config_sub, "academic", "Configure local academic source keys; ask about Elsevier first for publisher-heavy literature reviews.", cmd_config_academic)
     academic_config.add_argument("--elsevier-key", help="Save an Elsevier API key without opening the interactive prompt.")
     academic_config.add_argument("--wiley-tdm-token", help="Save a Wiley TDM token without opening the interactive prompt.")
-    academic_config.add_argument("--semantic-scholar-key", help="Save a Semantic Scholar API key without opening the interactive prompt.")
     academic_config.add_argument("--json", action="store_true", help="Print a machine-readable safe summary without echoing secrets.")
     zotero_config = _cmd(config_sub, "zotero", "Configure Zotero library credentials.", cmd_config_zotero)
     zotero_config.add_argument("--library-id")
     zotero_config.add_argument("--library-type", choices=["user", "group"], default=None)
     zotero_config.add_argument("--api-key")
+    proxy_config = _cmd(
+        config_sub,
+        "proxy",
+        "Configure HTTP/HTTPS/SOCKS proxy for campus-network paper acquisition.",
+        cmd_config_proxy,
+    )
+    proxy_config.add_argument("--proxy-url", help="Proxy URL such as socks5h://127.0.0.1:1080 or http://127.0.0.1:7890.")
+    proxy_config.add_argument(
+        "--require-campus-proxy",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Require AS786/Jisc/Nottingham outlet verification before local discovery or acquisition.",
+    )
+    proxy_config.add_argument("--clear", action="store_true", help="Clear saved proxy settings from config.json.")
+    proxy_config.add_argument("--json", action="store_true", help="Print a machine-readable safe summary.")
 
     parse = _cmd(sub, "parse", "Parse one DOI/URL or upload files.", cmd_parse)
     parse.add_argument("input", nargs="?")
@@ -247,6 +261,20 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_briefing = _cmd(mcp_sub, "briefing", "Print the local MCP agent briefing without starting a server.", cmd_mcp_briefing)
     mcp_briefing.add_argument("--json", action="store_true")
     _cmd(mcp_sub, "serve", "Serve local project context over FastMCP.", cmd_mcp_serve)
+
+    relay = sub.add_parser("relay")
+    relay.set_defaults(func=_print_nested_help(relay))
+    relay_sub = relay.add_subparsers(dest="relay_command")
+    relay_serve = _cmd(
+        relay_sub,
+        "serve",
+        "Run a campus-network relay (prefer standalone `mdtero-relay` on Win/Mac for background install).",
+        cmd_relay_serve,
+    )
+    relay_serve.add_argument("--label", help="Optional label shown in relay status, for example 'lab-pc'.")
+    relay_serve.add_argument("--json", action="store_true", help="Print machine-readable relay lifecycle events.")
+    relay_status = _cmd(relay_sub, "status", "Show whether your campus relay is connected.", cmd_relay_status)
+    relay_status.add_argument("--json", action="store_true")
 
     status = _cmd(sub, "status", "Poll one task and update the current project.", cmd_status)
     status.add_argument("task_id")
@@ -768,11 +796,12 @@ def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds:
 def cmd_doctor(_args: argparse.Namespace) -> int:
     cfg = load_config()
     remote_auth = _doctor_remote_auth(cfg)
+    relay_status = _doctor_relay_status(cfg, remote_auth=remote_auth)
     root = Path.cwd()
     server_rag_status = _doctor_server_rag_status(cfg, root, remote_auth=remote_auth)
-    rows = _doctor_rows(cfg, root, remote_auth=remote_auth, server_rag_status=server_rag_status)
+    rows = _doctor_rows(cfg, root, remote_auth=remote_auth, server_rag_status=server_rag_status, relay_status=relay_status)
     if getattr(_args, "json", False):
-        payload = _doctor_payload(cfg, root, rows, remote_auth=remote_auth, server_rag_status=server_rag_status)
+        payload = _doctor_payload(cfg, root, rows, remote_auth=remote_auth, server_rag_status=server_rag_status, relay_status=relay_status)
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0 if payload["status"] == "ok" else 1
     console = Console()
@@ -783,8 +812,9 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     return 0 if cfg.is_authenticated and remote_auth.get("status") != "failed" else 1
 
 
-def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
+def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
+    relay_status = relay_status if relay_status is not None else _doctor_relay_status(cfg, remote_auth=remote_auth)
     install_boundary = _install_boundary_summary()
     api_key_status = "ok" if cfg.is_authenticated else "missing"
     api_key_detail = cfg.api_key_source
@@ -796,11 +826,12 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         ("Config", "ok" if config_path().exists() else "not created", str(config_path())),
         ("API base", "ok", cfg.api_base_url),
         ("Proxy", "required" if cfg.campus_proxy_required else ("configured" if cfg.effective_proxy_url else "optional"), _proxy_config_detail(cfg)),
+        ("Campus relay", "online" if relay_status.get("connected") else ("offline" if relay_status.get("status") != "skipped" else "optional"), _relay_config_detail(relay_status)),
         ("Install boundary", str(install_boundary["status"]), str(install_boundary["action_hint"])),
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
         _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
         _dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"),
-        ("Semantic Scholar", "ok" if cfg.has_semantic_scholar_key else "optional", "local discovery" if cfg.has_semantic_scholar_key else "server OpenAlex fallback"),
+        ("Discovery", "server", "OpenAlex via Mdtero API"),
         ("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg)),
     ]
     current_project = project_path(root)
@@ -810,9 +841,10 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
     return rows
 
 
-def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None) -> dict[str, Any]:
+def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None) -> dict[str, Any]:
     row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
+    relay_status = relay_status if relay_status is not None else _doctor_relay_status(cfg, remote_auth=remote_auth)
     status = "ok" if cfg.is_authenticated else "missing_auth"
     if remote_auth.get("status") == "failed":
         status = "invalid_auth"
@@ -824,6 +856,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "config_path": str(config_path()),
         "api_base_url": cfg.api_base_url,
         "proxy": _proxy_config_payload(cfg),
+        "relay": relay_status,
         "install_boundary": _install_boundary_summary(),
         "checks": row_payload,
         "dependencies": {
@@ -834,8 +867,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "academic": {
             "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
             "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
-            "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
-            "discover_source": "local_semantic_scholar" if cfg.has_semantic_scholar_key else "server_openalex",
+            "discover_source": "server_openalex",
         },
         "zotero": {
             "configured": _zotero_configured(cfg),
@@ -876,6 +908,56 @@ def _doctor_remote_auth(cfg: MdteroConfig) -> dict[str, Any]:
         "email": usage.get("email"),
         "wallet_balance_display": usage.get("wallet_balance_display"),
     }
+
+
+def _relay_failure_payload(exc: MdteroApiError | httpx.HTTPError) -> dict[str, Any]:
+    if isinstance(exc, MdteroApiError):
+        return exc.payload
+    if isinstance(exc, httpx.HTTPStatusError):
+        return api_failure_payload(exc, method=exc.request.method, path=exc.request.url.path)
+    return {
+        "status": "failed",
+        "reason_code": "relay_status_unavailable",
+        "error_code": "relay_status_unavailable",
+        "message": str(exc),
+    }
+
+
+def _doctor_relay_status(cfg: MdteroConfig, *, remote_auth: dict[str, Any]) -> dict[str, Any]:
+    if not cfg.is_authenticated or remote_auth.get("status") == "failed":
+        return {
+            "status": "skipped",
+            "connected": False,
+            "action_hint": "Configure Mdtero auth before checking campus relay status.",
+            "next_commands": ["mdtero login", "mdtero relay serve"],
+        }
+    try:
+        payload = MdteroClient(config=cfg, timeout=10.0)._request("GET", "/api/v1/relay/status")
+    except (MdteroApiError, httpx.HTTPError) as exc:
+        failure = _relay_failure_payload(exc)
+        return {
+            "status": "unverified",
+            "connected": False,
+            "reason_code": failure.get("reason_code") or failure.get("error_code") or "relay_status_unavailable",
+            "action_hint": "Could not verify campus relay status against the server.",
+            "next_commands": ["mdtero relay status --json", "mdtero relay serve"],
+            "detail": failure,
+        }
+    return {
+        "status": "online" if payload.get("connected") else "offline",
+        **payload,
+    }
+
+
+def _relay_config_detail(relay_status: dict[str, Any]) -> str:
+    if relay_status.get("status") == "skipped":
+        return "auth required"
+    if relay_status.get("connected"):
+        outlet = relay_status.get("outlet") if isinstance(relay_status.get("outlet"), dict) else {}
+        label = str(relay_status.get("label") or "").strip()
+        parts = [part for part in (label or None, outlet.get("asn"), outlet.get("city")) if part]
+        return " / ".join(str(part) for part in parts) or "connected"
+    return str(relay_status.get("action_hint") or "run mdtero relay serve on campus")
 
 
 def _doctor_server_rag_status(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any]) -> dict[str, Any] | None:
@@ -924,7 +1006,7 @@ def _proxy_config_payload(cfg: MdteroConfig) -> dict[str, Any]:
         "action_hint": (
             "Campus proxy is required; Mdtero will verify AS786/Jisc/Nottingham before discovery or route acquisition."
             if settings.require_campus_proxy
-            else "Proxy is optional. Set MDTERO_PROXY_URL and MDTERO_REQUIRE_CAMPUS_PROXY=1 for guarded campus-network paper acquisition."
+            else "Proxy is optional. Set MDTERO_PROXY_URL or run `mdtero config proxy --proxy-url <url>` for guarded campus-network paper acquisition."
         ),
     }
 
@@ -935,7 +1017,7 @@ def _proxy_config_detail(cfg: MdteroConfig) -> str:
         return "campus outlet check required; proxy configured" if payload["configured"] else "campus outlet check required; proxy missing"
     if payload["configured"]:
         return "proxy configured"
-    return "set MDTERO_PROXY_URL to route local acquisition/discovery through a proxy"
+    return "set MDTERO_PROXY_URL or run mdtero config proxy --proxy-url <url>"
 
 
 def _doctor_row_status(rows: list[tuple[str, str, str]], check: str) -> dict[str, str] | None:
@@ -1103,7 +1185,6 @@ def cmd_config_academic(_args: argparse.Namespace) -> int:
     explicit = {
         "elsevier_api_key": getattr(_args, "elsevier_key", None),
         "wiley_tdm_token": getattr(_args, "wiley_tdm_token", None),
-        "semantic_scholar_api_key": getattr(_args, "semantic_scholar_key", None),
     }
     provided = {field: str(value).strip() for field, value in explicit.items() if value is not None and str(value).strip()}
     if provided or getattr(_args, "json", False):
@@ -1133,6 +1214,75 @@ def cmd_config_zotero(args: argparse.Namespace) -> int:
     path = save_config(cfg)
     console.print(f"Saved Zotero config to {path}")
     return 0
+
+
+def cmd_config_proxy(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    console = Console()
+    saved = False
+    path = config_path()
+
+    if getattr(args, "clear", False):
+        cfg.proxy_url = None
+        cfg.require_campus_proxy = False
+        path = save_config(cfg)
+        saved = True
+    else:
+        if getattr(args, "proxy_url", None) is not None:
+            raw = str(args.proxy_url or "").strip()
+            cfg.proxy_url = normalize_proxy_url(raw) if raw else None
+            saved = True
+        if getattr(args, "require_campus_proxy", None) is not None:
+            cfg.require_campus_proxy = bool(args.require_campus_proxy)
+            saved = True
+
+    if saved:
+        path = save_config(cfg)
+
+    payload = _proxy_config_summary(cfg, path=path, saved=saved)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+
+    if saved:
+        console.print(f"Saved proxy config to {path}")
+    console.print(payload["action_hint"])
+    if payload["configured"]:
+        console.print(f"Proxy URL: {payload['proxy_url_masked']}")
+    if payload["require_campus_proxy"]:
+        console.print("Campus outlet check: required before local discovery or acquisition.")
+    console.print("Supported schemes: http, https, socks4, socks4a, socks5, socks5h")
+    console.print("Browser OAuth still uses your browser proxy settings; CLI local acquisition uses this saved proxy.")
+    return 0
+
+
+def _proxy_config_summary(cfg: MdteroConfig, *, path: Path, saved: bool) -> dict[str, Any]:
+    settings = proxy_settings_from_config(cfg)
+    proxy_url = settings.proxy_url
+    masked = _mask_proxy_url(proxy_url)
+    return {
+        "saved": saved,
+        "config_path": str(path),
+        "configured": bool(proxy_url),
+        "proxy_url_present": bool(proxy_url),
+        "proxy_url_masked": masked,
+        "require_campus_proxy": settings.require_campus_proxy,
+        "supported_schemes": sorted(SUPPORTED_PROXY_SCHEMES),
+        "action_hint": _proxy_config_payload(cfg)["action_hint"],
+    }
+
+
+def _mask_proxy_url(proxy_url: str | None) -> str | None:
+    if not proxy_url:
+        return None
+    try:
+        parsed = httpx.URL(proxy_url)
+        host = str(parsed.host or "")
+        if parsed.username:
+            return f"{parsed.scheme}://***@{host}:{parsed.port or ''}".rstrip(":")
+        return proxy_url
+    except Exception:
+        return "***"
 
 
 def cmd_parse(args: argparse.Namespace) -> int:
@@ -1555,7 +1705,6 @@ def cmd_discover(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    _print_discovery_fallback_notice(result)
     _print_discovery_table(result)
     if project_add is not None:
         Console().print(f"Added {project_add['added_count']} discovery result(s) to project; skipped {project_add['skipped_count']}.")
@@ -1581,7 +1730,6 @@ def _run_discovery_interactive_session(*, query: str, page_size: int, initial_re
 
     while True:
         _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=loaded_limit)
-        _print_discovery_fallback_notice(result, console=console)
         _print_discovery_table(result, console=console)
         console.print("Commands: numbers add selected results; `a` adds this page; `all` adds loaded results; `n` next; `p` previous; `r <query>` refine; Enter/q skip.")
         reply = Prompt.ask("Discover", default="", console=console).strip()
@@ -1686,17 +1834,6 @@ def _discovery_current_page_selection(result: dict[str, Any]) -> str:
     return ",".join(str(index) for index in range(start + 1, end + 1))
 
 
-def _print_discovery_fallback_notice(result: dict[str, Any], *, console: Console | None = None) -> None:
-    fallback = result.get("discovery_fallback") if isinstance(result.get("discovery_fallback"), dict) else None
-    if not fallback:
-        return
-    target = console or Console()
-    reason = str(fallback.get("reason_code") or "semantic_scholar_local_failed")
-    hint = str(fallback.get("action_hint") or "Using server OpenAlex fallback for this query.")
-    target.print(f"Semantic Scholar local discovery failed ({reason}); using server OpenAlex fallback.")
-    target.print(hint)
-
-
 def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str) -> dict[str, Any]:
     items = [item for item in result.get("items") or [] if isinstance(item, dict)]
     selected_indices = _parse_result_selection(selection, max_count=len(items))
@@ -1724,13 +1861,11 @@ def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str)
         )
         existing_inputs.add(target)
         added.append({"index": index, "input": target, "title": item.get("title"), "doi": item.get("doi")})
-    source = str(result.get("source") or "unknown")
-    fallback = result.get("discovery_fallback") if isinstance(result.get("discovery_fallback"), dict) else None
+    source = str(result.get("source") or "openalex_server")
     summary = {
         "selection": selected_indices,
         "source": source,
-        "source_mode": "semantic_scholar_local" if source == "semantic_scholar_local" else "openalex_server",
-        "fallback_reason_code": fallback.get("reason_code") if fallback else None,
+        "source_mode": "openalex_server",
         "added_count": len(added),
         "skipped_count": len(skipped),
         "added": added,
@@ -2449,7 +2584,7 @@ def _smoke_coverage_contract(args: argparse.Namespace) -> dict[str, Any]:
         "goal": "production_cli_smoke",
         "covered_by_this_command": [
             "auth_config_presence",
-            "server_openalex_or_local_semantic_scholar_discovery" if not getattr(args, "skip_discovery", False) else "discovery_skipped",
+            "server_openalex_discovery" if not getattr(args, "skip_discovery", False) else "discovery_skipped",
             "doi_or_url_route_parse_status",
             "artifact_download" if not getattr(args, "skip_download", False) else "artifact_download_skipped",
             "translation_task" if not getattr(args, "skip_translate", False) else "translation_skipped",
@@ -2782,6 +2917,121 @@ def cmd_mcp_serve(_args: argparse.Namespace) -> int:
 
     serve_project_context(Path.cwd())
     return 0
+
+
+def cmd_relay_serve(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from .relay import run_relay_server
+
+    cfg = load_config()
+    if not cfg.is_authenticated:
+        payload = {
+            "status": "failed",
+            "reason_code": "auth_missing",
+            "action_hint": "Run `mdtero login` or `mdtero login --api-key` before starting the campus relay.",
+            "next_commands": ["mdtero login", "mdtero login --api-key"],
+        }
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print(payload["action_hint"])
+        return 1
+
+    console = Console()
+    json_events: list[dict[str, Any]] = []
+
+    def on_status(event: str, detail: dict[str, Any]) -> None:
+        if args.json:
+            json_events.append({"event": event, **detail})
+            return
+        if event == "outlet_checked":
+            summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else {}
+            if detail.get("campus_ok"):
+                console.print(
+                    f"Campus network: ok ({summary.get('asn') or 'unknown ASN'}, {summary.get('city') or 'unknown city'})"
+                )
+            else:
+                console.print(
+                    "[yellow]Warning:[/yellow] this machine does not look like the expected campus outlet "
+                    f"({summary.get('asn') or 'unknown ASN'}, {summary.get('city') or 'unknown city'}). "
+                    "Relay will still start, but publisher access may fail."
+                )
+            return
+        if event == "connecting":
+            console.print(f"Connecting campus relay to {cfg.api_base_url} ...")
+            return
+        if event == "registered":
+            console.print("Campus relay is live. Keep this window open while cloud agents fetch papers.")
+            console.print("Press Ctrl+C to stop.")
+            return
+        if event == "reconnecting":
+            console.print(f"Relay disconnected. Reconnecting in {detail.get('delay_seconds', 5)}s ...")
+            return
+        if event == "error":
+            console.print(f"[yellow]Relay error:[/yellow] {detail.get('message')}")
+            return
+        if event == "stopped":
+            console.print("Campus relay stopped.")
+
+    try:
+        asyncio.run(run_relay_server(cfg, label=getattr(args, "label", None), on_status=on_status))
+    except KeyboardInterrupt:
+        if args.json:
+            print(json.dumps({"status": "stopped", "events": json_events}, indent=2, ensure_ascii=False))
+        return 0
+    if args.json:
+        print(json.dumps({"status": "stopped", "events": json_events}, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_relay_status(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    if not cfg.is_authenticated:
+        payload = {
+            "status": "failed",
+            "reason_code": "auth_missing",
+            "action_hint": "Run `mdtero login` or `mdtero login --api-key` before checking relay status.",
+            "next_commands": ["mdtero login", "mdtero relay serve"],
+        }
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print(payload["action_hint"])
+        return 1
+
+    try:
+        payload = MdteroClient(config=cfg, timeout=20.0)._request("GET", "/api/v1/relay/status")
+    except (MdteroApiError, httpx.HTTPError) as exc:
+        failure = _relay_failure_payload(exc)
+        if args.json:
+            print(json.dumps(failure, indent=2, ensure_ascii=False))
+        else:
+            Console().print(str(failure.get("action_hint") or failure.get("message") or exc))
+        return 1
+
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+
+    console = Console()
+    if payload.get("connected"):
+        outlet = payload.get("outlet") if isinstance(payload.get("outlet"), dict) else {}
+        label = str(payload.get("label") or "").strip()
+        console.print("Campus relay: connected")
+        if label:
+            console.print(f"Label: {label}")
+        if outlet:
+            console.print(
+                f"Outlet: {outlet.get('asn') or 'unknown ASN'} / {outlet.get('city') or 'unknown city'} / {outlet.get('ip') or 'unknown IP'}"
+            )
+        console.print(str(payload.get("action_hint") or "Cloud agents can fetch publisher URLs through this relay."))
+    else:
+        console.print("Campus relay: offline")
+        console.print(str(payload.get("action_hint") or "Run `mdtero relay serve` on a campus-network machine."))
+        for command in payload.get("next_commands") or []:
+            console.print(f"  {command}")
+    return 0 if payload.get("connected") else 1
 
 
 def cmd_mcp_briefing(args: argparse.Namespace) -> int:
@@ -3420,7 +3670,7 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
     for option in ACADEMIC_OPTIONS:
         hint = f" — {option['hint']}" if option.get("hint") else ""
         console.print(f"  ({option['index']}) {option['label']}: {option['url']}{hint}")
-    console.print("Press Enter to skip for now. Choose one or more numbers, for example `1 3`; choose `1` first when Elsevier access matters.")
+    console.print("Press Enter to skip for now. Choose one or more numbers, for example `1 2`; choose `1` first when Elsevier access matters.")
     while True:
         selection = Prompt.ask("Configure optional keys", default="").strip()
         try:
@@ -3436,10 +3686,7 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
             setattr(cfg.academic, str(option["field"]), value)
     path = save_config(cfg)
     console.print(f"Saved config to {path}")
-    if cfg.academic.semantic_scholar_api_key:
-        console.print("Discover will use local Semantic Scholar first, with server OpenAlex as fallback.")
-    else:
-        console.print("Discover will use server OpenAlex. Add Semantic Scholar later with `mdtero config academic` if needed.")
+    console.print("Discover uses server OpenAlex through the Mdtero API.")
     if cfg.academic.elsevier_api_key:
         console.print("Elsevier key configured. Use `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` to confirm the selected route per paper.")
     else:
@@ -3460,7 +3707,7 @@ def _parse_academic_selection(selection: str) -> set[str]:
     tokens = [token for token in cleaned.replace(",", " ").split() if token]
     invalid = [token for token in tokens if token not in allowed]
     if invalid:
-        raise ValueError(f"Unknown academic key option(s): {', '.join(invalid)}. Choose 1, 2, 3, all, or Enter to skip.")
+        raise ValueError(f"Unknown academic key option(s): {', '.join(invalid)}. Choose 1, 2, all, or Enter to skip.")
     return set(tokens)
 
 

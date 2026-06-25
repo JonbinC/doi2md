@@ -878,6 +878,7 @@ dependencies = [
     { name = "rich" },
     { name = "socksio" },
     { name = "textual" },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -895,6 +896,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.7" },
     { name = "socksio", specifier = ">=1.0" },
     { name = "textual", specifier = ">=0.80" },
+    { name = "websockets", specifier = ">=14" },
 ]
 
 [package.metadata.requires-dev]

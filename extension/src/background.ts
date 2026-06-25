@@ -1,13 +1,39 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
 import { buildCliFileParseCommand } from "./lib/cli-handoff";
+import { PROXY_FEATURES_ENABLED } from "./lib/features";
 import { runBrowserFileParseRequest } from "./lib/file-upload";
 import type { LocalFileArtifactKind } from "./lib/runtime";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
-import { readSettings, writeSettings } from "./lib/storage";
+import { readSettings, SETTINGS_KEY, writeSettings } from "./lib/storage";
 import { sendTabMessageWithInjection } from "./lib/tab-messaging";
 
 const client = createApiClient(readSettings);
 const routerSSOT = createRouterSSOTClient(readSettings);
+
+async function ensureNetworkPolicy(settings?: Awaited<ReturnType<typeof readSettings>>) {
+  if (!PROXY_FEATURES_ENABLED) {
+    return;
+  }
+  const { applyProxySettings, assertCampusProxyIfRequired } = await import("./lib/proxy-sync");
+  const resolved = settings ?? await readSettings();
+  await applyProxySettings(resolved);
+  await assertCampusProxyIfRequired(resolved);
+}
+
+if (PROXY_FEATURES_ENABLED) {
+  void import("./lib/proxy-sync").then(({ applyProxySettings }) =>
+    readSettings().then((settings) => applyProxySettings(settings))
+  );
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+      return;
+    }
+    void import("./lib/proxy-sync").then(({ applyProxySettings }) =>
+      readSettings().then((settings) => applyProxySettings(settings))
+    );
+  });
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.auth.save_token") {
@@ -26,6 +52,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.ssot.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -83,6 +110,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.file.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -109,6 +137,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.current_html.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -144,8 +173,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "mdtero.task.get") {
     client
-      .getTask(message.taskId)
-      .then((result) => sendResponse({ ok: true, result }))
+      .getTask(message.taskId, { etag: message.etag })
+      .then((result) => sendResponse({ ok: true, ...result }))
       .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -153,6 +182,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.translate.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -182,6 +212,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         target_language: message.targetLanguage,
         mode: message.mode
       });
+    })()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (PROXY_FEATURES_ENABLED && message?.type === "mdtero.proxy.test.request") {
+    (async () => {
+      const { applyProxySettings, verifyCampusProxyOutlet } = await import("./lib/proxy-sync");
+      const settings = await readSettings();
+      await applyProxySettings(settings);
+      return verifyCampusProxyOutlet();
     })()
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error: Error) => sendResponse({ ok: false, error: error.message }));

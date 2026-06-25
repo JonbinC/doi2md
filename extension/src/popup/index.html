@@ -34,9 +34,9 @@
             <p id="account-email" class="meta-label">Guest mode</p>
             <p id="usage-status" class="meta-value">Checking account...</p>
           </div>
-          <p id="connection-pill" class="meta-pill">Website OAuth</p>
+          <p id="connection-pill" class="meta-pill" data-state="signed-out">Website OAuth</p>
         </div>
-        <div class="button-row hero-cta-row">
+        <div class="button-row hero-cta-row" id="hero-cta-row">
           <button id="open-settings-login" type="button" class="primary-button">Website OAuth</button>
           <button id="open-settings" type="button" class="secondary-button">Settings</button>
         </div>
@@ -49,14 +49,20 @@
       </section>
 
       <section class="card">
-        <label id="paper-input-label" for="paper-input">DOI or live page</label>
+        <div class="card-head">
+          <div class="section-eyebrow" id="paper-input-eyebrow">Paper input</div>
+          <label id="paper-input-label" for="paper-input">DOI or live page</label>
+        </div>
         <input id="paper-input" type="text" placeholder="10.1016/..." />
         <p id="status" class="status-line">Detecting paper input...</p>
         <p id="preflight-hint" class="meta-label campus-hint"></p>
       </section>
 
       <section class="card" id="file-intake-card">
-        <p id="file-intake-title" class="meta-value">Local file intake</p>
+        <div class="card-head">
+          <div class="section-eyebrow" id="file-intake-eyebrow">Local files</div>
+          <p id="file-intake-title" class="meta-value">Local file intake</p>
+        </div>
         <p id="file-intake-note" class="meta-label">Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.</p>
         <div class="button-row">
           <button id="pick-pdf-button" type="button" class="secondary-button">Use PDF</button>
@@ -68,6 +74,9 @@
       </section>
 
       <section class="card action-card">
+        <div class="card-head">
+          <div class="section-eyebrow" id="actions-eyebrow">Actions</div>
+        </div>
         <div class="button-row action-buttons-row">
           <button id="parse-button" type="button" class="primary-button">Parse Paper</button>
           <button id="capture-html-button" type="button" class="secondary-button">Capture HTML</button>

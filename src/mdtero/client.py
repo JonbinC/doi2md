@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,9 +11,6 @@ import httpx
 from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_locally
 from .config import MdteroConfig, load_config
 from .network import ProxyValidationError, assert_required_campus_proxy, proxy_settings_from_config
-
-SEMANTIC_SCHOLAR_MIN_INTERVAL_SECONDS = 1.1
-_last_semantic_scholar_request_at = 0.0
 
 
 class DiscoveryError(RuntimeError):
@@ -122,8 +120,37 @@ class MdteroClient:
             files = {"paper_file": (artifact.path.name, handle, _mime_type(artifact.path))}
             return self._request("POST", "/api/v1/tasks/upload", data=data, files=files)
 
-    def task(self, task_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/v1/tasks/{task_id}")
+    def task(self, task_id: str, *, include_result: bool = False) -> dict[str, Any]:
+        task, _etag, _not_modified = self._poll_task_status(task_id, include_result=include_result)
+        if task is None:
+            raise RuntimeError(f"task {task_id} poll returned 304 without a cached payload")
+        return task
+
+    def _poll_task_status(
+        self,
+        task_id: str,
+        *,
+        include_result: bool = False,
+        etag: str | None = None,
+    ) -> tuple[dict[str, Any] | None, str | None, bool]:
+        query = "?include=result" if include_result else ""
+        headers = self._headers()
+        if etag:
+            headers["If-None-Match"] = etag
+        proxy_settings = proxy_settings_from_config(self.config)
+        with httpx.Client(timeout=self.timeout, **proxy_settings.httpx_kwargs) as client:
+            response = client.request("GET", self._url(f"/api/v1/tasks/{task_id}{query}"), headers=headers)
+        if response.status_code == 304:
+            next_etag = _normalize_etag_header(response.headers.get("ETag")) or etag
+            return None, next_etag, True
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise MdteroApiError(api_failure_payload(exc, method="GET", path=f"/api/v1/tasks/{task_id}")) from exc
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Mdtero API returned a non-object payload")
+        return payload, _normalize_etag_header(response.headers.get("ETag")), False
 
     def download(self, task_id: str, artifact: str, output_dir: Path, *, filename: str | None = None) -> DownloadResult:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -152,52 +179,56 @@ class MdteroClient:
             parse_reason_codes=_csv_header_values(response.headers, "x-mdtero-parse-reason-codes"),
         )
 
-    def wait(self, task_id: str, *, interval: float = 2.0, timeout: float = 600.0) -> dict[str, Any]:
+    def wait(self, task_id: str, *, interval: float = 3.0, timeout: float = 600.0) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
+        poll_interval = max(0.25, float(interval or 3.0))
+        cached_task: dict[str, Any] | None = None
+        etag: str | None = None
+        unchanged_streak = 0
         while True:
-            task = self.task(task_id)
-            if task.get("status") in {"succeeded", "failed", "cancelled"}:
+            task, etag, not_modified = self._poll_task_status(task_id, etag=etag)
+            if not_modified:
+                unchanged_streak += 1
+                task = cached_task
+            else:
+                unchanged_streak = 0
+                cached_task = task
+            if task is None:
+                raise RuntimeError(f"task {task_id} poll returned 304 before any task payload was cached")
+            status = str(task.get("status") or "").strip().lower()
+            if status in {"succeeded", "failed", "cancelled"}:
+                if status == "succeeded":
+                    final_task, _final_etag, _ = self._poll_task_status(task_id, include_result=True, etag=None)
+                    return final_task if final_task is not None else task
                 return task
             if time.monotonic() >= deadline:
-                final_task = self.task(task_id)
-                if final_task.get("status") in {"succeeded", "failed", "cancelled"}:
+                final_task, _final_etag, _ = self._poll_task_status(task_id, include_result=status == "succeeded", etag=etag)
+                if final_task is None:
+                    final_task = cached_task
+                if final_task is None:
+                    raise TimeoutError(f"timed out waiting for task {task_id}")
+                final_status = str(final_task.get("status") or "").strip().lower()
+                if final_status == "succeeded":
+                    succeeded_task, _, _ = self._poll_task_status(task_id, include_result=True, etag=None)
+                    return succeeded_task if succeeded_task is not None else final_task
+                if final_status in {"failed", "cancelled"}:
                     return final_task
                 raise TimeoutError(f"timed out waiting for task {task_id}")
-            time.sleep(interval)
+            backoff = min(unchanged_streak * 0.5, 3.0)
+            jitter = random.uniform(-0.5, 0.5)
+            time.sleep(max(0.25, poll_interval + backoff + jitter))
 
     def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
-        local_failure: dict[str, Any] | None = None
-        if self.config.has_semantic_scholar_key:
-            try:
-                result = self._semantic_scholar_search(query, limit=limit)
-                result["discovery_diagnostics"] = {
-                    "semantic_scholar_configured": True,
-                    "semantic_scholar_attempted": True,
-                    "server_openalex_attempted": False,
-                }
-                return result
-            except (httpx.HTTPError, ValueError) as exc:
-                local_failure = _local_semantic_scholar_failure(exc)
         try:
             result = self._server_discovery_search(query, limit=limit)
         except (MdteroApiError, httpx.HTTPError, ValueError) as exc:
-            raise DiscoveryError(_discovery_failure_payload(exc, local_failure=local_failure)) from exc
+            raise DiscoveryError(_discovery_failure_payload(exc)) from exc
         result.setdefault("source", "openalex_server")
         result["discovery_diagnostics"] = {
-            "semantic_scholar_configured": self.config.has_semantic_scholar_key,
-            "semantic_scholar_attempted": self.config.has_semantic_scholar_key,
+            "provider": "openalex_server",
             "server_openalex_attempted": True,
         }
-        if local_failure:
-            result["local_semantic_scholar_error"] = local_failure["error_type"]
-            result["local_semantic_scholar_failure"] = local_failure
-            result["discovery_fallback"] = {
-                "from": "semantic_scholar_local",
-                "to": "openalex_server",
-                "reason_code": local_failure["reason_code"],
-                "action_hint": "Local Semantic Scholar discovery failed; using the Mdtero server OpenAlex fallback for this query.",
-            }
         return result
 
     def _server_discovery_search(self, query: str, *, limit: int) -> dict[str, Any]:
@@ -293,71 +324,14 @@ class MdteroClient:
             response = client.request(method, self._url(path), headers=self._headers(), **kwargs)
         return response
 
-    def _semantic_scholar_search(self, query: str, *, limit: int) -> dict[str, Any]:
-        headers = {"x-api-key": (self.config.academic.semantic_scholar_api_key or "").strip()}
-        params = {"query": query, "limit": limit, "fields": "title,authors,year,url,externalIds,abstract"}
-        proxy_settings = proxy_settings_from_config(self.config)
-        _throttle_semantic_scholar_request()
-        with httpx.Client(timeout=self.timeout, **proxy_settings.httpx_kwargs) as client:
-            response = client.get("https://api.semanticscholar.org/graph/v1/paper/search", headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
-        items = []
-        for item in data.get("data") or []:
-            external_ids = item.get("externalIds") or {}
-            doi = _semantic_scholar_external_id(external_ids, "DOI")
-            parse_url = _semantic_scholar_parse_url(external_ids)
-            semantic_scholar_url = item.get("url")
-            items.append(
-                {
-                    "title": item.get("title"),
-                    "year": item.get("year"),
-                    "doi": doi,
-                    "url": parse_url or semantic_scholar_url,
-                    "semantic_scholar_url": semantic_scholar_url,
-                    "external_ids": external_ids,
-                    "abstract": item.get("abstract"),
-                    "authors": [author.get("name") for author in item.get("authors") or [] if author.get("name")],
-                    "source": "semantic_scholar_local",
-                }
-            )
-        return {"items": items, "source": "semantic_scholar_local"}
 
-
-def _throttle_semantic_scholar_request() -> None:
-    global _last_semantic_scholar_request_at
-    now = time.monotonic()
-    wait_seconds = SEMANTIC_SCHOLAR_MIN_INTERVAL_SECONDS - (now - _last_semantic_scholar_request_at)
-    if wait_seconds > 0:
-        time.sleep(wait_seconds)
-        now = time.monotonic()
-    _last_semantic_scholar_request_at = now
-
-
-def _semantic_scholar_external_id(external_ids: Any, key: str) -> str:
-    if not isinstance(external_ids, dict):
-        return ""
-    for candidate_key, value in external_ids.items():
-        if str(candidate_key).lower() == key.lower():
-            return str(value or "").strip()
-    return ""
-
-
-def _semantic_scholar_parse_url(external_ids: Any) -> str:
-    doi = _semantic_scholar_external_id(external_ids, "DOI")
-    if doi:
-        return f"https://doi.org/{doi}"
-    arxiv = _semantic_scholar_external_id(external_ids, "ArXiv")
-    if arxiv:
-        return f"https://arxiv.org/abs/{arxiv}"
-    pmcid = _semantic_scholar_external_id(external_ids, "PMCID")
-    if pmcid:
-        cleaned = pmcid if pmcid.upper().startswith("PMC") else f"PMC{pmcid}"
-        return f"https://www.ncbi.nlm.nih.gov/pmc/articles/{cleaned}/"
-    pubmed = _semantic_scholar_external_id(external_ids, "PubMed") or _semantic_scholar_external_id(external_ids, "PMID")
-    if pubmed:
-        return f"https://pubmed.ncbi.nlm.nih.gov/{pubmed}/"
-    return ""
+def _normalize_etag_header(value: str | None) -> str | None:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return None
+    if cleaned.upper().startswith("W/"):
+        cleaned = cleaned[2:].strip()
+    return cleaned.strip('"') or None
 
 
 def _mime_type(path: Path) -> str:
@@ -388,42 +362,7 @@ def _safe_download_filename(value: str, *, fallback: str) -> str:
     return cleaned or "download.bin"
 
 
-def _local_semantic_scholar_failure(exc: Exception) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "provider": "semantic_scholar",
-        "status": "failed",
-        "error_type": exc.__class__.__name__,
-        "reason_code": "semantic_scholar_local_failed",
-        "action_hint": "Mdtero will fall back to server OpenAlex when available. Check the Semantic Scholar API key, rate limit, or network if you want local discovery.",
-    }
-    if isinstance(exc, httpx.HTTPStatusError):
-        response = exc.response
-        payload["status_code"] = response.status_code
-        if response.status_code == 401 or response.status_code == 403:
-            payload["reason_code"] = "semantic_scholar_auth_failed"
-            payload["action_hint"] = "Check the Semantic Scholar API key saved by `mdtero config academic`, or press Enter there to use server OpenAlex instead."
-        elif response.status_code == 429:
-            payload["reason_code"] = "semantic_scholar_rate_limited"
-            payload["action_hint"] = "Semantic Scholar rate-limited local discovery. Wait and retry, or continue with the server OpenAlex fallback."
-        else:
-            payload["reason_code"] = "semantic_scholar_http_error"
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text[:300]
-        payload["detail"] = detail
-    elif isinstance(exc, httpx.TimeoutException):
-        payload["reason_code"] = "semantic_scholar_timeout"
-    elif isinstance(exc, httpx.ConnectError):
-        payload["reason_code"] = "semantic_scholar_network_error"
-    elif isinstance(exc, ProxyValidationError):
-        payload.update(exc.payload)
-    else:
-        payload["detail"] = str(exc)
-    return payload
-
-
-def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] | None = None) -> dict[str, Any]:
+def _discovery_failure_payload(exc: Exception) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "failed",
         "error_code": "discovery_failed",
@@ -432,9 +371,6 @@ def _discovery_failure_payload(exc: Exception, *, local_failure: dict[str, Any] 
         "action_hint": "Check Mdtero API connectivity and whether server OpenAlex discovery is enabled.",
         "next_commands": ["mdtero doctor --json", "mdtero setup --api-key --json", "mdtero discover \"<topic>\" --json"],
     }
-    if local_failure:
-        payload["local_semantic_scholar_error"] = local_failure["error_type"]
-        payload["local_semantic_scholar_failure"] = local_failure
     if isinstance(exc, ProxyValidationError):
         payload.update(exc.payload)
     elif isinstance(exc, httpx.HTTPStatusError):

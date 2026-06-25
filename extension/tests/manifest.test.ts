@@ -16,7 +16,7 @@ describe("extension manifest", () => {
       content_scripts?: Array<{ matches?: string[]; js?: string[]; run_at?: string }>;
     };
 
-    expect(manifest.permissions).toEqual(["storage", "downloads", "tabs", "activeTab", "scripting"]);
+    expect(manifest.permissions).toEqual(["storage", "tabs", "activeTab", "scripting"]);
     expect(manifest.host_permissions).toEqual([
       "https://api.mdtero.com/*",
       "https://api.elsevier.com/*",
@@ -75,6 +75,14 @@ describe("extension manifest", () => {
       "16": "dist/assets/icon-16.png",
       "32": "dist/assets/icon-32.png"
     });
+  });
+
+  it("keeps campus proxy permission only in the development manifest", () => {
+    const devManifest = JSON.parse(
+      readFileSync(resolve("manifest.dev.json"), "utf-8")
+    ) as { permissions?: string[] };
+
+    expect(devManifest.permissions).toContain("proxy");
   });
 
   it("keeps outward-facing extension copy aligned with the shipping browser flow", () => {

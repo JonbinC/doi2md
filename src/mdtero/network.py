@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlunparse
 
 import httpx
 
 
 CAMPUS_PROXY_CHECK_URL = "https://ifconfig.co/json"
+SUPPORTED_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks4a", "socks5", "socks5h"})
 
 
 @dataclass(frozen=True)
@@ -25,10 +27,49 @@ class ProxyValidationError(RuntimeError):
         super().__init__(str(payload.get("action_hint") or payload.get("reason_code") or "proxy validation failed"))
 
 
+def normalize_proxy_url(raw: str | None) -> str | None:
+    cleaned = str(raw or "").strip()
+    if not cleaned:
+        return None
+    parsed = httpx.URL(cleaned)
+    scheme = str(parsed.scheme or "").strip().lower()
+    host = str(parsed.host or "").strip()
+    if scheme not in SUPPORTED_PROXY_SCHEMES:
+        raise ProxyValidationError(
+            _proxy_failure_payload(
+                "proxy_scheme_unsupported",
+                action_hint=f"Use one of {', '.join(sorted(SUPPORTED_PROXY_SCHEMES))} for the proxy URL.",
+                detail={"scheme": scheme or None},
+            )
+        )
+    if not host:
+        raise ProxyValidationError(
+            _proxy_failure_payload(
+                "proxy_url_invalid",
+                action_hint="Proxy URL must include a host, for example socks5h://127.0.0.1:1080.",
+            )
+        )
+    port = parsed.port
+    if port is None:
+        port = 443 if scheme == "https" else 1080 if scheme.startswith("socks") else 80
+    userinfo = ""
+    if parsed.username:
+        password = parsed.password or ""
+        userinfo = f"{parsed.username}:{password}@" if password else f"{parsed.username}@"
+    normalized = urlunparse((scheme, f"{userinfo}{host}:{port}", "", "", "", ""))
+    return normalized
+
+
 def proxy_settings_from_config(config: Any | None) -> ProxySettings:
     if config is None:
         return ProxySettings()
-    proxy_url = str(getattr(config, "effective_proxy_url", None) or "").strip() or None
+    raw_proxy_url = str(getattr(config, "effective_proxy_url", None) or "").strip() or None
+    proxy_url = None
+    if raw_proxy_url:
+        try:
+            proxy_url = normalize_proxy_url(raw_proxy_url)
+        except ProxyValidationError:
+            proxy_url = raw_proxy_url
     require_campus_proxy = bool(getattr(config, "campus_proxy_required", False))
     return ProxySettings(proxy_url=proxy_url, require_campus_proxy=require_campus_proxy)
 

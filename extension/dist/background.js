@@ -1,3 +1,161 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// src/lib/proxy.ts
+function parseProxyUrl(raw) {
+  const cleaned = String(raw || "").trim();
+  if (!cleaned) {
+    return null;
+  }
+  let url;
+  try {
+    url = new URL(cleaned);
+  } catch {
+    throw new Error("Proxy URL is invalid.");
+  }
+  const scheme = url.protocol.replace(":", "").toLowerCase();
+  if (!SUPPORTED_PROXY_SCHEMES.includes(scheme)) {
+    throw new Error(`Unsupported proxy scheme: ${scheme || "missing"}`);
+  }
+  const host = url.hostname.trim();
+  if (!host) {
+    throw new Error("Proxy URL must include a host.");
+  }
+  const port = url.port ? Number(url.port) : scheme === "https" ? 443 : scheme.startsWith("socks") ? 1080 : 80;
+  const chromeScheme = scheme === "socks4a" ? "socks4" : scheme === "socks5h" ? "socks5" : scheme === "socks4" || scheme === "socks5" || scheme === "http" || scheme === "https" ? scheme : "http";
+  return {
+    scheme: chromeScheme,
+    host,
+    port
+  };
+}
+function buildChromeProxyConfig(parsed) {
+  return {
+    mode: "fixed_servers",
+    rules: {
+      singleProxy: {
+        scheme: parsed.scheme,
+        host: parsed.host,
+        port: parsed.port
+      },
+      bypassList: ["127.0.0.1", "localhost", "<local>"]
+    }
+  };
+}
+function summarizeCampusOutlet(payload) {
+  if (!payload || typeof payload !== "object") {
+    return {};
+  }
+  const record = payload;
+  return {
+    ip: typeof record.ip === "string" ? record.ip : void 0,
+    asn: typeof record.asn === "string" ? record.asn : void 0,
+    asn_org: typeof record.asn_org === "string" ? record.asn_org : typeof record.org === "string" ? record.org : void 0,
+    city: typeof record.city === "string" ? record.city : void 0,
+    country: typeof record.country === "string" ? record.country : void 0
+  };
+}
+function isExpectedCampusOutlet(payload) {
+  const summary = summarizeCampusOutlet(payload);
+  const asn = String(summary.asn || "").toUpperCase();
+  const org = String(summary.asn_org || "").toLowerCase();
+  const city = String(summary.city || "").toLowerCase();
+  return asn === "AS786" && org.includes("jisc") && city === "nottingham";
+}
+var SUPPORTED_PROXY_SCHEMES;
+var init_proxy = __esm({
+  "src/lib/proxy.ts"() {
+    "use strict";
+    SUPPORTED_PROXY_SCHEMES = [
+      "http",
+      "https",
+      "socks4",
+      "socks4a",
+      "socks5",
+      "socks5h"
+    ];
+  }
+});
+
+// src/lib/proxy-sync.ts
+var proxy_sync_exports = {};
+__export(proxy_sync_exports, {
+  applyProxySettings: () => applyProxySettings,
+  assertCampusProxyIfRequired: () => assertCampusProxyIfRequired,
+  verifyCampusProxyOutlet: () => verifyCampusProxyOutlet
+});
+async function applyProxySettings(settings) {
+  if (!chrome.proxy?.settings) {
+    return;
+  }
+  if (!settings.proxyEnabled || !settings.proxyUrl?.trim()) {
+    await chrome.proxy.settings.clear({ scope: "regular" });
+    return;
+  }
+  const parsed = parseProxyUrl(settings.proxyUrl);
+  if (!parsed) {
+    await chrome.proxy.settings.clear({ scope: "regular" });
+    return;
+  }
+  await chrome.proxy.settings.set({
+    value: buildChromeProxyConfig(parsed),
+    scope: "regular"
+  });
+}
+async function verifyCampusProxyOutlet() {
+  try {
+    const response = await fetch("https://ifconfig.co/json");
+    if (!response.ok) {
+      return {
+        ok: false,
+        summary: {},
+        message: `Campus proxy check failed with HTTP ${response.status}.`
+      };
+    }
+    const payload = await response.json();
+    const summary = summarizeCampusOutlet(payload);
+    if (!isExpectedCampusOutlet(payload)) {
+      return {
+        ok: false,
+        summary,
+        message: "Campus proxy outlet is not AS786/Jisc/Nottingham."
+      };
+    }
+    return { ok: true, summary };
+  } catch (error) {
+    return {
+      ok: false,
+      summary: {},
+      message: error.message || "Campus proxy check failed."
+    };
+  }
+}
+async function assertCampusProxyIfRequired(settings) {
+  if (!settings.requireCampusProxy) {
+    return;
+  }
+  if (!settings.proxyEnabled || !settings.proxyUrl?.trim()) {
+    throw new Error("Campus proxy is required, but extension proxy settings are missing.");
+  }
+  const result = await verifyCampusProxyOutlet();
+  if (!result.ok) {
+    throw new Error(result.message || "Campus proxy outlet check failed.");
+  }
+}
+var init_proxy_sync = __esm({
+  "src/lib/proxy-sync.ts"() {
+    "use strict";
+    init_proxy();
+  }
+});
+
 // src/lib/cli-handoff.ts
 function shellQuote(value) {
   if (/^[A-Za-z0-9_/:.=?&%+@,;#~-]+$/.test(value)) {
@@ -251,8 +409,22 @@ function createApiClient(getSettings) {
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
-    getTask(taskId) {
-      return request(`/api/v1/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
+    getTask(taskId, options) {
+      const headers = new Headers();
+      if (options?.etag) {
+        headers.set("If-None-Match", options.etag);
+      }
+      return request(`/api/v1/tasks/${taskId}`, { headers }, { requireAuth: true }).then(async (response) => {
+        const etag = response.headers.get("ETag");
+        if (response.status === 304) {
+          return { notModified: true, etag };
+        }
+        return {
+          notModified: false,
+          result: await response.json(),
+          etag
+        };
+      });
     },
     downloadArtifact(taskId, artifact, preferredFilename) {
       return request(`/api/v1/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
@@ -361,6 +533,9 @@ function shellQuoteRouteInput(value) {
   }
   return `'${normalized.replace(/'/g, `'"'"'`)}'`;
 }
+
+// src/lib/features.ts
+var PROXY_FEATURES_ENABLED = true ? true : true;
 
 // src/lib/file-upload.ts
 async function runBrowserFileParseRequest(client2, message) {
@@ -1090,7 +1265,10 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
-    elsevierApiKey: current.elsevierApiKey
+    elsevierApiKey: current.elsevierApiKey,
+    proxyEnabled: Boolean(current.proxyEnabled),
+    proxyUrl: current.proxyUrl,
+    requireCampusProxy: Boolean(current.requireCampusProxy)
   };
 }
 async function writeSettings(next) {
@@ -1100,6 +1278,28 @@ async function writeSettings(next) {
 // src/background.ts
 var client = createApiClient(readSettings);
 var routerSSOT = createRouterSSOTClient(readSettings);
+async function ensureNetworkPolicy(settings) {
+  if (!PROXY_FEATURES_ENABLED) {
+    return;
+  }
+  const { applyProxySettings: applyProxySettings2, assertCampusProxyIfRequired: assertCampusProxyIfRequired2 } = await Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports));
+  const resolved = settings ?? await readSettings();
+  await applyProxySettings2(resolved);
+  await assertCampusProxyIfRequired2(resolved);
+}
+if (PROXY_FEATURES_ENABLED) {
+  void Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports)).then(
+    ({ applyProxySettings: applyProxySettings2 }) => readSettings().then((settings) => applyProxySettings2(settings))
+  );
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+      return;
+    }
+    void Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports)).then(
+      ({ applyProxySettings: applyProxySettings2 }) => readSettings().then((settings) => applyProxySettings2(settings))
+    );
+  });
+}
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.auth.save_token") {
     readSettings().then((settings) => {
@@ -1114,6 +1314,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.ssot.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1162,6 +1363,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.file.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1185,6 +1387,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.current_html.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1216,12 +1419,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message?.type === "mdtero.task.get") {
-    client.getTask(message.taskId).then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    client.getTask(message.taskId, { etag: message.etag }).then((result) => sendResponse({ ok: true, ...result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
   if (message?.type === "mdtero.translate.request") {
     (async () => {
       const settings = await readSettings();
+      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1251,6 +1455,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         target_language: message.targetLanguage,
         mode: message.mode
       });
+    })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (PROXY_FEATURES_ENABLED && message?.type === "mdtero.proxy.test.request") {
+    (async () => {
+      const { applyProxySettings: applyProxySettings2, verifyCampusProxyOutlet: verifyCampusProxyOutlet2 } = await Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports));
+      const settings = await readSettings();
+      await applyProxySettings2(settings);
+      return verifyCampusProxyOutlet2();
     })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }

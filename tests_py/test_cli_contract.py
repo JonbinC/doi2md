@@ -18,8 +18,7 @@ from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
-import mdtero.client as mdtero_client_module
-from mdtero.client import DiscoveryError, DownloadResult, MdteroApiError, MdteroClient, _local_semantic_scholar_failure, _semantic_scholar_parse_url, translation_source_path_from_task
+from mdtero.client import DiscoveryError, DownloadResult, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, ingest_project_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
 from mdtero.core import artifacts_from_task_result, paper_from_task, provider_from_task_result
@@ -43,7 +42,7 @@ from mdtero.projects import (
 from mdtero.rag_contract import ensure_rag_contract
 from mdtero.workflow import parse_trace_from_route, status_trace, upload_trace
 from mdtero.zotero import build_sync_note, paper_from_zotero_item, sync_project_to_zotero
-from mdtero.network import ProxySettings, ProxyValidationError, assert_required_campus_proxy, proxy_settings_from_config
+from mdtero.network import ProxySettings, ProxyValidationError, assert_required_campus_proxy, normalize_proxy_url, proxy_settings_from_config
 
 
 def load_python_script(path: Path):
@@ -401,7 +400,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     assert coverage["goal"] == "production_cli_smoke"
     assert coverage["covered_by_this_command"] == [
         "auth_config_presence",
-        "server_openalex_or_local_semantic_scholar_discovery",
+        "server_openalex_discovery",
         "doi_or_url_route_parse_status",
         "artifact_download",
         "translation_task",
@@ -972,7 +971,6 @@ def test_doctor_reports_local_dependency_and_optional_integration_state(monkeypa
     mock_doctor_remote_auth_ok(monkeypatch)
     save_config(MdteroConfig(
         api_key="mdt_live_config",
-        academic=AcademicKeys(semantic_scholar_api_key="s2"),
         zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero"),
     ))
     seen_imports: list[str] = []
@@ -991,8 +989,8 @@ def test_doctor_reports_local_dependency_and_optional_integration_state(monkeypa
     assert "MCP server available" in output
     assert "pyzotero" in output
     assert "Zotero client available" in output
-    assert "Semantic Scholar" in output
-    assert "local discovery" in output
+    assert "Discovery" in output
+    assert "OpenAlex" in output
     assert "Zotero config" in output
     assert "user:123" in output
 
@@ -1010,7 +1008,7 @@ def test_doctor_reports_optional_fallbacks_when_integrations_are_missing(monkeyp
 
     assert "httpx fallback only" in output
     assert "Zotero import/sync unavailable" in output
-    assert "server OpenAlex fallback" in output
+    assert "OpenAlex via Mdtero API" in output
     assert "run mdtero config zotero" in output
 
 
@@ -1074,6 +1072,46 @@ def test_proxy_settings_from_config_reads_environment(monkeypatch):
 
     assert settings.proxy_url == "socks5h://proxy.example:20815"
     assert settings.require_campus_proxy is True
+
+
+def test_normalize_proxy_url_accepts_common_schemes():
+    assert normalize_proxy_url("http://127.0.0.1:7890") == "http://127.0.0.1:7890"
+    assert normalize_proxy_url("https://proxy.example:8443") == "https://proxy.example:8443"
+    assert normalize_proxy_url("socks5h://100.127.22.74:20815") == "socks5h://100.127.22.74:20815"
+    assert normalize_proxy_url("socks4a://127.0.0.1:1080") == "socks4a://127.0.0.1:1080"
+
+
+def test_normalize_proxy_url_rejects_unsupported_scheme():
+    with pytest.raises(ProxyValidationError) as exc:
+        normalize_proxy_url("ftp://127.0.0.1:21")
+    assert exc.value.payload["reason_code"] == "proxy_scheme_unsupported"
+
+
+def test_config_proxy_saves_and_reports_json(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+
+    assert cli.cmd_config_proxy(
+        type(
+            "Args",
+            (),
+            {
+                "proxy_url": "socks5h://127.0.0.1:1080",
+                "require_campus_proxy": True,
+                "clear": False,
+                "json": True,
+            },
+        )()
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    cfg = load_config()
+
+    assert payload["configured"] is True
+    assert payload["require_campus_proxy"] is True
+    assert cfg.proxy_url == "socks5h://127.0.0.1:1080"
+    assert cfg.require_campus_proxy is True
 
 
 def test_doctor_reports_project_queue_and_rag_readiness(monkeypatch, tmp_path: Path, capsys):
@@ -1172,7 +1210,6 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
         academic=AcademicKeys(
             elsevier_api_key="elsevier-secret",
             wiley_tdm_token="wiley-secret",
-            semantic_scholar_api_key="s2-secret",
         ),
         zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero-secret"),
     ))
@@ -1192,8 +1229,7 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     assert payload["academic"] == {
         "elsevier_api_key": True,
         "wiley_tdm_token": True,
-        "semantic_scholar_api_key": True,
-        "discover_source": "local_semantic_scholar",
+        "discover_source": "server_openalex",
     }
     assert payload["zotero"] == {"configured": True, "library_id": "123", "library_type": "user"}
     assert payload["project"]["server_project_id"] == "42"
@@ -1203,7 +1239,6 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     assert secret not in raw
     assert "elsevier-secret" not in raw
     assert "wiley-secret" not in raw
-    assert "s2-secret" not in raw
     assert "zotero-secret" not in raw
 
 
@@ -1338,14 +1373,14 @@ def test_download_accepts_agent_friendly_json_flag():
 
 def test_academic_setup_selection_accepts_numbered_enter_flow():
     assert _parse_academic_selection("") == set()
-    assert _parse_academic_selection("1,3") == {"1", "3"}
-    assert _parse_academic_selection("2 3") == {"2", "3"}
-    assert _parse_academic_selection("all") == {"1", "2", "3"}
+    assert _parse_academic_selection("1,2") == {"1", "2"}
+    assert _parse_academic_selection("2") == {"2"}
+    assert _parse_academic_selection("all") == {"1", "2"}
 
     try:
-        _parse_academic_selection("4")
+        _parse_academic_selection("3")
     except ValueError as exc:
-        assert "Choose 1, 2, 3" in str(exc)
+        assert "Choose 1, 2" in str(exc)
     else:
         raise AssertionError("expected invalid academic option")
 
@@ -1360,14 +1395,11 @@ def test_config_academic_accepts_headless_key_flags():
         "elsevier-1",
         "--wiley-tdm-token",
         "wiley-1",
-        "--semantic-scholar-key",
-        "s2-1",
         "--json",
     ])
 
     assert args.elsevier_key == "elsevier-1"
     assert args.wiley_tdm_token == "wiley-1"
-    assert args.semantic_scholar_key == "s2-1"
     assert args.json is True
 
 
@@ -1380,8 +1412,6 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
         "elsevier-secret",
         "--wiley-tdm-token",
         "wiley-secret",
-        "--semantic-scholar-key",
-        "s2-secret",
         "--json",
     ])
 
@@ -1391,18 +1421,15 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
 
     assert cfg.academic.elsevier_api_key == "elsevier-secret"
     assert cfg.academic.wiley_tdm_token == "wiley-secret"
-    assert cfg.academic.semantic_scholar_api_key == "s2-secret"
     assert payload["status"] == "saved"
     assert payload["configured"] == {
         "elsevier_api_key": True,
         "wiley_tdm_token": True,
-        "semantic_scholar_api_key": True,
     }
-    assert payload["discover_source"] == "local_semantic_scholar"
+    assert payload["discover_source"] == "server_openalex"
     assert payload["discover_behavior"] == {
-        "semantic_scholar": "local_first",
-        "fallback": "server_openalex",
-        "action_hint": "Semantic Scholar is configured; discovery tries the local Semantic Scholar API first and falls back to server OpenAlex when needed.",
+        "provider": "server_openalex",
+        "action_hint": "Discovery uses the Mdtero server OpenAlex search API.",
     }
     assert "mdtero smoke --json" in payload["next_commands"]
     assert "mdtero mcp briefing --json" in payload["next_commands"]
@@ -1415,10 +1442,9 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
     output = json.dumps(payload)
     assert "elsevier-secret" not in output
     assert "wiley-secret" not in output
-    assert "s2-secret" not in output
 
 
-def test_config_academic_json_reports_server_openalex_when_s2_is_absent(monkeypatch, tmp_path: Path, capsys):
+def test_config_academic_json_reports_server_openalex_discovery(monkeypatch, tmp_path: Path, capsys):
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     args = build_parser().parse_args(["config", "academic", "--json"])
 
@@ -1426,11 +1452,9 @@ def test_config_academic_json_reports_server_openalex_when_s2_is_absent(monkeypa
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "current"
-    assert payload["configured"]["semantic_scholar_api_key"] is False
     assert payload["discover_source"] == "server_openalex"
-    assert payload["discover_behavior"]["semantic_scholar"] == "not_configured"
-    assert payload["discover_behavior"]["fallback"] == "server_openalex"
-    assert "server OpenAlex fallback" in payload["discover_behavior"]["action_hint"]
+    assert payload["discover_behavior"]["provider"] == "server_openalex"
+    assert "OpenAlex" in payload["discover_behavior"]["action_hint"]
 
 
 def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
@@ -1518,882 +1542,34 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
     assert state.papers[0].title == "Paper A"
 
 
-def test_discover_project_add_summary_preserves_semantic_scholar_and_fallback_source(monkeypatch, tmp_path: Path):
-    init_project(tmp_path, name="discover-demo")
-    monkeypatch.chdir(tmp_path)
-
-    semantic_summary = _add_discovery_results_to_project(
-        {"source": "semantic_scholar_local", "items": [{"title": "S2 Paper", "doi": "10.1000/s2", "source": "semantic_scholar"}]},
-        selection="all",
-    )
-    fallback_summary = _add_discovery_results_to_project(
-        {
-            "source": "openalex_server",
-            "discovery_fallback": {"reason_code": "semantic_scholar_rate_limited"},
-            "items": [{"title": "OA Paper", "doi": "10.1000/oa", "source": "openalex"}],
-        },
-        selection="all",
-    )
-
-    assert semantic_summary["source_mode"] == "semantic_scholar_local"
-    assert semantic_summary["fallback_reason_code"] is None
-    assert fallback_summary["source_mode"] == "openalex_server"
-    assert fallback_summary["fallback_reason_code"] == "semantic_scholar_rate_limited"
-
-
-def test_semantic_scholar_discovery_uses_parse_friendly_external_id_urls():
-    assert _semantic_scholar_parse_url({"DOI": "10.48550/arXiv.1706.03762", "ArXiv": "1706.03762"}) == "https://doi.org/10.48550/arXiv.1706.03762"
-    assert _semantic_scholar_parse_url({"ArXiv": "2312.07559"}) == "https://arxiv.org/abs/2312.07559"
-    assert _semantic_scholar_parse_url({"PMCID": "7517829"}) == "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7517829/"
-    assert _semantic_scholar_parse_url({"PubMed": "123456"}) == "https://pubmed.ncbi.nlm.nih.gov/123456/"
-
-
-def test_semantic_scholar_discovery_add_prefers_arxiv_over_s2_page(monkeypatch, tmp_path: Path):
-    monkeypatch.chdir(tmp_path)
-    init_project(tmp_path, name="s2-discovery")
-
-    result = {
-        "source": "semantic_scholar_local",
-        "items": [
-            {
-                "title": "PaperQA",
-                "doi": None,
-                "url": _semantic_scholar_parse_url({"ArXiv": "2312.07559"}) or "https://www.semanticscholar.org/paper/demo",
-                "semantic_scholar_url": "https://www.semanticscholar.org/paper/demo",
-                "source": "semantic_scholar_local",
-            }
-        ],
-    }
-
-    summary = _add_discovery_results_to_project(result, selection="1")
-    state = load_project(tmp_path)
-
-    assert summary["source_mode"] == "semantic_scholar_local"
-    assert summary["added"][0]["input"] == "https://arxiv.org/abs/2312.07559"
-    assert state.papers[0].input == "https://arxiv.org/abs/2312.07559"
-
-
-def test_discover_interactive_adds_prompted_results_to_project(monkeypatch, tmp_path: Path, capsys):
-    from mdtero import cli
-
-    init_project(tmp_path, name="discover-demo")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "1 2")
-
-    def fake_discover(self, query, *, limit=10):
-        assert query == "rag papers"
-        assert limit == 3
-        return {
-            "source": "openalex_server",
-            "items": [
-                {"title": "Paper A", "doi": "10.1000/a", "source": "openalex"},
-                {"title": "Paper B", "url": "https://example.test/paper-b", "source": "openalex"},
-                {"title": "Paper C"},
-            ],
-        }
-
-    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
-    args = type("Args", (), {"query": "rag papers", "limit": 3, "add": False, "select": "", "interactive": True, "json": True})()
-
-    assert cli.cmd_discover(args) == 0
-    payload = json.loads(capsys.readouterr().out)
-    state = load_project(tmp_path)
-
-    assert payload["project_add"]["added_count"] == 2
-    assert [paper.input for paper in state.papers] == ["10.1000/a", "https://example.test/paper-b"]
-    assert payload["discovery_session"]["pagination_mode"] == "client_expand_limit"
-    assert payload["discovery_session"]["commands"]["next"] == "mdtero discover 'rag papers' --limit 6 --interactive"
-
-
-def test_discover_interactive_can_page_and_add_current_page(monkeypatch, tmp_path: Path, capsys):
-    from mdtero import cli
-
-    init_project(tmp_path, name="discover-demo")
-    monkeypatch.chdir(tmp_path)
-    prompts = iter(["n", "a"])
-    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: next(prompts))
-    calls: list[tuple[str, int]] = []
-
-    def fake_discover(self, query, *, limit=10):
-        calls.append((query, limit))
-        return {
-            "source": "openalex_server",
-            "items": [
-                {"title": f"Paper {index}", "doi": f"10.1000/{index}", "source": "openalex"}
-                for index in range(1, limit + 1)
-            ],
-        }
-
-    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
-    args = type("Args", (), {"query": "rag papers", "limit": 2, "add": False, "select": "", "interactive": True, "json": True})()
-
-    assert cli.cmd_discover(args) == 0
-    payload = json.loads(capsys.readouterr().out)
-    state = load_project(tmp_path)
-
-    assert calls == [("rag papers", 2), ("rag papers", 4)]
-    assert payload["interactive_action"] == "add_page"
-    assert payload["interactive_selection"] == "3,4"
-    assert payload["project_add"]["selection"] == [3, 4]
-    assert payload["discovery_session"]["page"] == 2
-    assert payload["discovery_session"]["visible_range"] == [3, 4]
-    assert [paper.input for paper in state.papers] == ["10.1000/3", "10.1000/4"]
-
-
-def test_discover_interactive_can_refine_query_before_selecting(monkeypatch, tmp_path: Path, capsys):
-    from mdtero import cli
-
-    init_project(tmp_path, name="discover-demo")
-    monkeypatch.chdir(tmp_path)
-    prompts = iter(["r graph transformers", "1"])
-    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: next(prompts))
-    calls: list[tuple[str, int]] = []
-
-    def fake_discover(self, query, *, limit=10):
-        calls.append((query, limit))
-        suffix = "initial" if query == "rag papers" else "refined"
-        return {"source": "openalex_server", "items": [{"title": suffix, "doi": f"10.1000/{suffix}", "source": "openalex"}]}
-
-    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
-    args = type("Args", (), {"query": "rag papers", "limit": 1, "add": False, "select": "", "interactive": True, "json": True})()
-
-    assert cli.cmd_discover(args) == 0
-    payload = json.loads(capsys.readouterr().out)
-    state = load_project(tmp_path)
-
-    assert calls == [("rag papers", 1), ("graph transformers", 1)]
-    assert payload["discovery_session"]["query"] == "graph transformers"
-    assert payload["items"][0]["title"] == "refined"
-    assert [paper.input for paper in state.papers] == ["10.1000/refined"]
-
-
-def test_discover_accepts_unquoted_multi_word_query(monkeypatch, capsys):
-    from mdtero import cli
-
-    def fake_discover(self, query, *, limit=10):
-        assert query == "Thermochemical Energy storage Vermiculite"
-        assert limit == 5
-        return {"source": "semantic_scholar_local", "items": [{"title": "Vermiculite Paper", "doi": "10.1000/v"}]}
-
-    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
-    args = build_parser().parse_args(["discover", "Thermochemical", "Energy", "storage", "Vermiculite", "--limit", "5", "--json"])
-
-    assert cli.cmd_discover(args) == 0
-    payload = json.loads(capsys.readouterr().out)
-
-    assert payload["items"][0]["title"] == "Vermiculite Paper"
-
-
-def test_discover_interactive_enter_skips_project_add(monkeypatch, tmp_path: Path, capsys):
-    from mdtero import cli
-
-    init_project(tmp_path, name="discover-demo")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "")
-    monkeypatch.setattr(MdteroClient, "discover", lambda self, query, *, limit=10: {"items": [{"title": "Paper A", "doi": "10.1000/a"}]})
-
-    args = type("Args", (), {"query": "rag", "limit": 1, "add": False, "select": "", "interactive": True, "json": True})()
-
-    assert cli.cmd_discover(args) == 0
-    payload = json.loads(capsys.readouterr().out)
-    state = load_project(tmp_path)
-
-    assert payload["project_add"]["added_count"] == 0
-    assert payload["project_add"]["next_commands"] == [
-        "mdtero project status --json",
-        "mdtero discover \"<topic>\" --limit 5 --interactive",
-        "mdtero discover \"<topic>\" --limit 5 --add --select 1,3 --json",
-    ]
-    assert state.papers == []
-
-
-def test_discover_non_json_prints_semantic_scholar_fallback_notice(monkeypatch, capsys):
-    from mdtero import cli
-
-    def fake_discover(self, query, *, limit=10):
-        assert query == "rag papers"
-        return {
-            "source": "openalex_server",
-            "discovery_fallback": {
-                "from": "semantic_scholar_local",
-                "to": "openalex_server",
-                "reason_code": "semantic_scholar_rate_limited",
-                "action_hint": "Semantic Scholar rate-limited local discovery. Wait and retry.",
-            },
-            "items": [{"title": "Fallback Paper", "doi": "10.1000/fallback", "source": "openalex"}],
-        }
-
-    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
-    args = type("Args", (), {"query": "rag papers", "limit": 3, "add": False, "select": "", "interactive": False, "json": False})()
-
-    assert cli.cmd_discover(args) == 0
-    output = capsys.readouterr().out
-    assert "Semantic Scholar local discovery failed (semantic_scholar_rate_limited)" in output
-    assert "server OpenAlex fallback" in output
-    assert "Fallback Paper" in output
-
-
-def test_config_round_trip_keeps_semantic_scholar_local_discover_flag(tmp_path: Path):
-    path = tmp_path / "config.json"
-    save_config(
-        MdteroConfig(
-            api_key="key",
-            academic=AcademicKeys(semantic_scholar_api_key="s2"),
-        ),
-        path,
-    )
-
-    cfg = load_config(path)
-
-    assert cfg.api_key == "key"
-    assert cfg.has_semantic_scholar_key is True
-
-
-def test_config_keeps_environment_api_key_as_runtime_override(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
-    monkeypatch.setenv("MDTERO_API_KEY", "mdt_live_env")
-
-    cfg = load_config()
-
-    assert cfg.api_key is None
-    assert cfg.effective_api_key == "mdt_live_env"
-    assert cfg.api_key_source == "MDTERO_API_KEY"
-    assert cfg.is_authenticated is True
-
-
-def test_config_reads_headless_academic_keys_from_environment(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
-    monkeypatch.setenv("MDTERO_ELSEVIER_API_KEY", "elsevier-env")
-    monkeypatch.setenv("MDTERO_WILEY_TDM_TOKEN", "wiley-env")
-    monkeypatch.setenv("MDTERO_SEMANTIC_SCHOLAR_API_KEY", "s2-env")
-
-    cfg = load_config()
-
-    assert cfg.academic.elsevier_api_key == "elsevier-env"
-    assert cfg.academic.wiley_tdm_token == "wiley-env"
-    assert cfg.academic.semantic_scholar_api_key == "s2-env"
-    assert cfg.has_semantic_scholar_key is True
-
-
-def test_saved_academic_keys_take_precedence_over_environment(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("MDTERO_ELSEVIER_API_KEY", "elsevier-env")
-    monkeypatch.setenv("MDTERO_WILEY_TDM_TOKEN", "wiley-env")
-    monkeypatch.setenv("MDTERO_SEMANTIC_SCHOLAR_API_KEY", "s2-env")
-    path = tmp_path / "config.json"
-    save_config(
-        MdteroConfig(
-            academic=AcademicKeys(
-                elsevier_api_key="elsevier-saved",
-                wiley_tdm_token="wiley-saved",
-                semantic_scholar_api_key="s2-saved",
-            )
-        ),
-        path,
-    )
-
-    cfg = load_config(path)
-
-    assert cfg.academic.elsevier_api_key == "elsevier-saved"
-    assert cfg.academic.wiley_tdm_token == "wiley-saved"
-    assert cfg.academic.semantic_scholar_api_key == "s2-saved"
-
-
-def test_client_keeps_task_submission_on_v1_when_route_is_not_deployed(monkeypatch):
-    calls = []
-
-    def fake_request(self, method, path, **kwargs):
-        calls.append((method, path, kwargs))
-        if path == "/api/v1/route":
-            request = httpx.Request(method, "https://api.mdtero.test/api/v1/route")
-            response = httpx.Response(404, request=request)
-            raise httpx.HTTPStatusError("not found", request=request, response=response)
-        if path == "/api/v1/tasks/parse":
-            request = httpx.Request(method, "https://api.mdtero.test/api/v1/tasks/parse")
-            response = httpx.Response(404, request=request)
-            raise httpx.HTTPStatusError("not found", request=request, response=response)
-        raise AssertionError(path)
-
-    monkeypatch.setattr(MdteroClient, "_request", fake_request)
-    client = MdteroClient()
-
-    route = client.route("10.1000/demo")
-
-    assert route["route_planner_fallback"] is True
-    assert route["acquisition_mode"] == "server_parse"
-    assert route["server_entrypoint"] == "/api/v1/tasks/parse"
-    assert route["upload_entrypoint"] == "/api/v1/tasks/upload"
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        client.parse("10.1000/demo")
-    assert exc_info.value.response.status_code == 404
-    assert [call[1] for call in calls] == ["/api/v1/route", "/api/v1/tasks/parse"]
-
-
-def test_client_reports_v1_discovery_failure_without_old_endpoint_fallback(monkeypatch):
-    calls = []
-
-    def fake_request(self, method, path, **kwargs):
-        calls.append((method, path, kwargs))
-        if path == "/api/v1/discovery/search":
-            request = httpx.Request(method, "https://api.mdtero.test/api/v1/discovery/search")
-            response = httpx.Response(404, request=request)
-            raise httpx.HTTPStatusError("not found", request=request, response=response)
-        raise AssertionError(path)
-
-    monkeypatch.setattr(MdteroClient, "_request", fake_request)
-    with pytest.raises(DiscoveryError) as exc_info:
-        MdteroClient().discover("rag", limit=1)
-
-    assert exc_info.value.payload["error_code"] == "discovery_failed"
-    assert exc_info.value.payload["status_code"] == 404
-    assert [call[1] for call in calls] == ["/api/v1/discovery/search"]
-
-
-def test_translate_text_payload_is_compatible_with_v1_schema(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_request(self, method, path, **kwargs):
-        captured["method"] = method
-        captured["path"] = path
-        captured["json"] = kwargs.get("json")
-        return {"task_id": "translate-task", "status": "queued"}
-
-    monkeypatch.setattr(MdteroClient, "_request", fake_request)
-
-    result = MdteroClient().translate_text("# Title\n\nHello", filename="paper.md", target_language="zh-CN")
-
-    assert result == {"task_id": "translate-task", "status": "queued"}
-    assert captured["method"] == "POST"
-    assert captured["path"] == "/api/v1/tasks/translate"
-    assert captured["json"] == {
-        "source_markdown_path": "",
-        "source_markdown_text": "# Title\n\nHello",
-        "source_markdown_filename": "paper.md",
-        "target_language": "zh-CN",
-        "mode": "full",
-    }
-
-
-def test_translate_server_path_payload_is_compatible_with_v1_schema(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_request(self, method, path, **kwargs):
-        captured["method"] = method
-        captured["path"] = path
-        captured["json"] = kwargs.get("json")
-        return {"task_id": "translate-task", "status": "queued"}
-
-    monkeypatch.setattr(MdteroClient, "_request", fake_request)
-
-    result = MdteroClient().translate_server_path("/app/tasks/parse-1/paper.md", target_language="zh-CN")
-
-    assert result == {"task_id": "translate-task", "status": "queued"}
-    assert captured["method"] == "POST"
-    assert captured["path"] == "/api/v1/tasks/translate"
-    assert captured["json"] == {
-        "source_markdown_path": "/app/tasks/parse-1/paper.md",
-        "target_language": "zh-CN",
-        "mode": "full",
-    }
-
-
-def test_translation_source_path_from_task_prefers_paper_md_artifact_path():
-    task = {
-        "result": {
-            "artifacts": {
-                "paper_md": {"path": "/app/tasks/parse-1/paper.md", "filename": "paper.md"},
-                "paper_bundle": {"path": "/app/tasks/parse-1/paper.zip"},
-            }
-        }
-    }
-
-    assert translation_source_path_from_task(task) == "/app/tasks/parse-1/paper.md"
-
-
-def test_translation_source_download_artifact_from_v1_download_artifacts():
-    from mdtero.client import translation_source_download_artifact_from_task
-
-    task = {
-        "result": {
-            "download_artifacts": [
-                {"artifact": "paper_bundle", "filename": "paper.zip"},
-                {"artifact": "paper_md", "filename": "paper.md", "media_type": "text/markdown"},
-            ]
-        }
-    }
-
-    assert translation_source_download_artifact_from_task(task) == {
-        "artifact": "paper_md",
-        "filename": "paper.md",
-        "media_type": "text/markdown",
-    }
-
-
-def test_translation_source_download_artifact_from_legacy_download_artifacts_dict():
-    from mdtero.client import translation_source_download_artifact_from_task
-
-    task = {"result": {"download_artifacts": {"paper_md": {"filename": "legacy.md"}}}}
-
-    assert translation_source_download_artifact_from_task(task) == {
-        "artifact": "paper_md",
-        "filename": "legacy.md",
-    }
-
-
-def test_translate_task_uses_parse_task_artifact_path(monkeypatch):
-    calls = []
-
-    def fake_task(self, task_id):
-        calls.append(("task", task_id))
-        return {"result": {"artifacts": {"paper_md": {"path": "/app/tasks/parse-1/paper.md"}}}}
-
-    def fake_translate_server_path(self, source_markdown_path, *, target_language="zh-CN"):
-        calls.append(("translate", source_markdown_path, target_language))
-        return {"task_id": "translate-task", "status": "queued"}
-
-    monkeypatch.setattr(MdteroClient, "task", fake_task)
-    monkeypatch.setattr(MdteroClient, "translate_server_path", fake_translate_server_path)
-
-    result = MdteroClient().translate_task("parse-1", target_language="zh-CN")
-
-    assert result == {"task_id": "translate-task", "status": "queued"}
-    assert calls == [("task", "parse-1"), ("translate", "/app/tasks/parse-1/paper.md", "zh-CN")]
-
-
-def test_translate_task_downloads_v1_markdown_artifact_when_server_path_is_absent(monkeypatch):
-    calls = []
-
-    class FakeResponse:
-        headers = {"content-disposition": 'attachment; filename="vaswani2017attention.md"'}
-        text = "# Attention Is All You Need\n\nTransformer text."
-
-        def raise_for_status(self):
-            calls.append(("raise_for_status",))
-
-    def fake_task(self, task_id):
-        calls.append(("task", task_id))
-        return {
-            "result": {
-                "download_artifacts": [
-                    {"artifact": "paper_md", "filename": "vaswani2017attention.md", "media_type": "text/markdown"}
-                ]
-            }
-        }
-
-    def fake_raw_request(self, method, path, **kwargs):
-        calls.append(("raw", method, path, kwargs))
-        return FakeResponse()
-
-    def fake_translate_text(self, markdown, *, filename="paper.md", target_language="zh-CN"):
-        calls.append(("translate_text", markdown, filename, target_language))
-        return {"task_id": "translate-task", "status": "queued"}
-
-    monkeypatch.setattr(MdteroClient, "task", fake_task)
-    monkeypatch.setattr(MdteroClient, "_raw_request", fake_raw_request)
-    monkeypatch.setattr(MdteroClient, "translate_text", fake_translate_text)
-
-    result = MdteroClient().translate_task("parse-1", target_language="zh-CN")
-
-    assert result == {"task_id": "translate-task", "status": "queued"}
-    assert calls == [
-        ("task", "parse-1"),
-        ("raw", "GET", "/api/v1/tasks/parse-1/download/paper_md", {}),
-        ("raise_for_status",),
-        ("translate_text", "# Attention Is All You Need\n\nTransformer text.", "vaswani2017attention.md", "zh-CN"),
-    ]
-
-
-def test_cmd_translate_accepts_task_id_and_outputs_json(monkeypatch, capsys):
-    from mdtero import cli
-
-    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
-        assert task_id == "parse-1"
-        assert target_language == "zh-CN"
-        assert artifact == "paper_md"
-        return {"task_id": "translate-task", "status": "queued"}
-
-    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
-
-    assert cli.cmd_translate(type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "json": True})()) == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload == {
-        "task_id": "translate-task",
-        "status": "queued",
-        "task_api": "/api/v1/tasks/{task_id}",
-        "download_api": "/api/v1/tasks/{task_id}/download/{artifact}",
-        "preferred_artifact": "translated_md",
-        "next_commands": [
-            "mdtero status translate-task --wait --timeout 300 --json",
-            "mdtero download translate-task translated_md --output-dir ./mdtero-output --json",
-        ],
-    }
-
-
-def test_cmd_translate_wait_includes_final_task(monkeypatch, capsys):
-    from mdtero import cli
-
-    calls = []
-
-    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
-        calls.append(("translate", task_id, target_language, artifact))
-        return {"task_id": "translate-task", "status": "queued"}
-
-    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
-        calls.append(("wait", task_id, interval, timeout))
-        return {
-            "task_id": task_id,
-            "status": "succeeded",
-            "result": {"artifacts": {"translated_md": {"filename": "paper_CN.md"}}},
-        }
-
-    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
-    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
-
-    args = type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "wait": True, "timeout": 13, "interval": 4.5, "json": True})()
-    assert cli.cmd_translate(args) == 0
-    payload = json.loads(capsys.readouterr().out)
-
-    assert payload["task_id"] == "translate-task"
-    assert payload["final_task"]["status"] == "succeeded"
-    assert payload["final_task"]["preferred_artifact"] == "translated_md"
-    assert payload["final_task"]["next_commands"] == [
-        "mdtero download translate-task translated_md --output-dir ./mdtero-output --json"
-    ]
-    assert calls == [("translate", "parse-1", "zh-CN", "paper_md"), ("wait", "translate-task", 4.5, 13.0)]
-
-
-def test_cmd_translate_wait_returns_nonzero_for_failed_final_task(monkeypatch, capsys):
-    from mdtero import cli
-
-    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
-        return {"task_id": "translate-task", "status": "queued"}
-
-    def fake_wait(self, task_id, *, interval=2.0, timeout=600.0):
-        return {
-            "task_id": task_id,
-            "status": "failed",
-            "error_code": "translation_provider_chain_failed",
-            "result": {
-                "reason_code": "translation_provider_chain_failed",
-                "action_hint": "All configured server translation providers failed.",
-                "translation_attempts": [{"provider": "translation_provider_a", "reason_code": "translation_provider_auth_failed"}],
-            },
-        }
-
-    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
-    monkeypatch.setattr(MdteroClient, "wait", fake_wait)
-
-    args = type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "wait": True, "timeout": 13, "interval": 4.5, "json": True})()
-    assert cli.cmd_translate(args) == 1
-    payload = json.loads(capsys.readouterr().out)
-
-    assert payload["final_task"]["reason_code"] == "translation_provider_chain_failed"
-    assert payload["final_task"]["action_hint"] == "All configured server translation providers failed."
-    assert payload["final_task"]["translation_attempts"][0]["reason_code"] == "translation_provider_auth_failed"
-
-
-def test_cmd_translate_preserves_server_next_commands(monkeypatch, capsys, tmp_path):
-    from mdtero import cli
-
-    paper = tmp_path / "paper.md"
-    paper.write_text("# Demo\n\nHello", encoding="utf-8")
-
-    def fake_translate_text(self, markdown, *, filename="paper.md", target_language="zh-CN"):
-        assert markdown == "# Demo\n\nHello"
-        assert filename == "paper.md"
-        assert target_language == "zh-CN"
-        return {
-            "task_id": "translate-task",
-            "status": "queued",
-            "next_commands": ["mdtero status translate-task --wait --timeout 300 --json"],
-        }
-
-    monkeypatch.setattr(MdteroClient, "translate_text", fake_translate_text)
-
-    assert cli.cmd_translate(type("Args", (), {"task_or_file": str(paper), "to": "zh-CN", "json": True})()) == 0
-    payload = json.loads(capsys.readouterr().out)
-
-    assert payload["preferred_artifact"] == "translated_md"
-    assert payload["next_commands"] == [
-        "mdtero status translate-task --wait --timeout 300 --json",
-        "mdtero download translate-task translated_md --output-dir ./mdtero-output --json",
-    ]
-
-
-def test_cmd_translate_reports_missing_task_artifact_without_traceback(monkeypatch, capsys):
-    from mdtero import cli
-
-    def fake_translate_task(self, task_id, *, target_language="zh-CN", artifact="paper_md"):
-        raise ValueError("translation_source_artifact_missing")
-
-    monkeypatch.setattr(MdteroClient, "translate_task", fake_translate_task)
-
-    assert cli.cmd_translate(type("Args", (), {"task_or_file": "parse-1", "to": "zh-CN", "json": True})()) == 1
-    payload = json.loads(capsys.readouterr().out)
-
-    assert payload["error_code"] == "translation_source_artifact_missing"
-    assert payload["task_id"] == "parse-1"
-    assert "mdtero status <task-id> --json" in payload["action_hint"]
-    assert payload["next_commands"][0] == "mdtero status parse-1 --json"
-
-
-def test_discover_falls_back_to_server_when_semantic_scholar_is_unreachable(monkeypatch):
-    calls = []
-
-    def fake_s2(self, query, *, limit):
-        raise httpx.ConnectError("socks tls failed")
-
-    def fake_request(self, method, path, **kwargs):
-        calls.append((method, path, kwargs))
-        return {"items": [{"title": "Server fallback"}]}
-
-    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
-    monkeypatch.setattr(MdteroClient, "_request", fake_request)
-
-    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
-
-    assert result["source"] == "openalex_server"
-    assert result["discovery_diagnostics"] == {
-        "semantic_scholar_configured": True,
-        "semantic_scholar_attempted": True,
-        "server_openalex_attempted": True,
-    }
-    assert result["local_semantic_scholar_error"] == "ConnectError"
-    assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_network_error"
-    assert result["discovery_fallback"] == {
-        "from": "semantic_scholar_local",
-        "to": "openalex_server",
-        "reason_code": "semantic_scholar_network_error",
-        "action_hint": "Local Semantic Scholar discovery failed; using the Mdtero server OpenAlex fallback for this query.",
-    }
-    assert result["items"][0]["title"] == "Server fallback"
-    assert calls[0][1] == "/api/v1/discovery/search"
-
-
-def test_discover_explains_semantic_scholar_rate_limit_before_openalex_fallback(monkeypatch):
-    def fake_s2(self, query, *, limit):
-        request = httpx.Request("GET", "https://api.semanticscholar.org/graph/v1/paper/search")
-        response = httpx.Response(429, json={"message": "Too many requests"}, request=request)
-        raise httpx.HTTPStatusError("rate limited", request=request, response=response)
-
-    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
-    monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": []})
-
-    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
-
-    assert result["source"] == "openalex_server"
-    assert result["local_semantic_scholar_failure"]["status_code"] == 429
-    assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_rate_limited"
-    assert "server OpenAlex fallback" in result["discovery_fallback"]["action_hint"]
-
-
-def test_discover_explains_semantic_scholar_auth_failure_before_openalex_fallback(monkeypatch):
-    def fake_s2(self, query, *, limit):
-        request = httpx.Request("GET", "https://api.semanticscholar.org/graph/v1/paper/search")
-        response = httpx.Response(403, json={"message": "Forbidden"}, request=request)
-        raise httpx.HTTPStatusError("forbidden", request=request, response=response)
-
-    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
-    monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": [{"title": "OpenAlex fallback"}]})
-
-    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
-
-    assert result["source"] == "openalex_server"
-    assert result["local_semantic_scholar_failure"]["status_code"] == 403
-    assert result["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_auth_failed"
-    assert result["discovery_fallback"]["reason_code"] == "semantic_scholar_auth_failed"
-    assert result["items"][0]["title"] == "OpenAlex fallback"
-
-
-def test_discover_marks_semantic_scholar_success_diagnostics(monkeypatch):
-    def fake_s2(self, query, *, limit):
-        return {"source": "semantic_scholar_local", "items": [{"title": "S2 paper"}]}
-
-    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
-
-    result = MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
-
-    assert result["source"] == "semantic_scholar_local"
-    assert result["discovery_diagnostics"] == {
-        "semantic_scholar_configured": True,
-        "semantic_scholar_attempted": True,
-        "server_openalex_attempted": False,
-    }
-
-
-def test_semantic_scholar_search_uses_official_x_api_key_header(monkeypatch):
-    captured: dict[str, object] = {}
-    monkeypatch.setattr(mdtero_client_module, "_throttle_semantic_scholar_request", lambda: None)
-
-    class FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {"data": [{"title": "S2 paper", "year": 2024, "externalIds": {"DOI": "10.1000/s2"}}]}
-
-    class FakeClient:
-        def __init__(self, *args, **kwargs):
-            captured["client_kwargs"] = kwargs
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def get(self, url, *, headers=None, params=None):
-            captured["url"] = url
-            captured["headers"] = headers
-            captured["params"] = params
-            return FakeResponse()
-
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-
-    result = MdteroClient(config=MdteroConfig(academic=AcademicKeys(semantic_scholar_api_key=" s2-secret\n")))._semantic_scholar_search("rag", limit=2)
-
-    assert captured["url"] == "https://api.semanticscholar.org/graph/v1/paper/search"
-    assert captured["headers"] == {"x-api-key": "s2-secret"}
-    assert captured["params"] == {
-        "query": "rag",
-        "limit": 2,
-        "fields": "title,authors,year,url,externalIds,abstract",
-    }
-    assert result["source"] == "semantic_scholar_local"
-    assert result["items"][0]["doi"] == "10.1000/s2"
-
-
-def test_semantic_scholar_search_throttles_to_one_request_per_second(monkeypatch):
-    sleeps: list[float] = []
-    clock = {"now": 100.0}
-
-    class FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {"data": []}
-
-    class FakeClient:
-        def __init__(self, *args, **kwargs):
-            return None
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def get(self, url, *, headers=None, params=None):
-            clock["now"] += 0.01
-            return FakeResponse()
-
-    def fake_monotonic():
-        return clock["now"]
-
-    def fake_sleep(seconds):
-        sleeps.append(seconds)
-        clock["now"] += seconds
-
-    monkeypatch.setattr(mdtero_client_module, "_last_semantic_scholar_request_at", 0.0)
-    monkeypatch.setattr(mdtero_client_module.time, "monotonic", fake_monotonic)
-    monkeypatch.setattr(mdtero_client_module.time, "sleep", fake_sleep)
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    client = MdteroClient(config=MdteroConfig(academic=AcademicKeys(semantic_scholar_api_key="s2-secret")))
-
-    client._semantic_scholar_search("rag", limit=1)
-    client._semantic_scholar_search("rag", limit=1)
-
-    assert len(sleeps) == 1
-    assert sleeps[0] >= 1.0
-
-
-def test_discover_uses_semantic_scholar_key_from_environment_before_server(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
-    monkeypatch.setenv("MDTERO_SEMANTIC_SCHOLAR_API_KEY", "s2-env")
-
-    def fake_s2(self, query, *, limit):
-        assert self.config.academic.semantic_scholar_api_key == "s2-env"
-        assert query == "rag"
-        assert limit == 1
-        return {"source": "semantic_scholar_local", "items": [{"title": "S2 env paper"}]}
-
-    def fail_server(*args, **kwargs):  # pragma: no cover - failure guard
-        raise AssertionError("server OpenAlex should not be called when local Semantic Scholar succeeds")
-
-    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
-    monkeypatch.setattr(MdteroClient, "_request", fail_server)
-
-    result = MdteroClient(config=load_config()).discover("rag", limit=1)
-
-    assert result["source"] == "semantic_scholar_local"
-    assert result["items"][0]["title"] == "S2 env paper"
-    assert result["discovery_diagnostics"] == {
-        "semantic_scholar_configured": True,
-        "semantic_scholar_attempted": True,
-        "server_openalex_attempted": False,
-    }
-
-
-@pytest.mark.skipif(
-    not os.environ.get("MDTERO_LIVE_SEMANTIC_SCHOLAR_API_KEY"),
-    reason="set MDTERO_LIVE_SEMANTIC_SCHOLAR_API_KEY to run the live Semantic Scholar smoke",
-)
-def test_live_semantic_scholar_discovery_smoke():
-    client = MdteroClient(
-        config=MdteroConfig(
-            api_key="live-smoke",
-            academic=AcademicKeys(semantic_scholar_api_key=os.environ["MDTERO_LIVE_SEMANTIC_SCHOLAR_API_KEY"]),
-        ),
-        timeout=20.0,
-    )
-
-    try:
-        result = client._semantic_scholar_search("retrieval augmented generation scientific papers", limit=2)
-    except (httpx.HTTPError, ValueError) as exc:
-        payload = _local_semantic_scholar_failure(exc)
-        payload.pop("detail", None)
-        pytest.fail(f"live Semantic Scholar discovery failed: {json.dumps(payload, sort_keys=True)}")
-
-    assert result["source"] == "semantic_scholar_local"
-    assert len(result.get("items") or []) >= 1
-    assert all(item.get("source") == "semantic_scholar_local" for item in result.get("items") or [])
-
-
-def test_discover_marks_openalex_when_semantic_scholar_is_not_configured(monkeypatch):
+def test_discover_uses_server_openalex(monkeypatch):
     monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": [{"title": "OA paper"}]})
 
     result = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1)
 
     assert result["source"] == "openalex_server"
     assert result["discovery_diagnostics"] == {
-        "semantic_scholar_configured": False,
-        "semantic_scholar_attempted": False,
+        "provider": "openalex_server",
         "server_openalex_attempted": True,
     }
 
 
-def test_discover_returns_structured_failure_when_all_providers_fail(monkeypatch):
-    def fake_s2(self, query, *, limit):
-        raise httpx.ConnectError("socks tls failed")
-
+def test_discover_returns_structured_failure_when_server_discovery_fails(monkeypatch):
     def fake_request(self, method, path, **kwargs):
         request = httpx.Request(method, "https://api.mdtero.test/api/v1/discovery/search")
         response = httpx.Response(503, json={"error_code": "discovery_provider_disabled"}, request=request)
         raise httpx.HTTPStatusError("disabled", request=request, response=response)
 
-    monkeypatch.setattr(MdteroClient, "_semantic_scholar_search", fake_s2)
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
     try:
-        MdteroClient(config=MdteroConfig(api_key="key", academic=AcademicKeys(semantic_scholar_api_key="s2"))).discover("rag", limit=1)
+        MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1)
     except Exception as exc:
         payload = exc.payload
     else:
         raise AssertionError("expected discovery failure")
 
     assert payload["error_code"] == "discovery_provider_disabled"
-    assert payload["local_semantic_scholar_error"] == "ConnectError"
-    assert payload["local_semantic_scholar_failure"]["reason_code"] == "semantic_scholar_network_error"
     assert payload["status_code"] == 503
 
 
@@ -4185,7 +3361,11 @@ def test_client_wait_returns_terminal_task_seen_on_final_timeout_poll(monkeypatc
         {"task_id": "task-1", "status": "failed", "reason_code": "parser_failed"},
     ])
 
-    monkeypatch.setattr(client, "task", lambda task_id: next(calls))
+    def fake_poll(task_id, *, include_result=False, etag=None):
+        payload = next(calls)
+        return payload, "etag-1", False
+
+    monkeypatch.setattr(client, "_poll_task_status", fake_poll)
     monkeypatch.setattr("mdtero.client.time.monotonic", lambda: 1000.0)
 
     task = client.wait("task-1", interval=0.25, timeout=0.25)
@@ -4761,7 +3941,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert checklist["local_dependencies"]["status"] in {"ready", "needs_install"}
     assert checklist["academic_keys"]["status"] == "recommended"
     assert "https://dev.elsevier.com/apikey/manage" in checklist["academic_keys"]["links"]["elsevier_api_key"]
-    assert checklist["academic_keys"]["recommended_order"][:2] == ["elsevier_api_key", "semantic_scholar_api_key"]
+    assert checklist["academic_keys"]["recommended_order"][:2] == ["elsevier_api_key", "wiley_tdm_token"]
     assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
     assert checklist["academic_keys"]["elsevier_guidance"]["configure_command"] == "mdtero config academic --elsevier-key <key> --json"
     assert "does not bypass licensed-access requirements" in checklist["academic_keys"]["elsevier_guidance"]["action_hint"]
@@ -4782,13 +3962,13 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert any(group["title"] == "Server RAG and local agents" for group in payload["next_command_groups"])
 
 
-def test_setup_json_onboarding_uses_local_semantic_scholar_when_configured(monkeypatch, tmp_path: Path, capsys):
+def test_setup_json_onboarding_reports_server_openalex_discovery(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     cfg = load_config()
     cfg.api_key = "mdt_live_saved"
-    cfg.academic.semantic_scholar_api_key = "s2-secret"
+    cfg.academic.wiley_tdm_token = "wiley-secret"
     save_config(cfg)
     monkeypatch.setattr(
         "mdtero.agent.detect_target_status",
@@ -4801,12 +3981,11 @@ def test_setup_json_onboarding_uses_local_semantic_scholar_when_configured(monke
     checklist = {item["id"]: item for item in payload["onboarding_checklist"]}
     assert_onboarding_payload_commands_parse(payload)
 
-    assert "s2-secret" not in output
-    assert payload["academic"]["discover_source"] == "local_semantic_scholar"
+    assert "wiley-secret" not in output
+    assert payload["academic"]["discover_source"] == "server_openalex"
     assert payload["input_routes"]["routes"][0]["id"] == "doi_or_url"
     assert checklist["academic_keys"]["status"] == "partial"
-    assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
-    assert checklist["discovery"]["status"] == "local_semantic_scholar"
+    assert checklist["discovery"]["status"] == "server_openalex"
     assert checklist["agent_skills"]["status"] == "not_detected"
 
 
@@ -7110,7 +6289,6 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     (tmp_path / ".codex").mkdir()
     cfg = MdteroConfig(
         api_key="key",
-        academic=AcademicKeys(semantic_scholar_api_key="s2"),
         zotero=ZoteroConfig(library_id="123", library_type="user", api_key="zotero"),
     )
 
@@ -7128,7 +6306,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert_dashboard_model_commands_parse(model)
     rendered = render_dashboard_text(model)
 
-    assert model["academic"]["discover_source"] == "local Semantic Scholar"
+    assert model["academic"]["discover_source"] == "server OpenAlex"
     assert model["health"]["status"] == "results_ready"
     assert model["health"]["counts"]["ready_artifacts"] == 1
     assert model["health"]["counts"]["pending_agent_installs"] == 1
@@ -7236,8 +6414,14 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert "Launch Bundles" in output
     assert "Copy one group into a terminal" in output
     assert "RAG + MCP" in output
-    assert "One-command backend RAG bootstrap and query" in output
-    assert "Explicit recovery build when bootstrap query is not enough" in output
+    assert any(
+        item.get("use") == "One-command backend RAG bootstrap and query"
+        for item in model["command_palette"]
+    )
+    assert any(
+        item.get("use") == "Explicit recovery build when bootstrap query is not enough"
+        for item in model["command_palette"]
+    )
     assert "backend_rag / configured" in output
     assert "rag-model" in output
     assert "Build the server project index before" in output
@@ -7322,11 +6506,6 @@ def test_tui_dashboard_model_surfaces_blocked_and_active_handoff_items(tmp_path:
     assert model["agent_workflow"]["blocking_items"][0]["reason_code"] == "translation_provider_chain_failed"
     assert "codex:translation_provider_auth_failed" in model["agent_workflow"]["blocking_items"][0]["action_hint"]
     assert "mdtero project parse --include-failed --wait --timeout 300 --json" in model["handoff"]["recommended_next_commands"]
-    console = Console(record=True, width=140)
-    console.print(rendered)
-    output = console.export_text()
-    assert "Refresh provider API keys or quota" in output
-    assert "codex:translation_provider_auth_failed" in output
 
 
 def test_tui_dashboard_model_surfaces_ready_server_rag_status(tmp_path: Path):
@@ -8792,7 +7971,7 @@ def test_extension_dist_smoke_script_covers_shipping_mv3_bundle(tmp_path: Path):
         path.write_text("", encoding="utf-8")
     (dist / "manifest.json").write_text(json.dumps({
         "manifest_version": 3,
-        "permissions": ["storage", "downloads", "tabs", "activeTab", "scripting"],
+        "permissions": ["storage", "tabs", "activeTab", "scripting"],
         "host_permissions": ["https://api.mdtero.com/*", "https://api.elsevier.com/*"],
         "background": {"service_worker": "background.js"},
         "action": {"default_popup": "popup.html"},
@@ -8824,7 +8003,7 @@ def test_extension_dist_smoke_rejects_retired_helper_and_native_runtime(tmp_path
     dist.mkdir()
     (dist / "manifest.json").write_text(json.dumps({
         "manifest_version": 3,
-        "permissions": ["storage", "downloads", "tabs", "nativeMessaging"],
+        "permissions": ["storage", "tabs", "nativeMessaging"],
         "background": {"service_worker": "background.js"},
         "action": {"default_popup": "popup.html"},
         "options_page": "options.html",
@@ -8893,7 +8072,7 @@ def test_extension_dist_smoke_rejects_cli_mcp_content_in_options_page(tmp_path: 
         path.write_text("", encoding="utf-8")
     (dist / "manifest.json").write_text(json.dumps({
         "manifest_version": 3,
-        "permissions": ["storage", "downloads", "tabs"],
+        "permissions": ["storage", "tabs"],
         "host_permissions": ["https://api.mdtero.com/*"],
         "background": {"service_worker": "background.js"},
         "action": {"default_popup": "popup.html"},

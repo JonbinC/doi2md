@@ -23,14 +23,6 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
         "prompt": "Wiley TDM token",
         "hint": "Use when the user's Wiley access includes TDM rights.",
     },
-    {
-        "index": "3",
-        "label": "Semantic Scholar API Key",
-        "url": "https://www.semanticscholar.org/product/api#api-key-form",
-        "field": "semantic_scholar_api_key",
-        "prompt": "Semantic Scholar API key",
-        "hint": "Improves local discovery; without it, discovery uses the backend OpenAlex fallback.",
-    },
 ]
 
 
@@ -120,28 +112,20 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
     configured = {
         "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
         "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
-        "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
     }
-    discover_source = "local_semantic_scholar" if configured["semantic_scholar_api_key"] else "server_openalex"
-    discover_hint = (
-        "Semantic Scholar is configured; discovery tries the local Semantic Scholar API first and falls back to server OpenAlex when needed."
-        if configured["semantic_scholar_api_key"]
-        else "Semantic Scholar is not configured; discovery uses the server OpenAlex fallback."
-    )
     return {
         "status": "saved" if saved else "current",
         "config_path": str(path),
         "configured": configured,
-        "discover_source": discover_source,
+        "discover_source": "server_openalex",
         "discover_behavior": {
-            "semantic_scholar": "local_first" if configured["semantic_scholar_api_key"] else "not_configured",
-            "fallback": "server_openalex",
-            "action_hint": discover_hint,
+            "provider": "server_openalex",
+            "action_hint": "Discovery uses the Mdtero server OpenAlex search API.",
         },
         "application_links": {
             str(option["field"]): option["url"] for option in ACADEMIC_OPTIONS
         },
-        "recommended_order": ["elsevier_api_key", "semantic_scholar_api_key", "wiley_tdm_token"],
+        "recommended_order": ["elsevier_api_key", "wiley_tdm_token"],
         "priority_hints": {
             str(option["field"]): option["hint"] for option in ACADEMIC_OPTIONS
         },
@@ -175,7 +159,6 @@ def build_onboarding_checklist(
     agent_detection_skipped: bool,
 ) -> list[dict[str, Any]]:
     configured_academic = academic.get("configured") if isinstance(academic.get("configured"), dict) else {}
-    has_semantic_scholar = bool(configured_academic.get("semantic_scholar_api_key"))
     detected_agents = [item for item in agent_status if item.get("detected")]
     installed_agents = [item for item in detected_agents if item.get("installed")]
     dependencies = dependencies or {}
@@ -206,15 +189,15 @@ def build_onboarding_checklist(
             "title": "Academic source keys (Elsevier first)",
             "status": "elsevier_ready" if configured_academic.get("elsevier_api_key") else ("partial" if any(configured_academic.values()) else "recommended"),
             "primary_command": "mdtero config academic",
-            "action_hint": "For publisher-heavy literature reviews, ask whether the user can provide an Elsevier API key and configure it first. Academic keys stay local; without Semantic Scholar, discovery uses server OpenAlex.",
+            "action_hint": "For publisher-heavy literature reviews, ask whether the user can provide an Elsevier API key and configure it first. Academic keys stay local; discovery uses server OpenAlex.",
             "links": academic.get("application_links", {}),
-            "recommended_order": academic.get("recommended_order", ["elsevier_api_key", "semantic_scholar_api_key", "wiley_tdm_token"]),
+            "recommended_order": academic.get("recommended_order", ["elsevier_api_key", "wiley_tdm_token"]),
             "elsevier_guidance": academic.get("elsevier_guidance", {}),
         },
         {
             "id": "discovery",
             "title": "Discover papers",
-            "status": "local_semantic_scholar" if has_semantic_scholar else "server_openalex",
+            "status": "server_openalex",
             "primary_command": "mdtero discover \"<topic>\" --limit 5 --interactive",
             "action_hint": "Use space-bar multi-select in interactive discovery, or `--add --select 1,3 --json` for agent-safe project intake.",
         },

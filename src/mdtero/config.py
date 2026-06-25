@@ -25,7 +25,6 @@ def config_path() -> Path:
 class AcademicKeys:
     elsevier_api_key: str | None = None
     wiley_tdm_token: str | None = None
-    semantic_scholar_api_key: str | None = None
 
 
 @dataclass
@@ -45,10 +44,6 @@ class MdteroConfig:
     default_project: str | None = None
     proxy_url: str | None = None
     require_campus_proxy: bool = False
-
-    @property
-    def has_semantic_scholar_key(self) -> bool:
-        return bool((self.academic.semantic_scholar_api_key or "").strip())
 
     @property
     def effective_api_key(self) -> str | None:
@@ -101,7 +96,6 @@ def load_config(path: Path | None = None) -> MdteroConfig:
         academic=AcademicKeys(
             elsevier_api_key=academic.get("elsevier_api_key") or academic_env.elsevier_api_key or None,
             wiley_tdm_token=academic.get("wiley_tdm_token") or academic_env.wiley_tdm_token or None,
-            semantic_scholar_api_key=academic.get("semantic_scholar_api_key") or academic_env.semantic_scholar_api_key or None,
         ),
         zotero=ZoteroConfig(
             library_id=zotero.get("library_id") or os.environ.get("ZOTERO_LIBRARY_ID") or None,
@@ -116,12 +110,6 @@ def _academic_keys_from_env() -> AcademicKeys:
     return AcademicKeys(
         elsevier_api_key=os.environ.get("MDTERO_ELSEVIER_API_KEY") or os.environ.get("ELSEVIER_API_KEY") or None,
         wiley_tdm_token=os.environ.get("MDTERO_WILEY_TDM_TOKEN") or os.environ.get("WILEY_TDM_TOKEN") or None,
-        semantic_scholar_api_key=(
-            os.environ.get("MDTERO_SEMANTIC_SCHOLAR_API_KEY")
-            or os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
-            or os.environ.get("S2_API_KEY")
-            or None
-        ),
     )
 
 

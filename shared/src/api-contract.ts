@@ -189,6 +189,12 @@ export interface TranslationProviderAttempt {
   message?: string | null;
 }
 
+export interface TaskQueueSnapshot {
+  position?: number;
+  depth?: number;
+  ahead?: number;
+}
+
 export interface TaskRecord {
   task_id: string;
   status: "queued" | "running" | "succeeded" | "failed";
@@ -201,6 +207,8 @@ export interface TaskRecord {
   stage: "queued" | "parsing" | "translating" | "completed" | "failed";
   progress_percent?: number | null;
   created_at: string;
+  updated_at?: string;
+  queue?: TaskQueueSnapshot;
   result?: TaskResult | null;
   selected_provider?: string | null;
   parser_strategy?: string | null;

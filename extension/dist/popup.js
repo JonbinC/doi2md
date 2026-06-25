@@ -75,6 +75,9 @@ var MdteroApiError = class extends Error {
     this.nextCommands = params.nextCommands ?? [];
   }
 };
+function isMdteroApiError(error) {
+  return error instanceof MdteroApiError;
+}
 function buildFulltextUploadBody(params) {
   const body = new FormData();
   body.set("paper_file", params.file, params.filename);
@@ -251,8 +254,22 @@ function createApiClient(getSettings) {
         body: JSON.stringify(payload)
       }, { requireAuth: true }).then((response) => response.json());
     },
-    getTask(taskId) {
-      return request(`/api/v1/tasks/${taskId}`, void 0, { requireAuth: true }).then((response) => response.json());
+    getTask(taskId, options) {
+      const headers = new Headers();
+      if (options?.etag) {
+        headers.set("If-None-Match", options.etag);
+      }
+      return request(`/api/v1/tasks/${taskId}`, { headers }, { requireAuth: true }).then(async (response) => {
+        const etag = response.headers.get("ETag");
+        if (response.status === 304) {
+          return { notModified: true, etag };
+        }
+        return {
+          notModified: false,
+          result: await response.json(),
+          etag
+        };
+      });
     },
     downloadArtifact(taskId, artifact, preferredFilename) {
       return request(`/api/v1/tasks/${taskId}/download/${artifact}`, void 0, { requireAuth: true }).then(async (response) => ({
@@ -383,6 +400,12 @@ function resolveUiLanguage(preferred, browserLanguage) {
   }
   return browserLanguage?.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
+function mergeSettings(current, next) {
+  return {
+    ...current,
+    ...next
+  };
+}
 async function readSettings() {
   const stored = await chrome.storage.local.get(SETTINGS_KEY);
   const current = stored[SETTINGS_KEY] ?? { apiBaseUrl: DEFAULT_API_BASE_URL };
@@ -391,7 +414,10 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
-    elsevierApiKey: current.elsevierApiKey
+    elsevierApiKey: current.elsevierApiKey,
+    proxyEnabled: Boolean(current.proxyEnabled),
+    proxyUrl: current.proxyUrl,
+    requireCampusProxy: Boolean(current.requireCampusProxy)
   };
 }
 async function writeSettings(next) {
@@ -502,6 +528,12 @@ function getTaskProcessingSummary(task, language = "en") {
   const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
   const artifacts = summarizeDownloadArtifacts(result);
   const lines = [];
+  const queue = task?.queue;
+  if (queue?.position) {
+    lines.push(
+      language === "zh" ? `\u961F\u5217\u4F4D\u7F6E\uFF1A${queue.position}${queue.ahead ? `\uFF08\u524D\u9762\u8FD8\u6709 ${queue.ahead} \u4E2A\uFF09` : ""}` : `Queue position: ${queue.position}${queue.ahead ? ` (${queue.ahead} ahead)` : ""}`
+    );
+  }
   if (task?.selected_provider || result?.selected_provider || task?.parser_strategy || result?.parser_strategy) {
     lines.push(language === "zh" ? "\u5904\u7406\u8DEF\u5F84\uFF1A\u540E\u7AEF\u89E3\u6790" : "Processing path: Backend parsing");
   }
@@ -1009,6 +1041,10 @@ var COPY = {
     signInButton: "Open website OAuth",
     connectionPillSignedOut: "Website OAuth",
     connectionPillSignedIn: "Connected",
+    paperInputEyebrow: "Paper input",
+    fileIntakeEyebrow: "Local files",
+    actionsEyebrow: "Actions",
+    sessionExpired: "Session expired. Please sign in again through website OAuth.",
     workflowAuth: "Login",
     workflowParse: "Parse / Upload",
     workflowTranslate: "Translate",
@@ -1022,6 +1058,7 @@ var COPY = {
     fileIntakeNote: "Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.",
     pickPdfButton: "Use PDF",
     pickEpubButton: "Use EPUB",
+    pickHtmlButton: "Use HTML",
     fileNameEmpty: "No local file selected.",
     localFileParsing: (filename) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
@@ -1071,6 +1108,10 @@ var COPY = {
     signInButton: "\u6253\u5F00\u7F51\u9875\u767B\u5F55",
     connectionPillSignedOut: "\u7F51\u9875\u767B\u5F55",
     connectionPillSignedIn: "\u5DF2\u8FDE\u63A5",
+    paperInputEyebrow: "\u8BBA\u6587\u8F93\u5165",
+    fileIntakeEyebrow: "\u672C\u5730\u6587\u4EF6",
+    actionsEyebrow: "\u64CD\u4F5C",
+    sessionExpired: "\u767B\u5F55\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u901A\u8FC7\u7F51\u9875\u767B\u5F55\u6388\u6743\u3002",
     workflowAuth: "\u767B\u5F55",
     workflowParse: "\u89E3\u6790 / \u4E0A\u4F20",
     workflowTranslate: "\u7FFB\u8BD1",
@@ -1084,6 +1125,7 @@ var COPY = {
     fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF\u3001EPUB \u6216\u4FDD\u5B58\u7684 HTML \u9875\u9762\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002\u4E0A\u4F20\u540E\u7531\u540E\u7AEF\u81EA\u52A8\u89E3\u6790\u3002",
     pickPdfButton: "\u9009\u62E9 PDF",
     pickEpubButton: "\u9009\u62E9 EPUB",
+    pickHtmlButton: "\u9009\u62E9 HTML",
     fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
     localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u540E\u7AEF\u4F1A\u521B\u5EFA\u89E3\u6790\u4EFB\u52A1\u5E76\u5728\u8FD9\u91CC\u8F6E\u8BE2...`,
     localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
@@ -1130,6 +1172,10 @@ var languageToggleEl = document.querySelector("#language-toggle");
 var accountEmailEl = document.querySelector("#account-email");
 var usageStatusEl = document.querySelector("#usage-status");
 var connectionPillEl = document.querySelector("#connection-pill");
+var heroCtaRowEl = document.querySelector("#hero-cta-row");
+var paperInputEyebrowEl = document.querySelector("#paper-input-eyebrow");
+var fileIntakeEyebrowEl = document.querySelector("#file-intake-eyebrow");
+var actionsEyebrowEl = document.querySelector("#actions-eyebrow");
 var workflowAuthEl = document.querySelector("#workflow-auth");
 var workflowParseEl = document.querySelector("#workflow-parse");
 var workflowTranslateEl = document.querySelector("#workflow-translate");
@@ -1331,6 +1377,31 @@ async function saveArtifact(taskId, artifactKey, preferredFilename) {
     }
   }
 }
+function updateAccountChrome(settings) {
+  isSignedIn = Boolean(settings.token);
+  if (connectionPillEl) {
+    connectionPillEl.textContent = settings.token ? getCurrentCopy().connectionPillSignedIn : getCurrentCopy().connectionPillSignedOut;
+    connectionPillEl.dataset.state = settings.token ? "signed-in" : "signed-out";
+  }
+  if (heroCtaRowEl) {
+    heroCtaRowEl.dataset.signedIn = settings.token ? "true" : "false";
+  }
+  if (accountEmailEl) {
+    accountEmailEl.textContent = settings.email ? getCurrentCopy().signedIn(settings.email) : getCurrentCopy().guest;
+  }
+}
+async function clearStaleAuth() {
+  const current = await readSettings();
+  if (!current.token) {
+    return;
+  }
+  await writeSettings(mergeSettings(current, { token: void 0, email: void 0 }));
+  updateAccountChrome({ token: void 0, email: void 0 });
+  if (usageStatusEl) {
+    usageStatusEl.textContent = getCurrentCopy().sessionExpired;
+  }
+  updateWorkflowState();
+}
 function applyLanguage() {
   const copy = getCurrentCopy();
   document.documentElement.lang = uiLanguage === "zh" ? "zh-CN" : "en";
@@ -1341,12 +1412,16 @@ function applyLanguage() {
   if (workflowParseEl) workflowParseEl.textContent = copy.workflowParse;
   if (workflowTranslateEl) workflowTranslateEl.textContent = copy.workflowTranslate;
   if (workflowDownloadEl) workflowDownloadEl.textContent = copy.workflowDownload;
+  if (paperInputEyebrowEl) paperInputEyebrowEl.textContent = copy.paperInputEyebrow;
+  if (fileIntakeEyebrowEl) fileIntakeEyebrowEl.textContent = copy.fileIntakeEyebrow;
+  if (actionsEyebrowEl) actionsEyebrowEl.textContent = copy.actionsEyebrow;
   if (inputLabelEl) inputLabelEl.textContent = copy.inputLabel;
   if (inputEl) inputEl.placeholder = copy.inputPlaceholder;
   if (fileIntakeTitleEl) fileIntakeTitleEl.textContent = copy.fileIntakeTitle;
   if (fileIntakeNoteEl) fileIntakeNoteEl.textContent = copy.fileIntakeNote;
   if (pickPdfButton) pickPdfButton.textContent = copy.pickPdfButton;
   if (pickEpubButton) pickEpubButton.textContent = copy.pickEpubButton;
+  if (pickHtmlButton) pickHtmlButton.textContent = copy.pickHtmlButton;
   if (localFileNameEl && !localFileNameEl.dataset.selectedName) {
     localFileNameEl.textContent = copy.fileNameEmpty;
   }
@@ -1395,6 +1470,9 @@ function applyLanguage() {
   if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
+  if (connectionPillEl) {
+    connectionPillEl.textContent = isSignedIn ? copy.connectionPillSignedIn : copy.connectionPillSignedOut;
+  }
   updateWorkflowState();
   renderActionButtons();
 }
@@ -1625,10 +1703,19 @@ async function hydrateSavedState(detectedInput) {
   updateWorkflowState();
   renderActionButtons();
 }
+var TASK_POLL_BASE_MS = 2500;
+var taskPollCache = /* @__PURE__ */ new Map();
+function nextTaskPollDelayMs(unchangedStreak) {
+  const backoff = Math.min(unchangedStreak * 500, 3500);
+  const jitter = Math.floor(Math.random() * 1e3) - 500;
+  return Math.max(1e3, TASK_POLL_BASE_MS + backoff + jitter);
+}
 async function pollTask(taskId, kind) {
+  const cached = taskPollCache.get(taskId);
   const response = await chrome.runtime.sendMessage({
     type: "mdtero.task.get",
-    taskId
+    taskId,
+    etag: cached?.etag
   });
   if (!response?.ok) {
     setResult(response?.error ?? getCurrentCopy().parseFailed);
@@ -1650,7 +1737,21 @@ async function pollTask(taskId, kind) {
     updateWorkflowState();
     return;
   }
-  const task = response.result;
+  let unchangedStreak = cached?.unchangedStreak ?? 0;
+  let task;
+  if (response.notModified) {
+    if (!cached?.task) {
+      setResult(getCurrentCopy().parseFailed);
+      return;
+    }
+    unchangedStreak += 1;
+    task = cached.task;
+    taskPollCache.set(taskId, { task, etag: response.etag ?? cached.etag, unchangedStreak });
+  } else {
+    unchangedStreak = 0;
+    task = response.result;
+    taskPollCache.set(taskId, { task, etag: response.etag ?? null, unchangedStreak: 0 });
+  }
   if (task.status === "failed") {
     setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     setResult(
@@ -1696,7 +1797,7 @@ async function pollTask(taskId, kind) {
     setTaskSummary(getTaskProcessingSummary(task, uiLanguage));
     window.setTimeout(() => {
       void pollTask(taskId, kind);
-    }, 1500);
+    }, nextTaskPollDelayMs(unchangedStreak));
     updateWorkflowState();
     return;
   }
@@ -1740,13 +1841,7 @@ async function pollTask(taskId, kind) {
 }
 async function refreshUsage() {
   const settings = await readSettings();
-  isSignedIn = Boolean(settings.token);
-  if (connectionPillEl) {
-    connectionPillEl.textContent = settings.token ? getCurrentCopy().connectionPillSignedIn : getCurrentCopy().connectionPillSignedOut;
-  }
-  if (accountEmailEl) {
-    accountEmailEl.textContent = settings.email ? getCurrentCopy().signedIn(settings.email) : getCurrentCopy().guest;
-  }
+  updateAccountChrome(settings);
   if (!settings.token) {
     if (usageStatusEl) {
       usageStatusEl.textContent = getCurrentCopy().signInHint;
@@ -1763,6 +1858,10 @@ async function refreshUsage() {
       accountEmailEl.textContent = getCurrentCopy().signedIn(usage.email);
     }
   } catch (error) {
+    if (isMdteroApiError(error) && (error.status === 401 || error.status === 403)) {
+      await clearStaleAuth();
+      return;
+    }
     if (usageStatusEl) {
       usageStatusEl.textContent = getUsageStatusText(null, uiLanguage, error.message);
     }
@@ -1980,6 +2079,12 @@ translateButton?.addEventListener("click", async () => {
     setResult(getCurrentCopy().translateFirst);
     return;
   }
+  const settings = await readSettings();
+  if (!settings.token) {
+    setResult(getCurrentCopy().signInHint);
+    await openMdteroAccount();
+    return;
+  }
   const previous = await readPopupState();
   const markdownRef = parsedMarkdownRef(lastParsedMarkdownSource);
   const reconnectableTask = getReconnectablePendingTranslationTask(
@@ -2108,4 +2213,15 @@ void (async () => {
   await detectCurrentTab();
   await updatePreflightHint();
 })();
+chrome.storage.onChanged?.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+    return;
+  }
+  void refreshUsage();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void refreshUsage();
+  }
+});
 //# sourceMappingURL=popup.js.map

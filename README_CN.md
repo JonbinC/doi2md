@@ -226,7 +226,7 @@ mdtero mcp serve
 - PDF 上传走后端文档解析路径，解析成功时返回 Markdown 和 zip artifacts。
 - 本地 project init/add/remove/list/status、BibTeX 导入去重、project parse/refresh/download，以及 agent-readable JSON。
 - Zotero 元数据导入本地 Mdtero project，并把成功解析任务的 note/tag 保守同步回 Zotero。
-- Discovery 配置 Semantic Scholar 时走本地 Semantic Scholar，否则走后端 OpenAlex fallback。Semantic Scholar 不可用时，`--json` 返回 `local_semantic_scholar_failure` 和 `discovery_fallback`，agent 可保留 reason code 后继续走 OpenAlex。
+- Discovery 走 Mdtero 服务端 OpenAlex API。`mdtero discover "<query>" --limit 5 --interactive` 支持分页筛选，并把选中结果加入本地项目队列。
 - `status`、waited parse results 和 downloads 暴露 `quality_label` / `quality_warning`，用于 `metadata_only`、`abstract_only`、`section_only_fulltext`、`low_confidence_parse` 等低内容产物；Markdown 下载默认 `author_year_shorttitle.md`，低置信全文会追加 `.low_quality.md`，并更新 `manifest.csv`。
 - 本地 route acquisition 使用 `curl_cffi` 获取后端规划的 HTML/XML/EPUB/PDF 来源，并有 `httpx` fallback 和可见 `client_acquisition` trace 输出。
 - 从 parse task id 或本地 Markdown 发起服务端翻译。

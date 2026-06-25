@@ -122,8 +122,7 @@ def build_dashboard_model(
         "academic": {
             "elsevier": bool(cfg.academic.elsevier_api_key),
             "wiley_tdm": bool(cfg.academic.wiley_tdm_token),
-            "semantic_scholar": bool(cfg.academic.semantic_scholar_api_key),
-            "discover_source": "local Semantic Scholar" if cfg.has_semantic_scholar_key else "server OpenAlex",
+            "discover_source": "server OpenAlex",
             "configure_command": "mdtero config academic",
             "application_links": build_academic_onboarding_summary(cfg, path=config_path(), saved=False)["application_links"],
         },
@@ -1375,6 +1374,5 @@ def _key_summary(academic: dict[str, Any]) -> str:
     parts = [
         f"Elsevier {'ok' if academic['elsevier'] else 'optional'}",
         f"Wiley {'ok' if academic['wiley_tdm'] else 'optional'}",
-        f"Semantic Scholar {'ok' if academic['semantic_scholar'] else 'optional'}",
     ]
     return " / ".join(parts)

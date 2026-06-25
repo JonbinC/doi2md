@@ -89,13 +89,13 @@ mdtero mcp serve
 
 What is validated in the current alpha:
 
-- interactive and headless academic-key setup. `mdtero config academic --json` prints a safe configured/missing summary, and flags such as `--semantic-scholar-key <key>` let agents or headless servers configure local Semantic Scholar discovery without a prompt.
+- interactive and headless academic-key setup. `mdtero config academic --json` prints a safe configured/missing summary for optional Elsevier and Wiley TDM keys.
 - DOI/arXiv parse, status polling, Markdown download, and bundle download.
 - PDF upload through the backend document parsing path. The backend fetches the uploaded file URL instead of relying on an older external upload path.
 - backend-planned local source acquisition through `curl_cffi` for HTML/XML/EPUB/PDF URLs, with `httpx` fallback and `--trace` visibility.
 - local project state, BibTeX import, de-duplication, project parse/refresh/download.
 - Zotero metadata import into the current Mdtero project, plus conservative note/tag sync for succeeded Zotero-origin parse tasks.
-- discovery with local Semantic Scholar when configured, otherwise backend OpenAlex fallback. `--interactive` shows numbered results and lets a human multi-select papers into the local project queue; `--add --select 1,3` keeps the same flow scriptable.
+- discovery through the Mdtero server OpenAlex API. `--interactive` shows numbered results and lets a human multi-select papers into the local project queue; `--add --select 1,3` keeps the same flow scriptable.
 - server-side RAG query responses with extractive `answer`, stable `citations`, raw `matches`, `reason_code`, and `next_commands` for CLI and agent continuation. `mdtero mcp briefing --json` is safe to run before project initialization and will return `project_not_initialized` plus the exact `mdtero project init` next step. When a project exists, the briefing also returns `mcp_tool_plan`, a structured agent playbook for choosing `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query` with expected arguments and failure fields.
 - deploy smoke through `mdtero smoke --json`, which uses an isolated project directory and exercises discovery, DOI parse, task wait, artifact download, server-side RAG build/status/query, and agent-readable failure summaries.
 - TUI command palette with copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands; current next commands are highlighted for workstation or local-agent handoff.
