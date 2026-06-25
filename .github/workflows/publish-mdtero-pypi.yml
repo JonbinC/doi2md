@@ -23,7 +23,6 @@ jobs:
   publish:
     name: Build and publish public mdtero client
     runs-on: ubuntu-latest
-    environment: pypi
     steps:
       - name: Checkout
         uses: actions/checkout@v6
