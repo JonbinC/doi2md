@@ -8,8 +8,7 @@
     "storage",
     "tabs",
     "activeTab",
-    "scripting",
-    "proxy"
+    "scripting"
   ],
   "host_permissions": [
     "https://api.mdtero.com/*",

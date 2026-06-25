@@ -75,10 +75,52 @@ async function uploadChromeDraft() {
   console.log(JSON.stringify({ store: "chrome", action: "draft-upload", ...payload }));
 }
 
+async function pollEdgeOperation(productId, operationId, { apiKey, clientId }, label) {
+  for (let attempt = 1; attempt <= 24; attempt += 1) {
+    await new Promise((resolveTimer) => setTimeout(resolveTimer, 5000));
+    const { payload } = await requestJson(
+      `${EDGE_BASE_URL}/${productId}/submissions/operations/${operationId}`,
+      { headers: { Authorization: `ApiKey ${apiKey}`, "X-ClientID": clientId } }
+    );
+    console.log(JSON.stringify({ store: "edge", action: label, attempt, status: payload.status, message: payload.message || "" }));
+    if (payload.status === "Succeeded") {
+      return payload;
+    }
+    if (payload.status === "Failed") {
+      throw new Error(`Edge ${label} failed: ${JSON.stringify(payload)}`);
+    }
+  }
+  throw new Error(`Timed out waiting for Edge ${label}`);
+}
+
+async function pollEdgePackageOperation(productId, operationId, { apiKey, clientId }) {
+  for (let attempt = 1; attempt <= 24; attempt += 1) {
+    await new Promise((resolveTimer) => setTimeout(resolveTimer, 5000));
+    const { payload } = await requestJson(
+      `${EDGE_BASE_URL}/${productId}/submissions/draft/package/operations/${operationId}`,
+      { headers: { Authorization: `ApiKey ${apiKey}`, "X-ClientID": clientId } }
+    );
+    console.log(JSON.stringify({ store: "edge", action: "poll-package", attempt, status: payload.status, message: payload.message || "" }));
+    if (payload.status === "Succeeded") {
+      return payload;
+    }
+    if (payload.status === "Failed") {
+      throw new Error(`Edge draft package failed: ${JSON.stringify(payload)}`);
+    }
+  }
+  throw new Error("Timed out waiting for Edge draft package operation");
+}
+
+function edgeAuth() {
+  return {
+    productId: requiredEnv("EDGE_PRODUCT_ID"),
+    clientId: requiredEnv("EDGE_CLIENT_ID"),
+    apiKey: requiredEnv("EDGE_API_KEY"),
+  };
+}
+
 async function uploadEdgeDraft() {
-  const productId = requiredEnv("EDGE_PRODUCT_ID");
-  const clientId = requiredEnv("EDGE_CLIENT_ID");
-  const apiKey = requiredEnv("EDGE_API_KEY");
+  const { productId, clientId, apiKey } = edgeAuth();
   const zipBytes = await readFile(ZIP_PATH);
   const { response } = await requestJson(`${EDGE_BASE_URL}/${productId}/submissions/draft/package`, {
     method: "POST",
@@ -94,26 +136,39 @@ async function uploadEdgeDraft() {
     throw new Error("Edge upload succeeded but did not return an operation id");
   }
   console.log(JSON.stringify({ store: "edge", action: "draft-upload", operationId }));
-  for (let attempt = 1; attempt <= 24; attempt += 1) {
-    await new Promise((resolveTimer) => setTimeout(resolveTimer, 5000));
-    const { payload } = await requestJson(
-      `${EDGE_BASE_URL}/${productId}/submissions/draft/package/operations/${operationId}`,
-      { headers: { Authorization: `ApiKey ${apiKey}`, "X-ClientID": clientId } }
-    );
-    console.log(JSON.stringify({ store: "edge", action: "poll", attempt, status: payload.status, message: payload.message || "" }));
-    if (payload.status === "Succeeded") {
-      return;
-    }
-    if (payload.status === "Failed") {
-      throw new Error(`Edge draft package failed: ${JSON.stringify(payload)}`);
-    }
+  await pollEdgePackageOperation(productId, operationId, { apiKey, clientId });
+}
+
+async function submitEdgeForReview() {
+  const { productId, clientId, apiKey } = edgeAuth();
+  const notes = process.env.EDGE_SUBMISSION_NOTES
+    || "Mdtero extension update: remove unused downloads permission and improve campus proxy handoff.";
+  const { response } = await requestJson(`${EDGE_BASE_URL}/${productId}/submissions`, {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${apiKey}`,
+      "X-ClientID": clientId,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ notes }),
+  });
+  const operationId = response.headers.get("location") || response.headers.get("Location");
+  if (!operationId) {
+    throw new Error("Edge submit succeeded but did not return an operation id");
   }
-  throw new Error("Timed out waiting for Edge draft package operation");
+  const normalized = operationId.includes("/") ? operationId.split("/").pop() : operationId;
+  console.log(JSON.stringify({ store: "edge", action: "submit-review", operationId: normalized }));
+  await pollEdgeOperation(productId, normalized, { apiKey, clientId }, "submit-review");
+}
+
+async function releaseEdgeDraft() {
+  await uploadEdgeDraft();
+  await submitEdgeForReview();
 }
 
 function usage() {
   const name = basename(process.argv[1]);
-  console.error(`Usage: node scripts/${name} <chrome-draft|edge-draft|draft-all>`);
+  console.error(`Usage: node scripts/${name} <chrome-draft|edge-draft|edge-submit|edge-release|draft-all>`);
 }
 
 if (!existsSync(ZIP_PATH)) {
@@ -125,6 +180,10 @@ if (command === "chrome-draft") {
   await uploadChromeDraft();
 } else if (command === "edge-draft") {
   await uploadEdgeDraft();
+} else if (command === "edge-submit") {
+  await submitEdgeForReview();
+} else if (command === "edge-release") {
+  await releaseEdgeDraft();
 } else if (command === "draft-all") {
   await uploadChromeDraft();
   await uploadEdgeDraft();

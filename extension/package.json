@@ -19,6 +19,8 @@
     "package:webstore": "npm run build:store && node scripts/package-webstore.mjs",
     "store:chrome-draft": "node scripts/store-draft.mjs chrome-draft",
     "store:edge-draft": "node scripts/store-draft.mjs edge-draft",
+    "store:edge-submit": "node scripts/store-draft.mjs edge-submit",
+    "store:edge-release": "node scripts/store-draft.mjs edge-release",
     "store:draft-all": "node scripts/store-draft.mjs draft-all",
     "test": "vitest run"
   }
