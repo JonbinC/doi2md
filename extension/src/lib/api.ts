@@ -194,6 +194,10 @@ export function createApiClient(
       ...init,
       headers
     });
+    // Task polling uses conditional GET (If-None-Match); 304 is success with an empty body.
+    if (response.status === 304) {
+      return response;
+    }
     if (!response.ok) {
       const detail = await readErrorDetail(response);
       throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {

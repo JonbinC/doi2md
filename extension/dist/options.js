@@ -258,6 +258,9 @@ function createApiClient(getSettings) {
       ...init,
       headers
     });
+    if (response.status === 304) {
+      return response;
+    }
     if (!response.ok) {
       const detail = await readErrorDetail(response);
       throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {
@@ -388,7 +391,7 @@ function triggerBlobDownload(blob, filename, deps = defaultDeps) {
 }
 
 // src/lib/features.ts
-var PROXY_FEATURES_ENABLED = true ? false : true;
+var PROXY_FEATURES_ENABLED = true ? true : true;
 
 // ../shared/src/api-contract.ts
 var DEFAULT_API_BASE_URL = "https://api.mdtero.com";

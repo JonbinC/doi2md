@@ -79,10 +79,29 @@ class MdteroClient:
     def parse(self, input_value: str) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks/parse", json={"input": input_value})
 
+    def relay_connected(self) -> bool | None:
+        if not self.config.effective_api_key:
+            return None
+        try:
+            payload = self._request("GET", "/api/v1/relay/status")
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return bool(payload.get("connected"))
+
     def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         route = self.route(input_value)
-        if should_acquire_locally(route, input_value, config=self.config):
+        relay_connected = None
+        if "fetch_elsevier_xml" in {str(action) for action in route.get("action_sequence") or []}:
+            relay_connected = self.relay_connected()
+        if should_acquire_locally(
+            route,
+            input_value,
+            config=self.config,
+            relay_connected=relay_connected,
+        ):
             artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0), config=self.config)
             acquisition = artifact.to_dict()
             try:
@@ -304,6 +323,9 @@ class MdteroClient:
 
     def usage(self) -> dict[str, Any]:
         return self._request("GET", "/me/usage")
+
+    def pdf_providers_health(self) -> dict[str, Any]:
+        return self._request("GET", "/health/pdf-providers")
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         proxy_settings = proxy_settings_from_config(self.config)

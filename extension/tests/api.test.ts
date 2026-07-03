@@ -569,4 +569,28 @@ describe("createApiClient", () => {
     expect(detail.progress_percent).toBeNull();
     expect(detail.created_at).toBe("2026-03-16T12:05:00+00:00");
   });
+
+  it("treats task polling 304 responses as not modified", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(null, {
+        status: 304,
+        headers: { ETag: '"task-2-etag"' }
+      })
+    );
+
+    const client = createApiClient(() =>
+      Promise.resolve({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        token: "demo-token"
+      })
+    );
+
+    const detailResponse = await client.getTask("task-2", { etag: '"task-2-etag"' });
+
+    expect(detailResponse.notModified).toBe(true);
+    expect(detailResponse.etag).toBe('"task-2-etag"');
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("If-None-Match")).toBe('"task-2-etag"');
+  });
 });

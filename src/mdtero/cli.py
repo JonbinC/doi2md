@@ -799,9 +799,25 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     relay_status = _doctor_relay_status(cfg, remote_auth=remote_auth)
     root = Path.cwd()
     server_rag_status = _doctor_server_rag_status(cfg, root, remote_auth=remote_auth)
-    rows = _doctor_rows(cfg, root, remote_auth=remote_auth, server_rag_status=server_rag_status, relay_status=relay_status)
+    server_pdf_fallback = _doctor_server_pdf_fallback(cfg, remote_auth=remote_auth)
+    rows = _doctor_rows(
+        cfg,
+        root,
+        remote_auth=remote_auth,
+        server_rag_status=server_rag_status,
+        relay_status=relay_status,
+        server_pdf_fallback=server_pdf_fallback,
+    )
     if getattr(_args, "json", False):
-        payload = _doctor_payload(cfg, root, rows, remote_auth=remote_auth, server_rag_status=server_rag_status, relay_status=relay_status)
+        payload = _doctor_payload(
+            cfg,
+            root,
+            rows,
+            remote_auth=remote_auth,
+            server_rag_status=server_rag_status,
+            relay_status=relay_status,
+            server_pdf_fallback=server_pdf_fallback,
+        )
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0 if payload["status"] == "ok" else 1
     console = Console()
@@ -812,7 +828,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     return 0 if cfg.is_authenticated and remote_auth.get("status") != "failed" else 1
 
 
-def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
+def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None, server_pdf_fallback: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
     relay_status = relay_status if relay_status is not None else _doctor_relay_status(cfg, remote_auth=remote_auth)
     install_boundary = _install_boundary_summary()
@@ -828,6 +844,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         ("Proxy", "required" if cfg.campus_proxy_required else ("configured" if cfg.effective_proxy_url else "optional"), _proxy_config_detail(cfg)),
         ("Campus relay", "online" if relay_status.get("connected") else ("offline" if relay_status.get("status") != "skipped" else "optional"), _relay_config_detail(relay_status)),
         ("Install boundary", str(install_boundary["status"]), str(install_boundary["action_hint"])),
+        ("PDF fallback", _doctor_pdf_fallback_row_status(server_pdf_fallback=server_pdf_fallback), _doctor_pdf_fallback_row_detail(server_pdf_fallback=server_pdf_fallback)),
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
         _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
         _dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"),
@@ -841,7 +858,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
     return rows
 
 
-def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None) -> dict[str, Any]:
+def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None, server_pdf_fallback: dict[str, Any] | None = None) -> dict[str, Any]:
     row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
     relay_status = relay_status if relay_status is not None else _doctor_relay_status(cfg, remote_auth=remote_auth)
@@ -875,11 +892,124 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "library_type": cfg.zotero.library_type,
         },
         "project": _doctor_project_payload(root, server_rag_status=server_rag_status),
+        "pdf_fallback": _doctor_pdf_fallback_payload(server_pdf_fallback=server_pdf_fallback),
         "next_commands": _doctor_auth_next_commands(cfg, remote_auth),
     }
     project_next = payload["project"].get("next_commands") if isinstance(payload.get("project"), dict) else None
     if status != "invalid_auth" and isinstance(project_next, list):
         payload["next_commands"] = _dedupe_string_list([*payload["next_commands"], *project_next])
+    return payload
+
+
+def _doctor_pdf_fallback_row_status(*, server_pdf_fallback: dict[str, Any] | None = None) -> str:
+    local_mineru = bool(str(os.environ.get("MINERU_API_TOKEN") or "").strip())
+    server_mineru = _doctor_server_engine_status(server_pdf_fallback, "mineru_precision")
+    if server_mineru == "ready":
+        return "mineru_ready"
+    if local_mineru:
+        return "mineru_ready_local"
+    return "mineru_unconfigured"
+
+
+def _doctor_pdf_fallback_row_detail(*, server_pdf_fallback: dict[str, Any] | None = None) -> str:
+    grobid_enabled = str(os.environ.get("MDTERO_ENABLE_GROBID_PDF_PROVIDER") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    local_mineru = bool(str(os.environ.get("MINERU_API_TOKEN") or "").strip())
+    server_mineru = _doctor_server_engine_status(server_pdf_fallback, "mineru_precision")
+    server_grobid = _doctor_server_engine_status(server_pdf_fallback, "grobid")
+    if server_mineru == "ready":
+        base = "Server MinerU precision is ready"
+    elif local_mineru:
+        base = "MinerU precision is configured locally"
+    else:
+        base = "Configure MINERU_API_TOKEN for local uploaded PDF parsing"
+    if server_pdf_fallback and server_pdf_fallback.get("status") == "ok":
+        if server_grobid == "disabled":
+            return f"{base}; server GROBID PDF is retired unless opted in"
+        if server_grobid in {"ready", "unhealthy", "unreachable", "unconfigured"}:
+            return f"{base}; server GROBID PDF status={server_grobid}"
+    if grobid_enabled:
+        return f"{base}; GROBID opt-in enabled locally (server-managed)"
+    return f"{base}; GROBID PDF is temporarily retired unless explicitly opted in"
+
+
+def _doctor_server_engine_status(server_pdf_fallback: dict[str, Any] | None, engine: str) -> str | None:
+    if not isinstance(server_pdf_fallback, dict) or server_pdf_fallback.get("status") != "ok":
+        return None
+    engines = server_pdf_fallback.get("engines")
+    if not isinstance(engines, dict):
+        return None
+    payload = engines.get(engine)
+    if not isinstance(payload, dict):
+        return None
+    return str(payload.get("status") or "").strip() or None
+
+
+def _doctor_server_pdf_fallback(cfg: MdteroConfig, *, remote_auth: dict[str, Any]) -> dict[str, Any] | None:
+    if not cfg.is_authenticated or remote_auth.get("status") == "failed":
+        return None
+    try:
+        payload = MdteroClient(config=cfg, timeout=10.0).pdf_providers_health()
+    except (MdteroApiError, httpx.HTTPError) as exc:
+        failure = _relay_failure_payload(exc) if isinstance(exc, (MdteroApiError, httpx.HTTPError)) else {"message": str(exc)}
+        return {
+            "status": "unverified",
+            "reason_code": failure.get("reason_code") or failure.get("error_code") or "pdf_providers_unavailable",
+            "action_hint": "Could not verify server PDF provider health.",
+            "next_commands": ["mdtero doctor --json"],
+            "detail": failure,
+        }
+    return {"status": "ok", **payload}
+
+
+def _doctor_pdf_fallback_payload(*, server_pdf_fallback: dict[str, Any] | None = None) -> dict[str, Any]:
+    grobid_enabled = str(os.environ.get("MDTERO_ENABLE_GROBID_PDF_PROVIDER") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    mineru_configured = bool(str(os.environ.get("MINERU_API_TOKEN") or "").strip())
+    provider_order = str(os.environ.get("MDTERO_PDF_PROVIDER_ORDER") or "").strip()
+    payload: dict[str, Any] = {
+        "default_provider": "mineru_precision",
+        "automatic_fallback_enabled": False,
+        "configured_provider_order": [item.strip() for item in provider_order.split(",") if item.strip()]
+        or ["mineru_precision"],
+        "grobid_opt_in_required": not grobid_enabled,
+        "local": {
+            "mineru_configured": mineru_configured,
+            "grobid_opt_in_enabled": grobid_enabled,
+        },
+        "engines": {
+            "mineru_precision": {
+                "status": "ready" if mineru_configured else "unconfigured",
+                "configured": mineru_configured,
+                "reason": "available" if mineru_configured else "MINERU_API_TOKEN is not configured",
+            },
+            "grobid": {
+                "status": "disabled" if not grobid_enabled else "server_managed",
+                "reason": "temporarily_retired" if not grobid_enabled else "requires_server_health",
+                "detail": "Set MDTERO_ENABLE_GROBID_PDF_PROVIDER=1 to opt in on the server",
+            },
+        },
+    }
+    if isinstance(server_pdf_fallback, dict):
+        payload["server"] = server_pdf_fallback
+        if server_pdf_fallback.get("status") == "ok":
+            payload["default_provider"] = str(server_pdf_fallback.get("default_engine") or payload["default_provider"])
+            payload["automatic_fallback_enabled"] = bool(server_pdf_fallback.get("automatic_fallback_enabled"))
+            server_order = server_pdf_fallback.get("configured_provider_order")
+            if isinstance(server_order, list) and server_order:
+                payload["configured_provider_order"] = server_order
+            payload["grobid_opt_in_required"] = bool(server_pdf_fallback.get("grobid_opt_in_required"))
+            server_engines = server_pdf_fallback.get("engines")
+            if isinstance(server_engines, dict):
+                payload["engines"] = server_engines
     return payload
 
 

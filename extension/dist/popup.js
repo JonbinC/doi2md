@@ -183,6 +183,9 @@ function createApiClient(getSettings) {
       ...init,
       headers
     });
+    if (response.status === 304) {
+      return response;
+    }
     if (!response.ok) {
       const detail = await readErrorDetail(response);
       throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {

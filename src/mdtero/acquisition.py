@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from .network import proxy_settings_from_config
+from .network import local_egress_is_campus_outlet, proxy_settings_from_config
 
 
 DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$", re.I)
@@ -86,7 +86,14 @@ class AcquisitionError(RuntimeError):
         }
 
 
-def should_acquire_locally(route: dict[str, Any], input_value: str, *, config: Any | None = None) -> bool:
+def should_acquire_locally(
+    route: dict[str, Any],
+    input_value: str,
+    *,
+    config: Any | None = None,
+    relay_connected: bool | None = None,
+    local_outlet_is_campus: bool | None = None,
+) -> bool:
     if _is_direct_local_artifact_url(input_value):
         return True
     if route.get("legacy_fallback") or route.get("route_planner_fallback"):
@@ -98,8 +105,33 @@ def should_acquire_locally(route: dict[str, Any], input_value: str, *, config: A
     if actions.intersection(local_actions) and _candidate_urls(route, input_value):
         return True
     if "fetch_elsevier_xml" in actions and _elsevier_api_key(config) and _candidate_urls(route, input_value):
-        return True
+        return _should_fetch_elsevier_locally(
+            config,
+            relay_connected=relay_connected,
+            local_outlet_is_campus=local_outlet_is_campus,
+        )
     return False
+
+
+def _should_fetch_elsevier_locally(
+    config: Any | None,
+    *,
+    relay_connected: bool | None = None,
+    local_outlet_is_campus: bool | None = None,
+) -> bool:
+    on_campus = (
+        local_outlet_is_campus
+        if local_outlet_is_campus is not None
+        else local_egress_is_campus_outlet(config=config)
+    )
+    if on_campus:
+        return True
+    # Off-campus CLI hosts should use cloud parse so the backend can fetch via campus relay.
+    if relay_connected is True:
+        return False
+    if relay_connected is False:
+        return False
+    return True
 
 
 def _is_direct_local_artifact_url(input_value: str) -> bool:
