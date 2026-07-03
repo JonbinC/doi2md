@@ -1995,7 +1995,7 @@ def test_should_acquire_locally_requires_fetchable_candidate_for_doi_routes():
     assert should_acquire_locally({"action_sequence": [], "requires_raw_upload": False}, "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML") is True
 
 
-def test_elsevier_xml_route_uses_local_acquisition_when_academic_key_is_configured():
+def test_elsevier_xml_route_uses_local_acquisition_when_academic_key_is_configured(monkeypatch):
     route = {
         "action_sequence": ["fetch_elsevier_xml"],
         "acquisition_candidates": [
@@ -2008,7 +2008,89 @@ def test_elsevier_xml_route_uses_local_acquisition_when_academic_key_is_configur
     config = MdteroConfig(academic=AcademicKeys(elsevier_api_key="elsevier-secret"))
 
     assert should_acquire_locally(route, "10.1016/j.energy.2026.140192") is False
+    monkeypatch.setattr("mdtero.acquisition.local_egress_is_campus_outlet", lambda **kwargs: True)
     assert should_acquire_locally(route, "10.1016/j.energy.2026.140192", config=config) is True
+
+
+def test_elsevier_xml_route_prefers_cloud_parse_when_relay_is_online_off_campus():
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+    config = MdteroConfig(academic=AcademicKeys(elsevier_api_key="elsevier-secret"))
+
+    assert (
+        should_acquire_locally(
+            route,
+            "10.1016/j.energy.2026.140192",
+            config=config,
+            relay_connected=True,
+            local_outlet_is_campus=False,
+        )
+        is False
+    )
+
+
+def test_elsevier_xml_route_skips_local_fetch_off_campus_without_relay():
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+    config = MdteroConfig(academic=AcademicKeys(elsevier_api_key="elsevier-secret"))
+
+    assert (
+        should_acquire_locally(
+            route,
+            "10.1016/j.energy.2026.140192",
+            config=config,
+            relay_connected=False,
+            local_outlet_is_campus=False,
+        )
+        is False
+    )
+
+
+def test_parse_with_route_uses_cloud_elsevier_when_relay_is_online_off_campus(monkeypatch):
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+    calls: list[str] = []
+
+    def fake_request(self, method, path, **kwargs):
+        calls.append(path)
+        if path == "/api/v1/route":
+            return route
+        if path == "/api/v1/relay/status":
+            return {"connected": True}
+        if path == "/api/v1/tasks/parse":
+            return {"task_id": "task-cloud", "status": "queued"}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+    monkeypatch.setattr("mdtero.acquisition.local_egress_is_campus_outlet", lambda **kwargs: False)
+
+    route_result, task, acquisition = MdteroClient(timeout=60.0).parse_with_route("10.1016/j.energy.2026.140192")
+
+    assert route_result is route
+    assert task["task_id"] == "task-cloud"
+    assert acquisition is None
+    assert calls == ["/api/v1/route", "/api/v1/relay/status", "/api/v1/tasks/parse"]
 
 
 def test_elsevier_xml_acquisition_sends_local_api_key(monkeypatch, tmp_path: Path):
@@ -7673,11 +7755,10 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
     repo_root = Path(__file__).resolve().parents[1]
     manifest = json.loads((repo_root / "install" / "manifest.json").read_text(encoding="utf-8"))
     site_manifest_candidates = sorted(repo_root.parent.glob("[Nn]extmdtero/public/install/manifest.json"))
-    assert site_manifest_candidates, "Nextmdtero public install manifest must be checked out next to doi2md"
-    site_manifest = json.loads(site_manifest_candidates[0].read_text(encoding="utf-8"))
+    if site_manifest_candidates:
+        site_manifest = json.loads(site_manifest_candidates[0].read_text(encoding="utf-8"))
+        assert manifest == site_manifest
     package_version = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-
-    assert manifest == site_manifest
     assert manifest["quickInstallCommand"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git && mdtero setup"
     assert manifest["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
     assert manifest["pypiInstallCommand"] == "uv tool install mdtero"

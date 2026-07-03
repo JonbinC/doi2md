@@ -338,6 +338,9 @@ function createApiClient(getSettings) {
       ...init,
       headers
     });
+    if (response.status === 304) {
+      return response;
+    }
     if (!response.ok) {
       const detail = await readErrorDetail(response);
       throw new MdteroApiError(detail.message || `API request failed: ${response.status}`, {
@@ -535,7 +538,7 @@ function shellQuoteRouteInput(value) {
 }
 
 // src/lib/features.ts
-var PROXY_FEATURES_ENABLED = true ? false : true;
+var PROXY_FEATURES_ENABLED = true ? true : true;
 
 // src/lib/file-upload.ts
 async function runBrowserFileParseRequest(client2, message) {

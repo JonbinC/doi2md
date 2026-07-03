@@ -74,6 +74,24 @@ def proxy_settings_from_config(config: Any | None) -> ProxySettings:
     return ProxySettings(proxy_url=proxy_url, require_campus_proxy=require_campus_proxy)
 
 
+def local_egress_is_campus_outlet(*, config: Any | None = None, timeout: float = 15.0) -> bool:
+    """Return True when this machine's publisher fetch egress looks like AS786/Jisc/Nottingham."""
+    settings = proxy_settings_from_config(config)
+    if settings.require_campus_proxy and settings.proxy_url:
+        try:
+            assert_required_campus_proxy(settings, timeout=timeout)
+            return True
+        except ProxyValidationError:
+            return False
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.get(CAMPUS_PROXY_CHECK_URL)
+            response.raise_for_status()
+            return _is_expected_campus_outlet(response.json())
+    except Exception:
+        return False
+
+
 def assert_required_campus_proxy(settings: ProxySettings, *, timeout: float = 20.0, client_factory: Any | None = None) -> dict[str, Any] | None:
     if not settings.require_campus_proxy:
         return None
