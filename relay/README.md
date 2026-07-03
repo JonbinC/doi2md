@@ -38,12 +38,15 @@ The installer will:
 ## Commands
 
 ```bash
-mdtero-relay install --api-key <key>   # install + background service
-mdtero-relay serve                     # foreground run (debug)
-mdtero-relay status                    # check cloud-visible status
-mdtero-relay login --api-key <key>     # save credentials
-mdtero-relay uninstall                 # remove background service
+mdtero-relay install [--api-key <key>] [--label <name>]
+mdtero-relay serve [--label <name>]
+mdtero-relay status
+mdtero-relay login [--browser] [--api-key <key>]
+mdtero-relay uninstall
+mdtero-relay version
 ```
+
+`mdtero-relay login` opens the same Mdtero web OAuth flow as the CLI. After you sign in on mdtero.com, a dedicated **Campus Relay** API key is issued to this machine automatically.
 
 ## How it works
 
