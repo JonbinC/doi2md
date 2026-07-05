@@ -2060,6 +2060,43 @@ def test_elsevier_xml_route_skips_local_fetch_off_campus_without_relay():
     )
 
 
+@pytest.mark.parametrize(
+    ("action_sequence", "input_value", "candidates"),
+    [
+        (
+            ["fetch_remote_html"],
+            "10.1038/s41592-022-01409-2",
+            [{"html_url": "https://www.nature.com/articles/s41592-022-01409-2"}],
+        ),
+        (
+            ["fallback_pdf_parse"],
+            "10.1109/ACCESS.2024.3365742",
+            [{"pdf_url": "https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=1"}],
+        ),
+        (
+            ["fetch_structured_xml"],
+            "10.1093/bioinformatics/btae123",
+            [{"url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC123/fullTextXML"}],
+        ),
+    ],
+)
+def test_publisher_routes_prefer_cloud_parse_when_relay_is_online_off_campus(action_sequence, input_value, candidates):
+    route = {
+        "action_sequence": action_sequence,
+        "acquisition_candidates": candidates,
+    }
+
+    assert (
+        should_acquire_locally(
+            route,
+            input_value,
+            relay_connected=True,
+            local_outlet_is_campus=False,
+        )
+        is False
+    )
+
+
 def test_parse_with_route_uses_cloud_elsevier_when_relay_is_online_off_campus(monkeypatch):
     route = {
         "action_sequence": ["fetch_elsevier_xml"],

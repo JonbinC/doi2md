@@ -10,7 +10,7 @@ import httpx
 
 from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_locally
 from .config import MdteroConfig, load_config
-from .network import ProxyValidationError, assert_required_campus_proxy, proxy_settings_from_config
+from .network import ProxyValidationError, assert_required_campus_proxy, local_egress_is_campus_outlet, proxy_settings_from_config
 
 
 class DiscoveryError(RuntimeError):
@@ -94,7 +94,7 @@ class MdteroClient:
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         route = self.route(input_value)
         relay_connected = None
-        if "fetch_elsevier_xml" in {str(action) for action in route.get("action_sequence") or []}:
+        if not local_egress_is_campus_outlet(config=self.config):
             relay_connected = self.relay_connected()
         if should_acquire_locally(
             route,

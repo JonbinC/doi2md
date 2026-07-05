@@ -86,6 +86,27 @@ class AcquisitionError(RuntimeError):
         }
 
 
+def _local_outlet_is_campus(
+    config: Any | None,
+    *,
+    local_outlet_is_campus: bool | None = None,
+) -> bool:
+    if local_outlet_is_campus is not None:
+        return bool(local_outlet_is_campus)
+    return local_egress_is_campus_outlet(config=config)
+
+
+def _should_prefer_cloud_via_relay(
+    config: Any | None,
+    *,
+    relay_connected: bool | None = None,
+    local_outlet_is_campus: bool | None = None,
+) -> bool:
+    if _local_outlet_is_campus(config, local_outlet_is_campus=local_outlet_is_campus):
+        return False
+    return relay_connected is True
+
+
 def should_acquire_locally(
     route: dict[str, Any],
     input_value: str,
@@ -101,6 +122,14 @@ def should_acquire_locally(
     if route.get("requires_raw_upload"):
         return True
     actions = {str(action) for action in route.get("action_sequence") or []}
+    if "fetch_wiley_tdm_pdf" in actions and _wiley_tdm_token(config):
+        return True
+    if _should_prefer_cloud_via_relay(
+        config,
+        relay_connected=relay_connected,
+        local_outlet_is_campus=local_outlet_is_campus,
+    ):
+        return False
     local_actions = {"fetch_remote_html", "fetch_epub_asset", "fetch_structured_xml", "fallback_pdf_parse"}
     if actions.intersection(local_actions) and _candidate_urls(route, input_value):
         return True
@@ -119,12 +148,7 @@ def _should_fetch_elsevier_locally(
     relay_connected: bool | None = None,
     local_outlet_is_campus: bool | None = None,
 ) -> bool:
-    on_campus = (
-        local_outlet_is_campus
-        if local_outlet_is_campus is not None
-        else local_egress_is_campus_outlet(config=config)
-    )
-    if on_campus:
+    if _local_outlet_is_campus(config, local_outlet_is_campus=local_outlet_is_campus):
         return True
     # Off-campus CLI hosts should use cloud parse so the backend can fetch via campus relay.
     if relay_connected is True:
@@ -217,12 +241,21 @@ def _credential_headers(route: dict[str, Any], candidate: dict[str, str], url: s
         key = _elsevier_api_key(config)
         if key:
             return {"X-ELS-APIKey": key}
+    if connector == "wiley_tdm" or host == "api.wiley.com" or "fetch_wiley_tdm_pdf" in actions:
+        token = _wiley_tdm_token(config)
+        if token:
+            return {"Wiley-TDM-Client-Token": token}
     return {}
 
 
 def _elsevier_api_key(config: Any | None) -> str:
     academic = getattr(config, "academic", None)
     return str(getattr(academic, "elsevier_api_key", "") or "").strip()
+
+
+def _wiley_tdm_token(config: Any | None) -> str:
+    academic = getattr(config, "academic", None)
+    return str(getattr(academic, "wiley_tdm_token", "") or "").strip()
 
 
 def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, str]]:
@@ -267,6 +300,7 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
         add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector)
         add(candidate.get("epub_url"), kind="epub", connector=connector)
         add(candidate.get("pdf_url"), kind="pdf", connector=connector)
+        add(candidate.get("tdm_url"), kind="pdf", connector=connector or "wiley_tdm")
 
     browser_required: list[dict[str, str]] = []
     for handoff in route.get("client_handoff_candidates") or []:
