@@ -5,6 +5,7 @@ import base64
 import json
 import signal
 from typing import Any, Callable
+from urllib.parse import urljoin
 
 import httpx
 import websockets
@@ -12,10 +13,12 @@ from websockets.exceptions import ConnectionClosed
 
 from .config import MdteroConfig
 from .network import CAMPUS_PROXY_CHECK_URL, _is_expected_campus_outlet, _proxy_public_summary
-from .relay_domains import relay_url_allowed, relay_url_rejection_reason
+from .relay_domains import relay_url_rejection_reason
 
 MAX_RELAY_BODY_BYTES = 32 * 1024 * 1024
 DEFAULT_RECONNECT_SECONDS = 5.0
+MAX_RELAY_REDIRECTS = 10
+_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 
 
 def relay_ws_url(api_base_url: str) -> str:
@@ -46,16 +49,32 @@ async def execute_relay_fetch(
     headers: dict[str, str],
     timeout: float,
 ) -> dict[str, Any]:
-    if not relay_url_allowed(url):
-        reason_code = relay_url_rejection_reason(url) or "relay_url_domain_not_allowed"
-        return {
-            "error": "Relay fetch is limited to approved research publisher domains over HTTP/HTTPS.",
-            "reason_code": reason_code,
-        }
-
+    current_url = str(url or "").strip()
+    current_method = method
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.request(method, url, headers=headers)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+            for _redirect_count in range(MAX_RELAY_REDIRECTS + 1):
+                reason_code = relay_url_rejection_reason(current_url)
+                if reason_code:
+                    return {
+                        "error": "Relay fetch is limited to approved research publisher domains over HTTP/HTTPS.",
+                        "reason_code": reason_code,
+                    }
+                response = await client.request(current_method, current_url, headers=headers)
+                if response.status_code not in _REDIRECT_STATUS_CODES:
+                    break
+                location = response.headers.get("location")
+                if not location:
+                    break
+                next_url = urljoin(str(response.url), location)
+                if response.status_code == 303 or (response.status_code in {301, 302} and current_method != "HEAD"):
+                    current_method = "GET"
+                current_url = next_url
+            else:
+                return {
+                    "error": "Relay fetch exceeded the maximum redirect count.",
+                    "reason_code": "relay_fetch_too_many_redirects",
+                }
             body = response.content
             if len(body) > MAX_RELAY_BODY_BYTES:
                 return {

@@ -2,6 +2,7 @@ package fetch
 
 import (
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 )
 
 const MaxBodyBytes = 32 * 1024 * 1024
+const MaxRedirects = 10
 
 type Result struct {
 	StatusCode int
@@ -18,6 +20,32 @@ type Result struct {
 	BodyB64    string
 	Error      string
 	ReasonCode string
+}
+
+type redirectBlockedError struct {
+	reason string
+}
+
+func (e redirectBlockedError) Error() string {
+	if e.reason == "relay_fetch_too_many_redirects" {
+		return "relay fetch exceeded the maximum redirect count"
+	}
+	return "relay redirect target is not an approved research publisher domain"
+}
+
+var newHTTPClient = func(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= MaxRedirects {
+				return redirectBlockedError{reason: "relay_fetch_too_many_redirects"}
+			}
+			if reason := domains.RejectionReason(req.URL.String()); reason != "" {
+				return redirectBlockedError{reason: reason}
+			}
+			return nil
+		},
+	}
 }
 
 func Execute(rawURL, method string, headers map[string]string, timeout time.Duration) Result {
@@ -31,7 +59,7 @@ func Execute(rawURL, method string, headers map[string]string, timeout time.Dura
 	if method == "" {
 		method = http.MethodGet
 	}
-	client := &http.Client{Timeout: timeout}
+	client := newHTTPClient(timeout)
 	req, err := http.NewRequest(method, rawURL, nil)
 	if err != nil {
 		return Result{Error: err.Error(), ReasonCode: "relay_fetch_failed"}
@@ -41,6 +69,10 @@ func Execute(rawURL, method string, headers map[string]string, timeout time.Dura
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		var blocked redirectBlockedError
+		if errors.As(err, &blocked) {
+			return Result{Error: blocked.Error(), ReasonCode: blocked.reason}
+		}
 		return Result{Error: err.Error(), ReasonCode: "relay_fetch_failed"}
 	}
 	defer resp.Body.Close()

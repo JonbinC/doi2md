@@ -6,6 +6,12 @@ func TestAllowedPublisherURL(t *testing.T) {
 	if !Allowed("https://doi.org/10.1038/nature12373") {
 		t.Fatal("expected doi.org to be allowed")
 	}
+	if !Allowed("https://pubs.acs.org/doi/pdf/10.1021/demo") {
+		t.Fatal("expected pubs.acs.org to be allowed")
+	}
+	if !Allowed("https://api.wiley.com/onlinelibrary/tdm/v1/articles/10.1002%2Fdemo") {
+		t.Fatal("expected api.wiley.com to be allowed")
+	}
 }
 
 func TestBlocksLocalhost(t *testing.T) {

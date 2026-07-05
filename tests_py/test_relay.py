@@ -13,6 +13,8 @@ from mdtero.relay_domains import relay_url_allowed, relay_url_rejection_reason
 
 def test_relay_url_allowlist():
     assert relay_url_allowed("https://doi.org/10.1038/nature12373")
+    assert relay_url_allowed("https://pubs.acs.org/doi/pdf/10.1021/demo")
+    assert relay_url_allowed("https://api.wiley.com/onlinelibrary/tdm/v1/articles/10.1002%2Fdemo")
     assert relay_url_rejection_reason("https://example.com/paper.pdf") == "relay_url_domain_not_allowed"
 
 
@@ -33,6 +35,7 @@ def test_execute_relay_fetch_returns_response_body():
         status_code = 200
         headers = {"content-type": "text/plain"}
         content = b"paper"
+        url = "https://doi.org/10.1038/nature12373"
 
     class FakeClient:
         async def __aenter__(self):
@@ -58,6 +61,40 @@ def test_execute_relay_fetch_returns_response_body():
 
     assert result["status_code"] == 200
     assert result["body_b64"] == "cGFwZXI="
+
+
+def test_execute_relay_fetch_blocks_disallowed_redirect_target():
+    requested: list[str] = []
+
+    class RedirectResponse:
+        status_code = 302
+        headers = {"location": "https://example.com/private.pdf"}
+        content = b""
+        url = "https://doi.org/10.1038/nature12373"
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, headers):
+            requested.append(url)
+            return RedirectResponse()
+
+    with patch("mdtero.relay.httpx.AsyncClient", return_value=FakeClient()):
+        result = asyncio.run(
+            execute_relay_fetch(
+                url="https://doi.org/10.1038/nature12373",
+                method="GET",
+                headers={},
+                timeout=10.0,
+            )
+        )
+
+    assert requested == ["https://doi.org/10.1038/nature12373"]
+    assert result["reason_code"] == "relay_url_domain_not_allowed"
 
 
 def test_run_relay_server_registers_and_handles_fetch():
