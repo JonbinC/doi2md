@@ -11,8 +11,8 @@ Public shared contract subset used by extension/public code. Mirror/adaptation l
 | Public exports | `src/index.ts` | Shared package barrel. |
 | API contract subset | `src/api-contract.ts` | Public TS shapes consumed by extension. |
 | Package config | `package.json` | Local package consumed by extension via file dependency. |
-| Frontend contract source | `../../mdtero-frontend/packages/shared` | From `mdtero-public/shared`, points to the broader frontend-facing contract layer. |
-| Backend schema source | `../../mdtero-backend/service/schemas.py` | From `mdtero-public/shared`, points to backend HTTP model truth. |
+| Frontend contract source | (retired) | Old `mdtero-frontend/packages/shared` is archived; public contract SSOT is this package plus backend schemas. |
+| Backend schema source | `../../backend/service/schemas.py` | From `public/shared`, points to backend HTTP model truth. |
 
 ## CONVENTIONS
 
