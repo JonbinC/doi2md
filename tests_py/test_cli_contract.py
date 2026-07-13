@@ -335,7 +335,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
         calls.append(("rag_status", project_id))
         return {"status": "ready", "reason_code": "indexed", "summary": {"embedded_count": 1, "chunk_count": 1}}
 
-    def fake_rag_query(self, project_id, question):
+    def fake_rag_query(self, project_id, question, **kwargs):
         calls.append(("rag_query", project_id, question))
         return {"answer": "Ready.", "matches": [{"document_id": "doc-1", "snippet": "Ready evidence."}]}
 
@@ -525,7 +525,7 @@ def test_smoke_fails_when_mcp_briefing_missing_agent_tools(monkeypatch, tmp_path
     monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import_task)
     monkeypatch.setattr(MdteroClient, "rag_build", lambda self, project_id: {"status": "queued"})
     monkeypatch.setattr(MdteroClient, "rag_status", lambda self, project_id: {"status": "ready", "reason_code": "indexed"})
-    monkeypatch.setattr(MdteroClient, "rag_query", lambda self, project_id, question: {"answer": "Ready", "matches": []})
+    monkeypatch.setattr(MdteroClient, "rag_query", lambda self, project_id, question, **kwargs: {"answer": "Ready", "matches": []})
     monkeypatch.setattr("mdtero.mcp.build_agent_briefing", fake_briefing)
 
     args = type(
@@ -1327,12 +1327,18 @@ def test_rag_build_and_query_accept_agent_friendly_json_flags():
 
     build_args = parser.parse_args(["rag", "build", "--project-id", "42", "--json"])
     query_args = parser.parse_args(["rag", "query", "main contribution?", "--project-id", "42", "--json"])
+    ask_args = parser.parse_args(["rag", "ask", "What improved?", "--json"])
+    default_query = parser.parse_args(["rag", "query", "ready?"])
 
     assert build_args.project_id == "42"
     assert build_args.json is True
     assert query_args.project_id == "42"
     assert query_args.question == "main contribution?"
     assert query_args.json is True
+    assert query_args.build_if_needed is True
+    assert default_query.build_if_needed is True
+    assert ask_args.question == "What improved?"
+    assert ask_args.func.__name__ == "cmd_rag_ask"
 
 
 def test_project_management_commands_accept_agent_friendly_json_flags():
@@ -5258,7 +5264,7 @@ def test_mcp_rag_query_calls_bound_server_project(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(project_id, question):
+    def fake_query(project_id, question, **kwargs):
         assert project_id == "42"
         assert question == "What is the contribution?"
         return {
@@ -5285,7 +5291,7 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(project_id, question):
+    def fake_query(project_id, question, **kwargs):
         assert project_id == "42"
         assert question == "What does attention replace?"
         return {
@@ -5621,7 +5627,7 @@ def test_mcp_rag_query_returns_reason_codes_on_backend_failures(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(_project_id, _question):
+    def fake_query(_project_id, _question, **kwargs):
         request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
         response = httpx.Response(409, request=request, json={"detail": {"reason_code": "rag_index_not_built"}})
         raise httpx.HTTPStatusError("not built", request=request, response=response)
@@ -5643,7 +5649,7 @@ def test_mcp_rag_query_preserves_backend_action_hint_and_next_commands(tmp_path:
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(_project_id, _question):
+    def fake_query(_project_id, _question, **kwargs):
         request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
         response = httpx.Response(
             503,
@@ -5674,7 +5680,7 @@ def test_rag_query_failure_json_redacts_signed_urls_and_tokens(monkeypatch, tmp_
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
         response = httpx.Response(
             503,
@@ -5710,7 +5716,7 @@ def test_mcp_rag_query_redacts_backend_signed_urls_and_tokens(tmp_path: Path):
     init_project(tmp_path, name="agent-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(_project_id, _question):
+    def fake_query(_project_id, _question, **kwargs):
         request = httpx.Request("POST", "https://api.mdtero.com/api/v1/projects/42/rag/query")
         response = httpx.Response(
             503,
@@ -6793,10 +6799,11 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
     assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": False})()) == 0
     output = capsys.readouterr().out
 
-    assert "server RAG ready (indexed)" in output
-    assert "3/3 chunk(s) embedded" in output
+    assert "ready (indexed)" in output
+    assert "3/3 embedded" in output
     assert "rag-model-test" in output
     assert "Hint: Query this project or serve it over MCP." in output
+    assert "mdtero rag ask" in output
     assert "mdtero rag query \"<question>\"" in output
     assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
@@ -6828,10 +6835,10 @@ def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, t
     assert cli.cmd_rag_status(type("Args", (), {"project_id": None, "json": False})()) == 0
     output = capsys.readouterr().out
 
-    assert "server RAG partial (rag_index_partial)" in output
-    assert "2/4 chunk(s)" in output
-    assert "embedded" in output
+    assert "partial (rag_index_partial)" in output
+    assert "2/4 embedded" in output
     assert "Hint: Rebuild project RAG" in output
+    assert "mdtero rag ask" in output
     assert "mdtero rag build" in output
     assert "mdtero rag status --json" in output
     assert "Agent plan" in output
@@ -6949,7 +6956,7 @@ def test_rag_query_not_built_outputs_next_commands(monkeypatch, tmp_path: Path, 
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         assert project_id == "42"
         assert question == "demo"
         request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
@@ -6980,7 +6987,7 @@ def test_rag_query_failure_preserves_backend_next_commands(monkeypatch, tmp_path
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         assert project_id == "42"
         assert question == "demo"
         request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
@@ -7017,7 +7024,7 @@ def test_rag_query_failure_plain_output_is_actionable(monkeypatch, tmp_path: Pat
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         request = httpx.Request("POST", f"https://api.mdtero.com/api/v1/projects/{project_id}/rag/query")
         response = httpx.Response(409, request=request, json={"detail": {"reason_code": "rag_index_not_built"}})
         raise httpx.HTTPStatusError("conflict", request=request, response=response)
@@ -7040,7 +7047,7 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         assert project_id == "42"
         assert question == "What improves corrosion?"
         return {
@@ -7068,13 +7075,13 @@ def test_rag_query_success_plain_output_shows_answer_citations_and_next_commands
     assert cli.cmd_rag_query(type("Args", (), {"project_id": None, "question": "What improves corrosion?", "json": False})()) == 0
     output = capsys.readouterr().out
 
-    assert "RAG query: succeeded (rag_query_succeeded)" in output
+    assert "succeeded" in output
+    assert "rag_query_succeeded" in output
     assert "Answer" in output
     assert "[1] Coating improves corrosion resistance." in output
-    assert "Corrosion Paper:3-4 · 10.1000/rag" in output
-    assert "Citation contract" in output
-    assert "Final answers must preserve: citations, source_nodes" in output
-    assert "Use source_nodes and citations as grounded evidence" in output
+    assert "Corrosion Paper" in output
+    assert "10.1000/rag" in output
+    assert "Evidence" in output
     assert "mdtero mcp briefing --json" in output
     assert "mdtero mcp serve" in output
     assert "Agent plan" in output
@@ -7087,7 +7094,7 @@ def test_rag_query_json_backfills_answer_citations_and_next_commands_from_matche
     init_project(tmp_path, name="local-demo")
     bind_server_project(tmp_path, "42")
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         assert project_id == "42"
         assert question == "What is the contribution?"
         return {
@@ -7413,7 +7420,7 @@ def test_rag_query_build_if_needed_bootstraps_then_queries(monkeypatch, tmp_path
         calls.append(("build", project_id))
         return {"status": "ready", "reason_code": "indexed"}
 
-    def fake_query(self, project_id, question):
+    def fake_query(self, project_id, question, **kwargs):
         calls.append(("query", project_id, question))
         return {"status": "succeeded", "reason_code": "ok", "answer": "Ready.", "matches": []}
 
@@ -7460,7 +7467,7 @@ def test_rag_query_build_if_needed_returns_bootstrap_context_when_query_not_read
     def fake_status(self, project_id):
         return {"status": "waiting", "reason_code": "rag_index_not_built", "next_commands": ["mdtero rag status --json"]}
 
-    def fake_query(self, project_id, question):  # pragma: no cover - should not query until RAG is ready
+    def fake_query(self, project_id, question, **kwargs):  # pragma: no cover - should not query until RAG is ready
         raise AssertionError("query should not run before RAG status is ready")
 
     monkeypatch.setattr(MdteroClient, "create_project", fake_create)

@@ -248,9 +248,28 @@ def build_parser() -> argparse.ArgumentParser:
     rag_query = _cmd(rag_sub, "query", "Query server-side project RAG.", cmd_rag_query)
     rag_query.add_argument("question")
     rag_query.add_argument("--project-id")
-    rag_query.add_argument("--build-if-needed", action="store_true", help="Create/bind/import/build server RAG before querying when the local project is not ready.")
+    rag_query.add_argument(
+        "--build-if-needed",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Create/bind/import/build server RAG before querying when the local project is not ready (default: enabled).",
+    )
+    rag_query.add_argument("--limit", type=int, default=5, help="Max evidence hits to return.")
+    rag_query.add_argument(
+        "--synthesize",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Ask the backend for a grounded synthesized answer when available (default: enabled).",
+    )
     _add_wait_options(rag_query)
     rag_query.add_argument("--json", action="store_true")
+    rag_ask = _cmd(rag_sub, "ask", "Friendly alias for `rag query` with bootstrap and readable output.", cmd_rag_ask)
+    rag_ask.add_argument("question")
+    rag_ask.add_argument("--project-id")
+    rag_ask.add_argument("--limit", type=int, default=5)
+    rag_ask.add_argument("--synthesize", action=argparse.BooleanOptionalAction, default=True)
+    _add_wait_options(rag_ask)
+    rag_ask.add_argument("--json", action="store_true")
     rag_status = _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
     rag_status.add_argument("--project-id")
     rag_status.add_argument("--json", action="store_true")
@@ -2562,27 +2581,39 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
 
 def cmd_rag_query(args: argparse.Namespace) -> int:
     bootstrap: dict[str, Any] | None = None
-    if getattr(args, "build_if_needed", False):
+    console = Console()
+    json_output = bool(getattr(args, "json", False))
+    # Argparse defaults build-if-needed to True; hand-built test namespaces omit it and stay False.
+    build_if_needed = bool(getattr(args, "build_if_needed", False))
+    synthesize = bool(getattr(args, "synthesize", True))
+    limit = max(1, min(int(getattr(args, "limit", 5) or 5), 20))
+    if build_if_needed:
         client = MdteroClient()
         root = Path.cwd()
         state = load_project(root)
         if _local_ready_for_rag_count(state) == 0:
             payload = _rag_no_succeeded_tasks_payload(state, command="query", question=args.question)
-            _print_rag_command_failure(payload, json_output=args.json)
+            _print_rag_command_failure(payload, json_output=json_output)
             return 1
+        if not json_output:
+            console.print("[dim]Preparing project for RAG…[/dim]")
         try:
             project_id, bootstrap_meta = _ensure_server_project_for_rag(client, root, state, getattr(args, "project_id", None))
         except Exception as exc:
             payload = _rag_bootstrap_failure("query", exc)
             payload["question"] = args.question
-            _print_rag_command_failure(payload, json_output=args.json)
+            _print_rag_command_failure(payload, json_output=json_output)
             return 1
+        if not json_output:
+            console.print(f"[dim]Server project {project_id}: importing completed papers…[/dim]")
         ingest = _import_succeeded_tasks_to_server_project(client, load_project(root), project_id)
         bootstrap = {"bootstrap": bootstrap_meta, "ingest": ingest}
         if ingest["failures"]:
             payload = _rag_query_bootstrap_not_ready(project_id, args.question, bootstrap, reason_code="server_project_import_failed")
-            _print_rag_command_failure(payload, json_output=args.json)
+            _print_rag_command_failure(payload, json_output=json_output)
             return 1
+        if not json_output:
+            console.print("[dim]Building or refreshing server RAG index…[/dim]")
         try:
             build = client.rag_build(project_id)
         except Exception as exc:
@@ -2590,7 +2621,7 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
             payload["command"] = "rag_query"
             payload["question"] = args.question
             payload["bootstrap"] = bootstrap
-            _print_rag_command_failure(payload, json_output=args.json)
+            _print_rag_command_failure(payload, json_output=json_output)
             return 1
         bootstrap["build"] = build
         if not _rag_status_payload_is_ready(build):
@@ -2600,27 +2631,48 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
                 reason_code = str(status_after_build.get("reason_code") or "rag_index_not_ready")
                 payload = _rag_query_build_not_ready(project_id, args.question, bootstrap, reason_code=reason_code)
                 payload["status_after_build"] = status_after_build
-                _print_rag_command_failure(payload, json_output=args.json)
+                _print_rag_command_failure(payload, json_output=json_output)
                 return 1
     else:
         client = MdteroClient()
         project_id = _server_project_id_or_report(args, command="query")
     if project_id is None:
         return 1
+    if not json_output:
+        console.print(f"[dim]Querying project {project_id}…[/dim]")
     try:
-        result = client.rag_query(project_id, args.question)
+        result = client.rag_query(project_id, args.question, limit=limit, synthesize=synthesize)
     except Exception as exc:
         payload = _rag_command_failure("query", project_id, exc)
         if bootstrap is not None:
             payload["bootstrap"] = bootstrap
             payload.setdefault("question", args.question)
-        _print_rag_command_failure(payload, json_output=args.json)
+        if not build_if_needed:
+            payload.setdefault(
+                "action_hint",
+                f"Index may be missing. Retry with `mdtero rag ask \"{args.question}\"` or enable `--build-if-needed`.",
+            )
+            payload.setdefault(
+                "next_commands",
+                [f'mdtero rag ask "{args.question}"', RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, GENERIC_RAG_QUERY_COMMAND],
+            )
+        _print_rag_command_failure(payload, json_output=json_output)
         return 1
     result = _normalize_rag_query_payload(result, project_id=project_id, question=args.question)
     if bootstrap is not None:
         result.setdefault("bootstrap", bootstrap)
-    _print_rag_query_result(result, json_output=args.json)
+    _print_rag_query_result(result, json_output=json_output)
     return 0
+
+
+def cmd_rag_ask(args: argparse.Namespace) -> int:
+    """Human-friendly query path: always bootstrap when needed."""
+    args.build_if_needed = True
+    if not hasattr(args, "synthesize"):
+        args.synthesize = True
+    if not hasattr(args, "limit"):
+        args.limit = 5
+    return cmd_rag_query(args)
 
 
 def _rag_query_bootstrap_not_ready(project_id: str, question: str, bootstrap: dict[str, Any], *, reason_code: str) -> dict[str, Any]:
@@ -3003,18 +3055,43 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
         if args.json:
             print(json.dumps(redact_sensitive_payload(result), indent=2, ensure_ascii=False))
             return 0
+        from rich.panel import Panel
+        from rich.table import Table
+
+        status = str(result.get("status") or "unknown")
+        reason = str(result.get("reason_code") or "unknown")
         console.print(
-            f"Project {state.name}: server RAG {result.get('status')} ({result.get('reason_code')}); "
-            f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} chunk(s) embedded."
+            Panel(
+                f"{state.name} · {status} ({reason})",
+                title="RAG status",
+                border_style="green" if status == "ready" else "yellow",
+            )
         )
-        console.print(f"Server project: {project_id}; provider: {result.get('selected_provider')}; model: {summary.get('embedding_model') or 'unknown'}")
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column("k", style="dim")
+        table.add_column("v")
+        table.add_row("Server project", str(project_id))
+        table.add_row("Provider", f"{result.get('selected_provider') or 'voyage'} · {result.get('provider_state') or 'unknown'}")
+        table.add_row("Model", str(summary.get("embedding_model") or result.get("embedding_model") or "unknown"))
+        table.add_row("Chunks", f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} embedded")
+        table.add_row("Local ready", f"{indexed}/{len(state.papers)} paper artifact(s)")
+        console.print(table)
         action_hint = redact_sensitive_text(result.get("action_hint")).strip()
         if action_hint:
-            console.print(f"Hint: {action_hint}")
+            console.print(f"\nHint: {action_hint}")
         next_commands = [str(command).strip() for command in result.get("next_commands") or [] if str(command).strip()]
         if next_commands:
-            console.print("Next:")
-            for command in next_commands:
+            console.print("\n[bold]Next[/bold]")
+            human_first = next(
+                (command for command in next_commands if "rag ask" in command or ("rag query" in command and "--json" not in command)),
+                None,
+            )
+            if human_first is None:
+                # Offer a terminal-friendly ask command alongside agent JSON commands.
+                console.print('  mdtero rag ask "What are the strongest findings?"')
+            elif "rag ask" not in human_first:
+                console.print('  mdtero rag ask "What are the strongest findings?"')
+            for command in next_commands[:5]:
                 console.print(f"  {command}")
         _print_rag_agent_tool_plan(redact_sensitive_payload(result), console=console)
         return 0
@@ -3585,37 +3662,77 @@ def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> No
     if json_output:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
+    from rich.panel import Panel
+    from rich.table import Table
+
     console = Console()
-    console.print(f"RAG query: {payload.get('status', 'succeeded')} ({payload.get('reason_code', 'rag_query_succeeded')})")
+    interaction = payload.get("interaction") if isinstance(payload.get("interaction"), dict) else {}
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    strategy = str(payload.get("retrieval_strategy") or "voyage")
+    answer_kind = str(payload.get("answer_kind") or "extractive_evidence_pack")
+    human_summary = str(interaction.get("human_summary") or "").strip()
+    meta_bits = [
+        str(payload.get("status") or "succeeded"),
+        str(payload.get("reason_code") or "rag_query_succeeded"),
+        strategy,
+        answer_kind,
+    ]
+    if payload.get("used_rerank"):
+        meta_bits.append("reranked")
+    if payload.get("used_synthesis"):
+        meta_bits.append("synthesized")
+    console.print(Panel(" · ".join(meta_bits), title="RAG query", border_style="cyan"))
+    if human_summary:
+        console.print(f"[dim]{human_summary}[/dim]")
+
     answer = str(payload.get("answer") or "").strip()
     if answer:
         console.print("\n[bold]Answer[/bold]")
         console.print(answer)
+
     citations = payload.get("citations") if isinstance(payload.get("citations"), list) else []
-    if citations:
-        console.print("\n[bold]Citations[/bold]")
-        for citation in citations[:5]:
+    matches = payload.get("matches") if isinstance(payload.get("matches"), list) else []
+    if citations or matches:
+        table = Table(title="Evidence", show_header=True, header_style="bold")
+        table.add_column("#", style="cyan", width=3)
+        table.add_column("Paper")
+        table.add_column("Snippet")
+        table.add_column("Score", justify="right")
+        rows = citations[:5] if citations else []
+        match_by_chunk = {
+            int(match.get("chunk_id")): match
+            for match in matches
+            if isinstance(match, dict) and match.get("chunk_id") is not None
+        }
+        for citation in rows:
+            if not isinstance(citation, dict):
+                continue
+            order = str(citation.get("citation_order") or "-")
             title = str(citation.get("document_title") or citation.get("document_id") or "document").strip()
-            order = citation.get("citation_order") or "-"
-            line_start = citation.get("line_start")
-            line_end = citation.get("line_end")
-            line_ref = f":{line_start}-{line_end}" if line_start is not None and line_end is not None else ""
             source_ref = str(citation.get("doi") or citation.get("source_url") or "").strip()
-            suffix = f" · {source_ref}" if source_ref else ""
-            console.print(f"  [{order}] {title}{line_ref}{suffix}")
-    citation_contract = payload.get("citation_contract") if isinstance(payload.get("citation_contract"), dict) else {}
-    required_fields = citation_contract.get("required_for_final_answer") if isinstance(citation_contract.get("required_for_final_answer"), list) else []
-    agent_instruction = str(citation_contract.get("agent_instruction") or "").strip()
-    if required_fields or agent_instruction:
-        console.print("\n[bold]Citation contract[/bold]")
-        if required_fields:
-            console.print(f"  Final answers must preserve: {', '.join(str(field) for field in required_fields)}")
-        if agent_instruction:
-            console.print(f"  {agent_instruction}")
+            if source_ref:
+                title = f"{title} · {source_ref}"
+            try:
+                chunk_id = int(citation.get("chunk_id"))
+            except (TypeError, ValueError):
+                chunk_id = -1
+            match = match_by_chunk.get(chunk_id, {})
+            snippet = str(match.get("snippet") or citation.get("snippet") or "").strip()
+            snippet = " ".join(snippet.split())[:160]
+            score = citation.get("score")
+            if score is None:
+                score = match.get("score")
+            score_text = f"{float(score):.3f}" if isinstance(score, (int, float)) else "-"
+            table.add_row(order, title, snippet or "—", score_text)
+        console.print(table)
+        console.print(
+            f"[dim]{summary.get('match_count', len(rows))} hit(s) · indexed {summary.get('indexed_chunk_count', '?')} chunk(s)[/dim]"
+        )
+
     next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
     if next_commands:
         console.print("\n[bold]Next[/bold]")
-        for command in next_commands:
+        for command in next_commands[:4]:
             console.print(f"  {command}")
     _print_rag_agent_tool_plan(payload, console=console)
 
