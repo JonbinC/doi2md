@@ -239,7 +239,7 @@ class MdteroTui(App):
         self.notify("mdtero project parse --wait --timeout 300 --json")
 
     def action_rag_status(self) -> None:
-        self.notify("mdtero rag status --json")
+        self.notify('Try: mdtero rag ask "What are the strongest findings?"')
 
     def action_mcp_briefing(self) -> None:
         self.notify("mdtero mcp briefing --json")

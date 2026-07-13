@@ -315,8 +315,23 @@ class MdteroClient:
     def rag_build(self, project_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/projects/{project_id}/rag/build")
 
-    def rag_query(self, project_id: str, question: str) -> dict[str, Any]:
-        return self._request("POST", f"/api/v1/projects/{project_id}/rag/query", json={"question": question})
+    def rag_query(
+        self,
+        project_id: str,
+        question: str,
+        *,
+        limit: int = 5,
+        synthesize: bool = True,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/projects/{project_id}/rag/query",
+            json={
+                "question": question,
+                "limit": max(1, min(int(limit or 5), 20)),
+                "synthesize": bool(synthesize),
+            },
+        )
 
     def rag_status(self, project_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/projects/{project_id}/rag/status")
