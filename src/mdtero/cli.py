@@ -601,6 +601,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
 
     if args.skip_rag:
         _smoke_add_step(payload, "rag", "skipped", reason_code="skipped")
+        _smoke_add_step(payload, "content", "skipped", reason_code="rag_skipped")
     elif parse_task and parse_task.get("status") == "succeeded":
         try:
             state = load_project(workdir)
@@ -624,11 +625,17 @@ def cmd_smoke(args: argparse.Namespace) -> int:
                 query=query,
                 reason_code=query.get("reason_code") or rag_status.get("reason_code"),
             )
+            content_status, content_step = _smoke_document_content_step(client, project_id, query)
+            if content_status != "succeeded":
+                terminal_failures += 1
+            _smoke_add_step(payload, "content", content_status, **content_step)
         except Exception as exc:
             terminal_failures += 1
             _smoke_add_step(payload, "rag", "failed", server_project_id=payload.get("server_project_id"), **_smoke_exception_payload(exc, default_reason="rag_failed"))
+            _smoke_add_step(payload, "content", "skipped", reason_code="rag_failed")
     else:
         _smoke_add_step(payload, "rag", "skipped", reason_code="parse_not_succeeded")
+        _smoke_add_step(payload, "content", "skipped", reason_code="parse_not_succeeded")
 
     if args.skip_rag:
         _smoke_add_step(payload, "mcp_briefing", "skipped", reason_code="rag_skipped")
@@ -2795,6 +2802,13 @@ def cmd_translate(args: argparse.Namespace) -> int:
             result = client.translate_text(target.read_text(encoding="utf-8"), filename=target.name, target_language=args.to)
         else:
             result = client.translate_task(args.task_or_file, target_language=args.to)
+    except MdteroApiError as exc:
+        payload = dict(exc.payload or {})
+        payload.setdefault("status", "failed")
+        payload.setdefault("command", "translate")
+        payload.setdefault("task_or_file", args.task_or_file)
+        _print_result(redact_sensitive_payload(payload), json_output=args.json)
+        return 1
     except ValueError as exc:
         if str(exc) == "translation_source_artifact_missing":
             payload = {
@@ -3420,6 +3434,7 @@ def _smoke_coverage_contract(args: argparse.Namespace) -> dict[str, Any]:
             "artifact_download" if not getattr(args, "skip_download", False) else "artifact_download_skipped",
             "translation_task" if not getattr(args, "skip_translate", False) else "translation_skipped",
             "server_rag_build_query" if not getattr(args, "skip_rag", False) else "rag_skipped",
+            "document_content_evidence" if not getattr(args, "skip_rag", False) else "document_content_skipped",
             "mcp_agent_briefing_contract" if not getattr(args, "skip_rag", False) else "mcp_briefing_skipped",
         ],
         "requires_separate_smoke": [
@@ -3455,6 +3470,54 @@ def _smoke_coverage_contract(args: argparse.Namespace) -> dict[str, Any]:
         },
         "evidence_fields": ["reason_code", "action_hint", "download_artifacts", "selected_provider", "parser_strategy", "client_acquisition", "citation_contract", "citations", "source_nodes"],
     }
+
+
+def _smoke_document_content_step(
+    client: MdteroClient,
+    project_id: str,
+    query: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    citations = query.get("citations") if isinstance(query.get("citations"), list) else []
+    first = next((item for item in citations if isinstance(item, dict) and item.get("document_id") not in (None, "")), None)
+    if first is None:
+        return (
+            "failed",
+            {
+                "server_project_id": project_id,
+                "reason_code": "citation_locator_missing",
+                "action_hint": "RAG query returned no document_id citation locator for evidence expansion.",
+            },
+        )
+    document_id = first.get("document_id")
+    offset = int(first.get("offset") or first.get("char_start") or 0)
+    try:
+        content = client.document_content(project_id, document_id, offset=offset, limit=500)
+    except Exception as exc:
+        return ("failed", {"server_project_id": project_id, "document_id": document_id, "offset": offset, **_smoke_exception_payload(exc, default_reason="document_content_failed")})
+    text = str(content.get("text") or "")
+    if not text.strip():
+        return (
+            "failed",
+            {
+                "server_project_id": project_id,
+                "document_id": document_id,
+                "offset": offset,
+                "reason_code": "document_content_empty",
+                "action_hint": "Document content slice was empty; verify the citation offset and project import.",
+            },
+        )
+    return (
+        "succeeded",
+        {
+            "server_project_id": project_id,
+            "document_id": document_id,
+            "doc_id": content.get("doc_id") or first.get("doc_id"),
+            "offset": content.get("offset", offset),
+            "text_preview": text[:240],
+            "reason_code": "document_content_succeeded",
+            "result": content,
+        },
+    )
 
 
 def _enrich_smoke_failure_summary(payload: dict[str, Any]) -> dict[str, Any]:

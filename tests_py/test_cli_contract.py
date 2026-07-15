@@ -17,7 +17,16 @@ from rich.console import Console
 from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
-from mdtero.cli import API_KEY_PROMPT_SENTINEL, build_parser, _add_discovery_results_to_project, cmd_config_academic, _parse_academic_selection, _parse_result_selection
+from mdtero.cli import (
+    API_KEY_PROMPT_SENTINEL,
+    build_parser,
+    _add_discovery_results_to_project,
+    _annotate_discovery_session,
+    _run_discovery_interactive_session,
+    cmd_config_academic,
+    _parse_academic_selection,
+    _parse_result_selection,
+)
 from mdtero.client import DiscoveryError, DownloadResult, MdteroApiError, MdteroClient, translation_source_path_from_task
 from mdtero.config import AcademicKeys, MdteroConfig, ZoteroConfig, load_config, save_config
 from mdtero.mcp import add_project_item_for_agent, build_agent_briefing, build_agent_commands, build_paper_context, build_project_bridge, build_project_status, build_rag_context, build_server_rag_for_agent, build_server_rag_status, download_artifact_for_agent, ingest_project_for_agent, initialize_project_for_agent, query_server_rag, request_translation_for_agent, serve_project_context, submit_parse_for_agent, task_status_for_agent
@@ -337,7 +346,28 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
 
     def fake_rag_query(self, project_id, question, **kwargs):
         calls.append(("rag_query", project_id, question))
-        return {"answer": "Ready.", "matches": [{"document_id": "doc-1", "snippet": "Ready evidence."}]}
+        return {
+            "answer": "Ready.",
+            "matches": [{"document_id": 1, "snippet": "Ready evidence.", "offset": 0, "char_start": 0}],
+            "citations": [
+                {
+                    "document_id": 1,
+                    "doc_id": "mdtero-doc-1",
+                    "offset": 0,
+                    "char_start": 0,
+                    "quote": "Ready evidence.",
+                }
+            ],
+        }
+
+    def fake_document_content(self, project_id, document_id, *, offset=0, limit=2000, line_start=None, line_end=None):
+        calls.append(("document_content", project_id, document_id, offset, limit))
+        return {
+            "document_id": document_id,
+            "doc_id": f"mdtero-doc-{document_id}",
+            "offset": offset,
+            "text": "Ready evidence slice.",
+        }
 
     def fake_briefing(root):
         calls.append(("mcp_briefing", Path(root).name))
@@ -361,6 +391,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     monkeypatch.setattr(MdteroClient, "rag_build", fake_rag_build)
     monkeypatch.setattr(MdteroClient, "rag_status", fake_rag_status)
     monkeypatch.setattr(MdteroClient, "rag_query", fake_rag_query)
+    monkeypatch.setattr(MdteroClient, "document_content", fake_document_content)
     monkeypatch.setattr("mdtero.mcp.build_agent_briefing", fake_briefing)
 
     args = type(
@@ -405,6 +436,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
         "artifact_download",
         "translation_task",
         "server_rag_build_query",
+        "document_content_evidence",
         "mcp_agent_briefing_contract",
     ]
     assert {item["id"] for item in coverage["requires_separate_smoke"]} == {
@@ -417,12 +449,13 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     assert coverage["artifact_expectations"]["parse"] == ["paper_md", "paper_bundle"]
     assert "selected_provider" in coverage["evidence_fields"]
     assert "client_acquisition" in coverage["evidence_fields"]
-    assert [step["name"] for step in payload["steps"]] == ["discover", "parse", "download", "translate", "rag", "mcp_briefing"]
+    assert [step["name"] for step in payload["steps"]] == ["discover", "parse", "download", "translate", "rag", "content", "mcp_briefing"]
     assert payload["steps"][1]["selected_provider"] == "arxiv_native"
     assert payload["steps"][3]["target_language"] == "zh-CN"
     assert payload["steps"][4]["query"]["answer"] == "Ready."
-    assert payload["steps"][5]["mcp_tools"] == ["agent_briefing", "server_rag_status", "server_rag_build", "rag_query"]
-    assert payload["steps"][5]["reason_code"] == "indexed"
+    assert payload["steps"][5]["reason_code"] == "document_content_succeeded"
+    assert payload["steps"][6]["mcp_tools"] == ["agent_briefing", "server_rag_status", "server_rag_build", "rag_query"]
+    assert payload["steps"][6]["reason_code"] == "indexed"
     assert payload["downloaded_paths"][0].endswith("paper.md")
     assert payload["translated_paths"][0].endswith("paper_CN.md")
     assert state.server_project_id == "42"
@@ -439,6 +472,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
         ("rag_build", "42"),
         ("rag_status", "42"),
         ("rag_query", "42", "What is indexed?"),
+        ("document_content", "42", 1, 0, 500),
         ("mcp_briefing", "smoke"),
     ]
 
@@ -491,11 +525,19 @@ def test_smoke_can_skip_discovery_download_and_rag(monkeypatch, tmp_path: Path, 
         "artifact_download_skipped",
         "translation_skipped",
         "rag_skipped",
+        "document_content_skipped",
         "mcp_briefing_skipped",
     ]
     assert payload["coverage_contract"]["skipped_by_flags"] == ["discovery", "artifact_download", "translation", "rag", "mcp_briefing"]
-    assert [step["status"] for step in payload["steps"]] == ["skipped", "succeeded", "skipped", "skipped", "skipped", "skipped"]
-    assert [step["reason_code"] for step in payload["steps"] if step["status"] == "skipped"] == ["skipped", "skipped", "skipped", "skipped", "rag_skipped"]
+    assert [step["status"] for step in payload["steps"]] == ["skipped", "succeeded", "skipped", "skipped", "skipped", "skipped", "skipped"]
+    assert [step["reason_code"] for step in payload["steps"] if step["status"] == "skipped"] == [
+        "skipped",
+        "skipped",
+        "skipped",
+        "skipped",
+        "rag_skipped",
+        "rag_skipped",
+    ]
 
 
 def test_smoke_fails_when_mcp_briefing_missing_agent_tools(monkeypatch, tmp_path: Path, capsys):
@@ -519,13 +561,30 @@ def test_smoke_fails_when_mcp_briefing_missing_agent_tools(monkeypatch, tmp_path
     def fake_briefing(root):
         return {"project": {"initialized": True}, "mcp_tools": ["agent_briefing", "server_rag_status", "server_rag_build"]}
 
+    def fake_rag_query(self, project_id, question, **kwargs):
+        return {
+            "answer": "Ready",
+            "matches": [{"document_id": 1, "snippet": "Ready", "offset": 0}],
+            "citations": [{"document_id": 1, "doc_id": "mdtero-doc-1", "offset": 0}],
+        }
+
     monkeypatch.setattr(MdteroClient, "parse_with_route", fake_parse_with_route)
     monkeypatch.setattr(MdteroClient, "wait", fake_wait)
     monkeypatch.setattr(MdteroClient, "create_project", fake_create_project)
     monkeypatch.setattr(MdteroClient, "import_task_to_project", fake_import_task)
     monkeypatch.setattr(MdteroClient, "rag_build", lambda self, project_id: {"status": "queued"})
     monkeypatch.setattr(MdteroClient, "rag_status", lambda self, project_id: {"status": "ready", "reason_code": "indexed"})
-    monkeypatch.setattr(MdteroClient, "rag_query", lambda self, project_id, question, **kwargs: {"answer": "Ready", "matches": []})
+    monkeypatch.setattr(MdteroClient, "rag_query", fake_rag_query)
+    monkeypatch.setattr(
+        MdteroClient,
+        "document_content",
+        lambda self, project_id, document_id, **kwargs: {
+            "document_id": document_id,
+            "doc_id": f"mdtero-doc-{document_id}",
+            "offset": 0,
+            "text": "Ready evidence.",
+        },
+    )
     monkeypatch.setattr("mdtero.mcp.build_agent_briefing", fake_briefing)
 
     args = type(
@@ -1549,15 +1608,73 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
 
 
 def test_discover_uses_server_openalex(monkeypatch):
-    monkeypatch.setattr(MdteroClient, "_request", lambda self, method, path, **kwargs: {"items": [{"title": "OA paper"}]})
+    captured = {}
 
-    result = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1)
+    def fake_request(self, method, path, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params")
+        return {"items": [{"title": "OA paper"}], "meta": {"count": 1, "page": 1, "per_page": 1, "has_next": False, "has_previous": False}}
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1, page=2)
 
     assert result["source"] == "openalex_server"
+    assert captured == {
+        "method": "GET",
+        "path": "/api/v1/discovery/search",
+        "params": {"query": "rag", "limit": 1, "page": 2},
+    }
     assert result["discovery_diagnostics"] == {
         "provider": "openalex_server",
         "server_openalex_attempted": True,
     }
+
+
+def test_discovery_session_uses_server_page_meta():
+    result = {
+        "items": [{"title": "A", "doi": "10.1/a"}, {"title": "B", "doi": "10.1/b"}],
+        "meta": {"count": 25, "page": 2, "per_page": 2, "has_previous": True, "has_next": True},
+    }
+    _annotate_discovery_session(result, query="rag papers", page=2, page_size=2, loaded_limit=2)
+    session = result["discovery_session"]
+    assert session["pagination_mode"] == "server_page"
+    assert session["page"] == 2
+    assert session["visible_range"] == [3, 4]
+    assert session["total_count"] == 25
+    assert session["has_previous"] is True
+    assert session["has_next"] is True
+    assert session["commands"]["next"] == 'mdtero discover \'rag papers\' --limit 2 --page 3'
+
+
+def test_interactive_discover_fetches_next_server_page(monkeypatch):
+    calls: list[tuple[str, int, int]] = []
+
+    def fake_discover(self, query, *, limit=10, page=1):
+        calls.append((query, limit, page))
+        return {
+            "items": [{"title": f"page-{page}-item", "doi": f"10.1/{page}"}],
+            "meta": {
+                "count": 20,
+                "page": page,
+                "per_page": limit,
+                "has_previous": page > 1,
+                "has_next": page < 2,
+            },
+        }
+
+    monkeypatch.setattr(MdteroClient, "discover", fake_discover)
+    replies = iter(["n", "q"])
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: next(replies))
+
+    initial = fake_discover(None, "topic", limit=5, page=1)
+    result = _run_discovery_interactive_session(query="topic", page_size=5, initial_result=initial, initial_page=1)
+
+    assert calls == [("topic", 5, 1), ("topic", 5, 2)]
+    assert result["discovery_session"]["page"] == 2
+    assert result["discovery_session"]["pagination_mode"] == "server_page"
+    assert result["interactive_action"] == "skip"
 
 
 def test_discover_returns_structured_failure_when_server_discovery_fails(monkeypatch):
@@ -7518,6 +7635,9 @@ def test_zotero_import_json_reports_skipped_item_reasons(monkeypatch, tmp_path: 
     def fake_make_client(_cfg):
         return FakeClient()
 
+    def fake_collections(_client):
+        return [{"index": 1, "key": "COLL", "name": "Demo", "parent_collection": None, "num_items": 2, "num_collections": 0}]
+
     def fake_items(_client, *, collection_id=None, limit=50):
         assert collection_id == "COLL"
         assert limit == 2
@@ -7528,6 +7648,7 @@ def test_zotero_import_json_reports_skipped_item_reasons(monkeypatch, tmp_path: 
 
     monkeypatch.setattr("mdtero.config.load_config", lambda: MdteroConfig(zotero=ZoteroConfig(library_id="123", api_key="key")))
     monkeypatch.setattr("mdtero.zotero.make_zotero_client", fake_make_client)
+    monkeypatch.setattr("mdtero.zotero.list_zotero_collections", fake_collections)
     monkeypatch.setattr("mdtero.zotero.list_zotero_items", fake_items)
     monkeypatch.chdir(tmp_path)
 
@@ -7537,10 +7658,11 @@ def test_zotero_import_json_reports_skipped_item_reasons(monkeypatch, tmp_path: 
 
     assert payload["imported_count"] == 1
     assert payload["skipped_count"] == 1
+    assert payload["collection"]["key"] == "COLL"
     assert payload["imported"][0] == {"input": "10.1000/ready", "title": "Ready", "doi": "10.1000/ready", "zotero_key": "OK"}
     assert payload["skipped"][0]["zotero_key"] == "NOID"
     assert payload["skipped"][0]["reason_code"] == "missing_doi_or_url"
-    assert "mdtero parse --file" in payload["skipped"][0]["action_hint"]
+    assert "mdtero zotero parse" in payload["skipped"][0]["action_hint"]
 
 
 def test_zotero_sync_creates_note_for_succeeded_zotero_papers():
@@ -7587,6 +7709,162 @@ def test_zotero_sync_note_contains_download_command():
     assert note["itemType"] == "note"
     assert note["parentItem"] == "ABC"
     assert "mdtero download" in note["note"]
+
+
+def test_zotero_resolve_collection_selector_by_index_name_and_key():
+    from mdtero.zotero import resolve_collection_selector
+
+    collections = [
+        {"index": 1, "key": "AAAA", "name": "Weekly Paper"},
+        {"index": 2, "key": "BBBB", "name": "Review"},
+    ]
+    assert resolve_collection_selector(collections, "2")["key"] == "BBBB"
+    assert resolve_collection_selector(collections, "AAAA")["name"] == "Weekly Paper"
+    assert resolve_collection_selector(collections, "weekly")["key"] == "AAAA"
+    assert resolve_collection_selector(collections, "paper")["key"] == "AAAA"
+    assert resolve_collection_selector(collections, "missing") is None
+    assert resolve_collection_selector(collections, "e") is None  # ambiguous across Weekly Paper + Review
+
+
+def test_export_collection_pdfs_prefers_local_storage(tmp_path: Path):
+    from mdtero.zotero import export_collection_pdfs
+
+    storage = tmp_path / "storage"
+    att_dir = storage / "ATT1"
+    att_dir.mkdir(parents=True)
+    (att_dir / "paper.pdf").write_bytes(b"%PDF-1.4 local")
+    out = tmp_path / "out"
+
+    class FakeClient:
+        def collection_items_top(self, collection_id):
+            assert collection_id == "COLL"
+            return [{"key": "ITEM1", "data": {"title": "Local PDF", "DOI": "10.1000/local"}}]
+
+        def children(self, parent_key):
+            assert parent_key == "ITEM1"
+            return [
+                {
+                    "key": "ATT1",
+                    "data": {
+                        "itemType": "attachment",
+                        "contentType": "application/pdf",
+                        "filename": "paper.pdf",
+                        "linkMode": "imported_file",
+                    },
+                }
+            ]
+
+        def dump(self, *_args, **_kwargs):
+            raise AssertionError("API dump should not be used when local PDF exists")
+
+    payload = export_collection_pdfs(FakeClient(), collection_id="COLL", output_dir=out, storage_dir=storage)
+    assert payload["exported_count"] == 1
+    exported = payload["exported"][0]
+    assert exported["source"] == "local_storage"
+    assert Path(exported["path"]).read_bytes() == b"%PDF-1.4 local"
+
+
+def test_zotero_collections_json(monkeypatch, capsys):
+    from mdtero import cli
+
+    monkeypatch.setattr("mdtero.config.load_config", lambda: MdteroConfig(zotero=ZoteroConfig(library_id="123", api_key="key")))
+    monkeypatch.setattr("mdtero.zotero.make_zotero_client", lambda _cfg: object())
+    monkeypatch.setattr(
+        "mdtero.zotero.list_zotero_collections",
+        lambda _client: [{"index": 1, "key": "COLL", "name": "Demo", "parent_collection": None, "num_items": 3, "num_collections": 0}],
+    )
+    args = type("Args", (), {"library_id": None, "library_type": None, "api_key": None, "json": True})()
+    assert cli.cmd_zotero_collections(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["collection_count"] == 1
+    assert payload["collections"][0]["name"] == "Demo"
+    assert "mdtero zotero parse" in payload["action_hint"]
+
+
+def test_zotero_parse_uploads_exported_pdfs(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+    from mdtero.client import DownloadResult
+
+    pdf = tmp_path / "pdfs" / "ATT1_paper.pdf"
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4")
+
+    class FakeApi:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def upload(self, path, *, source_input=None, source_doi=None):
+            assert Path(path).exists()
+            return {"task_id": "task-zotero-1", "status": "queued"}
+
+        def wait(self, task_id, *, interval=3.0, timeout=600.0):
+            return {"task_id": task_id, "status": "succeeded", "result": {"preferred_artifact": "paper_md"}}
+
+        def download(self, task_id, artifact, output_dir, *, filename=None):
+            dest = Path(output_dir)
+            dest.mkdir(parents=True, exist_ok=True)
+            path = dest / "paper.md"
+            path.write_text("# ok\n", encoding="utf-8")
+            return DownloadResult(path=path, filename="paper.md")
+
+    monkeypatch.setattr("mdtero.config.load_config", lambda: MdteroConfig(zotero=ZoteroConfig(library_id="123", api_key="key")))
+    monkeypatch.setattr("mdtero.zotero.make_zotero_client", lambda _cfg: object())
+    monkeypatch.setattr(
+        "mdtero.zotero.list_zotero_collections",
+        lambda _client: [{"index": 1, "key": "COLL", "name": "Demo", "parent_collection": None, "num_items": 1, "num_collections": 0}],
+    )
+    monkeypatch.setattr(
+        "mdtero.zotero.export_collection_pdfs",
+        lambda *_args, **_kwargs: {
+            "collection_id": "COLL",
+            "item_count": 1,
+            "exported_count": 1,
+            "failed_count": 0,
+            "skipped_count": 0,
+            "exported": [
+                {
+                    "ok": True,
+                    "path": str(pdf),
+                    "source": "local_storage",
+                    "attachment_key": "ATT1",
+                    "parent_key": "ITEM1",
+                    "title": "Local PDF",
+                    "doi": "10.1000/local",
+                }
+            ],
+            "failed": [],
+            "skipped": [],
+            "output_dir": str(pdf.parent),
+        },
+    )
+    monkeypatch.setattr(cli, "MdteroClient", FakeApi)
+    monkeypatch.setattr(cli, "_wait_for_task", lambda client, task_id, args=None: client.wait(task_id))
+    monkeypatch.chdir(tmp_path)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "collection": "1",
+            "limit": 10,
+            "output_dir": tmp_path / "out",
+            "download": "paper_md",
+            "no_download": False,
+            "wait": True,
+            "timeout": 30.0,
+            "interval": 1.0,
+            "library_id": None,
+            "library_type": None,
+            "api_key": None,
+            "json": True,
+        },
+    )()
+    assert cli.cmd_zotero_parse(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "succeeded"
+    assert payload["succeeded_count"] == 1
+    assert payload["items"][0]["task_id"] == "task-zotero-1"
+    assert payload["items"][0]["download"]["status"] == "downloaded"
 
 
 def test_bib_targets_import_into_project(tmp_path: Path):
@@ -8449,6 +8727,7 @@ def test_public_docs_and_skills_use_agent_safe_discovery_add_json():
 
     assert "mdtero discover \"<query>\" --limit 5 --add --select 1,3 --json" in combined
     assert "mdtero discover \"thermochemical energy storage\" --limit 5 --add --select 1,3 --json" in combined
+    assert "mdtero discover \"<query>\" --limit 5 --page 2 --json" in combined
     assert "mdtero discover \"<query>\" --limit 5 --add --select 1,3`" not in combined
     assert "mdtero discover \"thermochemical energy storage\" --limit 5 --add --select 1,3\n" not in combined
 
