@@ -23,6 +23,13 @@ from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
+from .extension_handoff import (
+    attach_extension_handoff,
+    classify_acquisition_path,
+    preferred_open_url,
+    reason_needs_extension_handoff,
+)
+from .native_bridge import install_native_host, native_host_doctor, request_native_capture
 from .network import ProxyValidationError, SUPPORTED_PROXY_SCHEMES, assert_required_campus_proxy, normalize_proxy_url, proxy_settings_from_config
 from .onboarding import (
     ACADEMIC_OPTIONS,
@@ -144,6 +151,58 @@ def build_parser() -> argparse.ArgumentParser:
     proxy_config.add_argument("--clear", action="store_true", help="Clear saved proxy settings from config.json.")
     proxy_config.add_argument("--json", action="store_true", help="Print a machine-readable safe summary.")
 
+    route = _cmd(sub, "route", "Classify whether a DOI/URL can be acquired by CLI alone or needs the browser extension.", cmd_route)
+    route.add_argument("input")
+    route.add_argument("--json", action="store_true")
+    route.add_argument(
+        "--open-extension-handoff",
+        action="store_true",
+        help="When the route needs a browser session, open the extension install page and article URL.",
+    )
+    route.add_argument(
+        "--native-capture",
+        action="store_true",
+        help="When the route needs the browser, queue a capture job for the *dev* extension native host and wait.",
+    )
+
+    extension = sub.add_parser("extension")
+    extension.set_defaults(func=_print_nested_help(extension))
+    extension_sub = extension.add_subparsers(dest="extension_command")
+    extension_install_host = _cmd(
+        extension_sub,
+        "install-host",
+        "Install the Chrome native-messaging host for the unpackaged/dev Mdtero extension.",
+        cmd_extension_install_host,
+    )
+    extension_install_host.add_argument(
+        "--extension-id",
+        action="append",
+        default=[],
+        help="Extra Chrome extension ID to allow (repeatable). Dev default ID is always included.",
+    )
+    extension_install_host.add_argument("--json", action="store_true")
+    extension_doctor = _cmd(
+        extension_sub,
+        "doctor",
+        "Check whether the Chrome native-messaging host is installed.",
+        cmd_extension_doctor,
+    )
+    extension_doctor.add_argument("--json", action="store_true")
+
+    capture = _cmd(
+        sub,
+        "capture",
+        "Queue a browser capture job for the *dev* extension (native messaging) and optionally wait for task_id.",
+        cmd_capture,
+    )
+    capture.add_argument("input")
+    capture.add_argument("--open-url", help="Override the article URL opened in Chrome.")
+    capture.add_argument("--no-open", action="store_true", help="Do not open the article URL in a browser.")
+    capture.add_argument("--wait", action="store_true", help="Wait until the extension completes the capture job.")
+    capture.add_argument("--timeout", type=float, default=300.0)
+    capture.add_argument("--interval", type=float, default=1.0)
+    capture.add_argument("--json", action="store_true")
+
     parse = _cmd(sub, "parse", "Parse one DOI/URL or upload files.", cmd_parse)
     parse.add_argument("input", nargs="?")
     parse.add_argument("--file", type=Path)
@@ -152,6 +211,11 @@ def build_parser() -> argparse.ArgumentParser:
     parse.add_argument("--wait", action="store_true")
     _add_wait_options(parse)
     parse.add_argument("--trace", action="store_true")
+    parse.add_argument(
+        "--open-extension-handoff",
+        action="store_true",
+        help="When browser capture is required, open the extension install page and article URL in your default browser.",
+    )
 
     parse_batch = _cmd(sub, "parse-batch", "Parse DOI/URL targets from a text file, optionally wait and download Markdown.", cmd_parse_batch)
     parse_batch.add_argument("path", type=Path, help="Text file with one DOI or URL per line; blank lines and # comments are ignored.")
@@ -166,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover = _cmd(sub, "discover", "Search papers.", cmd_discover)
     discover.add_argument("query", nargs="+")
     discover.add_argument("--limit", type=int, default=10)
+    discover.add_argument("--page", type=int, default=1, help="1-based OpenAlex result page (non-interactive).")
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
     discover.add_argument("--interactive", action="store_true", help="Open a discovery session with paging, refinement, and project-add prompts.")
@@ -220,13 +285,43 @@ def build_parser() -> argparse.ArgumentParser:
     zotero = sub.add_parser("zotero")
     zotero.set_defaults(func=_print_nested_help(zotero))
     zotero_sub = zotero.add_subparsers(dest="zotero_command")
+    zotero_collections = _cmd(
+        zotero_sub,
+        "collections",
+        "List Zotero collections (pick a number/name for `mdtero zotero parse`).",
+        cmd_zotero_collections,
+    )
+    zotero_collections.add_argument("--library-id")
+    zotero_collections.add_argument("--library-type", choices=["user", "group"])
+    zotero_collections.add_argument("--api-key")
+    zotero_collections.add_argument("--json", action="store_true")
     zotero_import = _cmd(zotero_sub, "import", "Import a Zotero collection into the current project.", cmd_zotero_import)
-    zotero_import.add_argument("--collection")
+    zotero_import.add_argument("--collection", help="Collection key, exact name, unique name substring, or list index from `mdtero zotero collections`.")
     zotero_import.add_argument("--limit", type=int, default=50)
     zotero_import.add_argument("--library-id")
     zotero_import.add_argument("--library-type", choices=["user", "group"])
     zotero_import.add_argument("--api-key")
     zotero_import.add_argument("--json", action="store_true")
+    zotero_parse = _cmd(
+        zotero_sub,
+        "parse",
+        "Export PDF attachments from a Zotero collection and parse them to Markdown.",
+        cmd_zotero_parse,
+    )
+    zotero_parse.add_argument(
+        "--collection",
+        help="Collection key, exact name, unique name substring, or list index. Omit to choose interactively.",
+    )
+    zotero_parse.add_argument("--limit", type=int, default=50, help="Max parent items to export PDF attachments from.")
+    zotero_parse.add_argument("--output-dir", type=Path, default=Path("mdtero-zotero-output"))
+    zotero_parse.add_argument("--download", default="paper_md", help="Artifact to download after each succeeded parse (default: paper_md).")
+    zotero_parse.add_argument("--no-download", action="store_true", help="Skip artifact download after parse.")
+    zotero_parse.add_argument("--wait", action=argparse.BooleanOptionalAction, default=True)
+    zotero_parse.add_argument("--library-id")
+    zotero_parse.add_argument("--library-type", choices=["user", "group"])
+    zotero_parse.add_argument("--api-key")
+    zotero_parse.add_argument("--json", action="store_true")
+    _add_wait_options(zotero_parse)
     zotero_sync = _cmd(zotero_sub, "sync", "Sync Mdtero parse state back to Zotero notes/tags.", cmd_zotero_sync)
     zotero_sync.add_argument("--json", action="store_true")
 
@@ -273,6 +368,23 @@ def build_parser() -> argparse.ArgumentParser:
     rag_status = _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
     rag_status.add_argument("--project-id")
     rag_status.add_argument("--json", action="store_true")
+
+    content = _cmd(
+        sub,
+        "content",
+        "Read a citable project document slice by document_id/offset (literature-review evidence expansion).",
+        cmd_content,
+    )
+    content.add_argument(
+        "target",
+        help="document_id, mdtero-doc-<id>, or mdtero-doc-<id>@<offset>",
+    )
+    content.add_argument("--project-id", help="Server project id (defaults to local project binding).")
+    content.add_argument("--offset", type=int, default=None, help="Absolute char offset (overrides @offset in target).")
+    content.add_argument("--limit", type=int, default=2000, help="Max characters to return (default 2000, max 8192).")
+    content.add_argument("--line-start", type=int, default=None, help="Optional line-based locator start.")
+    content.add_argument("--line-end", type=int, default=None, help="Optional line-based locator end.")
+    content.add_argument("--json", action="store_true")
 
     mcp = sub.add_parser("mcp")
     mcp.set_defaults(func=_print_nested_help(mcp))
@@ -1434,6 +1546,123 @@ def _mask_proxy_url(proxy_url: str | None) -> str | None:
         return "***"
 
 
+def cmd_extension_install_host(args: argparse.Namespace) -> int:
+    payload = install_native_host(extension_ids=list(getattr(args, "extension_id", None) or []))
+    _print_result(payload, json_output=args.json)
+    return 0 if payload.get("ok") else 2
+
+
+def cmd_extension_doctor(args: argparse.Namespace) -> int:
+    payload = native_host_doctor()
+    _print_result(payload, json_output=args.json)
+    return 0 if payload.get("ok") else 2
+
+
+def cmd_capture(args: argparse.Namespace) -> int:
+    payload = request_native_capture(
+        input_value=args.input,
+        open_url=getattr(args, "open_url", None),
+        timeout=float(args.timeout),
+        open_browser=not bool(getattr(args, "no_open", False)),
+        wait=bool(getattr(args, "wait", False)),
+        interval=float(getattr(args, "interval", 1.0) or 1.0),
+    )
+    _print_result(payload, json_output=args.json)
+    if payload.get("status") == "succeeded" and payload.get("task_id"):
+        return 0
+    if payload.get("status") == "pending" and not getattr(args, "wait", False):
+        return 0
+    return 2
+
+
+def cmd_route(args: argparse.Namespace) -> int:
+    client = MdteroClient()
+    try:
+        route = client.route(args.input)
+    except MdteroApiError as exc:
+        _print_result(exc.payload, json_output=args.json)
+        return 2
+    except httpx.HTTPStatusError as exc:
+        _print_result(api_failure_payload(exc, method=exc.request.method, path=exc.request.url.path), json_output=args.json)
+        return 2
+    acquisition_path = classify_acquisition_path(route)
+    payload = {
+        "status": "ok",
+        "input": args.input,
+        "acquisition_path": acquisition_path,
+        "cli_only": acquisition_path in {"cli_server", "cli_local"},
+        "route_kind": route.get("route_kind"),
+        "top_connector": route.get("top_connector"),
+        "preferred_format": route.get("preferred_format"),
+        "requires_browser_capture": bool(route.get("requires_browser_capture")),
+        "requires_raw_upload": bool(route.get("requires_raw_upload")),
+        "action_sequence": route.get("action_sequence") or [],
+        "action_hint": route.get("action_hint") or route.get("user_message"),
+        "route": route,
+    }
+    if acquisition_path == "extension_required":
+        if getattr(args, "native_capture", False):
+            capture_payload = request_native_capture(
+                input_value=args.input,
+                open_url=preferred_open_url(route, args.input) or None,
+                timeout=float(getattr(args, "timeout", 300.0) or 300.0),
+                open_browser=True,
+                wait=True,
+                interval=1.0,
+            )
+            payload["native_capture"] = capture_payload
+            if capture_payload.get("status") == "succeeded" and capture_payload.get("task_id"):
+                payload["status"] = "ok"
+                payload["task_id"] = capture_payload.get("task_id")
+                payload["cli_only"] = False
+                payload["action_hint"] = capture_payload.get("action_hint")
+                payload["next_commands"] = [
+                    f"mdtero status {capture_payload['task_id']} --wait --timeout 600 --json",
+                ]
+                _print_result(payload, json_output=args.json)
+                return 0
+            payload = attach_extension_handoff(
+                payload,
+                input_value=args.input,
+                route=route,
+                reason_code="browser_extension_required",
+                open_browser=False,
+            )
+            payload["status"] = "extension_required"
+            payload["action_hint"] = capture_payload.get("action_hint") or payload.get("action_hint")
+            _print_result(payload, json_output=args.json)
+            return 2
+        payload = attach_extension_handoff(
+            payload,
+            input_value=args.input,
+            route=route,
+            reason_code="browser_extension_required",
+            open_browser=bool(getattr(args, "open_extension_handoff", False)),
+        )
+        payload["status"] = "extension_required"
+        payload["action_hint"] = (
+            "This route needs a logged-in browser session. Prefer the unpackaged/dev extension + "
+            "`mdtero extension install-host` then `mdtero capture <input> --wait --json`; "
+            "or open the article and Parse from the extension popup "
+            "(or upload a saved PDF/EPUB/HTML/XML with `mdtero parse --file ...`)."
+        )
+        payload["next_commands"] = [
+            "mdtero extension install-host --json",
+            f"mdtero capture {shlex.quote(args.input)} --wait --timeout 300 --json",
+        ]
+    else:
+        payload["action_hint"] = (
+            "CLI can handle this route without the browser extension."
+            if acquisition_path == "cli_server"
+            else "CLI will try local fetch/upload for this route; if the publisher challenges the request, install the browser extension."
+        )
+        payload["next_commands"] = [
+            f"mdtero parse {shlex.quote(args.input)} --trace --wait --timeout 300 --json",
+        ]
+    _print_result(payload, json_output=args.json)
+    return 0 if payload.get("cli_only") else 2
+
+
 def cmd_parse(args: argparse.Namespace) -> int:
     client = MdteroClient()
     submissions: list[tuple[dict[str, Any], str, str]] = []
@@ -1466,12 +1695,49 @@ def cmd_parse(args: argparse.Namespace) -> int:
         try:
             route, result, acquisition = client.parse_with_route(args.input)
         except AcquisitionError as exc:
-            failure = {
-                "status": "failed",
-                "reason_code": exc.reason_code,
-                "action_hint": exc.action_hint,
-                "diagnostics": exc.diagnostics,
-            }
+            if (
+                exc.reason_code == "browser_extension_required"
+                or reason_needs_extension_handoff(exc.reason_code)
+            ):
+                diagnostics = dict(exc.diagnostics or {})
+                route_payload = diagnostics.get("route") if isinstance(diagnostics.get("route"), dict) else None
+                capture_payload = request_native_capture(
+                    input_value=args.input,
+                    open_url=preferred_open_url(route_payload, args.input) or None,
+                    timeout=float(getattr(args, "timeout", 300.0) or 300.0),
+                    open_browser=True,
+                    wait=bool(getattr(args, "wait", False)),
+                    interval=float(getattr(args, "interval", 1.0) or 1.0),
+                )
+                if capture_payload.get("status") == "succeeded" and capture_payload.get("task_id"):
+                    result = {"task_id": capture_payload["task_id"], "status": "queued", "route": route_payload}
+                    submissions.append((result, args.input, "native_capture"))
+                    if getattr(args, "wait", False):
+                        task = client.wait(
+                            str(result["task_id"]),
+                            interval=float(getattr(args, "interval", 3.0) or 3.0),
+                            timeout=float(getattr(args, "timeout", 300.0) or 300.0),
+                        )
+                        _enrich_task_status(task)
+                        task["native_capture"] = capture_payload
+                        _print_result(task, json_output=args.json or args.trace)
+                        return 0 if str(task.get("status") or "") in {"succeeded", "completed"} else 2
+                    result["native_capture"] = capture_payload
+                    _print_result(result, json_output=args.json or args.trace)
+                    return 0
+                failure = _acquisition_failure_payload(
+                    args.input,
+                    exc,
+                    open_browser=bool(getattr(args, "open_extension_handoff", False)),
+                )
+                failure["native_capture"] = capture_payload
+                _print_result(failure, json_output=args.json or args.trace)
+                return 2
+            failure = _acquisition_failure_payload(
+                args.input,
+                exc,
+                open_browser=bool(getattr(args, "open_extension_handoff", False)),
+            )
             _print_result(failure, json_output=args.json or args.trace)
             return 2
         except ProxyValidationError as exc:
@@ -1618,6 +1884,33 @@ def _batch_item_summary(input_value: str, result: dict[str, Any], *, route_kind:
     }
 
 
+def _acquisition_failure_payload(
+    input_value: str,
+    exc: AcquisitionError,
+    *,
+    open_browser: bool = False,
+) -> dict[str, Any]:
+    diagnostics = dict(exc.diagnostics or {})
+    route = diagnostics.get("route") if isinstance(diagnostics.get("route"), dict) else None
+    failure = {
+        "status": "failed",
+        "input": input_value,
+        "reason_code": exc.reason_code,
+        "action_hint": exc.action_hint,
+        "diagnostics": diagnostics,
+    }
+    if reason_needs_extension_handoff(exc.reason_code) or classify_acquisition_path(route) == "extension_required":
+        failure = attach_extension_handoff(
+            failure,
+            input_value=input_value,
+            route=route,
+            reason_code=exc.reason_code,
+            action_hint=exc.action_hint,
+            open_browser=open_browser,
+        )
+    return failure
+
+
 def _batch_exception_payload(input_value: str, exc: Exception) -> dict[str, Any]:
     if isinstance(exc, ProxyValidationError):
         payload = dict(exc.payload)
@@ -1625,7 +1918,7 @@ def _batch_exception_payload(input_value: str, exc: Exception) -> dict[str, Any]
         payload.setdefault("status", "failed")
         return payload
     if isinstance(exc, AcquisitionError):
-        return {"input": input_value, "status": "failed", "reason_code": exc.reason_code, "action_hint": exc.action_hint, "diagnostics": exc.diagnostics}
+        return _acquisition_failure_payload(input_value, exc)
     if isinstance(exc, MdteroApiError):
         payload = dict(exc.payload)
         payload.setdefault("input", input_value)
@@ -1804,8 +2097,9 @@ def _preferred_parse_artifact(result: dict[str, Any]) -> str:
 
 def cmd_discover(args: argparse.Namespace) -> int:
     query = _discover_query(args.query)
+    page = max(1, int(getattr(args, "page", 1) or 1))
     try:
-        result = MdteroClient().discover(query, limit=args.limit)
+        result = MdteroClient().discover(query, limit=args.limit, page=page)
     except ProxyValidationError as exc:
         if args.json:
             print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
@@ -1823,7 +2117,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
     project_add = None
     if args.interactive:
         try:
-            result = _run_discovery_interactive_session(query=query, page_size=args.limit, initial_result=result)
+            result = _run_discovery_interactive_session(query=query, page_size=args.limit, initial_result=result, initial_page=page)
             selection = str(result.get("interactive_selection") or "")
             project_add = _add_discovery_results_to_project(result, selection=selection)
         except ValueError as exc:
@@ -1851,6 +2145,14 @@ def cmd_discover(args: argparse.Namespace) -> int:
                 Console().print(f"Invalid selection: {exc}")
             return 2
         result["project_add"] = project_add
+    if not args.interactive:
+        _annotate_discovery_session(
+            result,
+            query=query,
+            page=page,
+            page_size=max(int(args.limit or 1), 1),
+            loaded_limit=max(int(args.limit or 1), 1),
+        )
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
@@ -1866,21 +2168,57 @@ def _discover_query(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _run_discovery_interactive_session(*, query: str, page_size: int, initial_result: dict[str, Any]) -> dict[str, Any]:
+def _discovery_item_key(item: dict[str, Any]) -> str:
+    for key in ("doi", "external_id", "parse_input_value", "id", "title"):
+        value = str(item.get(key) or "").strip()
+        if value:
+            return f"{key}:{value.lower()}"
+    return f"row:{id(item)}"
+
+
+def _merge_discovery_items(accumulated: list[dict[str, Any]], items: list[dict[str, Any]], seen: set[str]) -> None:
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        key = _discovery_item_key(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        accumulated.append(item)
+
+
+def _run_discovery_interactive_session(
+    *,
+    query: str,
+    page_size: int,
+    initial_result: dict[str, Any],
+    initial_page: int = 1,
+) -> dict[str, Any]:
     console = Console(stderr=True)
     client = MdteroClient()
     session_query = query
     safe_page_size = max(int(page_size or 1), 1)
-    loaded_limit = safe_page_size
-    page = 1
+    page = max(1, int(initial_page or 1))
     result = dict(initial_result)
     selection = ""
     action = "skip"
+    accumulated: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
 
     while True:
-        _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=loaded_limit)
+        _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=safe_page_size)
         _print_discovery_table(result, console=console)
-        console.print("Commands: numbers add selected results; `a` adds this page; `all` adds loaded results; `n` next; `p` previous; `r <query>` refine; Enter/q skip.")
+        session = result.get("discovery_session") if isinstance(result.get("discovery_session"), dict) else {}
+        nav = []
+        if session.get("has_previous"):
+            nav.append("`p` previous")
+        if session.get("has_next"):
+            nav.append("`n` next")
+        nav_text = "; ".join(nav) + "; " if nav else ""
+        console.print(
+            f"Commands: numbers add selected results; `a` adds this page; `all` adds visited results; {nav_text}`r <query>` refine; Enter/q skip."
+        )
         reply = Prompt.ask("Discover", default="", console=console).strip()
         lowered = reply.lower()
         if lowered in {"", "q", "quit", "skip"}:
@@ -1888,12 +2226,20 @@ def _run_discovery_interactive_session(*, query: str, page_size: int, initial_re
             action = "skip"
             break
         if lowered in {"n", "next"}:
+            if not session.get("has_next"):
+                console.print("No more pages.")
+                continue
             page += 1
-            loaded_limit = max(loaded_limit, page * safe_page_size)
-            result = client.discover(session_query, limit=loaded_limit)
+            result = client.discover(session_query, limit=safe_page_size, page=page)
+            _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
         if lowered in {"p", "prev", "previous"}:
-            page = max(1, page - 1)
+            if page <= 1:
+                console.print("Already on the first page.")
+                continue
+            page -= 1
+            result = client.discover(session_query, limit=safe_page_size, page=page)
+            _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
         if lowered.startswith("r ") or lowered.startswith("refine "):
             _, refined = reply.split(maxsplit=1)
@@ -1901,8 +2247,10 @@ def _run_discovery_interactive_session(*, query: str, page_size: int, initial_re
             if not session_query:
                 continue
             page = 1
-            loaded_limit = safe_page_size
-            result = client.discover(session_query, limit=loaded_limit)
+            result = client.discover(session_query, limit=safe_page_size, page=page)
+            accumulated = []
+            seen = set()
+            _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
         if lowered in {"a", "page"}:
             selection = _discovery_current_page_selection(result)
@@ -1911,14 +2259,17 @@ def _run_discovery_interactive_session(*, query: str, page_size: int, initial_re
         if lowered in {"all", "*"}:
             selection = "all"
             action = "add_loaded"
+            result = dict(result)
+            result["items"] = list(accumulated)
             break
         selection = reply
         action = "add_selection"
         break
 
-    _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=loaded_limit)
+    _annotate_discovery_session(result, query=session_query, page=page, page_size=safe_page_size, loaded_limit=safe_page_size)
     result["interactive_selection"] = selection
     result["interactive_action"] = action
+    result["visited_count"] = len(accumulated)
     return result
 
 
@@ -1927,26 +2278,35 @@ def _annotate_discovery_session(result: dict[str, Any], *, query: str, page: int
     total = len(items)
     safe_page_size = max(page_size, 1)
     safe_page = max(page, 1)
-    start = min((safe_page - 1) * safe_page_size, total)
-    end = min(start + safe_page_size, total)
-    has_previous = safe_page > 1
-    has_next = total >= loaded_limit and end >= total
+    meta = result.get("meta") if isinstance(result.get("meta"), dict) else {}
+    total_count = int(meta.get("count") or total)
+    per_page = max(1, int(meta.get("per_page") or safe_page_size))
+    # Server-page mode: result.items are already one page.
+    start = (safe_page - 1) * per_page
+    end = start + total
+    has_previous = bool(meta.get("has_previous")) if "has_previous" in meta else safe_page > 1
+    if "has_next" in meta:
+        has_next = bool(meta.get("has_next"))
+    else:
+        has_next = end < total_count and total >= min(safe_page_size, per_page)
     query_arg = shlex.quote(query)
     result["discovery_session"] = {
         "query": query,
-        "page": safe_page,
+        "page": int(meta.get("page") or safe_page),
         "page_size": safe_page_size,
         "loaded_limit": loaded_limit,
         "loaded_count": total,
+        "total_count": total_count,
         "visible_range": [start + 1 if total else 0, end],
-        "pagination_mode": "client_expand_limit",
+        "pagination_mode": "server_page",
         "has_previous": has_previous,
         "has_next": has_next,
         "commands": {
-            "next": f"mdtero discover {query_arg} --limit {loaded_limit + safe_page_size} --interactive",
+            "next": f"mdtero discover {query_arg} --limit {safe_page_size} --page {safe_page + 1}",
+            "previous": f"mdtero discover {query_arg} --limit {safe_page_size} --page {max(1, safe_page - 1)}",
             "refine": f"mdtero discover \"<refined query>\" --limit {safe_page_size} --interactive",
-            "add_current_page": f"mdtero discover {query_arg} --limit {loaded_limit} --add --select {_discovery_current_page_selection(result)} --json",
-            "add_loaded": f"mdtero discover {query_arg} --limit {loaded_limit} --add --select all --json",
+            "add_current_page": f"mdtero discover {query_arg} --limit {safe_page_size} --page {safe_page} --add --select {_discovery_current_page_selection(result)} --json",
+            "add_loaded": f"mdtero discover {query_arg} --limit {safe_page_size} --page {safe_page} --add --select all --json",
         },
     }
 
@@ -1956,11 +2316,16 @@ def _print_discovery_table(result: dict[str, Any], *, console: Console | None = 
     session = result.get("discovery_session") if isinstance(result.get("discovery_session"), dict) else {}
     items = [item for item in result.get("items") or [] if isinstance(item, dict)]
     start, end = _discovery_visible_bounds(result)
-    for index, item in enumerate(items[start:end], start=start + 1):
+    for index, item in enumerate(items[start:end], start=1):
         table.add_row(str(index), str(item.get("year") or ""), str(item.get("title") or ""), str(item.get("doi") or ""), str(item.get("source") or "openalex"))
     target = console or Console()
     if session:
-        target.print(f"Discovery: {session.get('query') or ''} · page {session.get('page')} · showing {session.get('visible_range', ['-', '-'])[0]}-{session.get('visible_range', ['-', '-'])[1]} of {session.get('loaded_count', 0)} loaded")
+        total_count = session.get("total_count")
+        visible = session.get("visible_range") or ["-", "-"]
+        total_label = f" of {total_count} total" if total_count is not None else f" of {session.get('loaded_count', 0)} loaded"
+        target.print(
+            f"Discovery: {session.get('query') or ''} · page {session.get('page')} · showing {visible[0]}-{visible[1]}{total_label}"
+        )
     target.print(table)
 
 
@@ -1968,6 +2333,9 @@ def _discovery_visible_bounds(result: dict[str, Any]) -> tuple[int, int]:
     items = [item for item in result.get("items") or [] if isinstance(item, dict)]
     session = result.get("discovery_session") if isinstance(result.get("discovery_session"), dict) else None
     if not session:
+        return 0, len(items)
+    # Server page payloads already contain only the current page; select locally by index 0..n.
+    if session.get("pagination_mode") == "server_page":
         return 0, len(items)
     page_size = max(int(session.get("page_size") or len(items) or 1), 1)
     page = max(int(session.get("page") or 1), 1)
@@ -1980,7 +2348,7 @@ def _discovery_current_page_selection(result: dict[str, Any]) -> str:
     start, end = _discovery_visible_bounds(result)
     if end <= start:
         return ""
-    return ",".join(str(index) for index in range(start + 1, end + 1))
+    return ",".join(str(index) for index in range(1, (end - start) + 1))
 
 
 def _add_discovery_results_to_project(result: dict[str, Any], *, selection: str) -> dict[str, Any]:
@@ -2477,23 +2845,70 @@ def _enrich_translate_submission(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def cmd_zotero_import(args: argparse.Namespace) -> int:
-    from .config import load_config
-    from .zotero import list_zotero_items, make_zotero_client, paper_from_zotero_item, zotero_item_skip_reason
+def cmd_zotero_collections(args: argparse.Namespace) -> int:
+    from .zotero import list_zotero_collections, make_zotero_client
 
-    cfg = load_config()
-    if args.library_id:
-        cfg.zotero.library_id = args.library_id
-    if args.library_type:
-        cfg.zotero.library_type = args.library_type
-    if args.api_key:
-        cfg.zotero.api_key = args.api_key
-    client = make_zotero_client(cfg)
+    cfg = _zotero_config_from_args(args)
+    try:
+        client = make_zotero_client(cfg)
+        collections = list_zotero_collections(client)
+    except Exception as exc:
+        payload = _zotero_failure_payload(exc, command="collections")
+        _print_result(payload, json_output=args.json)
+        return 2
+    payload = {
+        "status": "ok",
+        "collection_count": len(collections),
+        "collections": collections,
+        "action_hint": "Pick a collection with `mdtero zotero parse --collection <index|name|key> --wait --json`.",
+        "next_commands": [
+            "mdtero zotero parse --collection <index|name|key> --wait --json",
+            "mdtero zotero parse",
+        ],
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        _print_zotero_collections_table(collections)
+        Console().print("Next: mdtero zotero parse   # interactive picker")
+        Console().print("Or:   mdtero zotero parse --collection <index|name|key> --wait")
+    return 0
+
+
+def cmd_zotero_import(args: argparse.Namespace) -> int:
+    from .zotero import list_zotero_collections, list_zotero_items, make_zotero_client, paper_from_zotero_item, resolve_collection_selector, zotero_item_skip_reason
+
+    cfg = _zotero_config_from_args(args)
+    try:
+        client = make_zotero_client(cfg)
+        collections = list_zotero_collections(client)
+        collection = _resolve_zotero_collection(
+            collections,
+            getattr(args, "collection", None),
+            interactive=not bool(args.json),
+            json_output=bool(args.json),
+        )
+    except Exception as exc:
+        payload = _zotero_failure_payload(exc, command="import")
+        _print_result(payload, json_output=args.json)
+        return 2
+    if collection is None:
+        payload = {
+            "status": "failed",
+            "command": "zotero_import",
+            "reason_code": "zotero_collection_required",
+            "error_code": "zotero_collection_required",
+            "collections": collections if args.json else None,
+            "action_hint": "Pass --collection <index|name|key>, or run without --json to pick interactively.",
+            "next_commands": ["mdtero zotero collections --json", "mdtero zotero import --collection <index|name|key> --json"],
+        }
+        _print_result(payload, json_output=args.json)
+        return 2
     imported = 0
     skipped = 0
     imported_items: list[dict[str, Any]] = []
     skipped_items: list[dict[str, Any]] = []
-    for item in list_zotero_items(client, collection_id=args.collection, limit=args.limit):
+    for item in list_zotero_items(client, collection_id=str(collection["key"]), limit=args.limit):
         paper = paper_from_zotero_item(item)
         if paper is None:
             skipped += 1
@@ -2502,12 +2917,160 @@ def cmd_zotero_import(args: argparse.Namespace) -> int:
         add_paper(Path.cwd(), paper)
         imported += 1
         imported_items.append({"input": paper.input, "title": paper.title, "doi": paper.doi, "zotero_key": paper.zotero_key})
-    payload = {"imported_count": imported, "skipped_count": skipped, "imported": imported_items, "skipped": skipped_items}
+    payload = {
+        "imported_count": imported,
+        "skipped_count": skipped,
+        "collection": collection,
+        "imported": imported_items,
+        "skipped": skipped_items,
+    }
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
-        Console().print(f"Imported {imported} Zotero item(s); skipped {skipped}.")
+        Console().print(f"Imported {imported} Zotero item(s) from {collection['name']}; skipped {skipped}.")
     return 0
+
+
+def cmd_zotero_parse(args: argparse.Namespace) -> int:
+    from .zotero import export_collection_pdfs, list_zotero_collections, make_zotero_client
+
+    cfg = _zotero_config_from_args(args)
+    console = Console(stderr=True)
+    try:
+        zotero_client = make_zotero_client(cfg)
+        collections = list_zotero_collections(zotero_client)
+        collection = _resolve_zotero_collection(
+            collections,
+            getattr(args, "collection", None),
+            interactive=not bool(args.json),
+            json_output=bool(args.json),
+        )
+    except Exception as exc:
+        payload = _zotero_failure_payload(exc, command="parse")
+        _print_result(payload, json_output=args.json)
+        return 2
+    if collection is None:
+        payload = {
+            "status": "failed",
+            "command": "zotero_parse",
+            "reason_code": "zotero_collection_required",
+            "error_code": "zotero_collection_required",
+            "collections": collections,
+            "action_hint": "Pass --collection <index|name|key>, or run without --json to pick from the interactive list.",
+            "next_commands": [
+                "mdtero zotero collections --json",
+                "mdtero zotero parse --collection <index|name|key> --wait --json",
+            ],
+        }
+        _print_result(payload, json_output=True if args.json else False)
+        if not args.json:
+            _print_zotero_collections_table(collections)
+        return 2
+
+    output_dir = Path(args.output_dir).expanduser().resolve()
+    pdf_dir = output_dir / "pdfs"
+    if not args.json:
+        console.print(f"Collection: [{collection['index']}] {collection['name']} ({collection['key']})")
+        console.print(f"Exporting PDF attachments to {pdf_dir} ...")
+    export_payload = export_collection_pdfs(
+        zotero_client,
+        collection_id=str(collection["key"]),
+        output_dir=pdf_dir,
+        limit=int(args.limit or 50),
+    )
+    exported = [item for item in export_payload.get("exported") or [] if isinstance(item, dict) and item.get("path")]
+    if not exported:
+        payload = {
+            "status": "failed",
+            "command": "zotero_parse",
+            "reason_code": "zotero_collection_no_pdfs",
+            "error_code": "zotero_collection_no_pdfs",
+            "collection": collection,
+            "export": export_payload,
+            "action_hint": "This collection has no exportable PDF attachments. Sync files in Zotero desktop, or use `mdtero zotero import` for DOI/URL metadata.",
+            "next_commands": [
+                "mdtero zotero collections --json",
+                "mdtero zotero import --collection <index|name|key> --json",
+            ],
+        }
+        _print_result(payload, json_output=args.json)
+        return 2
+
+    api = MdteroClient(config=cfg)
+    items: list[dict[str, Any]] = []
+    download_artifact = "" if bool(getattr(args, "no_download", False)) else str(getattr(args, "download", "paper_md") or "").strip()
+    for exported_item in exported:
+        path = Path(str(exported_item["path"]))
+        source_input = str(exported_item.get("doi") or exported_item.get("url") or path.name)
+        submission = api.upload(path, source_input=source_input, source_doi=exported_item.get("doi"))
+        _enrich_parse_submission(submission)
+        paper = paper_from_submission(source_input, submission, source="zotero-attachment")
+        paper.title = str(exported_item.get("title") or paper.title or "") or None
+        paper.doi = str(exported_item.get("doi") or paper.doi or "") or None
+        paper.zotero_key = str(exported_item.get("parent_key") or "") or None
+        paper.source = "zotero"
+        add_paper(Path.cwd(), paper)
+        row: dict[str, Any] = {
+            "title": exported_item.get("title"),
+            "doi": exported_item.get("doi"),
+            "zotero_key": exported_item.get("parent_key"),
+            "attachment_key": exported_item.get("attachment_key"),
+            "pdf_path": str(path),
+            "pdf_source": exported_item.get("source"),
+            "task_id": submission.get("task_id"),
+            "status": submission.get("status"),
+            "submission": submission,
+        }
+        if args.wait and submission.get("task_id"):
+            task = _wait_for_task(api, str(submission["task_id"]), args=args)
+            _enrich_task_status(task)
+            if task.get("status") != "timeout":
+                update_task(Path.cwd(), task)
+            _merge_waited_task_into_submission(submission, task)
+            row["status"] = task.get("status") or row["status"]
+            row["final_task"] = task
+            if (
+                download_artifact
+                and str(task.get("status") or "") in {"succeeded", "completed"}
+                and task.get("task_id")
+            ):
+                output_dir.mkdir(parents=True, exist_ok=True)
+                downloaded = api.download(str(task["task_id"]), download_artifact, output_dir)
+                row["download"] = {
+                    "artifact": download_artifact,
+                    "path": str(downloaded.path) if getattr(downloaded, "path", None) else None,
+                    "filename": getattr(downloaded, "filename", None),
+                    "status": "downloaded",
+                }
+        items.append(row)
+
+    succeeded = sum(1 for item in items if str(item.get("status") or "") in {"succeeded", "completed"})
+    payload = {
+        "status": "succeeded" if succeeded == len(items) and items else ("partial" if succeeded else "failed"),
+        "command": "zotero_parse",
+        "collection": collection,
+        "export": export_payload,
+        "parsed_count": len(items),
+        "succeeded_count": succeeded,
+        "items": items,
+        "output_dir": str(output_dir),
+        "next_commands": [
+            "mdtero zotero sync --json",
+            f"mdtero download <task-id> {download_artifact or 'paper_md'} --output-dir {output_dir}",
+        ],
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+    else:
+        console.print(
+            f"Parsed {succeeded}/{len(items)} PDF attachment(s) from {collection['name']} → {output_dir}"
+        )
+        for item in items:
+            console.print(
+                f"- {item.get('status')}: {item.get('title') or item.get('doi') or item.get('pdf_path')} "
+                f"({item.get('task_id')})"
+            )
+    return 0 if payload["status"] == "succeeded" else 2
 
 
 def cmd_zotero_sync(_args: argparse.Namespace) -> int:
@@ -2523,6 +3086,92 @@ def cmd_zotero_sync(_args: argparse.Namespace) -> int:
     else:
         Console().print(f"Synced {payload['synced_count']} Zotero item(s); skipped {payload['skipped_count']}.")
     return 0
+
+
+def _zotero_config_from_args(args: argparse.Namespace):
+    from .config import load_config
+
+    cfg = load_config()
+    if getattr(args, "library_id", None):
+        cfg.zotero.library_id = args.library_id
+    if getattr(args, "library_type", None):
+        cfg.zotero.library_type = args.library_type
+    if getattr(args, "api_key", None):
+        cfg.zotero.api_key = args.api_key
+    return cfg
+
+
+def _zotero_failure_payload(exc: Exception, *, command: str) -> dict[str, Any]:
+    message = str(exc)
+    reason = "zotero_unavailable"
+    if "Configure Zotero" in message or "API_KEY" in message or "library" in message.lower():
+        reason = "zotero_not_configured"
+    elif "pyzotero" in message:
+        reason = "pyzotero_missing"
+    return {
+        "status": "failed",
+        "command": f"zotero_{command}",
+        "reason_code": reason,
+        "error_code": reason,
+        "message": message,
+        "action_hint": (
+            "Run `mdtero config zotero` and ensure `pyzotero` is installed (`uv tool install mdtero` / pip install pyzotero)."
+        ),
+        "next_commands": ["mdtero config zotero", "mdtero doctor --json", "mdtero zotero collections --json"],
+    }
+
+
+def _print_zotero_collections_table(collections: list[dict[str, Any]]) -> None:
+    from rich.table import Table
+
+    table = Table(title="Zotero collections")
+    table.add_column("#", justify="right")
+    table.add_column("Name")
+    table.add_column("Key")
+    table.add_column("Items", justify="right")
+    for item in collections:
+        table.add_row(
+            str(item.get("index") or ""),
+            str(item.get("name") or ""),
+            str(item.get("key") or ""),
+            str(item.get("num_items") or 0),
+        )
+    Console(stderr=True).print(table)
+
+
+def _resolve_zotero_collection(
+    collections: list[dict[str, Any]],
+    selector: str | None,
+    *,
+    interactive: bool,
+    json_output: bool,
+) -> dict[str, Any] | None:
+    from .zotero import resolve_collection_selector
+
+    cleaned = str(selector or "").strip()
+    if cleaned:
+        match = resolve_collection_selector(collections, cleaned)
+        if match is not None:
+            return match
+        if not interactive or json_output:
+            raise RuntimeError(
+                f"Zotero collection not found or not unique: {cleaned!r}. "
+                "Use `mdtero zotero collections` and pass an index, exact name, or key."
+            )
+    if not interactive or json_output:
+        return None
+    if not collections:
+        raise RuntimeError("No Zotero collections found in this library.")
+    _print_zotero_collections_table(collections)
+    console = Console(stderr=True)
+    console.print("Enter collection number, exact name, unique name substring, or key.")
+    reply = Prompt.ask("Zotero collection", default="", console=console).strip()
+    if not reply:
+        return None
+    match = resolve_collection_selector(collections, reply)
+    if match is None:
+        raise RuntimeError(f"Zotero collection not found or not unique: {reply!r}.")
+    return match
 
 
 def cmd_rag_build(_args: argparse.Namespace) -> int:
@@ -3000,6 +3649,114 @@ def _rag_no_succeeded_tasks_payload(state: Any, *, command: str, question: str |
         payload["question"] = question
         payload["answer"] = None
     return payload
+
+
+def _parse_content_target(raw: str) -> tuple[int, int | None]:
+    text = str(raw or "").strip()
+    if not text:
+        raise ValueError("document target is required")
+    offset: int | None = None
+    if "@" in text:
+        left, right = text.rsplit("@", 1)
+        text = left.strip()
+        if right.strip():
+            offset = int(right.strip())
+    lowered = text.lower()
+    if lowered.startswith("mdtero-doc-"):
+        text = text.split("-", 2)[-1]
+    document_id = int(str(text).strip())
+    if document_id <= 0:
+        raise ValueError("document_id must be a positive integer")
+    return document_id, offset
+
+
+def cmd_content(args: argparse.Namespace) -> int:
+    console = Console()
+    json_output = bool(getattr(args, "json", False))
+    try:
+        document_id, target_offset = _parse_content_target(str(args.target))
+    except Exception as exc:
+        payload = {
+            "status": "failed",
+            "command": "content",
+            "reason_code": "invalid_document_target",
+            "error_code": "invalid_document_target",
+            "message": str(exc),
+            "action_hint": "Pass a document_id from RAG citations, or `mdtero-doc-<id>@<offset>`.",
+            "next_commands": ['mdtero rag query "<question>" --build-if-needed --json'],
+        }
+        _print_result(redact_sensitive_payload(payload), json_output=json_output)
+        return 1
+
+    offset = int(args.offset) if getattr(args, "offset", None) is not None else (target_offset or 0)
+    limit = max(1, min(int(getattr(args, "limit", 2000) or 2000), 8192))
+    root = Path.cwd()
+    try:
+        state = load_project(root)
+    except Exception:
+        state = None
+    project_id = str(getattr(args, "project_id", None) or (state.server_project_id if state else "") or "").strip()
+    if not project_id:
+        payload = {
+            "status": "failed",
+            "command": "content",
+            "reason_code": "project_not_linked",
+            "error_code": "project_not_linked",
+            "action_hint": "Bind a server project first (`mdtero rag query ... --build-if-needed`) or pass --project-id.",
+            "next_commands": ['mdtero rag query "<question>" --build-if-needed --json', "mdtero project status --json"],
+        }
+        _print_result(redact_sensitive_payload(payload), json_output=json_output)
+        return 1
+
+    client = MdteroClient()
+    try:
+        result = client.document_content(
+            project_id,
+            document_id,
+            offset=offset,
+            limit=limit,
+            line_start=getattr(args, "line_start", None),
+            line_end=getattr(args, "line_end", None),
+        )
+    except Exception as exc:
+        payload = {
+            "status": "failed",
+            "command": "content",
+            "reason_code": "document_content_failed",
+            "error_code": "document_content_failed",
+            "project_id": project_id,
+            "document_id": document_id,
+            "offset": offset,
+            "message": str(exc),
+            "action_hint": "Confirm the document is imported into this project and the offset comes from a RAG citation.",
+            "next_commands": ['mdtero rag query "<question>" --build-if-needed --json', "mdtero project status --json"],
+        }
+        if isinstance(exc, MdteroApiError):
+            payload.update({k: v for k, v in (exc.payload or {}).items() if k not in payload})
+        _print_result(redact_sensitive_payload(payload), json_output=json_output)
+        return 1
+
+    result.setdefault("command", "content")
+    result.setdefault("project_id", project_id)
+    if json_output:
+        _print_result(redact_sensitive_payload(result), json_output=True)
+        return 0
+
+    citation = result.get("citation") if isinstance(result.get("citation"), dict) else {}
+    doc_id = str(result.get("doc_id") or citation.get("doc_id") or f"mdtero-doc-{document_id}")
+    used_offset = citation.get("offset", result.get("offset", offset))
+    console.print(f"[bold]{doc_id}@{used_offset}[/bold]  project={project_id}")
+    text = str(result.get("text") or "")
+    if text:
+        console.print(text)
+    else:
+        console.print("[dim](empty slice)[/dim]")
+    if result.get("more") and result.get("next_offset") is not None:
+        console.print(
+            f"[dim]more=true next_offset={result.get('next_offset')}; "
+            f"continue with `mdtero content {doc_id}@{result.get('next_offset')} --limit {limit}`[/dim]"
+        )
+    return 0
 
 
 def cmd_rag_status(args: argparse.Namespace) -> int:

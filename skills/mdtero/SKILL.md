@@ -101,7 +101,7 @@ For a research-question → cited review workflow, follow the cookbook skill at 
 1. `mdtero discover "<question>" --limit 20 --json` and add selected DOIs to a project
 2. `mdtero project parse --wait --timeout 600 --json` (prefer `source_format_family` in `xml`/`html`/`epub`; reject `abstract_only`/`partial_fulltext` as full-text evidence)
 3. `mdtero rag query "<question>" --build-if-needed --json`
-4. Expand high-scoring citations with `GET /api/v1/projects/{id}/documents/{document_id}/content?offset={offset}&limit=2000`
+4. Expand high-scoring citations with `mdtero content mdtero-doc-<id>@<offset> --json` (or the documents content API)
 5. Write the review citing every claim as `[doc_id@offset]`; do not invent references outside `citations` / content slices
 
 Preserve `literature_review_playbook` and `citation_contract.locator_fields` from RAG responses when handing off to another agent.
