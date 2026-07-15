@@ -1,10 +1,10 @@
 """Public Python client for Mdtero."""
 
-from .client import MdteroClient
-from .config import MdteroConfig, load_config
-from .core import ArtifactRef, PaperChunk, PaperDocument, ProviderResult, WorkflowStep
+from __future__ import annotations
 
-__version__ = "0.2.0a11"
+from typing import Any
+
+__version__ = "0.2.0a12"
 
 __all__ = [
     "ArtifactRef",
@@ -17,3 +17,23 @@ __all__ = [
     "__version__",
     "load_config",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "MdteroClient":
+        from .client import MdteroClient
+
+        return MdteroClient
+    if name == "MdteroConfig":
+        from .config import MdteroConfig
+
+        return MdteroConfig
+    if name == "load_config":
+        from .config import load_config
+
+        return load_config
+    if name in {"ArtifactRef", "PaperChunk", "PaperDocument", "ProviderResult", "WorkflowStep"}:
+        from . import core
+
+        return getattr(core, name)
+    raise AttributeError(f"module 'mdtero' has no attribute {name!r}")
