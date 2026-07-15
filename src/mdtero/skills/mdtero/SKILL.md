@@ -50,7 +50,8 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
 - parse a text file of DOI/URL targets and download Markdown: `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`
 - search discovery: `mdtero discover "<query>" --json`; unquoted multi-word queries are also accepted by the CLI
-- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive` (`n`/`p` page, `r <query>` refines, numbers add selections, `a` adds the current page)
+- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive` (`n`/`p` page via server OpenAlex page, `r <query>` refines, numbers add selections, `a` adds the current page)
+- non-interactive paging: `mdtero discover "<query>" --limit 5 --page 2 --json`
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3 --json`
 - poll status: `mdtero status <task-id> --wait --timeout 300 --json`
 - download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`; downloads use metadata-based filenames, append `.low_quality.md` for low-confidence Markdown, and update `manifest.csv`
@@ -92,6 +93,18 @@ If `agent_briefing` or the dashboard API key dialog provides `dashboard_setup_ha
 Prefer MCP tools for multi-step agent work when `mdtero mcp serve` is already running. Prefer CLI commands when the user is reading along in a terminal, when a file path must be selected manually, or when browser-extension handoff copy should remain visible to the user.
 
 The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.
+
+## Literature Review Agent
+
+For a research-question → cited review workflow, follow the cookbook skill at `https://api.mdtero.com/skills/mdtero-literature-review.md`:
+
+1. `mdtero discover "<question>" --limit 20 --json` and add selected DOIs to a project
+2. `mdtero project parse --wait --timeout 600 --json` (prefer `source_format_family` in `xml`/`html`/`epub`; reject `abstract_only`/`partial_fulltext` as full-text evidence)
+3. `mdtero rag query "<question>" --build-if-needed --json`
+4. Expand high-scoring citations with `GET /api/v1/projects/{id}/documents/{document_id}/content?offset={offset}&limit=2000`
+5. Write the review citing every claim as `[doc_id@offset]`; do not invent references outside `citations` / content slices
+
+Preserve `literature_review_playbook` and `citation_contract.locator_fields` from RAG responses when handing off to another agent.
 
 ## Output Rule
 
