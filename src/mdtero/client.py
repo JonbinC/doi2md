@@ -91,8 +91,22 @@ class MdteroClient:
         return bool(payload.get("connected"))
 
     def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+        from .acquisition import AcquisitionError
+        from .extension_handoff import build_extension_handoff, classify_acquisition_path
+
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         route = self.route(input_value)
+        if classify_acquisition_path(route) == "extension_required":
+            handoff = build_extension_handoff(
+                input_value=input_value,
+                route=route,
+                reason_code="browser_extension_required",
+            )
+            raise AcquisitionError(
+                "browser_extension_required",
+                str(handoff.get("action_hint") or "Use the Mdtero browser extension for this route."),
+                diagnostics={"route": route, "extension_handoff": handoff},
+            )
         relay_connected = None
         if not local_egress_is_campus_outlet(config=self.config):
             relay_connected = self.relay_connected()
@@ -102,7 +116,12 @@ class MdteroClient:
             config=self.config,
             relay_connected=relay_connected,
         ):
-            artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0), config=self.config)
+            try:
+                artifact = acquire_from_route(route, input_value, timeout=min(self.timeout, 45.0), config=self.config)
+            except AcquisitionError as exc:
+                diagnostics = dict(exc.diagnostics or {})
+                diagnostics.setdefault("route", route)
+                raise AcquisitionError(exc.reason_code, exc.action_hint, diagnostics=diagnostics) from exc
             acquisition = artifact.to_dict()
             try:
                 result = self.upload_acquired(artifact, source_input=input_value)
@@ -237,10 +256,10 @@ class MdteroClient:
             jitter = random.uniform(-0.5, 0.5)
             time.sleep(max(0.25, poll_interval + backoff + jitter))
 
-    def discover(self, query: str, *, limit: int = 10) -> dict[str, Any]:
+    def discover(self, query: str, *, limit: int = 10, page: int = 1) -> dict[str, Any]:
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         try:
-            result = self._server_discovery_search(query, limit=limit)
+            result = self._server_discovery_search(query, limit=limit, page=page)
         except (MdteroApiError, httpx.HTTPError, ValueError) as exc:
             raise DiscoveryError(_discovery_failure_payload(exc)) from exc
         result.setdefault("source", "openalex_server")
@@ -250,8 +269,12 @@ class MdteroClient:
         }
         return result
 
-    def _server_discovery_search(self, query: str, *, limit: int) -> dict[str, Any]:
-        return self._request("GET", "/api/v1/discovery/search", params={"query": query, "limit": limit})
+    def _server_discovery_search(self, query: str, *, limit: int, page: int = 1) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/discovery/search",
+            params={"query": query, "limit": limit, "page": max(1, int(page or 1))},
+        )
 
     def translate_text(self, markdown: str, *, filename: str = "paper.md", target_language: str = "zh-CN") -> dict[str, Any]:
         return self._request(
@@ -335,6 +358,30 @@ class MdteroClient:
 
     def rag_status(self, project_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/projects/{project_id}/rag/status")
+
+    def document_content(
+        self,
+        project_id: str,
+        document_id: int | str,
+        *,
+        offset: int = 0,
+        limit: int = 2000,
+        line_start: int | None = None,
+        line_end: int | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "offset": max(0, int(offset or 0)),
+            "limit": max(1, min(int(limit or 2000), 8192)),
+        }
+        if line_start is not None:
+            params["line_start"] = int(line_start)
+        if line_end is not None:
+            params["line_end"] = int(line_end)
+        return self._request(
+            "GET",
+            f"/api/v1/projects/{project_id}/documents/{document_id}/content",
+            params=params,
+        )
 
     def usage(self) -> dict[str, Any]:
         return self._request("GET", "/me/usage")
