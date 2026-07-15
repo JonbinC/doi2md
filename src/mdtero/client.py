@@ -290,28 +290,62 @@ class MdteroClient:
         )
 
     def translate_task(self, task_id: str, *, target_language: str = "zh-CN", artifact: str = "paper_md") -> dict[str, Any]:
+        # Prefer server-side source_task_id so large papers never re-upload through the API gateway.
+        artifact_key = str(artifact or "paper_md").strip() or "paper_md"
+        try:
+            return self._request(
+                "POST",
+                "/api/v1/tasks/translate",
+                json={
+                    "source_task_id": str(task_id).strip(),
+                    "source_artifact": artifact_key,
+                    "target_language": target_language,
+                    "mode": "full",
+                },
+            )
+        except MdteroApiError as exc:
+            payload = exc.payload if isinstance(exc.payload, dict) else {}
+            reason = str(payload.get("reason_code") or payload.get("error_code") or "").strip()
+            status_code = payload.get("status_code")
+            if status_code in {401, 402, 403, 413}:
+                raise
+            if reason in {
+                "translation_source_not_found",
+                "source_task_not_succeeded",
+                "translation_source_task_not_found",
+                "translation_source_too_long",
+            }:
+                raise
+            # Older APIs ignore source_task_id and return translation_source_required; fall back.
+            if reason not in {"translation_source_required", "api_request_failed", "validation_error"} and status_code not in {
+                404,
+                405,
+                422,
+            }:
+                raise
+
         task = self.task(task_id)
-        source_path = translation_source_path_from_task(task, artifact=artifact)
+        source_path = translation_source_path_from_task(task, artifact=artifact_key)
         if source_path:
             return self.translate_server_path(source_path, target_language=target_language)
 
-        downloadable = translation_source_download_artifact_from_task(task, artifact=artifact)
+        downloadable = translation_source_download_artifact_from_task(task, artifact=artifact_key)
         if not downloadable:
             raise ValueError("translation_source_artifact_missing")
-        artifact_key = str(downloadable.get("artifact") or artifact or "paper_md").strip() or "paper_md"
-        response = self._raw_request("GET", f"/api/v1/tasks/{task_id}/download/{artifact_key}")
+        download_key = str(downloadable.get("artifact") or artifact_key).strip() or artifact_key
+        response = self._raw_request("GET", f"/api/v1/tasks/{task_id}/download/{download_key}")
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
+            if getattr(exc, "response", None) is not None and exc.response.status_code == 404:
                 raise ValueError("translation_source_artifact_missing") from exc
             raise
         markdown = response.text
         if not markdown.strip():
             raise ValueError("translation_source_artifact_empty")
-        filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact_key)
+        filename = _filename_from_disposition(response.headers.get("content-disposition"), download_key)
         descriptor_filename = str(downloadable.get("filename") or "").strip()
-        if filename == f"{artifact_key}.bin" and descriptor_filename:
+        if filename == f"{download_key}.bin" and descriptor_filename:
             filename = descriptor_filename
         return self.translate_text(markdown, filename=filename, target_language=target_language)
 
@@ -528,6 +562,28 @@ def api_failure_payload(exc: httpx.HTTPStatusError, *, method: str, path: str) -
         reason_code = "authentication_required" if response.status_code == 401 else "access_forbidden"
         action_hint = "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for headless environments, then rerun `mdtero doctor --json`."
         next_commands = ["mdtero setup --api-key --json", "mdtero doctor --json"]
+    elif response.status_code == 413:
+        nested_detail = detail.get("detail") if isinstance(detail, dict) else detail
+        if isinstance(nested_detail, dict):
+            error_code = str(nested_detail.get("error_code") or "translation_source_too_long")
+            reason_code = str(nested_detail.get("reason_code") or error_code)
+            action_hint = str(
+                nested_detail.get("action_hint")
+                or "The translation source exceeds the server character limit."
+            )
+            nested_commands = [
+                str(command).strip() for command in nested_detail.get("next_commands") or [] if str(command).strip()
+            ]
+            if nested_commands:
+                next_commands = nested_commands
+        elif isinstance(nested_detail, str) and "translation source too long" in nested_detail.lower():
+            error_code = "translation_source_too_long"
+            reason_code = "translation_source_too_long"
+            action_hint = "This paper exceeds the translation character limit. Retry after the API limit is raised, or translate a shorter markdown excerpt."
+        else:
+            error_code = "payload_too_large"
+            reason_code = "payload_too_large"
+            action_hint = "The request payload is too large for the API gateway. Prefer `mdtero translate <task-id>` so the server reads the artifact in place."
     return {
         "status": "failed",
         "error_code": error_code,
