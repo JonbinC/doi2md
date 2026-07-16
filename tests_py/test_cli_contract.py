@@ -45,6 +45,7 @@ from mdtero.projects import (
     project_pending_papers,
     project_task_ids,
     remove_paper,
+    save_project,
     update_paper_submission,
     update_task,
 )
@@ -6490,7 +6491,19 @@ def test_tui_dashboard_model_guides_login_and_setup(tmp_path: Path):
     assert model["next_steps"][:2] == ["mdtero setup", "mdtero doctor --json"]
     assert "mdtero setup --api-key --json" in model["next_steps"]
     assert model["operator_summary"][0] == {"area": "Account", "state": "missing", "detail": "run mdtero setup"}
-    assert [item["key"] for item in model["shortcuts"]] == ["r", "d", "p", "g", "m", "q"]
+    assert [item["key"] for item in model["shortcuts"]] == ["r", "d", "p", "g", "m", "1-5", "q"]
+    assert [item["action"] for item in model["shortcuts"]] == [
+        "refresh_dashboard",
+        "run_doctor",
+        "run_parse",
+        "run_rag_ask",
+        "run_mcp_briefing",
+        "show_tab",
+        "quit",
+    ]
+    assert model["guide"]["phase"] == "authenticate"
+    assert model["guide"]["focus_tab"] == "guide"
+    assert model["guide"]["wizard_mode"] is True
     assert model["command_palette"][0] == {
         "area": "Setup",
         "use": "Authenticate this workstation with browser OAuth",
@@ -6611,6 +6624,9 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert model["launch_summary"]["primary_path"] == "build_rag"
     assert model["launch_summary"]["primary_group"] == "RAG + MCP"
     assert model["launch_summary"]["primary_next_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
+    assert model["guide"]["phase"] == "build_rag"
+    assert model["guide"]["focus_tab"] == "rag"
+    assert model["guide"]["primary_binding"] == "g"
     assert any(item["id"] == "rag" and item["ready"] is False for item in model["launch_summary"]["blocked_checks"])
     assert "mdtero mcp briefing --json" in model["launch_summary"]["recommended_flow"]
     launch_groups = {group["label"]: group for group in model["launch_bundle"]["groups"]}
@@ -6632,6 +6648,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     console.print(rendered)
     output = console.export_text()
     assert "Mdtero Control Console" in output
+    assert "Workspace Guide" in output
     assert "Agent Workflow" in output
     assert "First MCP tool" in output
     assert "RAG coverage" in output
@@ -6692,11 +6709,63 @@ def test_tui_app_exposes_operator_shortcuts():
     bindings = set(MdteroTui.BINDINGS)
 
     assert ("r", "refresh_dashboard", "Refresh") in bindings
-    assert ("d", "doctor", "Doctor") in bindings
-    assert ("p", "parse_pending", "Parse") in bindings
-    assert ("g", "rag_status", "RAG") in bindings
-    assert ("m", "mcp_briefing", "MCP") in bindings
+    assert ("d", "run_doctor", "Doctor") in bindings
+    assert ("p", "run_parse", "Parse") in bindings
+    assert ("g", "run_rag_ask", "Ask RAG") in bindings
+    assert ("m", "run_mcp_briefing", "MCP") in bindings
+    assert ("1", "show_tab('guide')", "Guide") in bindings
+    assert ("2", "show_tab('papers')", "Papers") in bindings
+    assert ("3", "show_tab('tasks')", "Tasks") in bindings
+    assert ("4", "show_tab('rag')", "RAG") in bindings
+    assert ("5", "show_tab('agents')", "Agents") in bindings
     assert ("q", "quit", "Quit") in bindings
+
+
+def test_tui_guide_advances_through_workflow_phases(tmp_path: Path):
+    init_project(tmp_path, name="tui-guide")
+    unauth = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key=None), agent_root=tmp_path)
+    assert unauth["guide"]["phase"] == "authenticate"
+    assert unauth["guide"]["focus_tab"] == "guide"
+    assert unauth["guide"]["wizard_mode"] is True
+
+    auth_empty = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path)
+    assert auth_empty["guide"]["phase"] == "add_papers"
+    assert auth_empty["guide"]["focus_tab"] == "papers"
+
+    add_paper(tmp_path, PaperRecord(input="10.1000/pending", status="pending"))
+    pending = build_dashboard_model(project_root=tmp_path, config=MdteroConfig(api_key="key"), agent_root=tmp_path)
+    assert pending["guide"]["phase"] == "parse_tasks"
+    assert pending["guide"]["focus_tab"] == "tasks"
+    assert pending["guide"]["primary_binding"] == "p"
+
+    bind_server_project(tmp_path, "42")
+    add_paper(tmp_path, PaperRecord(input="10.1000/done", task_id="task-done", status="succeeded", artifact="paper_md"))
+    state = load_project(tmp_path)
+    state.papers = [paper for paper in state.papers if paper.status == "succeeded"]
+    save_project(tmp_path, state)
+    rag_build = build_dashboard_model(
+        project_root=tmp_path,
+        config=MdteroConfig(api_key="key"),
+        agent_root=tmp_path,
+        rag_status_fetcher=lambda _project_id: {"status": "not_ready", "reason_code": "rag_index_not_built"},
+    )
+    assert rag_build["guide"]["phase"] == "build_rag"
+    assert rag_build["guide"]["focus_tab"] == "rag"
+
+    ready = build_dashboard_model(
+        project_root=tmp_path,
+        config=MdteroConfig(api_key="key"),
+        agent_root=tmp_path,
+        rag_status_fetcher=lambda _project_id: {"status": "ready", "reason_code": "indexed", "summary": {"chunk_count": 3, "embedded_count": 3}},
+    )
+    assert ready["guide"]["phase"] == "query_and_agents"
+    assert ready["guide"]["wizard_mode"] is False
+    rendered = render_dashboard_text(ready)
+    from rich.console import Console
+
+    console = Console(record=True, width=120)
+    console.print(rendered)
+    assert "Workspace Guide" in console.export_text()
 
 
 def test_tui_dashboard_model_reports_installed_agent_skills(tmp_path: Path):

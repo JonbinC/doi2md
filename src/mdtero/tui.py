@@ -8,8 +8,10 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from textual import work
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header, Static
+from textual.containers import Vertical
+from textual.widgets import Footer, Header, Input, RichLog, Static, TabbedContent, TabPane
 
 from .agent import detect_target_status
 from .client import MdteroClient
@@ -102,17 +104,28 @@ def build_dashboard_model(
         launch_summary=launch_summary,
         next_steps=next_steps,
     )
+    health = _health_payload(
+        cfg=cfg,
+        project=project,
+        rag=rag,
+        detected_agents=detected_agents,
+        installed_agents=installed_agents,
+        pending_agent_installs=pending_agent_installs,
+        handoff=handoff,
+        next_steps=next_steps,
+    )
+    project_payload = _project_payload(project, pending=pending, running=running, succeeded=succeeded, failed=failed)
+    guide = _guide_payload(
+        health=health,
+        project=project_payload,
+        rag=rag,
+        next_steps=next_steps,
+        onboarding_checklist=onboarding_checklist if isinstance(onboarding_checklist, list) else [],
+        authenticated=cfg.is_authenticated,
+    )
     return {
-        "health": _health_payload(
-            cfg=cfg,
-            project=project,
-            rag=rag,
-            detected_agents=detected_agents,
-            installed_agents=installed_agents,
-            pending_agent_installs=pending_agent_installs,
-            handoff=handoff,
-            next_steps=next_steps,
-        ),
+        "health": health,
+        "guide": guide,
         "account": {
             "api_base_url": cfg.api_base_url,
             "authenticated": cfg.is_authenticated,
@@ -126,7 +139,7 @@ def build_dashboard_model(
             "configure_command": "mdtero config academic",
             "application_links": build_academic_onboarding_summary(cfg, path=config_path(), saved=False)["application_links"],
         },
-        "project": _project_payload(project, pending=pending, running=running, succeeded=succeeded, failed=failed),
+        "project": project_payload,
         "rag": rag,
         "zotero": {
             "configured": bool(cfg.zotero.library_id and cfg.zotero.api_key),
@@ -184,6 +197,7 @@ def build_dashboard_model(
 
 def render_dashboard_text(model: dict[str, Any]) -> Group:
     return Group(
+        _guide_panel(model),
         _hero_panel(model),
         _agent_workflow_panel(model),
         _onboarding_panel(model),
@@ -202,47 +216,236 @@ def render_dashboard_text(model: dict[str, Any]) -> Group:
 
 
 class MdteroTui(App):
+    """Workflow-partitioned Textual shell with guided next actions."""
+
+    TITLE = "Mdtero"
     BINDINGS = [
         ("r", "refresh_dashboard", "Refresh"),
-        ("d", "doctor", "Doctor"),
-        ("p", "parse_pending", "Parse"),
-        ("g", "rag_status", "RAG"),
-        ("m", "mcp_briefing", "MCP"),
+        ("d", "run_doctor", "Doctor"),
+        ("p", "run_parse", "Parse"),
+        ("g", "run_rag_ask", "Ask RAG"),
+        ("m", "run_mcp_briefing", "MCP"),
+        ("1", "show_tab('guide')", "Guide"),
+        ("2", "show_tab('papers')", "Papers"),
+        ("3", "show_tab('tasks')", "Tasks"),
+        ("4", "show_tab('rag')", "RAG"),
+        ("5", "show_tab('agents')", "Agents"),
         ("q", "quit", "Quit"),
     ]
 
     CSS = """
-    Screen { background: #fcf7f1; color: #2f1a12; }
-    #dashboard { padding: 1 2; }
+    Screen { background: #161410; color: #f4efe6; }
+    Header { background: #1f1a14; color: #f4efe6; }
+    Footer { background: #1f1a14; }
+    #workspace { height: 1fr; padding: 0 1; }
+    #action-log { height: 8; border: solid #3d3428; margin: 0 1 1 1; }
+    .pane-body { padding: 1; height: 1fr; }
+    #rag-question { margin-bottom: 1; }
+    TabbedContent { height: 1fr; }
+    Tabs { background: #1f1a14; }
     """
 
     def __init__(self, *, project_root: Path | None = None) -> None:
         super().__init__()
-        self.project_root = project_root or Path.cwd()
-
-    def _build_renderable(self) -> Group:
-        return render_dashboard_text(build_dashboard_model(project_root=self.project_root))
+        self.project_root = (project_root or Path.cwd()).expanduser().resolve()
+        self._model: dict[str, Any] = {}
+        self._busy = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static(self._build_renderable(), id="dashboard")
+        with Vertical(id="workspace"):
+            with TabbedContent(id="main-tabs"):
+                with TabPane("1 Guide", id="guide"):
+                    yield Static(id="pane-guide", classes="pane-body")
+                with TabPane("2 Papers", id="papers"):
+                    yield Static(id="pane-papers", classes="pane-body")
+                with TabPane("3 Tasks", id="tasks"):
+                    yield Static(id="pane-tasks", classes="pane-body")
+                with TabPane("4 RAG", id="rag"):
+                    yield Input(
+                        placeholder='Ask the project corpus, e.g. What are the strongest findings?',
+                        id="rag-question",
+                    )
+                    yield Static(id="pane-rag", classes="pane-body")
+                with TabPane("5 Agents", id="agents"):
+                    yield Static(id="pane-agents", classes="pane-body")
+            yield RichLog(id="action-log", highlight=True, markup=True)
         yield Footer()
 
+    def on_mount(self) -> None:
+        self._reload_model(notify=False)
+        guide = self._model.get("guide") if isinstance(self._model.get("guide"), dict) else {}
+        focus_tab = str(guide.get("focus_tab") or "guide")
+        tabs = self.query_one("#main-tabs", TabbedContent)
+        tabs.active = focus_tab
+        self.query_one("#action-log", RichLog).write(
+            f"[bold]Mdtero workspace[/] · phase={guide.get('phase') or '-'} · next={guide.get('primary_label') or '-'}"
+        )
+
+    def action_show_tab(self, tab_id: str) -> None:
+        self.query_one("#main-tabs", TabbedContent).active = tab_id
+
     def action_refresh_dashboard(self) -> None:
-        self.query_one("#dashboard", Static).update(self._build_renderable())
-        self.notify("Dashboard refreshed")
+        self._reload_model(notify=True)
 
-    def action_doctor(self) -> None:
-        self.notify("mdtero doctor --json")
+    def action_run_doctor(self) -> None:
+        self._run_action("doctor", self._action_doctor)
 
-    def action_parse_pending(self) -> None:
-        self.notify("mdtero project parse --wait --timeout 300 --json")
+    def action_run_parse(self) -> None:
+        self._run_action("parse", self._action_parse_pending)
 
-    def action_rag_status(self) -> None:
-        self.notify('Try: mdtero rag ask "What are the strongest findings?"')
+    def action_run_rag_ask(self) -> None:
+        self.query_one("#main-tabs", TabbedContent).active = "rag"
+        question = self.query_one("#rag-question", Input).value.strip()
+        if not question:
+            question = "What are the strongest findings?"
+            self.query_one("#rag-question", Input).value = question
+        self._run_action("rag", lambda: self._action_rag_ask(question))
 
-    def action_mcp_briefing(self) -> None:
-        self.notify("mdtero mcp briefing --json")
+    def action_run_mcp_briefing(self) -> None:
+        self._run_action("mcp", self._action_mcp_briefing)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "rag-question":
+            return
+        question = event.value.strip() or "What are the strongest findings?"
+        self._run_action("rag", lambda: self._action_rag_ask(question))
+
+    def _reload_model(self, *, notify: bool) -> None:
+        self._model = build_dashboard_model(project_root=self.project_root)
+        self._paint_panes()
+        if notify:
+            self.notify("Workspace refreshed")
+
+    def _paint_panes(self) -> None:
+        model = self._model
+        self.query_one("#pane-guide", Static).update(_render_guide_tab(model))
+        self.query_one("#pane-papers", Static).update(_render_papers_tab(model))
+        self.query_one("#pane-tasks", Static).update(_render_tasks_tab(model))
+        self.query_one("#pane-rag", Static).update(_render_rag_tab(model))
+        self.query_one("#pane-agents", Static).update(_render_agents_tab(model))
+
+    def _log(self, message: str) -> None:
+        self.query_one("#action-log", RichLog).write(message)
+
+    def _run_action(self, name: str, fn: Any) -> None:
+        if self._busy:
+            self.notify("Another action is still running")
+            return
+        self._busy = True
+        self._log(f"[yellow]▶ {name}[/]")
+        self._execute_action(name, fn)
+
+    @work(thread=True)
+    def _execute_action(self, name: str, fn: Any) -> None:
+        try:
+            result = fn()
+            summary = _action_summary(name, result)
+            self.call_from_thread(self._on_action_done, name, True, summary, result)
+        except Exception as exc:
+            self.call_from_thread(self._on_action_done, name, False, f"{exc.__class__.__name__}: {exc}", None)
+
+    def _on_action_done(self, name: str, ok: bool, summary: str, result: Any) -> None:
+        self._busy = False
+        style = "green" if ok else "red"
+        self._log(f"[{style}]■ {name}: {summary}[/]")
+        self._reload_model(notify=False)
+        if ok:
+            self.notify(f"{name} ok")
+        else:
+            self.notify(f"{name} failed", severity="error")
+
+    def _action_doctor(self) -> dict[str, Any]:
+        cfg = load_config()
+        return {
+            "authenticated": cfg.is_authenticated,
+            "api_base_url": cfg.api_base_url,
+            "auth_source": cfg.api_key_source,
+            "project": str(self.project_root),
+            "hint": "mdtero doctor --json",
+        }
+
+    def _action_parse_pending(self) -> dict[str, Any]:
+        from .projects import load_project, project_pending_papers, update_paper_submission, update_task
+
+        state = load_project(self.project_root)
+        pending = project_pending_papers(state)
+        if not pending:
+            return {"submitted_count": 0, "items": [], "message": "no pending papers"}
+        client = MdteroClient(config=load_config())
+        items: list[dict[str, Any]] = []
+        for paper in pending[:5]:
+            path = Path(paper.input).expanduser()
+            if path.exists() and path.is_file():
+                result = client.upload(path, source_input=paper.doi or paper.title)
+            else:
+                _route, result, _acquisition = client.parse_with_route(paper.input)
+            update_paper_submission(self.project_root, paper.input, result)
+            task_id = str(result.get("task_id") or "").strip()
+            final = None
+            if task_id:
+                final = client.wait(task_id, interval=3.0, timeout=180.0)
+                if final.get("status") != "timeout":
+                    update_task(self.project_root, final)
+            items.append(
+                {
+                    "input": paper.input,
+                    "task_id": task_id or None,
+                    "status": (final or result).get("status"),
+                    "reason_code": (final or result).get("reason_code"),
+                }
+            )
+        return {"submitted_count": len(items), "items": items}
+
+    def _action_rag_ask(self, question: str) -> dict[str, Any]:
+        from .projects import load_project
+
+        state = load_project(self.project_root)
+        project_id = str(state.server_project_id or "").strip()
+        if not project_id:
+            return {
+                "status": "failed",
+                "reason_code": "project_not_linked",
+                "message": "Bind/create a server project first (press p after adding papers, then bootstrap RAG).",
+                "next": GENERIC_RAG_QUERY_COMMAND,
+            }
+        client = MdteroClient(config=load_config())
+        # Ensure index exists when possible, then query.
+        try:
+            status = client.rag_status(project_id)
+        except Exception:
+            status = {}
+        if str(status.get("status") or "") != "ready":
+            try:
+                client.rag_build(project_id)
+                for _ in range(40):
+                    status = client.rag_status(project_id)
+                    if str(status.get("status") or "") == "ready":
+                        break
+                    import time
+
+                    time.sleep(3)
+            except Exception as exc:
+                return {"status": "failed", "reason_code": "rag_build_failed", "message": str(exc)}
+        query = client.rag_query(project_id, question)
+        citations = query.get("citations") if isinstance(query.get("citations"), list) else []
+        return {
+            "status": query.get("status") or "succeeded",
+            "reason_code": query.get("reason_code"),
+            "answer": str(query.get("answer") or "")[:500],
+            "citation_count": len(citations),
+            "first_citation": citations[0] if citations else None,
+        }
+
+    def _action_mcp_briefing(self) -> dict[str, Any]:
+        briefing = build_agent_briefing(self.project_root)
+        health = briefing.get("health") if isinstance(briefing.get("health"), dict) else {}
+        return {
+            "rag_reason_code": health.get("rag_reason_code"),
+            "recommended_next_commands": (briefing.get("recommended_next_commands") or [])[:4],
+            "mcp_tools_count": len(briefing.get("mcp_tools") or []),
+            "primary_tool": "agent_briefing",
+        }
 
 
 def _project_payload(
@@ -634,12 +837,13 @@ def _operator_summary(
 
 def _shortcuts_payload(commands: dict[str, str]) -> list[dict[str, str]]:
     return [
-        {"key": "r", "label": "refresh", "action": "refresh_dashboard", "command": "reload dashboard state"},
-        {"key": "d", "label": "doctor", "action": "doctor", "command": "mdtero doctor --json"},
-        {"key": "p", "label": "parse", "action": "parse_pending", "command": commands.get("parse_pending", "mdtero project parse --wait --timeout 300 --json")},
-        {"key": "g", "label": "rag", "action": "rag_status", "command": commands.get("rag_status", "mdtero rag status --json")},
-        {"key": "m", "label": "mcp", "action": "mcp_briefing", "command": commands.get("mcp_briefing", "mdtero mcp briefing --json")},
-        {"key": "q", "label": "quit", "action": "quit", "command": "close TUI"},
+        {"key": "r", "label": "refresh", "action": "refresh_dashboard", "command": "mdtero doctor --json"},
+        {"key": "d", "label": "doctor", "action": "run_doctor", "command": "mdtero doctor --json"},
+        {"key": "p", "label": "parse", "action": "run_parse", "command": commands.get("parse_pending", "mdtero project parse --wait --timeout 300 --json")},
+        {"key": "g", "label": "rag", "action": "run_rag_ask", "command": commands.get("rag_query", GENERIC_RAG_QUERY_COMMAND)},
+        {"key": "m", "label": "mcp", "action": "run_mcp_briefing", "command": commands.get("mcp_briefing", "mdtero mcp briefing --json")},
+        {"key": "1-5", "label": "tabs", "action": "show_tab", "command": "mdtero tui"},
+        {"key": "q", "label": "quit", "action": "quit", "command": "mdtero doctor --json"},
     ]
 
 
@@ -1019,6 +1223,237 @@ def _command_palette_payload(
         seen.add(seen_key)
         palette.append({**row, "command": command, "is_next": command in next_step_set})
     return palette
+
+
+def _guide_payload(
+    *,
+    health: dict[str, Any],
+    project: dict[str, Any],
+    rag: dict[str, Any],
+    next_steps: list[str],
+    onboarding_checklist: list[Any],
+    authenticated: bool,
+) -> dict[str, Any]:
+    pending = int(project.get("pending_count") or 0)
+    running = int(project.get("running_count") or 0)
+    succeeded = int(project.get("succeeded_count") or 0)
+    failed = int(project.get("failed_count") or 0)
+    papers = int(project.get("paper_count") or 0)
+    rag_ready = bool(rag.get("ready") or rag.get("server_status") == "ready")
+
+    if not authenticated:
+        phase = "authenticate"
+        focus_tab = "guide"
+        primary_action = "run_doctor"
+        primary_label = "Check auth / run setup outside TUI if needed"
+        primary_binding = "d"
+    elif papers == 0:
+        phase = "add_papers"
+        focus_tab = "papers"
+        primary_action = "show_tab"
+        primary_label = "Add a DOI/file, then press p to parse"
+        primary_binding = "2"
+    elif pending > 0 or running > 0:
+        phase = "parse_tasks"
+        focus_tab = "tasks"
+        primary_action = "run_parse"
+        primary_label = "Parse pending papers"
+        primary_binding = "p"
+    elif failed > 0 and succeeded == 0:
+        phase = "resolve_failures"
+        focus_tab = "tasks"
+        primary_action = "run_doctor"
+        primary_label = "Inspect failed tasks, then retry parse"
+        primary_binding = "d"
+    elif not rag_ready:
+        phase = "build_rag"
+        focus_tab = "rag"
+        primary_action = "run_rag_ask"
+        primary_label = "Bootstrap/query project RAG"
+        primary_binding = "g"
+    else:
+        phase = "query_and_agents"
+        focus_tab = "rag"
+        primary_action = "run_rag_ask"
+        primary_label = "Ask the corpus or open Agents for MCP"
+        primary_binding = "g"
+
+    stages = [
+        {"id": "authenticate", "label": "Auth", "done": authenticated},
+        {"id": "add_papers", "label": "Papers", "done": papers > 0},
+        {"id": "parse_tasks", "label": "Parse", "done": succeeded > 0 and pending == 0 and running == 0},
+        {"id": "build_rag", "label": "RAG", "done": rag_ready},
+        {"id": "query_and_agents", "label": "Ask/MCP", "done": rag_ready},
+    ]
+    for stage in stages:
+        if stage["id"] == phase:
+            stage["state"] = "current"
+        elif stage["done"]:
+            stage["state"] = "done"
+        else:
+            stage["state"] = "locked"
+
+    checklist_rows = []
+    for item in onboarding_checklist:
+        if not isinstance(item, dict):
+            continue
+        checklist_rows.append(
+            {
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "status": item.get("status"),
+                "primary_command": item.get("primary_command"),
+            }
+        )
+
+    return {
+        "phase": phase,
+        "focus_tab": focus_tab,
+        "headline": health.get("headline"),
+        "detail": health.get("detail"),
+        "primary_action": primary_action,
+        "primary_label": primary_label,
+        "primary_binding": primary_binding,
+        "primary_next_command": health.get("primary_next_command") or (next_steps[0] if next_steps else "mdtero doctor --json"),
+        "next_steps": next_steps[:4],
+        "stages": stages,
+        "checklist": checklist_rows,
+        "wizard_mode": phase in {"authenticate", "add_papers", "parse_tasks", "build_rag"},
+    }
+
+
+def _action_summary(name: str, result: Any) -> str:
+    if not isinstance(result, dict):
+        return str(result)[:180]
+    if name == "parse":
+        return f"submitted={result.get('submitted_count', 0)} · {result.get('message') or 'ok'}"
+    if name == "rag":
+        answer = str(result.get("answer") or "").replace("\n", " ")
+        if result.get("status") == "failed":
+            return str(result.get("message") or result.get("reason_code") or "failed")[:180]
+        return f"citations={result.get('citation_count', 0)} · {answer[:140]}"
+    if name == "mcp":
+        cmds = result.get("recommended_next_commands") or []
+        return f"tools={result.get('mcp_tools_count', 0)} · next={cmds[0] if cmds else '-'}"
+    if name == "doctor":
+        return f"auth={'yes' if result.get('authenticated') else 'no'} · {result.get('api_base_url')}"
+    return str(result.get("status") or result.get("reason_code") or "done")[:180]
+
+
+def _guide_panel(model: dict[str, Any]) -> Panel:
+    guide = model.get("guide") if isinstance(model.get("guide"), dict) else {}
+    stages = guide.get("stages") if isinstance(guide.get("stages"), list) else []
+    stage_bits = []
+    for stage in stages:
+        if not isinstance(stage, dict):
+            continue
+        mark = {"done": "✓", "current": "●", "locked": "○"}.get(str(stage.get("state")), "·")
+        stage_bits.append(f"{mark} {stage.get('label')}")
+    grid = Table.grid(expand=True)
+    grid.add_column(ratio=1)
+    grid.add_row(Text(str(guide.get("headline") or "Mdtero"), style="bold"))
+    grid.add_row(str(guide.get("detail") or ""))
+    grid.add_row("Flow: " + " → ".join(stage_bits) if stage_bits else "Flow: -")
+    grid.add_row(f"Phase: {guide.get('phase') or '-'} · Focus tab: {guide.get('focus_tab') or 'guide'}")
+    grid.add_row(f"Do now [{guide.get('primary_binding') or '-'}]: {guide.get('primary_label') or '-'}")
+    grid.add_row(f"CLI fallback: {guide.get('primary_next_command') or '-'}")
+    if guide.get("wizard_mode"):
+        grid.add_row("Wizard mode: finish the current stage before browsing other tabs deeply.")
+    return Panel(grid, title="Workspace Guide", border_style="bright_yellow")
+
+
+def _render_guide_tab(model: dict[str, Any]) -> Group:
+    return Group(
+        _guide_panel(model),
+        _hero_panel(model),
+        _onboarding_panel(model),
+        _next_steps_panel(model),
+        _shortcuts_panel(model),
+    )
+
+
+def _render_papers_tab(model: dict[str, Any]) -> Group:
+    project = model.get("project") if isinstance(model.get("project"), dict) else {}
+    table = Table("Input", "Status", "Task", "Hint", expand=True)
+    recent = project.get("recent") if isinstance(project.get("recent"), list) else []
+    if recent:
+        for paper in recent:
+            if not isinstance(paper, dict):
+                continue
+            table.add_row(
+                str(paper.get("input") or "-")[:48],
+                str(paper.get("status") or "-"),
+                str(paper.get("task_id") or "-")[:18],
+                str(paper.get("action_hint") or paper.get("reason_code") or "-")[:70],
+            )
+    else:
+        table.add_row("(empty)", "-", "-", "mdtero project add <doi> --json")
+    routes = model.get("input_routes") if isinstance(model.get("input_routes"), dict) else {}
+    route_rows = routes.get("routes") if isinstance(routes.get("routes"), list) else []
+    route_table = Table("Route", "Primary command", expand=True)
+    for route in route_rows[:4]:
+        if not isinstance(route, dict):
+            continue
+        route_table.add_row(str(route.get("id") or "-"), str(route.get("primary_command") or "-")[:90])
+    summary = Table.grid(expand=True)
+    summary.add_column(ratio=1)
+    summary.add_row(
+        f"Project={project.get('name') or '-'} · papers={project.get('paper_count', 0)} · "
+        f"pending={project.get('pending_count', 0)} · succeeded={project.get('succeeded_count', 0)}"
+    )
+    summary.add_row("Add literature here, then press p on Tasks to parse.")
+    return Group(
+        Panel(summary, title="Papers / Project", border_style="cyan"),
+        Panel(table, title="Recent papers", border_style="cyan"),
+        Panel(route_table, title="Input routes", border_style="white"),
+    )
+
+
+def _render_tasks_tab(model: dict[str, Any]) -> Group:
+    handoff = model.get("handoff") if isinstance(model.get("handoff"), dict) else {}
+    table = Table("State", "Item", "Next", expand=True)
+    for state_name, key in (("ready", "ready_artifacts"), ("active", "active_items"), ("blocked", "blocked_items")):
+        items = handoff.get(key) if isinstance(handoff.get(key), list) else []
+        if not items:
+            table.add_row(state_name, "none", "-")
+            continue
+        for item in items[:6]:
+            if not isinstance(item, dict):
+                continue
+            table.add_row(state_name, _brief_item_label(item), _blocked_next_hint(item) if state_name == "blocked" else str(item.get("action_hint") or "-")[:70])
+    guide = model.get("guide") if isinstance(model.get("guide"), dict) else {}
+    tip = Table.grid(expand=True)
+    tip.add_column(ratio=1)
+    tip.add_row("Press p to submit pending parses (waits up to ~3 min per paper, max 5).")
+    tip.add_row(f"Current stage: {guide.get('phase') or '-'} · {guide.get('primary_label') or '-'}")
+    return Group(
+        Panel(tip, title="Tasks", border_style="magenta"),
+        Panel(table, title="Queue", border_style="magenta"),
+        _operator_panel(model),
+    )
+
+
+def _render_rag_tab(model: dict[str, Any]) -> Group:
+    return Group(
+        _rag_panel(model),
+        _agent_workflow_panel(model),
+        Panel(
+            Text("Type a question above and press Enter, or press g to ask the default question."),
+            title="Ask",
+            border_style="green",
+        ),
+    )
+
+
+def _render_agents_tab(model: dict[str, Any]) -> Group:
+    return Group(
+        _integration_panel(model),
+        _agent_playbook_panel(model),
+        _mcp_tool_plan_panel(model),
+        _dashboard_setup_handoff_panel(model),
+        _extension_handoff_panel(model),
+        _command_palette_panel(model),
+    )
 
 
 def _hero_panel(model: dict[str, Any]) -> Panel:
