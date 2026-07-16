@@ -63,6 +63,9 @@ export async function executeSsotActionSequence(
     return submitServerParse(parseClient, context.input);
   }
 
+  let lastActionError: string | undefined;
+  let lastNextCommand: string | undefined;
+
   for (const action of routePlan.action_sequence) {
     const result = await executeAction(action as ActionType, context, {
       top_connector: routePlan.top_connector,
@@ -121,12 +124,19 @@ export async function executeSsotActionSequence(
       };
     }
 
-    if (routePlan.fail_closed) {
-      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
-    }
+    lastActionError = result.error || lastActionError;
+    lastNextCommand = result.nextCommand || lastNextCommand;
+    // Planned action_sequence is an ordered attempt list. Keep walking the
+    // remaining actions even when fail_closed is true; fail-closed applies to
+    // inventing undocumented fallbacks after the sequence is exhausted, and to
+    // raw-upload submission failures above.
   }
 
-  return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
+  return {
+    success: false,
+    error: lastActionError || "No executable action succeeded",
+    nextCommand: lastNextCommand || buildCliParseCommand(context.input),
+  };
 }
 
 async function submitServerParse(parseClient: ParseClientLike, input: string) {

@@ -58,12 +58,6 @@ function createChromeStub() {
         addListener: vi.fn()
       }
     },
-    proxy: {
-      settings: {
-        clear: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined)
-      }
-    },
     __messageListeners: messageListeners
   };
 }
@@ -74,9 +68,7 @@ describe("extension background routing", () => {
     vi.clearAllMocks();
     readSettings.mockResolvedValue({
       token: "demo-token",
-      email: "demo@example.com",
-      proxyEnabled: false,
-      requireCampusProxy: false
+      email: "demo@example.com"
     });
     writeSettings.mockResolvedValue(undefined);
     createParseTask.mockResolvedValue({ task_id: "task-generic", status: "queued" });

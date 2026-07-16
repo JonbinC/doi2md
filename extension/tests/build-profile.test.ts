@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 describe("extension build profiles", () => {
-  it("builds store and dev packages with different proxy surfaces", () => {
+  it("builds store and dev packages without campus proxy permission or UI", () => {
     const storeBuild = spawnSync("node", ["esbuild.config.mjs"], {
       cwd: resolve("."),
       env: { ...process.env, MDTERO_EXTENSION_PROFILE: "store" },
@@ -16,9 +16,12 @@ describe("extension build profiles", () => {
       permissions?: string[];
     };
     const storeOptionsHtml = readFileSync(resolve("dist/options.html"), "utf-8");
+    const storeBackground = readFileSync(resolve("dist/background.js"), "utf-8");
 
     expect(storeManifest.permissions ?? []).not.toContain("proxy");
     expect(storeOptionsHtml).not.toContain('id="proxy-settings-card"');
+    expect(storeBackground).not.toContain("nativeMessaging");
+    expect(storeManifest.permissions ?? []).not.toContain("nativeMessaging");
 
     const devBuild = spawnSync("node", ["esbuild.config.mjs"], {
       cwd: resolve("."),
@@ -32,7 +35,8 @@ describe("extension build profiles", () => {
     };
     const devOptionsHtml = readFileSync(resolve("dist/options.html"), "utf-8");
 
-    expect(devManifest.permissions ?? []).toContain("proxy");
-    expect(devOptionsHtml).toContain('id="proxy-settings-card"');
+    expect(devManifest.permissions ?? []).not.toContain("proxy");
+    expect(devManifest.permissions ?? []).toContain("nativeMessaging");
+    expect(devOptionsHtml).not.toContain('id="proxy-settings-card"');
   });
 });

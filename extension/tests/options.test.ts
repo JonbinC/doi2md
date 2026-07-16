@@ -45,7 +45,7 @@ function createChromeMock() {
     },
     runtime: {
       getManifest: () => ({ version: "0.1.5" }),
-      sendMessage: vi.fn(async () => ({ ok: true, result: { ok: true, summary: { asn: "AS786", city: "Nottingham" } } })),
+      sendMessage: vi.fn(async () => ({ ok: true, result: { ok: true, summary: { asn: "AS64500", city: "Somewhere" } } })),
     },
     storage: {
       local: {
@@ -272,11 +272,11 @@ describe("extension options page", () => {
     expect(document.querySelector("#elsevier-api-key-feedback")?.textContent).toContain("cleared");
   });
 
-  it("shows campus proxy controls only in the development options surface", async () => {
-    await loadOptionsModule("src/options/index.dev.html");
+  it("keeps campus proxy configuration out of the options surface", async () => {
+    await loadOptionsModule();
 
-    expect(document.querySelector("#proxy-settings-title")?.textContent).toBe("Campus proxy");
-    expect(document.querySelector("#proxy-url")?.getAttribute("placeholder")).toBe("socks5h://127.0.0.1:1080");
-    expect(document.querySelector("#save-proxy-settings")?.textContent).toBe("Save proxy");
+    expect(document.querySelector("#proxy-settings-card")).toBeNull();
+    expect(document.querySelector("#proxy-url")).toBeNull();
+    expect(document.querySelector("#require-campus-proxy")).toBeNull();
   });
 });

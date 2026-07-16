@@ -371,7 +371,7 @@ async function downloadEpubArtifact(artifactUrl) {
     accept: "application/epub+zip,application/octet-stream,*/*;q=0.8",
     artifactLabel: "EPUB",
     payloadName: "paper.epub",
-    validate: () => true
+    validate: looksLikeEpubBytes
   });
   return result;
 }
@@ -639,10 +639,12 @@ async function downloadBinaryArtifact(artifactUrl, options) {
   const buffer = await response.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   if (!options.validate(bytes)) {
+    const textHead = bytesToText(bytes).toLowerCase();
+    const looksLikeHtmlShell = textHead.includes("<!doctype html") || textHead.includes("<html") || textHead.includes("bm-verify") || textHead.includes("just a moment") || textHead.includes("akamai");
     return {
       ok: false,
       failureCode: "artifact_download_missing",
-      failureMessage: `Browser page context downloaded a response that was not a valid ${options.artifactLabel} artifact.`
+      failureMessage: looksLikeHtmlShell ? `Browser page context downloaded a challenge/HTML shell instead of a valid ${options.artifactLabel} artifact.` : `Browser page context downloaded a response that was not a valid ${options.artifactLabel} artifact.`
     };
   }
   return {
@@ -657,6 +659,19 @@ function looksLikePdfBytes(bytes) {
     return false;
   }
   return bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70 && bytes[4] === 45;
+}
+function looksLikeEpubBytes(bytes) {
+  if (bytes.length < 4) {
+    return false;
+  }
+  if (!(bytes[0] === 80 && bytes[1] === 75 && bytes[2] === 3 && bytes[3] === 4)) {
+    return false;
+  }
+  const textHead = bytesToText(bytes).toLowerCase();
+  if (textHead.includes("<!doctype html") || textHead.includes("<html") || textHead.includes("bm-verify") || textHead.includes("just a moment")) {
+    return false;
+  }
+  return true;
 }
 async function fetchXmlArtifact(candidateUrls) {
   for (const candidate of candidateUrls.map((item) => String(item || "").trim()).filter(Boolean)) {

@@ -600,9 +600,23 @@ function pickHtmlCandidateUrls(routePlan: {
     new Set(
       urls
         .map((url) => String(url || "").trim())
-        .filter((url) => /^https?:\/\//i.test(url))
+        .filter((url) => isLikelyHtmlCandidateUrl(url))
     )
   );
+}
+
+function isLikelyHtmlCandidateUrl(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) {
+    return false;
+  }
+  const lower = url.toLowerCase();
+  if (/\.epub(?:$|[?#])/.test(lower) || /\/epub(?:$|[?#/])/.test(lower)) {
+    return false;
+  }
+  if (/\.pdf(?:$|[?#])/.test(lower) || /\/pdf(?:$|[?#/])/.test(lower)) {
+    return false;
+  }
+  return true;
 }
 
 function pickPdfHandoffCandidate(candidates: ClientHandoffCandidate[]): ClientHandoffCandidate | undefined {

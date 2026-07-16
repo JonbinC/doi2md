@@ -156,6 +156,14 @@ function firstString(...values) {
   }
   return "";
 }
+function authorizationHeader(token) {
+  const value = String(token || "").trim();
+  if (!value) {
+    return null;
+  }
+  const looksLikeJwt = value.split(".").length === 3 && !value.includes(" ");
+  return looksLikeJwt ? `Bearer ${value}` : `ApiKey ${value}`;
+}
 function createApiClient(getSettings) {
   async function requireSignedInSettings() {
     const settings = await getSettings();
@@ -174,8 +182,9 @@ function createApiClient(getSettings) {
     if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    if (settings.token) {
-      headers.set("Authorization", `Bearer ${settings.token}`);
+    const auth = authorizationHeader(settings.token);
+    if (auth) {
+      headers.set("Authorization", auth);
     }
     headers.set("X-Client-Channel", "extension");
     headers.set("X-Client-Version", getRuntimeVersion());
@@ -417,10 +426,7 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
-    elsevierApiKey: current.elsevierApiKey,
-    proxyEnabled: Boolean(current.proxyEnabled),
-    proxyUrl: current.proxyUrl,
-    requireCampusProxy: Boolean(current.requireCampusProxy)
+    elsevierApiKey: current.elsevierApiKey
   };
 }
 async function writeSettings(next) {

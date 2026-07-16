@@ -1,4 +1,4 @@
-declare const __MDTERO_PROXY_ENABLED__: boolean | undefined;
+declare const __MDTERO_NATIVE_MESSAGING_ENABLED__: boolean;
 
-export const PROXY_FEATURES_ENABLED =
-  typeof __MDTERO_PROXY_ENABLED__ === "boolean" ? __MDTERO_PROXY_ENABLED__ : true;
+/** Dev/unpacked profile only. Store build must keep this false. */
+export const NATIVE_MESSAGING_ENABLED = __MDTERO_NATIVE_MESSAGING_ENABLED__;

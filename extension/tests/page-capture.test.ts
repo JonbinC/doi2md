@@ -153,6 +153,26 @@ describe("downloadEpubArtifact", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("rejects Akamai HTML challenge shells that pretend to be EPUB payloads", async () => {
+    const originalFetch = globalThis.fetch;
+    const shell = "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"5; URL='/epub?bm-verify=abc'\" /></head></html>";
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new TextEncoder().encode(shell).buffer
+    }) as Response) as typeof fetch;
+
+    try {
+      const result = await downloadEpubArtifact("https://www.mdpi.com/2071-1050/17/5/2018/epub");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.failureCode).toBe("artifact_download_missing");
+        expect(result.failureMessage).toContain("challenge/HTML shell");
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("downloadPdfArtifact", () => {

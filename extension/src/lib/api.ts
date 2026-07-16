@@ -163,6 +163,16 @@ function firstString(...values: unknown[]): string {
   return "";
 }
 
+function authorizationHeader(token?: string): string | null {
+  const value = String(token || "").trim();
+  if (!value) {
+    return null;
+  }
+  // JWT access tokens are three base64url segments; CLI/API keys are not.
+  const looksLikeJwt = value.split(".").length === 3 && !value.includes(" ");
+  return looksLikeJwt ? `Bearer ${value}` : `ApiKey ${value}`;
+}
+
 export function createApiClient(
   getSettings: () => Promise<ApiClientSettings>
 ) {
@@ -185,8 +195,9 @@ export function createApiClient(
     if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    if (settings.token) {
-      headers.set("Authorization", `Bearer ${settings.token}`);
+    const auth = authorizationHeader(settings.token);
+    if (auth) {
+      headers.set("Authorization", auth);
     }
     headers.set("X-Client-Channel", "extension");
     headers.set("X-Client-Version", getRuntimeVersion());
@@ -327,7 +338,10 @@ export function createRouterSSOTClient(
       headers.set("Content-Type", "application/json");
     }
     
-    headers.set("Authorization", `Bearer ${settings.token}`);
+    const auth = authorizationHeader(settings.token);
+    if (auth) {
+      headers.set("Authorization", auth);
+    }
     headers.set("X-Client-Channel", "extension");
     headers.set("X-Client-Version", getRuntimeVersion());
 

@@ -59,8 +59,6 @@ describe("workspace", () => {
     expect(optionsHtml).toContain('id="connection-guide-list"');
     expect(optionsHtml).toContain('id="elsevier-settings-card"');
     expect(optionsHtml).not.toContain('id="proxy-settings-card"');
-    const devOptionsHtml = readFileSync(resolve("src/options/index.dev.html"), "utf-8");
-    expect(devOptionsHtml).toContain('id="proxy-settings-card"');
     expect(optionsHtml).toContain('id="elsevier-key-status"');
     expect(optionsHtml).toContain('id="toggle-elsevier-key"');
     expect(optionsHtml).toContain('id="clear-elsevier-key"');
@@ -101,8 +99,10 @@ describe("workspace", () => {
     expect(readme).toContain("The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com`");
     expect(readme).toContain("Publisher pages cannot mint extension tokens");
     expect(readme).toContain("can store your own Elsevier API key locally");
-    expect(readme).toContain("does not use native messaging or a local helper process");
-    expect(readme).toContain("The options page keeps CLI setup out of the extension product surface");
+    expect(readme).toContain("Web Store / store-profile build does not use native messaging");
+    expect(readme).toContain("unpackaged **dev** build");
+    expect(readme).toContain("The options page keeps CLI setup and campus-network tooling out of the extension product surface");
+    expect(readme).toContain("Campus Relay");
   });
 
   it("declares warm brand assets for the extension", () => {

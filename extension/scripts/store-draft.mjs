@@ -142,7 +142,7 @@ async function uploadEdgeDraft() {
 async function submitEdgeForReview() {
   const { productId, clientId, apiKey } = edgeAuth();
   const notes = process.env.EDGE_SUBMISSION_NOTES
-    || "Mdtero extension update: remove unused downloads permission and improve campus proxy handoff.";
+    || "Mdtero extension update: keep the browser surface focused on auth, capture, and download.";
   const { response } = await requestJson(`${EDGE_BASE_URL}/${productId}/submissions`, {
     method: "POST",
     headers: {

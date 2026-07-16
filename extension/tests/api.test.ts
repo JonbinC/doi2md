@@ -28,7 +28,7 @@ describe("createApiClient", () => {
       })
     );
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(headers.get("Authorization")).toBe("Bearer demo-token");
+    expect(headers.get("Authorization")).toBe("ApiKey demo-token");
     expect(headers.get("X-Client-Channel")).toBe("extension");
     expect(headers.get("X-Client-Version")).toBe("extension-dev");
   });

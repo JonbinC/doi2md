@@ -1,37 +1,43 @@
 import { createApiClient, createRouterSSOTClient } from "./lib/api";
 import { buildCliFileParseCommand } from "./lib/cli-handoff";
-import { PROXY_FEATURES_ENABLED } from "./lib/features";
+import { NATIVE_MESSAGING_ENABLED } from "./lib/features";
 import { runBrowserFileParseRequest } from "./lib/file-upload";
 import type { LocalFileArtifactKind } from "./lib/runtime";
 import { executeSsotActionSequence, fetchRoutePlanFromSsot } from "./lib/ssot-route";
 import { readSettings, SETTINGS_KEY, writeSettings } from "./lib/storage";
 import { sendTabMessageWithInjection } from "./lib/tab-messaging";
 
+const NATIVE_POLL_ALARM = "mdtero.native.poll";
+let nativePollInFlight = false;
+
 const client = createApiClient(readSettings);
 const routerSSOT = createRouterSSOTClient(readSettings);
 
-async function ensureNetworkPolicy(settings?: Awaited<ReturnType<typeof readSettings>>) {
-  if (!PROXY_FEATURES_ENABLED) {
-    return;
-  }
-  const { applyProxySettings, assertCampusProxyIfRequired } = await import("./lib/proxy-sync");
-  const resolved = settings ?? await readSettings();
-  await applyProxySettings(resolved);
-  await assertCampusProxyIfRequired(resolved);
-}
-
-if (PROXY_FEATURES_ENABLED) {
-  void import("./lib/proxy-sync").then(({ applyProxySettings }) =>
-    readSettings().then((settings) => applyProxySettings(settings))
-  );
-
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+if (NATIVE_MESSAGING_ENABLED) {
+  void import("./lib/native-bridge").then(({ isHostBridgeAvailable }) => {
+    if (!isHostBridgeAvailable()) {
       return;
     }
-    void import("./lib/proxy-sync").then(({ applyProxySettings }) =>
-      readSettings().then((settings) => applyProxySettings(settings))
-    );
+    chrome.runtime.onInstalled.addListener(() => {
+      void chrome.alarms.create(NATIVE_POLL_ALARM, { periodInMinutes: 1 });
+      void pollNativeCaptureJobs();
+    });
+    chrome.runtime.onStartup.addListener(() => {
+      void chrome.alarms.create(NATIVE_POLL_ALARM, { periodInMinutes: 1 });
+      void pollNativeCaptureJobs();
+    });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === NATIVE_POLL_ALARM) {
+        void pollNativeCaptureJobs();
+      }
+    });
+    chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+      if (changeInfo.status === "complete") {
+        void pollNativeCaptureJobs();
+      }
+    });
+    void chrome.alarms.create(NATIVE_POLL_ALARM, { periodInMinutes: 1 });
+    void pollNativeCaptureJobs();
   });
 }
 
@@ -52,7 +58,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.ssot.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -110,7 +115,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.file.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -137,7 +141,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.current_html.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -182,7 +185,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.translate.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -218,20 +220,118 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (PROXY_FEATURES_ENABLED && message?.type === "mdtero.proxy.test.request") {
-    (async () => {
-      const { applyProxySettings, verifyCampusProxyOutlet } = await import("./lib/proxy-sync");
-      const settings = await readSettings();
-      await applyProxySettings(settings);
-      return verifyCampusProxyOutlet();
-    })()
-      .then((result) => sendResponse({ ok: true, result }))
-      .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
 
   return false;
 });
+
+async function pollNativeCaptureJobs() {
+  if (!NATIVE_MESSAGING_ENABLED || nativePollInFlight) {
+    return;
+  }
+  const bridge = await import("./lib/native-bridge");
+  if (!bridge.isHostBridgeAvailable()) {
+    return;
+  }
+  nativePollInFlight = true;
+  try {
+    const jobs = await bridge.dequeueHostBridgeJobs(1);
+    for (const job of jobs) {
+      await runNativeCaptureJob(job);
+    }
+  } catch {
+    // Host may be uninstalled; keep SW quiet and retry on next alarm.
+  } finally {
+    nativePollInFlight = false;
+  }
+}
+
+async function runNativeCaptureJob(job: { job_id?: string; input?: string; open_url?: string }) {
+  const bridge = await import("./lib/native-bridge");
+  const jobId = String(job.job_id || "").trim();
+  const input = String(job.input || job.open_url || "").trim();
+  if (!jobId || !input) {
+    return;
+  }
+  try {
+    const settings = await readSettings();
+    if (!settings.token) {
+      // CDP / first-boot races can leave storage momentarily unread; retry once.
+      await delay(250);
+      const retry = await readSettings();
+      if (!retry.token) {
+        const raw = await chrome.storage.local.get(SETTINGS_KEY);
+        throw new Error(
+          `Sign in required in the Mdtero extension before host-bridge capture. storage=${JSON.stringify(raw)}`
+        );
+      }
+      Object.assign(settings, retry);
+    }
+    const openUrl = String(job.open_url || input).trim();
+    let tab = await ensureArticleTab(openUrl);
+    // Give publisher HTML a moment to settle after navigation.
+    await delay(1500);
+    tab = (await chrome.tabs.get(tab.id!)) || tab;
+
+    const routePlan = await fetchRoutePlanFromSsot(
+      routerSSOT,
+      input,
+      tab.url
+        ? {
+            tabUrl: tab.url,
+            tabTitle: tab.title,
+          }
+        : undefined
+    );
+
+    const result = await executeSsotActionSequence(client, routePlan, {
+      tabId: tab.id,
+      tabUrl: tab.url,
+      tabTitle: tab.title,
+      input,
+      elsevierApiKey: settings.elsevierApiKey,
+    });
+
+    if (!result.success || !result.taskId) {
+      throw new Error(formatSsotFailure(result));
+    }
+
+    await bridge.completeHostBridgeJob({
+      jobId,
+      taskId: result.taskId,
+      result: { task_id: result.taskId },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "native_capture_failed");
+    try {
+      await bridge.completeHostBridgeJob({ jobId, error: message });
+    } catch {
+      // ignore host write failures
+    }
+  }
+}
+
+async function ensureArticleTab(openUrl: string): Promise<chrome.tabs.Tab> {
+  if (!openUrl.startsWith("http")) {
+    throw new Error("Native capture job is missing an http(s) open_url.");
+  }
+  const existing = await chrome.tabs.query({ url: ["*://*/*"] });
+  const match = existing.find((tab) => {
+    const url = String(tab.url || "");
+    return url === openUrl || (openUrl.includes("/document/") && url.includes(openUrl.split("/document/")[1]?.split(/[?#]/)[0] || "__none__"));
+  });
+  if (match?.id != null) {
+    await chrome.tabs.update(match.id, { active: true, url: match.url === openUrl ? undefined : openUrl });
+    if (match.windowId != null) {
+      await chrome.windows.update(match.windowId, { focused: true });
+    }
+    return match;
+  }
+  return chrome.tabs.create({ url: openUrl, active: true });
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function formatSsotFailure(result: {
   error?: string;
