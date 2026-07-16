@@ -8,9 +8,6 @@ export interface MdteroSettings {
   email?: string;
   uiLanguage?: UiLanguage;
   elsevierApiKey?: string;
-  proxyEnabled?: boolean;
-  proxyUrl?: string;
-  requireCampusProxy?: boolean;
 }
 
 export interface PopupState {
@@ -70,10 +67,7 @@ export async function readSettings(): Promise<MdteroSettings> {
     token: current.token,
     email: current.email,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
-    elsevierApiKey: current.elsevierApiKey,
-    proxyEnabled: Boolean(current.proxyEnabled),
-    proxyUrl: current.proxyUrl,
-    requireCampusProxy: Boolean(current.requireCampusProxy)
+    elsevierApiKey: current.elsevierApiKey
   };
 }
 

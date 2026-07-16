@@ -8,151 +8,77 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/lib/proxy.ts
-function parseProxyUrl(raw) {
-  const cleaned = String(raw || "").trim();
-  if (!cleaned) {
-    return null;
-  }
-  let url;
-  try {
-    url = new URL(cleaned);
-  } catch {
-    throw new Error("Proxy URL is invalid.");
-  }
-  const scheme = url.protocol.replace(":", "").toLowerCase();
-  if (!SUPPORTED_PROXY_SCHEMES.includes(scheme)) {
-    throw new Error(`Unsupported proxy scheme: ${scheme || "missing"}`);
-  }
-  const host = url.hostname.trim();
-  if (!host) {
-    throw new Error("Proxy URL must include a host.");
-  }
-  const port = url.port ? Number(url.port) : scheme === "https" ? 443 : scheme.startsWith("socks") ? 1080 : 80;
-  const chromeScheme = scheme === "socks4a" ? "socks4" : scheme === "socks5h" ? "socks5" : scheme === "socks4" || scheme === "socks5" || scheme === "http" || scheme === "https" ? scheme : "http";
-  return {
-    scheme: chromeScheme,
-    host,
-    port
-  };
-}
-function buildChromeProxyConfig(parsed) {
-  return {
-    mode: "fixed_servers",
-    rules: {
-      singleProxy: {
-        scheme: parsed.scheme,
-        host: parsed.host,
-        port: parsed.port
-      },
-      bypassList: ["127.0.0.1", "localhost", "<local>"]
-    }
-  };
-}
-function summarizeCampusOutlet(payload) {
-  if (!payload || typeof payload !== "object") {
-    return {};
-  }
-  const record = payload;
-  return {
-    ip: typeof record.ip === "string" ? record.ip : void 0,
-    asn: typeof record.asn === "string" ? record.asn : void 0,
-    asn_org: typeof record.asn_org === "string" ? record.asn_org : typeof record.org === "string" ? record.org : void 0,
-    city: typeof record.city === "string" ? record.city : void 0,
-    country: typeof record.country === "string" ? record.country : void 0
-  };
-}
-function isExpectedCampusOutlet(payload) {
-  const summary = summarizeCampusOutlet(payload);
-  const asn = String(summary.asn || "").toUpperCase();
-  const org = String(summary.asn_org || "").toLowerCase();
-  const city = String(summary.city || "").toLowerCase();
-  return asn === "AS786" && org.includes("jisc") && city === "nottingham";
-}
-var SUPPORTED_PROXY_SCHEMES;
-var init_proxy = __esm({
-  "src/lib/proxy.ts"() {
+// src/lib/features.ts
+var NATIVE_MESSAGING_ENABLED;
+var init_features = __esm({
+  "src/lib/features.ts"() {
     "use strict";
-    SUPPORTED_PROXY_SCHEMES = [
-      "http",
-      "https",
-      "socks4",
-      "socks4a",
-      "socks5",
-      "socks5h"
-    ];
+    NATIVE_MESSAGING_ENABLED = true;
   }
 });
 
-// src/lib/proxy-sync.ts
-var proxy_sync_exports = {};
-__export(proxy_sync_exports, {
-  applyProxySettings: () => applyProxySettings,
-  assertCampusProxyIfRequired: () => assertCampusProxyIfRequired,
-  verifyCampusProxyOutlet: () => verifyCampusProxyOutlet
+// src/lib/native-bridge.ts
+var native_bridge_exports = {};
+__export(native_bridge_exports, {
+  HOST_BRIDGE_NAME: () => HOST_BRIDGE_NAME,
+  completeHostBridgeJob: () => completeHostBridgeJob,
+  dequeueHostBridgeJobs: () => dequeueHostBridgeJobs,
+  isHostBridgeAvailable: () => isHostBridgeAvailable,
+  pingHostBridge: () => pingHostBridge,
+  sendHostBridgeMessage: () => sendHostBridgeMessage
 });
-async function applyProxySettings(settings) {
-  if (!chrome.proxy?.settings) {
-    return;
+function runtimeSendHostMessage(application, message, responseCallback) {
+  const runtime = chrome.runtime;
+  const send = runtime[SEND_HOST_MSG];
+  if (typeof send !== "function") {
+    throw new Error("Host bridge API is unavailable in this browser.");
   }
-  if (!settings.proxyEnabled || !settings.proxyUrl?.trim()) {
-    await chrome.proxy.settings.clear({ scope: "regular" });
-    return;
+  send(application, message, responseCallback);
+}
+function isHostBridgeAvailable() {
+  return NATIVE_MESSAGING_ENABLED && typeof chrome !== "undefined" && typeof chrome.runtime?.[SEND_HOST_MSG] === "function";
+}
+function sendHostBridgeMessage(message) {
+  if (!isHostBridgeAvailable()) {
+    return Promise.reject(new Error("Host bridge is unavailable in this extension build."));
   }
-  const parsed = parseProxyUrl(settings.proxyUrl);
-  if (!parsed) {
-    await chrome.proxy.settings.clear({ scope: "regular" });
-    return;
-  }
-  await chrome.proxy.settings.set({
-    value: buildChromeProxyConfig(parsed),
-    scope: "regular"
+  return new Promise((resolve, reject) => {
+    runtimeSendHostMessage(HOST_BRIDGE_NAME, message, (response) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message || "Host bridge error"));
+        return;
+      }
+      resolve(response || {});
+    });
   });
 }
-async function verifyCampusProxyOutlet() {
-  try {
-    const response = await fetch("https://ifconfig.co/json");
-    if (!response.ok) {
-      return {
-        ok: false,
-        summary: {},
-        message: `Campus proxy check failed with HTTP ${response.status}.`
-      };
-    }
-    const payload = await response.json();
-    const summary = summarizeCampusOutlet(payload);
-    if (!isExpectedCampusOutlet(payload)) {
-      return {
-        ok: false,
-        summary,
-        message: "Campus proxy outlet is not AS786/Jisc/Nottingham."
-      };
-    }
-    return { ok: true, summary };
-  } catch (error) {
-    return {
-      ok: false,
-      summary: {},
-      message: error.message || "Campus proxy check failed."
-    };
-  }
+async function pingHostBridge() {
+  return sendHostBridgeMessage({ type: "ping" });
 }
-async function assertCampusProxyIfRequired(settings) {
-  if (!settings.requireCampusProxy) {
-    return;
+async function dequeueHostBridgeJobs(limit = 1) {
+  const response = await sendHostBridgeMessage({ type: "dequeue", limit });
+  if (!response.ok) {
+    throw new Error(response.error || "Failed to dequeue host bridge jobs");
   }
-  if (!settings.proxyEnabled || !settings.proxyUrl?.trim()) {
-    throw new Error("Campus proxy is required, but extension proxy settings are missing.");
-  }
-  const result = await verifyCampusProxyOutlet();
-  if (!result.ok) {
-    throw new Error(result.message || "Campus proxy outlet check failed.");
-  }
+  return Array.isArray(response.jobs) ? response.jobs : [];
 }
-var init_proxy_sync = __esm({
-  "src/lib/proxy-sync.ts"() {
+async function completeHostBridgeJob(params) {
+  return sendHostBridgeMessage({
+    type: "complete",
+    job_id: params.jobId,
+    task_id: params.taskId,
+    error: params.error,
+    result: params.result
+  });
+}
+var HOST_BRIDGE_NAME, SEND_HOST_MSG;
+var init_native_bridge = __esm({
+  "src/lib/native-bridge.ts"() {
     "use strict";
-    init_proxy();
+    init_features();
+    HOST_BRIDGE_NAME = "com.mdtero.cli";
+    SEND_HOST_MSG = "sendNativeMessage";
   }
 });
 
@@ -311,6 +237,14 @@ function firstString(...values) {
   }
   return "";
 }
+function authorizationHeader(token) {
+  const value = String(token || "").trim();
+  if (!value) {
+    return null;
+  }
+  const looksLikeJwt = value.split(".").length === 3 && !value.includes(" ");
+  return looksLikeJwt ? `Bearer ${value}` : `ApiKey ${value}`;
+}
 function createApiClient(getSettings) {
   async function requireSignedInSettings() {
     const settings = await getSettings();
@@ -329,8 +263,9 @@ function createApiClient(getSettings) {
     if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    if (settings.token) {
-      headers.set("Authorization", `Bearer ${settings.token}`);
+    const auth = authorizationHeader(settings.token);
+    if (auth) {
+      headers.set("Authorization", auth);
     }
     headers.set("X-Client-Channel", "extension");
     headers.set("X-Client-Version", getRuntimeVersion());
@@ -459,7 +394,10 @@ function createRouterSSOTClient(getSettings) {
     if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    headers.set("Authorization", `Bearer ${settings.token}`);
+    const auth = authorizationHeader(settings.token);
+    if (auth) {
+      headers.set("Authorization", auth);
+    }
     headers.set("X-Client-Channel", "extension");
     headers.set("X-Client-Version", getRuntimeVersion());
     const response = await fetch(`${settings.apiBaseUrl}${path}`, {
@@ -537,8 +475,8 @@ function shellQuoteRouteInput(value) {
   return `'${normalized.replace(/'/g, `'"'"'`)}'`;
 }
 
-// src/lib/features.ts
-var PROXY_FEATURES_ENABLED = true ? true : true;
+// src/background.ts
+init_features();
 
 // src/lib/file-upload.ts
 async function runBrowserFileParseRequest(client2, message) {
@@ -1120,9 +1058,22 @@ function pickHtmlCandidateUrls(routePlan) {
   ];
   return Array.from(
     new Set(
-      urls.map((url) => String(url || "").trim()).filter((url) => /^https?:\/\//i.test(url))
+      urls.map((url) => String(url || "").trim()).filter((url) => isLikelyHtmlCandidateUrl(url))
     )
   );
+}
+function isLikelyHtmlCandidateUrl(url) {
+  if (!/^https?:\/\//i.test(url)) {
+    return false;
+  }
+  const lower = url.toLowerCase();
+  if (/\.epub(?:$|[?#])/.test(lower) || /\/epub(?:$|[?#/])/.test(lower)) {
+    return false;
+  }
+  if (/\.pdf(?:$|[?#])/.test(lower) || /\/pdf(?:$|[?#/])/.test(lower)) {
+    return false;
+  }
+  return true;
 }
 function pickPdfHandoffCandidate(candidates) {
   return candidates.find((candidate) => candidate.artifact_kind === "pdf" && candidate.capture_mode === "download_artifact");
@@ -1161,6 +1112,8 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
   if (shouldSubmitServerParse(routePlan)) {
     return submitServerParse(parseClient, context.input);
   }
+  let lastActionError;
+  let lastNextCommand;
   for (const action of routePlan.action_sequence) {
     const result = await executeAction(action, context, {
       top_connector: routePlan.top_connector,
@@ -1213,11 +1166,14 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
         error: `${result.error || "Elsevier XML fetch failed"}; backend fallback failed: ${serverResult.error}`
       };
     }
-    if (routePlan.fail_closed) {
-      return { success: false, error: result.error || "Action failed", nextCommand: result.nextCommand || buildCliParseCommand(context.input) };
-    }
+    lastActionError = result.error || lastActionError;
+    lastNextCommand = result.nextCommand || lastNextCommand;
   }
-  return { success: false, error: "No executable action succeeded", nextCommand: buildCliParseCommand(context.input) };
+  return {
+    success: false,
+    error: lastActionError || "No executable action succeeded",
+    nextCommand: lastNextCommand || buildCliParseCommand(context.input)
+  };
 }
 async function submitServerParse(parseClient, input) {
   try {
@@ -1268,10 +1224,7 @@ async function readSettings() {
     token: current.token,
     email: current.email,
     uiLanguage: resolveUiLanguage(current.uiLanguage, globalThis.navigator?.language),
-    elsevierApiKey: current.elsevierApiKey,
-    proxyEnabled: Boolean(current.proxyEnabled),
-    proxyUrl: current.proxyUrl,
-    requireCampusProxy: Boolean(current.requireCampusProxy)
+    elsevierApiKey: current.elsevierApiKey
   };
 }
 async function writeSettings(next) {
@@ -1279,28 +1232,35 @@ async function writeSettings(next) {
 }
 
 // src/background.ts
+var NATIVE_POLL_ALARM = "mdtero.native.poll";
+var nativePollInFlight = false;
 var client = createApiClient(readSettings);
 var routerSSOT = createRouterSSOTClient(readSettings);
-async function ensureNetworkPolicy(settings) {
-  if (!PROXY_FEATURES_ENABLED) {
-    return;
-  }
-  const { applyProxySettings: applyProxySettings2, assertCampusProxyIfRequired: assertCampusProxyIfRequired2 } = await Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports));
-  const resolved = settings ?? await readSettings();
-  await applyProxySettings2(resolved);
-  await assertCampusProxyIfRequired2(resolved);
-}
-if (PROXY_FEATURES_ENABLED) {
-  void Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports)).then(
-    ({ applyProxySettings: applyProxySettings2 }) => readSettings().then((settings) => applyProxySettings2(settings))
-  );
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes[SETTINGS_KEY]) {
+if (NATIVE_MESSAGING_ENABLED) {
+  void Promise.resolve().then(() => (init_native_bridge(), native_bridge_exports)).then(({ isHostBridgeAvailable: isHostBridgeAvailable2 }) => {
+    if (!isHostBridgeAvailable2()) {
       return;
     }
-    void Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports)).then(
-      ({ applyProxySettings: applyProxySettings2 }) => readSettings().then((settings) => applyProxySettings2(settings))
-    );
+    chrome.runtime.onInstalled.addListener(() => {
+      void chrome.alarms.create(NATIVE_POLL_ALARM, { periodInMinutes: 1 });
+      void pollNativeCaptureJobs();
+    });
+    chrome.runtime.onStartup.addListener(() => {
+      void chrome.alarms.create(NATIVE_POLL_ALARM, { periodInMinutes: 1 });
+      void pollNativeCaptureJobs();
+    });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === NATIVE_POLL_ALARM) {
+        void pollNativeCaptureJobs();
+      }
+    });
+    chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+      if (changeInfo.status === "complete") {
+        void pollNativeCaptureJobs();
+      }
+    });
+    void chrome.alarms.create(NATIVE_POLL_ALARM, { periodInMinutes: 1 });
+    void pollNativeCaptureJobs();
   });
 }
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -1317,7 +1277,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.ssot.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1366,7 +1325,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.file.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1390,7 +1348,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.parse.current_html.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1428,7 +1385,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "mdtero.translate.request") {
     (async () => {
       const settings = await readSettings();
-      await ensureNetworkPolicy(settings);
       if (!settings.token) {
         throw new Error("Sign in required before parsing or translating.");
       }
@@ -1461,17 +1417,103 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
-  if (PROXY_FEATURES_ENABLED && message?.type === "mdtero.proxy.test.request") {
-    (async () => {
-      const { applyProxySettings: applyProxySettings2, verifyCampusProxyOutlet: verifyCampusProxyOutlet2 } = await Promise.resolve().then(() => (init_proxy_sync(), proxy_sync_exports));
-      const settings = await readSettings();
-      await applyProxySettings2(settings);
-      return verifyCampusProxyOutlet2();
-    })().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
   return false;
 });
+async function pollNativeCaptureJobs() {
+  if (!NATIVE_MESSAGING_ENABLED || nativePollInFlight) {
+    return;
+  }
+  const bridge = await Promise.resolve().then(() => (init_native_bridge(), native_bridge_exports));
+  if (!bridge.isHostBridgeAvailable()) {
+    return;
+  }
+  nativePollInFlight = true;
+  try {
+    const jobs = await bridge.dequeueHostBridgeJobs(1);
+    for (const job of jobs) {
+      await runNativeCaptureJob(job);
+    }
+  } catch {
+  } finally {
+    nativePollInFlight = false;
+  }
+}
+async function runNativeCaptureJob(job) {
+  const bridge = await Promise.resolve().then(() => (init_native_bridge(), native_bridge_exports));
+  const jobId = String(job.job_id || "").trim();
+  const input = String(job.input || job.open_url || "").trim();
+  if (!jobId || !input) {
+    return;
+  }
+  try {
+    const settings = await readSettings();
+    if (!settings.token) {
+      await delay(250);
+      const retry = await readSettings();
+      if (!retry.token) {
+        const raw = await chrome.storage.local.get(SETTINGS_KEY);
+        throw new Error(
+          `Sign in required in the Mdtero extension before host-bridge capture. storage=${JSON.stringify(raw)}`
+        );
+      }
+      Object.assign(settings, retry);
+    }
+    const openUrl = String(job.open_url || input).trim();
+    let tab = await ensureArticleTab(openUrl);
+    await delay(1500);
+    tab = await chrome.tabs.get(tab.id) || tab;
+    const routePlan = await fetchRoutePlanFromSsot(
+      routerSSOT,
+      input,
+      tab.url ? {
+        tabUrl: tab.url,
+        tabTitle: tab.title
+      } : void 0
+    );
+    const result = await executeSsotActionSequence(client, routePlan, {
+      tabId: tab.id,
+      tabUrl: tab.url,
+      tabTitle: tab.title,
+      input,
+      elsevierApiKey: settings.elsevierApiKey
+    });
+    if (!result.success || !result.taskId) {
+      throw new Error(formatSsotFailure(result));
+    }
+    await bridge.completeHostBridgeJob({
+      jobId,
+      taskId: result.taskId,
+      result: { task_id: result.taskId }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "native_capture_failed");
+    try {
+      await bridge.completeHostBridgeJob({ jobId, error: message });
+    } catch {
+    }
+  }
+}
+async function ensureArticleTab(openUrl) {
+  if (!openUrl.startsWith("http")) {
+    throw new Error("Native capture job is missing an http(s) open_url.");
+  }
+  const existing = await chrome.tabs.query({ url: ["*://*/*"] });
+  const match = existing.find((tab) => {
+    const url = String(tab.url || "");
+    return url === openUrl || openUrl.includes("/document/") && url.includes(openUrl.split("/document/")[1]?.split(/[?#]/)[0] || "__none__");
+  });
+  if (match?.id != null) {
+    await chrome.tabs.update(match.id, { active: true, url: match.url === openUrl ? void 0 : openUrl });
+    if (match.windowId != null) {
+      await chrome.windows.update(match.windowId, { focused: true });
+    }
+    return match;
+  }
+  return chrome.tabs.create({ url: openUrl, active: true });
+}
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 function formatSsotFailure(result) {
   if (result.requiresBrowserCapture) {
     return result.error || "Open the article page in this browser, make sure the full text is loaded, then retry current-page parse or upload the PDF/EPUB directly.";

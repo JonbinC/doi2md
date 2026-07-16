@@ -77,12 +77,16 @@ describe("extension manifest", () => {
     });
   });
 
-  it("keeps campus proxy permission only in the development manifest", () => {
+  it("keeps campus proxy permission out of store and development manifests", () => {
+    const storeManifest = JSON.parse(
+      readFileSync(resolve("manifest.json"), "utf-8")
+    ) as { permissions?: string[] };
     const devManifest = JSON.parse(
       readFileSync(resolve("manifest.dev.json"), "utf-8")
     ) as { permissions?: string[] };
 
-    expect(devManifest.permissions).toContain("proxy");
+    expect(storeManifest.permissions ?? []).not.toContain("proxy");
+    expect(devManifest.permissions ?? []).not.toContain("proxy");
   });
 
   it("keeps outward-facing extension copy aligned with the shipping browser flow", () => {

@@ -125,8 +125,9 @@ mdtero zotero import --json
 mdtero zotero sync --json
 mdtero discover "thermochemical energy storage" --limit 5 --json
 mdtero discover Thermochemical Energy storage Vermiculite --limit 5 --json
+mdtero discover "thermochemical energy storage" --limit 5 --page 2 --json
 mdtero discover "thermochemical energy storage" --limit 5 --interactive
-# In the interactive discovery session: enter numbers to add, `n`/`p` to page, `r <query>` to refine, `a` to add the current page, or `q` to quit.
+# In the interactive discovery session: enter numbers to add, `n`/`p` to page server-side, `r <query>` to refine, `a` to add the current page, or `q` to quit.
 mdtero discover "thermochemical energy storage" --limit 5 --add --select 1,3 --json
 mdtero discover "<query>" --limit 5 --add --select 1,3 --json
 mdtero parse 10.48550/arXiv.1706.03762 --json

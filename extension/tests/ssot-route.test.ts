@@ -226,6 +226,53 @@ describe("ssot-route", () => {
     });
   });
 
+  it("continues planned MDPI EPUB sequence to HTML capture when EPUB download fails", async () => {
+    executeAction
+      .mockResolvedValueOnce({
+        success: false,
+        error: "Browser page context downloaded a challenge/HTML shell instead of a valid EPUB artifact.",
+      })
+      .mockResolvedValueOnce({
+        success: false,
+        error: "Remote HTML also blocked.",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        rawArtifact: new Blob(["<html><body>ok</body></html>"], { type: "text/html" }),
+        filename: "paper.html",
+        artifactKind: "html",
+        sourceDoi: "10.3390/su17052018",
+      });
+
+    const task = { task_id: "task-mdpi-html", status: "queued" };
+    const parseClient = {
+      createParseTask: vi.fn(),
+      createRawUploadTask: vi.fn().mockResolvedValue(task),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(
+      parseClient,
+      buildRoutePlan({
+        fail_closed: true,
+        top_connector: "mdpi_epub_asset",
+        route_kind: "epub_first",
+        action_sequence: ["fetch_epub_asset", "fetch_browser_source", "capture_current_tab_html"],
+      }),
+      { input: "10.3390/su17052018", tabId: 9 },
+    );
+
+    expect(executeAction).toHaveBeenCalledTimes(3);
+    expect(parseClient.createRawUploadTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: "paper.html",
+        artifactKind: "html",
+        sourceDoi: "10.3390/su17052018",
+      }),
+    );
+    expect(result).toEqual({ success: true, taskId: "task-mdpi-html", task });
+  });
+
   it("propagates requires-upload and browser-capture failures without extra submission", async () => {
     executeAction.mockResolvedValue({
       success: false,

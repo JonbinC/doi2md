@@ -432,7 +432,7 @@ export async function downloadEpubArtifact(artifactUrl: string): Promise<EpubDow
     accept: "application/epub+zip,application/octet-stream,*/*;q=0.8",
     artifactLabel: "EPUB",
     payloadName: "paper.epub",
-    validate: () => true,
+    validate: looksLikeEpubBytes,
   });
   return result as EpubDownloadResult;
 }
@@ -746,10 +746,19 @@ async function downloadBinaryArtifact(
   const buffer = await response.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   if (!options.validate(bytes)) {
+    const textHead = bytesToText(bytes).toLowerCase();
+    const looksLikeHtmlShell =
+      textHead.includes("<!doctype html") ||
+      textHead.includes("<html") ||
+      textHead.includes("bm-verify") ||
+      textHead.includes("just a moment") ||
+      textHead.includes("akamai");
     return {
       ok: false,
       failureCode: "artifact_download_missing",
-      failureMessage: `Browser page context downloaded a response that was not a valid ${options.artifactLabel} artifact.`
+      failureMessage: looksLikeHtmlShell
+        ? `Browser page context downloaded a challenge/HTML shell instead of a valid ${options.artifactLabel} artifact.`
+        : `Browser page context downloaded a response that was not a valid ${options.artifactLabel} artifact.`
     };
   }
 
@@ -766,6 +775,26 @@ function looksLikePdfBytes(bytes: Uint8Array): boolean {
     return false;
   }
   return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+}
+
+export function looksLikeEpubBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 4) {
+    return false;
+  }
+  // EPUB is a ZIP package (local file header magic PK\x03\x04).
+  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04)) {
+    return false;
+  }
+  const textHead = bytesToText(bytes).toLowerCase();
+  if (
+    textHead.includes("<!doctype html") ||
+    textHead.includes("<html") ||
+    textHead.includes("bm-verify") ||
+    textHead.includes("just a moment")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export async function fetchXmlArtifact(candidateUrls: string[]): Promise<XmlFetchResult> {

@@ -4,7 +4,15 @@
   "version": "0.1.10",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "tabs", "activeTab", "scripting", "proxy"],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAy9/YQNJn/bA5b6zQXgyhQajtpxqLVxLsJSQy5/B/uFDXu6M0gI3r6jU8kBk6j5IlBugBCnxoTZk1Hf6yRrgoKrVRadQKCKam747ZgARn2t5YVpDzcvCvFrYI5x+TqxNTF4D0eIou9EUjVAv05Kw27R171ZUdndYkEXoK6IetQ+LgfKwhyi000EXq10aEfSaQ37RRXDyRzxsjzuiDAM3kMhkFxrY126LWqIBaLUytGBSjHIte0Aywr7ECheMBPF0CNOoCmlTKqlKGU2CX4iY8zDsFxASMkLUjfTzyQONSltyv6EJ3M6T65QteZAc3e3F44tFET7Rzhk3cFb6HMAMn4QIDAQAB",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "nativeMessaging",
+    "alarms"
+  ],
   "host_permissions": [
     "https://api.mdtero.com/*",
     "https://api.elsevier.com/*",
@@ -49,7 +57,9 @@
         "https://mdtero.com/*",
         "https://*.mdtero.com/*"
       ],
-      "js": ["dist/content.js"],
+      "js": [
+        "dist/content.js"
+      ],
       "run_at": "document_start"
     },
     {
@@ -70,7 +80,9 @@
         "*://*.onlinelibrary.wiley.com/*",
         "*://*.tandfonline.com/*"
       ],
-      "js": ["dist/content.js"],
+      "js": [
+        "dist/content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
