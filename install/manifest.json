@@ -11,7 +11,7 @@
   "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
     "packageName": "mdtero",
-    "packageVersion": "0.2.0a11",
+    "packageVersion": "0.2.0a15",
     "packageManager": "uv",
     "runtimeInstallCommand": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
     "scriptInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh",
@@ -28,7 +28,7 @@
       "target": "openclaw",
       "label": "OpenClaw",
       "description": "OpenClaw stays on a separate ClawHub route. Normal parsing still uses Mdtero's Python CLI/API and backend parser.",
-      "descriptionZh": "OpenClaw 保持独立的 ClawHub 路线。常规解析仍走 Mdtero Python CLI/API 和后端解析。",
+      "descriptionZh": "OpenClaw \u4fdd\u6301\u72ec\u7acb\u7684 ClawHub \u8def\u7ebf\u3002\u5e38\u89c4\u89e3\u6790\u4ecd\u8d70 Mdtero Python CLI/API \u548c\u540e\u7aef\u89e3\u6790\u3002",
       "installCommand": "clawhub install mdtero",
       "skillDirectory": ".openclaw/skills/mdtero"
     },
@@ -36,7 +36,7 @@
       "target": "claude_code",
       "label": "Claude Code",
       "description": "Best for workspaces that keep Mdtero in .claude/skills.",
-      "descriptionZh": "适合把 Mdtero 放进 .claude/skills 的 Claude Code 工作区。",
+      "descriptionZh": "\u9002\u5408\u628a Mdtero \u653e\u8fdb .claude/skills \u7684 Claude Code \u5de5\u4f5c\u533a\u3002",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent claude_code",
       "skillDirectory": ".claude/skills/mdtero",
       "skillInstallCommand": "mdtero agent install --target claude_code"
@@ -45,7 +45,7 @@
       "target": "codex",
       "label": "Codex",
       "description": "Best for workspaces that keep Mdtero in .codex/skills.",
-      "descriptionZh": "适合把 Mdtero 放进 .codex/skills 的 Codex 工作区。",
+      "descriptionZh": "\u9002\u5408\u628a Mdtero \u653e\u8fdb .codex/skills \u7684 Codex \u5de5\u4f5c\u533a\u3002",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex",
       "skillDirectory": ".codex/skills/mdtero",
       "skillInstallCommand": "mdtero agent install --target codex"
@@ -54,7 +54,7 @@
       "target": "gemini_cli",
       "label": "Gemini CLI",
       "description": "Best for Gemini CLI setups that keep the workflow in .gemini/skills.",
-      "descriptionZh": "适合把工作流放进 .gemini/skills 的 Gemini CLI 环境。",
+      "descriptionZh": "\u9002\u5408\u628a\u5de5\u4f5c\u6d41\u653e\u8fdb .gemini/skills \u7684 Gemini CLI \u73af\u5883\u3002",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent gemini_cli",
       "skillDirectory": ".gemini/skills/mdtero",
       "skillInstallCommand": "mdtero agent install --target gemini_cli"
@@ -63,7 +63,7 @@
       "target": "hermes",
       "label": "Hermes Agent",
       "description": "Best for Hermes Agent setups that load SKILL.md workflows from ~/.hermes/skills.",
-      "descriptionZh": "适合从 ~/.hermes/skills 加载 SKILL.md 工作流的 Hermes Agent 环境。",
+      "descriptionZh": "\u9002\u5408\u4ece ~/.hermes/skills \u52a0\u8f7d SKILL.md \u5de5\u4f5c\u6d41\u7684 Hermes Agent \u73af\u5883\u3002",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent hermes",
       "skillDirectory": ".hermes/skills/mdtero",
       "skillInstallCommand": "mdtero agent install --target hermes",
@@ -73,7 +73,7 @@
       "target": "opencode",
       "label": "OpenCode",
       "description": "Best for OpenCode workspaces that keep project skills in .opencode/skills.",
-      "descriptionZh": "适合把项目技能放进 .opencode/skills 的 OpenCode 工作区。",
+      "descriptionZh": "\u9002\u5408\u628a\u9879\u76ee\u6280\u80fd\u653e\u8fdb .opencode/skills \u7684 OpenCode \u5de5\u4f5c\u533a\u3002",
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode",
       "skillDirectory": ".opencode/skills/mdtero",
       "skillInstallCommand": "mdtero agent install --target opencode"
@@ -90,7 +90,7 @@
     },
     "current": {
       "cli": {
-        "version": "0.2.0a11",
+        "version": "0.2.0a15",
         "packageName": "mdtero",
         "packageManager": "uv",
         "installCommand": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",

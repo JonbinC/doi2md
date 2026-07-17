@@ -944,7 +944,8 @@ def _normalize_rag_query_result_for_agents(
     payload.setdefault("answer", _extract_rag_answer(matches))
     payload.setdefault("citations", citations)
     payload.setdefault("source_nodes", source_nodes)
-    payload.setdefault("evidence_pack", _rag_evidence_pack(question=question, source_nodes=source_nodes, citations=citations))
+    payload.setdefault("evidence_quality", _rag_evidence_quality(matches if matches else citations))
+    payload.setdefault("evidence_pack", _rag_evidence_pack(question=question, source_nodes=source_nodes, citations=citations, evidence_quality=payload.get("evidence_quality")))
     payload.setdefault("action_hint", "RAG query completed. Review evidence_pack.context_markdown, source_nodes, citations, and matches before writing a final synthesis.")
     payload.setdefault("next_commands", ["mdtero rag status --json", commands["rag_query"], commands["mcp_briefing"], commands["serve_mcp"]])
     ensure_rag_contract(payload)
@@ -967,7 +968,7 @@ def _rag_citations_from_matches(matches: list[Any]) -> list[dict[str, Any]]:
     for index, match in enumerate(matches, start=1):
         if not isinstance(match, dict):
             continue
-        citations.append({
+        citation = {
             "citation_order": match.get("citation_order") or index,
             "document_id": match.get("document_id"),
             "document_title": match.get("document_title"),
@@ -976,7 +977,14 @@ def _rag_citations_from_matches(matches: list[Any]) -> list[dict[str, Any]]:
             "line_end": match.get("line_end"),
             "doi": match.get("doi"),
             "source_url": match.get("source_url"),
-        })
+        }
+        if match.get("confidence") is not None:
+            citation["confidence"] = match.get("confidence")
+        if match.get("match_signal") is not None:
+            citation["match_signal"] = match.get("match_signal")
+        if match.get("quote_is_short") is not None:
+            citation["quote_is_short"] = bool(match.get("quote_is_short"))
+        citations.append(citation)
     return citations
 
 
@@ -987,30 +995,74 @@ def _rag_source_nodes_from_matches(matches: list[Any]) -> list[dict[str, Any]]:
             continue
         document_id = match.get("document_id")
         chunk_id = match.get("chunk_id")
+        metadata = {
+            "citation_order": match.get("citation_order") or index,
+            "document_id": document_id,
+            "document_title": match.get("document_title"),
+            "chunk_id": chunk_id,
+            "line_start": match.get("line_start"),
+            "line_end": match.get("line_end"),
+            "doi": match.get("doi"),
+            "source_url": match.get("source_url"),
+            "year": match.get("year"),
+            "venue": match.get("venue"),
+            "external_source": match.get("external_source"),
+            "external_key": match.get("external_key"),
+        }
+        if match.get("confidence") is not None:
+            metadata["confidence"] = match.get("confidence")
+        if match.get("match_signal") is not None:
+            metadata["match_signal"] = match.get("match_signal")
+        if match.get("quote_is_short") is not None:
+            metadata["quote_is_short"] = bool(match.get("quote_is_short"))
         source_nodes.append({
             "node_id": f"doc-{document_id}:chunk-{chunk_id}",
             "score": match.get("score"),
+            "confidence": match.get("confidence"),
             "text": str(match.get("snippet") or ""),
-            "metadata": {
-                "citation_order": match.get("citation_order") or index,
-                "document_id": document_id,
-                "document_title": match.get("document_title"),
-                "chunk_id": chunk_id,
-                "line_start": match.get("line_start"),
-                "line_end": match.get("line_end"),
-                "doi": match.get("doi"),
-                "source_url": match.get("source_url"),
-                "year": match.get("year"),
-                "venue": match.get("venue"),
-                "external_source": match.get("external_source"),
-                "external_key": match.get("external_key"),
-            },
+            "metadata": metadata,
         })
     return source_nodes
 
 
-def _rag_evidence_pack(*, question: str, source_nodes: list[dict[str, Any]], citations: list[dict[str, Any]]) -> dict[str, Any]:
+def _rag_evidence_quality(matches: list[Any]) -> dict[str, Any]:
+    confidence_counts = {"high": 0, "medium": 0, "low": 0}
+    short_quote_count = 0
+    scores: list[float] = []
+    document_ids: set[Any] = set()
+    for match in matches:
+        if not isinstance(match, dict):
+            continue
+        label = str(match.get("confidence") or "low")
+        confidence_counts[label] = confidence_counts.get(label, 0) + 1
+        if match.get("quote_is_short"):
+            short_quote_count += 1
+        if match.get("score") is not None:
+            try:
+                scores.append(float(match.get("score")))
+            except (TypeError, ValueError):
+                pass
+        if match.get("document_id") is not None:
+            document_ids.add(match.get("document_id"))
     return {
+        "match_count": len([m for m in matches if isinstance(m, dict)]),
+        "distinct_document_count": len(document_ids),
+        "confidence_counts": confidence_counts,
+        "low_confidence_count": confidence_counts.get("low", 0),
+        "short_quote_count": short_quote_count,
+        "max_score": max(scores) if scores else None,
+        "min_score": min(scores) if scores else None,
+    }
+
+
+def _rag_evidence_pack(
+    *,
+    question: str,
+    source_nodes: list[dict[str, Any]],
+    citations: list[dict[str, Any]],
+    evidence_quality: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    pack = {
         "question": question,
         "answer_kind": "extractive_evidence_pack",
         "source_nodes": source_nodes,
@@ -1021,6 +1073,9 @@ def _rag_evidence_pack(*, question: str, source_nodes: list[dict[str, Any]], cit
             "not a generated final synthesis, unless a downstream LLM rewrites it with citations preserved."
         ),
     }
+    if evidence_quality is not None:
+        pack["evidence_quality"] = evidence_quality
+    return pack
 
 
 def _rag_context_markdown(source_nodes: list[dict[str, Any]]) -> str:
