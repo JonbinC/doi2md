@@ -23,6 +23,8 @@ jobs:
   publish:
     name: Build and publish public mdtero client
     runs-on: ubuntu-latest
+    # Must match the Trusted Publisher "Environment name" on https://pypi.org/manage/project/mdtero/settings/publishing/
+    environment: pypi
     steps:
       - name: Checkout
         uses: actions/checkout@v6
