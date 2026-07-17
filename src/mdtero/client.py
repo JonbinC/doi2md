@@ -379,15 +379,22 @@ class MdteroClient:
         *,
         limit: int = 5,
         synthesize: bool = True,
+        document_ids: list[int] | None = None,
+        dois: list[str] | None = None,
     ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "question": question,
+            "limit": max(1, min(int(limit or 5), 20)),
+            "synthesize": bool(synthesize),
+        }
+        if document_ids:
+            body["document_ids"] = [int(item) for item in document_ids]
+        if dois:
+            body["dois"] = [str(item) for item in dois if str(item).strip()]
         return self._request(
             "POST",
             f"/api/v1/projects/{project_id}/rag/query",
-            json={
-                "question": question,
-                "limit": max(1, min(int(limit or 5), 20)),
-                "synthesize": bool(synthesize),
-            },
+            json=body,
         )
 
     def rag_status(self, project_id: str) -> dict[str, Any]:

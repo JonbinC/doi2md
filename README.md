@@ -28,6 +28,8 @@ mdtero doctor --json
 
 During alpha, install the known-good public client from GitHub with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`. The old PyPI `mdtero` package currently points at a retired backend bundle; use `uv tool install mdtero` only after the public client is republished there.
 
+**PyPI version pitfall:** legacy CalVer releases such as `2026.4.26.3` sort higher than SemVer alphas like `0.2.0a16`. After Trusted Publishing uploads a new `0.2.0a*` wheel, yank every `2026.*` release on PyPI (or publish a higher SemVer) before `uv tool install mdtero` will select the new client by default. Until then prefer `uv tool install mdtero==0.2.0a16` or the GitHub install command above.
+
 If a machine has no `uv`, use the installer script:
 
 ```bash

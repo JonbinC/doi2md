@@ -60,12 +60,33 @@ def build_rag_readiness(payload: dict[str, Any]) -> dict[str, Any]:
     status = str(payload.get("status") or "").strip().lower()
     reason_code = str(payload.get("reason_code") or "").strip().lower()
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    chunk_count = _summary_int(summary, "chunk_count", "indexed_chunk_count")
+    chunk_count = _summary_int(summary, "chunk_count", "embeddable_chunk_count", "indexed_chunk_count")
     embedded_count = _summary_int(summary, "embedded_count", "indexed_chunk_count")
     pending_embedding_count = _summary_int(summary, "pending_embedding_count")
+    if pending_embedding_count <= 0 and chunk_count > 0 and embedded_count < chunk_count:
+        pending_embedding_count = max(chunk_count - embedded_count, 0)
+    empty_chunk_count = _summary_int(summary, "empty_chunk_count")
+    estimated_embed_seconds_remaining = _summary_int(summary, "estimated_embed_seconds_remaining")
     match_count = _summary_int(summary, "match_count")
-    ready_for_query = status in {"ready", "succeeded"} or reason_code in {"indexed", "rag_query_succeeded", "ok", "no_matches"}
-    explicit_needs_build = reason_code in {"rag_index_not_built", "rag_index_partial"}
+    if reason_code in {
+        "rag_index_partial",
+        "rag_index_not_built",
+        "project_has_no_chunks",
+        "rag_wait_timeout",
+        "voyage_not_configured",
+        "voyage_timeout",
+        "voyage_rate_limited",
+        "voyage_request_failed",
+        "voyage_response_invalid",
+    } or status in {"partial", "not_ready", "timeout", "failed", "unavailable", "skipped"}:
+        ready_for_query = False
+    elif reason_code in {"indexed", "rag_query_succeeded", "ok", "no_matches"}:
+        ready_for_query = True
+    elif status == "ready":
+        ready_for_query = True
+    else:
+        ready_for_query = False
+    explicit_needs_build = reason_code in {"rag_index_not_built", "rag_index_partial"} or pending_embedding_count > 0
     needs_ingest = reason_code == "project_has_no_chunks" or (chunk_count <= 0 and not explicit_needs_build)
     needs_build = explicit_needs_build or (chunk_count > 0 and embedded_count < chunk_count)
     provider_configured = _provider_configured(
@@ -121,6 +142,8 @@ def build_rag_readiness(payload: dict[str, Any]) -> dict[str, Any]:
         "chunk_count": chunk_count,
         "embedded_count": embedded_count,
         "pending_embedding_count": pending_embedding_count,
+        "empty_chunk_count": empty_chunk_count,
+        "estimated_embed_seconds_remaining": estimated_embed_seconds_remaining,
         "match_count": match_count,
     }
 
@@ -389,6 +412,8 @@ def _next_commands(payload: dict[str, Any]) -> list[str]:
 
 def _summary_int(summary: dict[str, Any], *keys: str) -> int:
     for key in keys:
+        if key not in summary:
+            continue
         try:
             return int(summary.get(key) or 0)
         except (TypeError, ValueError):

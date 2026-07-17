@@ -354,7 +354,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--synthesize",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Ask the backend for a grounded synthesized answer when available (default: enabled).",
+        help="Ask the backend for a grounded synthesized answer when available (default: enabled). Use --no-synthesize for faster citation audits.",
+    )
+    rag_query.add_argument(
+        "--doi",
+        action="append",
+        default=[],
+        help="Restrict retrieval to this DOI (repeatable). Prefer with --no-synthesize for citation audits.",
+    )
+    rag_query.add_argument(
+        "--document-id",
+        action="append",
+        default=[],
+        type=int,
+        help="Restrict retrieval to this server document id (repeatable).",
     )
     _add_wait_options(rag_query)
     rag_query.add_argument("--json", action="store_true")
@@ -363,6 +376,8 @@ def build_parser() -> argparse.ArgumentParser:
     rag_ask.add_argument("--project-id")
     rag_ask.add_argument("--limit", type=int, default=5)
     rag_ask.add_argument("--synthesize", action=argparse.BooleanOptionalAction, default=True)
+    rag_ask.add_argument("--doi", action="append", default=[], help="Restrict retrieval to this DOI (repeatable).")
+    rag_ask.add_argument("--document-id", action="append", default=[], type=int, help="Restrict retrieval to this document id (repeatable).")
     _add_wait_options(rag_ask)
     rag_ask.add_argument("--json", action="store_true")
     rag_status = _cmd(rag_sub, "status", "Show RAG status.", cmd_rag_status)
@@ -3235,9 +3250,27 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
         if _rag_status_payload_is_ready(status_after_build):
             result.setdefault("status", status_after_build.get("status", "ready"))
             result.setdefault("reason_code", status_after_build.get("reason_code", "indexed"))
-        else:
-            result.setdefault("action_hint", "RAG build was submitted, but it did not become query-ready within the local wait timeout. Poll `mdtero rag status --json`, then retry `mdtero rag query \"<question>\" --build-if-needed --json`.")
-            result.setdefault("next_commands", [RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND])
+            ensure_rag_contract(result)
+            _print_result(redact_sensitive_payload(result), json_output=_args.json)
+            return 0
+        readiness = status_after_build.get("readiness") if isinstance(status_after_build.get("readiness"), dict) else {}
+        pending = readiness.get("pending_embedding_count", (status_after_build.get("summary") or {}).get("pending_embedding_count"))
+        eta = readiness.get("estimated_embed_seconds_remaining", (status_after_build.get("summary") or {}).get("estimated_embed_seconds_remaining"))
+        result.setdefault(
+            "action_hint",
+            (
+                "RAG build finished the HTTP call, but the index is not query-ready yet "
+                f"(pending_embedding={pending}, eta_seconds≈{eta}). "
+                "Poll `mdtero rag status --json`, then retry `mdtero rag query \"<question>\" --build-if-needed --json`."
+            ),
+        )
+        result.setdefault("next_commands", [RAG_STATUS_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND])
+        result["status"] = str(status_after_build.get("status") or "partial")
+        result["reason_code"] = str(status_after_build.get("reason_code") or "rag_index_not_ready")
+        ensure_rag_contract(result)
+        _print_result(redact_sensitive_payload(result), json_output=_args.json)
+        return 1
+    ensure_rag_contract(result)
     _print_result(redact_sensitive_payload(result), json_output=_args.json)
     return 0
 
@@ -3250,6 +3283,8 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
     build_if_needed = bool(getattr(args, "build_if_needed", False))
     synthesize = bool(getattr(args, "synthesize", True))
     limit = max(1, min(int(getattr(args, "limit", 5) or 5), 20))
+    dois = [str(item).strip() for item in (getattr(args, "doi", None) or []) if str(item).strip()]
+    document_ids = [int(item) for item in (getattr(args, "document_id", None) or []) if int(item) > 0]
     if build_if_needed:
         client = MdteroClient()
         root = Path.cwd()
@@ -3304,7 +3339,14 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
     if not json_output:
         console.print(f"[dim]Querying project {project_id}…[/dim]")
     try:
-        result = client.rag_query(project_id, args.question, limit=limit, synthesize=synthesize)
+        result = client.rag_query(
+            project_id,
+            args.question,
+            limit=limit,
+            synthesize=synthesize,
+            document_ids=document_ids or None,
+            dois=dois or None,
+        )
     except Exception as exc:
         payload = _rag_command_failure("query", project_id, exc)
         if bootstrap is not None:
@@ -3367,9 +3409,14 @@ def _rag_query_build_not_ready(project_id: str, question: str, bootstrap: dict[s
 
 
 def _rag_status_payload_is_ready(payload: dict[str, Any]) -> bool:
-    status = str(payload.get("status") or "").lower()
-    reason_code = str(payload.get("reason_code") or "").lower()
-    return status in {"ready", "succeeded", "indexed"} or reason_code in {"indexed", "rag_index_ready", "rag_ready"}
+    if not isinstance(payload, dict):
+        return False
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else None
+    if readiness is not None and "ready_for_query" in readiness:
+        return bool(readiness.get("ready_for_query"))
+    ensure_rag_contract(payload)
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else {}
+    return bool(readiness.get("ready_for_query"))
 
 
 def _local_ready_for_rag_count(state: Any) -> int:
@@ -3658,17 +3705,28 @@ def _wait_for_rag_ready(client: MdteroClient, project_id: str, *, args: argparse
     last_status: dict[str, Any] = {}
     while True:
         last_status = client.rag_status(project_id)
-        status = str(last_status.get("status") or "").lower()
-        reason_code = str(last_status.get("reason_code") or "").lower()
-        if status in {"ready", "succeeded", "indexed"} or reason_code in {"indexed", "rag_index_ready", "rag_ready"}:
+        ensure_rag_contract(last_status)
+        if _rag_status_payload_is_ready(last_status):
             return last_status
+        status = str(last_status.get("status") or "").lower()
         if status in {"failed", "cancelled", "error"}:
             return last_status
         if time.monotonic() >= deadline:
             last_status.setdefault("status", "timeout")
             last_status.setdefault("reason_code", "rag_wait_timeout")
-            last_status.setdefault("action_hint", "RAG build did not become ready within the local wait timeout. Poll again later with `mdtero rag status --json`.")
+            readiness = last_status.get("readiness") if isinstance(last_status.get("readiness"), dict) else {}
+            pending = readiness.get("pending_embedding_count")
+            eta = readiness.get("estimated_embed_seconds_remaining")
+            last_status.setdefault(
+                "action_hint",
+                (
+                    "RAG build did not become ready within the local wait timeout "
+                    f"(pending_embedding={pending}, eta_seconds≈{eta}). "
+                    "Poll again later with `mdtero rag status --json`."
+                ),
+            )
             last_status.setdefault("next_commands", ["mdtero rag status --json", "mdtero rag query \"<question>\" --build-if-needed --json"])
+            ensure_rag_contract(last_status)
             return last_status
         time.sleep(interval)
 
@@ -3880,20 +3938,36 @@ def cmd_rag_status(args: argparse.Namespace) -> int:
 
         status = str(result.get("status") or "unknown")
         reason = str(result.get("reason_code") or "unknown")
+        readiness = result.get("readiness") if isinstance(result.get("readiness"), dict) else {}
+        ready = bool(readiness.get("ready_for_query"))
         console.print(
             Panel(
                 f"{state.name} · {status} ({reason})",
                 title="RAG status",
-                border_style="green" if status == "ready" else "yellow",
+                border_style="green" if ready else "yellow",
             )
         )
         table = Table(show_header=False, box=None, padding=(0, 1))
         table.add_column("k", style="dim")
         table.add_column("v")
         table.add_row("Server project", str(project_id))
+        table.add_row("Ready for query", "yes" if ready else "no")
+        table.add_row("Next step", str(readiness.get("next_step") or "inspect_status"))
         table.add_row("Provider", f"{result.get('selected_provider') or 'voyage'} · {result.get('provider_state') or 'unknown'}")
         table.add_row("Model", str(summary.get("embedding_model") or result.get("embedding_model") or "unknown"))
-        table.add_row("Chunks", f"{summary.get('embedded_count', 0)}/{summary.get('chunk_count', 0)} embedded")
+        table.add_row(
+            "Chunks",
+            (
+                f"{readiness.get('embedded_count', summary.get('embedded_count', 0))}/"
+                f"{readiness.get('chunk_count', summary.get('chunk_count', 0))} embeddable embedded"
+            ),
+        )
+        table.add_row("Pending embed", str(readiness.get("pending_embedding_count", summary.get("pending_embedding_count", 0))))
+        table.add_row("Empty chunks skipped", str(readiness.get("empty_chunk_count", summary.get("empty_chunk_count", 0))))
+        table.add_row(
+            "ETA (embed)",
+            f"~{readiness.get('estimated_embed_seconds_remaining', summary.get('estimated_embed_seconds_remaining', 0))}s",
+        )
         table.add_row("Local ready", f"{indexed}/{len(state.papers)} paper artifact(s)")
         console.print(table)
         action_hint = redact_sensitive_text(result.get("action_hint")).strip()
@@ -4501,6 +4575,16 @@ def _print_rag_query_result(payload: dict[str, Any], *, json_output: bool) -> No
         meta_bits.append("reranked")
     if payload.get("used_synthesis"):
         meta_bits.append("synthesized")
+    scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
+    if scope.get("scoped"):
+        scoped_dois = [str(item) for item in (scope.get("resolved_dois") or scope.get("dois") or []) if str(item).strip()]
+        scoped_docs = [str(item) for item in (scope.get("document_ids") or []) if str(item).strip()]
+        if scoped_dois:
+            meta_bits.append("doi=" + ",".join(scoped_dois[:3]))
+        elif scoped_docs:
+            meta_bits.append("doc=" + ",".join(scoped_docs[:3]))
+        else:
+            meta_bits.append("scoped")
     console.print(Panel(" · ".join(meta_bits), title="RAG query", border_style="cyan"))
     if human_summary:
         console.print(f"[dim]{human_summary}[/dim]")

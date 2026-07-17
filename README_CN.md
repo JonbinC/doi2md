@@ -28,6 +28,8 @@ mdtero doctor --json
 
 alpha 阶段，GitHub 安装命令是已验证的公开安装路径。旧 PyPI `mdtero` 包目前指向已退役的后端 bundle；只有等公开客户端重新发布到 PyPI 后，才使用 `uv tool install mdtero`。
 
+**PyPI 版本坑：** 旧 CalVer（如 `2026.4.26.3`）在比较时会高于 SemVer alpha（如 `0.2.0a16`）。Trusted Publishing 上传新 `0.2.0a*` 后，需要在 PyPI 上 yank 全部 `2026.*`（或改发更高 SemVer），`uv tool install mdtero` 才会默认装到新客户端。在此之前请用 `uv tool install mdtero==0.2.0a16` 或上面的 GitHub 安装命令。
+
 如果机器没有 `uv`，使用安装脚本：
 
 ```bash

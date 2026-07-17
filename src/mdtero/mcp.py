@@ -618,6 +618,9 @@ def query_server_rag(
     query_fn: Any | None = None,
     client: Any | None = None,
     build_if_needed: bool = False,
+    synthesize: bool = True,
+    document_ids: list[int] | None = None,
+    dois: list[str] | None = None,
 ) -> dict[str, Any]:
     root = project_root or Path.cwd()
     state = _load_project_or_none(root)
@@ -664,7 +667,16 @@ def query_server_rag(
             "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, "mdtero rag status --json", commands["rag_build"], commands["rag_query"]],
         }
     try:
-        result = (query_fn or (client or MdteroClient()).rag_query)(state.server_project_id, cleaned_question)
+        if query_fn is not None:
+            result = query_fn(state.server_project_id, cleaned_question)
+        else:
+            result = (client or MdteroClient()).rag_query(
+                state.server_project_id,
+                cleaned_question,
+                synthesize=synthesize,
+                document_ids=document_ids,
+                dois=dois,
+            )
     except Exception as exc:
         detail = _rag_query_exception_detail(exc)
         payload = {
@@ -1457,10 +1469,16 @@ def _wait_for_agent_rag_ready(client: Any, project_id: str, *, timeout: float, i
 
 
 def _rag_status_payload_is_ready(payload: dict[str, Any]) -> bool:
-    status = str(payload.get("status") or "").lower()
-    reason_code = str(payload.get("reason_code") or "").lower()
+    if not isinstance(payload, dict):
+        return False
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else None
+    if readiness is not None and "ready_for_query" in readiness:
+        return bool(readiness.get("ready_for_query"))
+    from .rag_contract import ensure_rag_contract
+
+    ensure_rag_contract(payload)
     readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else {}
-    return bool(readiness.get("ready_for_query")) or status in {"ready", "succeeded", "indexed"} or reason_code in {"indexed", "rag_index_ready", "rag_ready"}
+    return bool(readiness.get("ready_for_query"))
 
 
 def _find_or_create_server_project_for_mcp(client: Any, name: str, *, description: str | None = None) -> tuple[dict[str, Any], bool]:
@@ -2609,8 +2627,20 @@ def serve_project_context(project_root: Path | None = None) -> None:
         return build_server_rag_for_agent(root, project_id=project_id, wait=wait, timeout=timeout, interval=interval)
 
     @mcp.tool
-    def rag_query(question: str) -> dict:
-        return query_server_rag(question, root, build_if_needed=True)
+    def rag_query(
+        question: str,
+        synthesize: bool = True,
+        document_ids: list[int] | None = None,
+        dois: list[str] | None = None,
+    ) -> dict:
+        return query_server_rag(
+            question,
+            root,
+            build_if_needed=True,
+            synthesize=synthesize,
+            document_ids=document_ids,
+            dois=dois,
+        )
 
     @mcp.tool
     def agent_briefing() -> dict:
