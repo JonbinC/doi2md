@@ -5645,7 +5645,7 @@ def test_mcp_rag_query_build_if_needed_bootstraps_unlinked_project(tmp_path: Pat
             calls.append(("build", project_id))
             return {"status": "ready", "reason_code": "indexed"}
 
-        def rag_query(self, project_id, question):
+        def rag_query(self, project_id, question, **kwargs):
             calls.append(("query", project_id, question))
             return {"answer": "Bootstrapped answer.", "matches": []}
 
@@ -5688,7 +5688,7 @@ def test_mcp_rag_query_build_if_needed_reuses_matching_server_project(tmp_path: 
             calls.append(("build", project_id))
             return {"status": "ready", "reason_code": "indexed"}
 
-        def rag_query(self, project_id, question):
+        def rag_query(self, project_id, question, **kwargs):
             calls.append(("query", project_id, question))
             return {"answer": "Reused answer.", "matches": []}
 
@@ -6018,6 +6018,8 @@ def test_mcp_server_rag_status_surfaces_ready_server_state(tmp_path: Path):
         "chunk_count": 5,
         "embedded_count": 5,
         "pending_embedding_count": 0,
+        "empty_chunk_count": 0,
+        "estimated_embed_seconds_remaining": 0,
         "match_count": 0,
     }
     assert status["agent_summary"] == {
@@ -7000,7 +7002,8 @@ def test_rag_status_prefers_server_status_when_project_is_linked(monkeypatch, tm
     output = capsys.readouterr().out
 
     assert "ready (indexed)" in output
-    assert "3/3 embedded" in output
+    assert "3/3 embeddable embedded" in output
+    assert "Ready for query" in output
     assert "rag-model-test" in output
     assert "Hint: Query this project or serve it over MCP." in output
     assert "mdtero rag ask" in output
@@ -7036,7 +7039,8 @@ def test_rag_status_prints_server_next_commands_for_partial_index(monkeypatch, t
     output = capsys.readouterr().out
 
     assert "partial (rag_index_partial)" in output
-    assert "2/4 embedded" in output
+    assert "2/4 embeddable embedded" in output
+    assert "Pending embed" in output
     assert "Hint: Rebuild project RAG" in output
     assert "mdtero rag ask" in output
     assert "mdtero rag build" in output
