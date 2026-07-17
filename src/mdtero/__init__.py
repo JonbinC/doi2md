@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__version__ = "0.2.0a15"
+__version__ = "0.2.0a16"
 
 __all__ = [
     "ArtifactRef",

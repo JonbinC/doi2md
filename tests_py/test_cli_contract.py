@@ -2232,6 +2232,7 @@ def test_parse_with_route_uses_cloud_elsevier_when_relay_is_online_off_campus(mo
         ],
     }
     calls: list[str] = []
+    config = MdteroConfig(api_key="mdt_live_test")
 
     def fake_request(self, method, path, **kwargs):
         calls.append(path)
@@ -2244,9 +2245,11 @@ def test_parse_with_route_uses_cloud_elsevier_when_relay_is_online_off_campus(mo
         raise AssertionError(path)
 
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
-    monkeypatch.setattr("mdtero.acquisition.local_egress_is_campus_outlet", lambda **kwargs: False)
+    monkeypatch.setattr("mdtero.client.local_egress_is_campus_outlet", lambda **kwargs: False)
 
-    route_result, task, acquisition = MdteroClient(timeout=60.0).parse_with_route("10.1016/j.energy.2026.140192")
+    route_result, task, acquisition = MdteroClient(config=config, timeout=60.0).parse_with_route(
+        "10.1016/j.energy.2026.140192"
+    )
 
     assert route_result is route
     assert task["task_id"] == "task-cloud"
