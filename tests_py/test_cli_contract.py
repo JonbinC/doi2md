@@ -5430,6 +5430,9 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
                     "doi": "10.48550/arXiv.1706.03762",
                     "year": 2017,
                     "venue": "arXiv",
+                    "confidence": "high",
+                    "match_signal": {"cosine": 0.71, "term_coverage": 0.5, "matched_terms": ["attention"]},
+                    "quote_is_short": False,
                 }
             ],
         }
@@ -5446,6 +5449,14 @@ def test_mcp_rag_query_backfills_agent_evidence_pack_from_matches(tmp_path: Path
     assert payload["source_nodes"][0]["node_id"] == "doc-7:chunk-9"
     assert payload["source_nodes"][0]["metadata"]["doi"] == "10.48550/arXiv.1706.03762"
     assert payload["source_nodes"][0]["metadata"]["year"] == 2017
+    assert payload["citations"][0]["confidence"] == "high"
+    assert payload["citations"][0]["match_signal"]["matched_terms"] == ["attention"]
+    assert payload["source_nodes"][0]["confidence"] == "high"
+    assert payload["source_nodes"][0]["metadata"]["match_signal"]["cosine"] == 0.71
+    assert payload["evidence_quality"]["match_count"] == 1
+    assert payload["evidence_quality"]["confidence_counts"]["high"] == 1
+    assert payload["evidence_quality"]["distinct_document_count"] == 1
+    assert payload["evidence_pack"]["evidence_quality"]["match_count"] == 1
     assert payload["evidence_pack"]["answer_kind"] == "extractive_evidence_pack"
     assert payload["evidence_pack"]["question"] == "What does attention replace?"
     assert "[1] Attention Is All You Need:53-58" in payload["evidence_pack"]["context_markdown"]
