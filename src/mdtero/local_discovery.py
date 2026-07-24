@@ -230,6 +230,7 @@ def search_local_discovery(
             detail={"providers": diagnostics, "errors": errors},
         )
 
+    key_hints = _rate_limit_key_hints(errors, credentials=credentials)
     return {
         "provider": "+".join(sources_succeeded) if sources_succeeded else "local",
         "source": "local_multi_source",
@@ -265,12 +266,44 @@ def search_local_discovery(
             "sources_succeeded": sources_succeeded,
             "sources_skipped": sources_skipped,
             "errors": errors or None,
+            "key_hints": key_hints or None,
             "server_openalex_attempted": False,
             "scihub_enabled_for_search": False,
             "semantic_scholar_default_role": "enrich",
             **enrichment_meta,
         },
     }
+
+
+def _rate_limit_key_hints(errors: list[dict[str, Any]], *, credentials: dict[str, Any]) -> list[dict[str, str]]:
+    hints: list[dict[str, str]] = []
+    rate_limited = {
+        str(row.get("source") or "")
+        for row in errors
+        if row.get("kind") == "rate_limited" or row.get("reason_code") == "provider_rate_limited"
+    }
+    if "openalex" in rate_limited and not str(credentials.get("openalex_api_key") or "").strip():
+        hints.append(
+            {
+                "provider": "openalex",
+                "action_hint": (
+                    "OpenAlex rate-limited without a key. Discover still returned other sources. "
+                    "Free key: https://openalex.org/settings/api then "
+                    "`mdtero config academic --openalex-key <key> --json`."
+                ),
+            }
+        )
+    if "semantic_scholar" in rate_limited and not str(credentials.get("semantic_scholar_api_key") or "").strip():
+        hints.append(
+            {
+                "provider": "semantic_scholar",
+                "action_hint": (
+                    "Semantic Scholar rate-limited without a key. "
+                    "Add one with `mdtero config academic --semantic-scholar-key <key> --json`, or use `--enrich none`."
+                ),
+            }
+        )
+    return hints
 
 
 def _provider_kwargs(name: str, credentials: dict[str, Any]) -> dict[str, Any]:
