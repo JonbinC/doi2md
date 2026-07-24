@@ -19,10 +19,18 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from . import __version__
+from .access_outlets import (
+    access_status,
+    clear_carsi_cookies,
+    doctor_access_row,
+    import_carsi_cookies_file,
+    load_carsi_cookies,
+    suggest_carsi_locale,
+)
 from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
-from .config import MdteroConfig, config_path, load_config, save_config
+from .config import AccessOutletConfig, MdteroConfig, config_path, load_config, save_config
 from .discovery_providers import provider_capability_matrix
 from .extension_handoff import (
     attach_extension_handoff,
@@ -259,7 +267,18 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument(
         "--sources",
         default="free_core",
-        help="Local providers: free_core (default), all, or comma list (arxiv,pubmed,crossref,openalex,...). Sci-Hub is never a search source.",
+        help="Local providers: free_core (default, no S2 fan-out), all, or comma list (arxiv,pubmed,crossref,openalex,...). Sci-Hub is never a search source.",
+    )
+    discover.add_argument(
+        "--enrich",
+        default="semantic_scholar",
+        help="Post-merge enrichers for publications (default: semantic_scholar via strong IDs). Use none to disable.",
+    )
+    discover.add_argument(
+        "--entity-type",
+        choices=["publication", "trial"],
+        default="publication",
+        help="publication (default papers/preprints) or trial (ClinicalTrials.gov registrations).",
     )
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
@@ -451,6 +470,31 @@ def build_parser() -> argparse.ArgumentParser:
     relay_serve.add_argument("--json", action="store_true", help="Print machine-readable relay lifecycle events.")
     relay_status = _cmd(relay_sub, "status", "Show whether your campus relay is connected.", cmd_relay_status)
     relay_status.add_argument("--json", action="store_true")
+
+    access = sub.add_parser("access", help="Local access outlets: campus relay, CARSI cookies, proxy.")
+    access.set_defaults(func=_print_nested_help(access))
+    access_sub = access.add_subparsers(dest="access_command")
+    access_status_cmd = _cmd(access_sub, "status", "Show campus relay / CARSI / proxy outlet status.", cmd_access_status)
+    access_status_cmd.add_argument("--json", action="store_true")
+    access_carsi = access_sub.add_parser("carsi", help="Opt-in CARSI institutional SSO cookies (local only).")
+    access_carsi.set_defaults(func=_print_nested_help(access_carsi))
+    access_carsi_sub = access_carsi.add_subparsers(dest="access_carsi_command")
+    carsi_enable = _cmd(access_carsi_sub, "enable", "Enable CARSI cookie injection for publisher fetches.", cmd_access_carsi_enable)
+    carsi_enable.add_argument("--institution", help="Display label for your university, e.g. 'Tsinghua'.")
+    carsi_enable.add_argument("--entity-id", help="Optional IdP/entity id for your institution.")
+    carsi_enable.add_argument("--json", action="store_true")
+    carsi_disable = _cmd(access_carsi_sub, "disable", "Disable CARSI cookie injection.", cmd_access_carsi_disable)
+    carsi_disable.add_argument("--json", action="store_true")
+    carsi_import = _cmd(
+        access_carsi_sub,
+        "import-cookies",
+        "Import browser-exported SSO cookies JSON (stays on this machine).",
+        cmd_access_carsi_import_cookies,
+    )
+    carsi_import.add_argument("--file", type=Path, required=True, help="JSON list or {cookies:[...]} with name/value/domain.")
+    carsi_import.add_argument("--json", action="store_true")
+    carsi_clear = _cmd(access_carsi_sub, "clear-cookies", "Delete local CARSI cookies.", cmd_access_carsi_clear_cookies)
+    carsi_clear.add_argument("--json", action="store_true")
 
     status = _cmd(sub, "status", "Poll one task and update the current project.", cmd_status)
     status.add_argument("task_id")
@@ -1026,6 +1070,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         ("API base", "ok", cfg.api_base_url),
         ("Proxy", "required" if cfg.campus_proxy_required else ("configured" if cfg.effective_proxy_url else "optional"), _proxy_config_detail(cfg)),
         ("Campus relay", "online" if relay_status.get("connected") else ("offline" if relay_status.get("status") != "skipped" else "optional"), _relay_config_detail(relay_status)),
+        doctor_access_row(cfg, relay_connected=bool(relay_status.get("connected"))),
         ("Install boundary", str(install_boundary["status"]), str(install_boundary["action_hint"])),
         ("PDF fallback", _doctor_pdf_fallback_row_status(server_pdf_fallback=server_pdf_fallback), _doctor_pdf_fallback_row_detail(server_pdf_fallback=server_pdf_fallback)),
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
@@ -1057,6 +1102,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "api_base_url": cfg.api_base_url,
         "proxy": _proxy_config_payload(cfg),
         "relay": relay_status,
+        "access": access_status(cfg, relay_connected=bool(relay_status.get("connected"))),
         "install_boundary": _install_boundary_summary(),
         "checks": row_payload,
         "dependencies": {
@@ -1074,6 +1120,8 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "enable_scihub": bool(getattr(cfg.academic, "enable_scihub", False)),
             "discover_source": "local_multi_source",
             "discovery_providers": "free_core",
+            "discovery_enrich_default": "semantic_scholar",
+            "discovery_entity_types": ["publication", "trial"],
             "discovery_capability_matrix": provider_capability_matrix(),
         },
         "zotero": {
@@ -2174,8 +2222,18 @@ def cmd_discover(args: argparse.Namespace) -> int:
     page = max(1, int(getattr(args, "page", 1) or 1))
     source = str(getattr(args, "source", "local") or "local")
     providers = str(getattr(args, "sources", "free_core") or "free_core")
+    enrich = str(getattr(args, "enrich", "semantic_scholar") or "semantic_scholar")
+    entity_type = str(getattr(args, "entity_type", "publication") or "publication")
     try:
-        result = MdteroClient().discover(query, limit=args.limit, page=page, source=source, providers=providers)
+        result = MdteroClient().discover(
+            query,
+            limit=args.limit,
+            page=page,
+            source=source,
+            providers=providers,
+            enrich=enrich,
+            entity_type=entity_type,
+        )
     except ProxyValidationError as exc:
         if args.json:
             print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
@@ -2200,6 +2258,8 @@ def cmd_discover(args: argparse.Namespace) -> int:
                 initial_page=page,
                 source=source,
                 providers=providers,
+                enrich=enrich,
+                entity_type=entity_type,
             )
             selection = str(result.get("interactive_selection") or "")
             project_add = _add_discovery_results_to_project(result, selection=selection)
@@ -2278,6 +2338,8 @@ def _run_discovery_interactive_session(
     initial_page: int = 1,
     source: str = "local",
     providers: str = "free_core",
+    enrich: str = "semantic_scholar",
+    entity_type: str = "publication",
 ) -> dict[str, Any]:
     console = Console(stderr=True)
     client = MdteroClient()
@@ -2286,6 +2348,8 @@ def _run_discovery_interactive_session(
     page = max(1, int(initial_page or 1))
     discovery_source = str(source or "local")
     discovery_providers = str(providers or "free_core")
+    discovery_enrich = str(enrich or "semantic_scholar")
+    discovery_entity_type = str(entity_type or "publication")
     result = dict(initial_result)
     selection = ""
     action = "skip"
@@ -2323,6 +2387,8 @@ def _run_discovery_interactive_session(
                 page=page,
                 source=discovery_source,
                 providers=discovery_providers,
+                enrich=discovery_enrich,
+                entity_type=discovery_entity_type,
             )
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
@@ -2337,6 +2403,8 @@ def _run_discovery_interactive_session(
                 page=page,
                 source=discovery_source,
                 providers=discovery_providers,
+                enrich=discovery_enrich,
+                entity_type=discovery_entity_type,
             )
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
@@ -2352,6 +2420,8 @@ def _run_discovery_interactive_session(
                 page=page,
                 source=discovery_source,
                 providers=discovery_providers,
+                enrich=discovery_enrich,
+                entity_type=discovery_entity_type,
             )
             accumulated = []
             seen = set()
@@ -4168,6 +4238,113 @@ def cmd_relay_serve(args: argparse.Namespace) -> int:
         return 0
     if args.json:
         print(json.dumps({"status": "stopped", "events": json_events}, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_access_status(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    relay_connected = None
+    if cfg.is_authenticated:
+        try:
+            relay_payload = MdteroClient(config=cfg, timeout=10.0)._request("GET", "/api/v1/relay/status")
+            relay_connected = bool(relay_payload.get("connected"))
+        except Exception:
+            relay_connected = False
+    payload = access_status(cfg, relay_connected=relay_connected)
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
+    console = Console()
+    console.print("Access outlets (campus relay ≈ remote egress; CARSI ≈ local SSO cookies)")
+    for row in payload.get("outlets") or []:
+        console.print(f"- {row.get('outlet')}: enabled={row.get('enabled')} ready={row.get('ready')} — {row.get('detail')}")
+    if payload.get("carsi_suggested"):
+        console.print("Hint: Chinese locale detected; CARSI is optional via `mdtero access carsi enable`.")
+    return 0
+
+
+def cmd_access_carsi_enable(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    access = cfg.access if isinstance(cfg.access, AccessOutletConfig) else AccessOutletConfig()
+    access.carsi_enabled = True
+    if args.institution:
+        access.carsi_institution = str(args.institution).strip() or None
+    if getattr(args, "entity_id", None):
+        access.carsi_entity_id = str(args.entity_id).strip() or None
+    cfg.access = access
+    save_config(cfg)
+    cookies = load_carsi_cookies()
+    payload = {
+        "status": "ok",
+        "carsi_enabled": True,
+        "institution": access.carsi_institution,
+        "entity_id": access.carsi_entity_id,
+        "cookie_count": len(cookies),
+        "suggested_locale": suggest_carsi_locale(),
+        "next_commands": (
+            ["mdtero access status --json"]
+            if cookies
+            else ["mdtero access carsi import-cookies --file cookies.json", "mdtero access status --json"]
+        ),
+        "note": "CARSI cookies stay local and are injected only when this outlet is enabled.",
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print("CARSI outlet enabled." + ("" if cookies else " Import cookies next: mdtero access carsi import-cookies --file cookies.json"))
+    return 0
+
+
+def cmd_access_carsi_disable(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    access = cfg.access if isinstance(cfg.access, AccessOutletConfig) else AccessOutletConfig()
+    access.carsi_enabled = False
+    cfg.access = access
+    save_config(cfg)
+    payload = {"status": "ok", "carsi_enabled": False}
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print("CARSI outlet disabled.")
+    return 0
+
+
+def cmd_access_carsi_import_cookies(args: argparse.Namespace) -> int:
+    try:
+        path = import_carsi_cookies_file(Path(args.file))
+        cookies = load_carsi_cookies(path)
+    except Exception as exc:
+        payload = {"status": "failed", "reason_code": "carsi_cookie_import_failed", "message": str(exc)}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print(str(exc))
+        return 1
+    cfg = load_config()
+    if not cfg.access.carsi_enabled:
+        cfg.access.carsi_enabled = True
+        save_config(cfg)
+    payload = {
+        "status": "ok",
+        "cookie_count": len(cookies),
+        "path": str(path),
+        "carsi_enabled": True,
+        "next_commands": ["mdtero access status --json", "mdtero doctor --json"],
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Imported {len(cookies)} CARSI cookies to {path}")
+    return 0
+
+
+def cmd_access_carsi_clear_cookies(args: argparse.Namespace) -> int:
+    clear_carsi_cookies()
+    payload = {"status": "ok", "cleared": True}
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print("Local CARSI cookies cleared.")
     return 0
 
 

@@ -46,21 +46,34 @@ def _normalize(entry: ET.Element) -> dict[str, Any]:
         if link.attrib.get("type") == "application/pdf" or link.attrib.get("title") == "pdf":
             pdf_url = link.attrib.get("href")
             break
-    doi = _text(entry.find(f"{ARXIV_NS}doi")) or extract_doi(summary) or extract_doi(entry_id)
+    publisher_doi = _text(entry.find(f"{ARXIV_NS}doi")) or extract_doi(summary)
+    # Prefer the arXiv paper id for parse; publisher DOI is metadata only.
+    clean_id = re.sub(r"v\d+$", "", paper_id or "", flags=re.I) if paper_id else None
+    arxiv_doi = f"10.48550/arXiv.{clean_id}" if clean_id else None
     categories = [cat.attrib.get("term") for cat in entry.findall(f"{ATOM}category") if cat.attrib.get("term")]
-    return discovery_item(
+    extra: dict[str, Any] = {}
+    if categories:
+        extra["categories"] = categories
+    if publisher_doi and publisher_doi.lower() != (arxiv_doi or "").lower():
+        extra["publisher_doi"] = publisher_doi
+    item = discovery_item(
         source="arxiv",
-        external_id=paper_id,
+        external_id=clean_id or paper_id,
         title=re.sub(r"\s+", " ", title),
         authors=authors,
         year=year,
         venue="arXiv",
         abstract_preview=re.sub(r"\s+", " ", summary) if summary else None,
-        doi=doi,
-        source_url=entry_id or (f"https://arxiv.org/abs/{paper_id}" if paper_id else None),
-        open_access_pdf_url=pdf_url or (f"https://arxiv.org/pdf/{paper_id}.pdf" if paper_id else None),
-        extra={"categories": categories} if categories else None,
+        doi=arxiv_doi,
+        source_url=(f"https://arxiv.org/abs/{clean_id}" if clean_id else None) or entry_id,
+        open_access_pdf_url=pdf_url or (f"https://arxiv.org/pdf/{clean_id}.pdf" if clean_id else None),
+        extra=extra or None,
     )
+    if publisher_doi and publisher_doi.lower() != (arxiv_doi or "").lower():
+        item["publisher_doi"] = publisher_doi
+    item["arxiv_id"] = clean_id or paper_id
+    item["entity_type"] = "preprint"
+    return item
 
 
 def _text(node: ET.Element | None) -> str:

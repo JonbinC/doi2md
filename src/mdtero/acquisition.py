@@ -176,11 +176,60 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
 
     errors: list[dict[str, Any]] = []
     allowed_kinds = _allowed_artifact_kinds(route)
+    artifact = _try_acquire_candidates(
+        route,
+        candidates,
+        allowed_kinds=allowed_kinds,
+        timeout=timeout,
+        config=config,
+        errors=errors,
+    )
+    if artifact is not None:
+        return artifact
+
+    # HTML-first routes (e.g. best_oa_location_html) often skip OA/publisher PDFs.
+    # If HTML/XML fails, retry PDF candidates instead of failing closed.
+    if "pdf" not in allowed_kinds and _has_pdf_candidate(route, candidates):
+        pdf_errors: list[dict[str, Any]] = []
+        artifact = _try_acquire_candidates(
+            route,
+            candidates,
+            allowed_kinds={"pdf"},
+            timeout=timeout,
+            config=config,
+            errors=pdf_errors,
+            only_kinds={"pdf"},
+        )
+        if artifact is not None:
+            return artifact
+        errors.extend(pdf_errors)
+
+    reason_code, action_hint, diagnostics = _summarize_acquisition_failures(errors)
+    if any(row.get("reason_code") == "client_acquisition_artifact_kind_not_allowed" for row in errors):
+        diagnostics = {
+            **(diagnostics if isinstance(diagnostics, dict) else {"errors": diagnostics}),
+            "pdf_fallback_attempted": "pdf" not in allowed_kinds,
+        }
+    raise AcquisitionError(reason_code, action_hint, diagnostics=diagnostics)
+
+
+def _try_acquire_candidates(
+    route: dict[str, Any],
+    candidates: list[dict[str, str]],
+    *,
+    allowed_kinds: set[str],
+    timeout: float,
+    config: Any | None,
+    errors: list[dict[str, Any]],
+    only_kinds: set[str] | None = None,
+) -> AcquiredArtifact | None:
     for candidate in candidates:
         url = str(candidate.get("url") or "").strip()
         if not url:
             continue
         artifact_kind = _artifact_kind(candidate, route, url)
+        if only_kinds and artifact_kind not in only_kinds:
+            continue
         if allowed_kinds and artifact_kind not in allowed_kinds:
             errors.append(
                 {
@@ -200,9 +249,17 @@ def acquire_from_route(route: dict[str, Any], input_value: str, *, timeout: floa
             return _fetch_with_httpx(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "httpx", **_candidate_error_context(candidate), **exc.to_dict()})
+    return None
 
-    reason_code, action_hint, diagnostics = _summarize_acquisition_failures(errors)
-    raise AcquisitionError(reason_code, action_hint, diagnostics=diagnostics)
+
+def _has_pdf_candidate(route: dict[str, Any], candidates: list[dict[str, str]]) -> bool:
+    for candidate in candidates:
+        url = str(candidate.get("url") or "").strip()
+        if not url:
+            continue
+        if _artifact_kind(candidate, route, url) == "pdf":
+            return True
+    return False
 
 
 def _allowed_artifact_kinds(route: dict[str, Any]) -> set[str]:
@@ -234,18 +291,33 @@ def curl_cffi_available() -> bool:
 
 
 def _credential_headers(route: dict[str, Any], candidate: dict[str, str], url: str, *, config: Any | None) -> dict[str, str]:
+    headers: dict[str, str] = {}
     connector = str(candidate.get("connector") or "").lower()
     actions = {str(action) for action in route.get("action_sequence") or []}
     host = urllib.parse.urlparse(url).netloc.lower()
     if ("fetch_elsevier_xml" in actions or connector == "elsevier_article_retrieval_api" or host == "api.elsevier.com"):
         key = _elsevier_api_key(config)
         if key:
-            return {"X-ELS-APIKey": key}
+            headers["X-ELS-APIKey"] = key
     if connector == "wiley_tdm" or host == "api.wiley.com" or "fetch_wiley_tdm_pdf" in actions:
         token = _wiley_tdm_token(config)
         if token:
-            return {"Wiley-TDM-Client-Token": token}
-    return {}
+            headers["Wiley-TDM-Client-Token"] = token
+    cookie = _access_cookie_header(url, config=config)
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
+
+
+def _access_cookie_header(url: str, *, config: Any | None) -> str | None:
+    access = getattr(config, "access", None)
+    if access is None or not bool(getattr(access, "carsi_enabled", False)):
+        return None
+    try:
+        from .access_outlets import cookie_header_for_url, load_carsi_cookies
+    except Exception:
+        return None
+    return cookie_header_for_url(url, load_carsi_cookies())
 
 
 def _elsevier_api_key(config: Any | None) -> str:

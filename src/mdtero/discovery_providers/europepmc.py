@@ -53,7 +53,8 @@ def _normalize(item: dict[str, Any]) -> dict[str, Any]:
         year = int(year) if year is not None else None
     except (TypeError, ValueError):
         year = None
-    return discovery_item(
+    citation_count = int(item.get("citedByCount") or 0)
+    row = discovery_item(
         source="europepmc",
         external_id=paper_id,
         title=str(item.get("title") or "").strip(),
@@ -61,8 +62,14 @@ def _normalize(item: dict[str, Any]) -> dict[str, Any]:
         year=year,
         venue=str(item.get("journalTitle") or "").strip() or None,
         abstract_preview=str(item.get("abstractText") or "").strip() or None,
-        citation_count=int(item.get("citedByCount") or 0),
+        citation_count=citation_count,
         doi=doi,
         source_url=source_url,
         open_access_pdf_url=pdf,
     )
+    row["pmid"] = pmid
+    row["pmcid"] = pmcid.upper() if pmcid else None
+    row["entity_type"] = "publication"
+    row["citation_count_source"] = "europepmc"
+    row["citation_counts"] = {"europepmc": citation_count}
+    return row

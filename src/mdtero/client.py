@@ -265,11 +265,14 @@ class MdteroClient:
         page: int = 1,
         source: str = "local",
         providers: str | None = None,
+        enrich: str | None = None,
+        entity_type: str = "publication",
     ) -> dict[str, Any]:
         """Search literature metadata.
 
         Default ``source='local'`` talks to multi-source academic APIs from the
-        workstation (OpenAlex, Semantic Scholar, Crossref, arXiv, PubMed, ...).
+        workstation (OpenAlex, Crossref, arXiv, PubMed, ...). Semantic Scholar
+        defaults to strong-ID enrich. Trial registrations use ``entity_type='trial'``.
         The Mdtero API path is only a proxy and is opt-in via ``source='server'``.
         """
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
@@ -286,7 +289,14 @@ class MdteroClient:
             )
         if mode in {"local", "auto"}:
             try:
-                return self._local_discovery_search(query, limit=limit, page=page, providers=providers)
+                return self._local_discovery_search(
+                    query,
+                    limit=limit,
+                    page=page,
+                    providers=providers,
+                    enrich=enrich,
+                    entity_type=entity_type,
+                )
             except DiscoveryError:
                 if mode == "local":
                     raise
@@ -309,6 +319,8 @@ class MdteroClient:
         limit: int,
         page: int = 1,
         providers: str | None = None,
+        enrich: str | None = None,
+        entity_type: str = "publication",
     ) -> dict[str, Any]:
         academic = self.config.academic
         try:
@@ -317,6 +329,8 @@ class MdteroClient:
                 limit=limit,
                 page=page,
                 providers=providers,
+                enrich=enrich,
+                entity_type=entity_type,
                 openalex_api_key=getattr(academic, "openalex_api_key", None),
                 semantic_scholar_api_key=getattr(academic, "semantic_scholar_api_key", None),
                 core_api_key=getattr(academic, "core_api_key", None),

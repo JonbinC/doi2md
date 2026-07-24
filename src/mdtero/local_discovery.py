@@ -1,7 +1,8 @@
 """Client-side multi-source academic discovery.
 
-Absorbs paper-search-mcp coverage into Mdtero's existing local discover path.
+Absorbs paper-search-mcp coverage plus nature-academic-search merge/enrich patterns.
 Keys are optional for most sources. Sci-Hub is download-only and opt-in.
+Semantic Scholar defaults to strong-ID enrich (not free_core fan-out).
 """
 
 from __future__ import annotations
@@ -9,15 +10,18 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from .discovery_http import LocalDiscoveryError, normalize_doi
+from .discovery_http import LocalDiscoveryError
+from .discovery_merge import deduplicate_discovery_records, prepare_discovery_record
 from .discovery_providers import (
     FREE_CORE_PROVIDERS,
     PROVIDER_SEARCHERS,
     provider_capability_matrix,
+    resolve_enrichers,
     resolve_provider_names,
 )
 from .discovery_providers import openalex as openalex_provider
 from .discovery_providers import semantic_scholar as semantic_provider
+from .discovery_rank import rank_discovery_items, sanitize_discovery_item
 
 DEFAULT_OPENALEX_API_BASE = openalex_provider.DEFAULT_API_BASE
 DEFAULT_SEMANTIC_SCHOLAR_API_BASE = semantic_provider.DEFAULT_API_BASE
@@ -72,6 +76,8 @@ def search_local_discovery(
     limit: int = 10,
     page: int = 1,
     providers: str | tuple[str, ...] | list[str] | None = None,
+    enrich: str | tuple[str, ...] | list[str] | None = None,
+    entity_type: str = "publication",
     openalex_api_key: str | None = None,
     semantic_scholar_api_key: str | None = None,
     core_api_key: str | None = None,
@@ -83,15 +89,23 @@ def search_local_discovery(
     proxy_url: str | None = None,
     openalex_api_base: str = DEFAULT_OPENALEX_API_BASE,
     semantic_scholar_api_base: str = DEFAULT_SEMANTIC_SCHOLAR_API_BASE,
-    max_workers: int = 8,
+    max_workers: int = 5,
 ) -> dict[str, Any]:
     query_text = str(query or "").strip()
     if not query_text:
         raise LocalDiscoveryError("query is required", reason_code="discovery_query_missing")
 
+    entity = str(entity_type or "publication").strip().lower()
+    if entity not in {"publication", "trial"}:
+        raise LocalDiscoveryError(
+            f"Unsupported entity_type: {entity_type}",
+            reason_code="invalid_discovery_entity_type",
+        )
+
     page_number = max(1, int(page or 1))
     per_page = max(1, min(int(limit or 10), 25))
-    selected = resolve_provider_names(providers)
+    selected = resolve_provider_names(providers, entity_type=entity)
+    enrichers = resolve_enrichers(enrich, entity_type=entity, selected_providers=selected)
     credentials = {
         "openalex_api_key": openalex_api_key,
         "semantic_scholar_api_key": semantic_scholar_api_key,
@@ -107,8 +121,11 @@ def search_local_discovery(
     }
 
     diagnostics: list[dict[str, Any]] = []
-    buckets: list[list[dict[str, Any]]] = []
+    errors: list[dict[str, Any]] = []
     bucket_by_provider: dict[str, list[dict[str, Any]]] = {}
+    sources_queried = list(selected)
+    sources_succeeded: list[str] = []
+    sources_skipped: list[dict[str, Any]] = []
 
     def _run(name: str) -> tuple[str, dict[str, Any] | None, LocalDiscoveryError | None]:
         searcher = PROVIDER_SEARCHERS.get(name)
@@ -141,57 +158,117 @@ def search_local_discovery(
                         "detail": str(error.detail or error),
                     }
                 )
+                errors.append(
+                    {
+                        "source": name,
+                        "error": str(error),
+                        "reason_code": error.reason_code,
+                        "kind": "rate_limited" if error.reason_code == "provider_rate_limited" else "source_error",
+                    }
+                )
                 continue
             assert payload is not None
             items = [item for item in payload.get("items") or [] if isinstance(item, dict)]
+            prepared_items: list[dict[str, Any]] = []
             for item in items:
                 item.setdefault("source", name)
                 item.setdefault("external_source", name)
+                item.setdefault("entity_type", entity)
                 item.update(_query_match_summary(item, query=query_text))
-            bucket_by_provider[name] = items
+                prepared_items.append(prepare_discovery_record(item))
+            bucket_by_provider[name] = prepared_items
+            sources_succeeded.append(name)
             diagnostics.append(
                 {
                     "provider": name,
                     "status": "succeeded",
-                    "item_count": len(items),
+                    "item_count": len(prepared_items),
                     "authenticated": bool(payload.get("authenticated")),
                 }
             )
 
-    # Preserve requested provider order for round-robin fairness.
+    raw_records: list[dict[str, Any]] = []
     for name in selected:
-        if name in bucket_by_provider:
-            buckets.append(bucket_by_provider[name])
+        raw_records.extend(bucket_by_provider.get(name) or [])
 
-    merged = _merge_discovery_items(buckets, limit=per_page)
-    if not merged and not any(row.get("status") == "succeeded" for row in diagnostics):
+    merged = deduplicate_discovery_records(raw_records)
+    ranked = rank_discovery_items([sanitize_discovery_item(item) for item in merged])
+    # Re-prepare after sanitize so identifier fields stay consistent.
+    ranked = [prepare_discovery_record(item) for item in ranked]
+    page_items = ranked[:per_page]
+
+    enrichment_meta: dict[str, Any] = {
+        "enrichment_sources": list(enrichers),
+        "enrichment_sources_queried": [],
+        "enrichment_sources_succeeded": [],
+    }
+    if enrichers and page_items:
+        for enricher in enrichers:
+            if enricher != "semantic_scholar":
+                sources_skipped.append({"source": enricher, "reason": "unsupported_enricher"})
+                continue
+            result = semantic_provider.enrich_records(
+                page_items,
+                api_key=semantic_scholar_api_key,
+                api_base_url=semantic_scholar_api_base,
+                limit=per_page,
+            )
+            page_items = [prepare_discovery_record(item) for item in result["results"]]
+            enrichment_meta["enrichment_sources_queried"] = list(result.get("sources_queried") or [])
+            enrichment_meta["enrichment_sources_succeeded"] = list(result.get("sources_succeeded") or [])
+            sources_queried = list(dict.fromkeys([*sources_queried, *enrichment_meta["enrichment_sources_queried"]]))
+            sources_succeeded = list(
+                dict.fromkeys([*sources_succeeded, *enrichment_meta["enrichment_sources_succeeded"]])
+            )
+            sources_skipped.extend(result.get("skipped") or [])
+            errors.extend(result.get("errors") or [])
+
+    if not page_items and not sources_succeeded:
         raise LocalDiscoveryError(
             "Local discovery providers failed.",
             reason_code="local_discovery_failed",
-            detail={"providers": diagnostics},
+            detail={"providers": diagnostics, "errors": errors},
         )
 
-    used = [row["provider"] for row in diagnostics if row.get("status") == "succeeded"]
     return {
-        "provider": "+".join(used) if used else "local",
+        "provider": "+".join(sources_succeeded) if sources_succeeded else "local",
         "source": "local_multi_source",
         "query": query_text,
-        "items": merged,
+        "entity_type": entity,
+        "items": page_items,
+        "raw_result_count": len(raw_records),
+        "result_count": len(page_items),
+        "sources_queried": sources_queried,
+        "sources_succeeded": sources_succeeded,
+        "sources_skipped": sources_skipped or None,
+        "errors": errors or None,
         "meta": {
-            "count": len(merged),
+            "count": len(page_items),
             "page": page_number,
             "per_page": per_page,
             "has_previous": page_number > 1,
-            "has_next": len(merged) >= per_page,
+            "has_next": len(ranked) > per_page,
             "local": True,
+            "entity_type": entity,
             "sources": list(selected),
-            "sources_succeeded": used,
+            "sources_queried": sources_queried,
+            "sources_succeeded": sources_succeeded,
+            "sources_skipped": sources_skipped,
+            "enrichment_sources": list(enrichers),
+            **enrichment_meta,
         },
         "discovery_diagnostics": {
             "mode": "local",
+            "entity_type": entity,
             "providers": _ordered_diagnostics(diagnostics, selected),
+            "sources_queried": sources_queried,
+            "sources_succeeded": sources_succeeded,
+            "sources_skipped": sources_skipped,
+            "errors": errors or None,
             "server_openalex_attempted": False,
             "scihub_enabled_for_search": False,
+            "semantic_scholar_default_role": "enrich",
+            **enrichment_meta,
         },
     }
 
@@ -240,7 +317,7 @@ def _query_match_summary(item: dict[str, Any], *, query: str) -> dict[str, Any]:
         return {}
     haystack = " ".join(
         str(value or "")
-        for value in (item.get("title"), item.get("venue"), item.get("abstract_preview"), item.get("doi"))
+        for value in (item.get("title"), item.get("venue"), item.get("abstract_preview"), item.get("doi"), item.get("nct_id"))
     ).lower()
     matched = sorted({token for token in tokens if token in haystack})
     score = round(len(matched) / len(set(tokens)), 4) if tokens else 0.0
@@ -249,40 +326,3 @@ def _query_match_summary(item: dict[str, Any], *, query: str) -> dict[str, Any]:
         "query_matched_terms": matched,
         "query_match_warning": "low_query_term_overlap" if score < 0.25 else None,
     }
-
-
-def _merge_discovery_items(buckets: list[list[dict[str, Any]]], *, limit: int) -> list[dict[str, Any]]:
-    merged: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    indexes = [0] * len(buckets)
-    while len(merged) < limit:
-        progressed = False
-        for bucket_index, bucket in enumerate(buckets):
-            cursor = indexes[bucket_index]
-            while cursor < len(bucket):
-                item = bucket[cursor]
-                cursor += 1
-                indexes[bucket_index] = cursor
-                key = _item_key(item)
-                if key in seen:
-                    continue
-                seen.add(key)
-                merged.append(item)
-                progressed = True
-                break
-            if len(merged) >= limit:
-                break
-        if not progressed:
-            break
-    return merged
-
-
-def _item_key(item: dict[str, Any]) -> str:
-    doi = normalize_doi(item.get("doi"))
-    if doi:
-        return f"doi:{doi.lower()}"
-    for field in ("external_id", "parse_input_value", "title"):
-        value = str(item.get(field) or "").strip().lower()
-        if value:
-            return f"{field}:{value}"
-    return f"row:{id(item)}"
