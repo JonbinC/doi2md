@@ -1609,7 +1609,7 @@ def test_discover_defaults_to_local_and_server_is_opt_in(monkeypatch):
     local_calls = {}
     server_calls = {}
 
-    def fake_local(self, query, *, limit, page=1, providers=None):
+    def fake_local(self, query, *, limit, page=1, providers=None, enrich=None, entity_type="publication"):
         local_calls.update({"query": query, "limit": limit, "page": page, "providers": providers})
         return {
             "source": "local_multi_source",
@@ -1659,7 +1659,7 @@ def test_discovery_session_uses_server_page_meta():
 def test_interactive_discover_fetches_next_server_page(monkeypatch):
     calls: list[tuple[str, int, int, str]] = []
 
-    def fake_discover(self, query, *, limit=10, page=1, source="local", providers="free_core"):
+    def fake_discover(self, query, *, limit=10, page=1, source="local", providers="free_core", enrich=None, entity_type="publication"):
         calls.append((query, limit, page, source, providers))
         return {
             "items": [{"title": f"page-{page}-item", "doi": f"10.1/{page}"}],
