@@ -267,13 +267,17 @@ class MdteroClient:
         providers: str | None = None,
         enrich: str | None = None,
         entity_type: str = "publication",
+        relevance: str = "baseline",
+        relax: bool = False,
     ) -> dict[str, Any]:
         """Search literature metadata.
 
-        Default ``source='local'`` talks to multi-source academic APIs from the
-        workstation (OpenAlex, Crossref, arXiv, PubMed, ...). Semantic Scholar
-        defaults to strong-ID enrich. Trial registrations use ``entity_type='trial'``.
-        The Mdtero API path is only a proxy and is opt-in via ``source='server'``.
+        Default ``source='local'`` searches OpenAlex from the workstation.
+        Pass ``providers='free_core'`` (or a comma list) for broader fan-out.
+        Semantic Scholar defaults to strong-ID enrich. Trial registrations use
+        ``entity_type='trial'``. The Mdtero API path is only a proxy and is
+        opt-in via ``source='server'``. ``relevance='denoise'`` applies
+        concept-group hard filtering locally.
         """
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
         mode = str(source or "local").strip().lower() or "local"
@@ -296,6 +300,8 @@ class MdteroClient:
                     providers=providers,
                     enrich=enrich,
                     entity_type=entity_type,
+                    relevance=relevance,
+                    relax=relax,
                 )
             except DiscoveryError:
                 if mode == "local":
@@ -309,6 +315,8 @@ class MdteroClient:
             "provider": "openalex_server",
             "mode": "server",
             "server_openalex_attempted": True,
+            "relevance_mode": "baseline",
+            "relevance_note": "server proxy ignores local denoise filters",
         }
         return result
 
@@ -321,6 +329,8 @@ class MdteroClient:
         providers: str | None = None,
         enrich: str | None = None,
         entity_type: str = "publication",
+        relevance: str = "baseline",
+        relax: bool = False,
     ) -> dict[str, Any]:
         academic = self.config.academic
         try:
@@ -340,6 +350,8 @@ class MdteroClient:
                 acm_api_key=getattr(academic, "acm_api_key", None),
                 unpaywall_email=getattr(academic, "unpaywall_email", None),
                 proxy_url=self.config.effective_proxy_url,
+                relevance=relevance,
+                relax=relax,
             )
         except LocalDiscoveryError as exc:
             raise DiscoveryError(
@@ -351,14 +363,14 @@ class MdteroClient:
                     "detail": exc.detail,
                     "message": str(exc),
                     "action_hint": (
-                        "Local multi-source discovery failed. Retry later, narrow `--sources`, "
-                        "or configure optional free keys with `mdtero config academic --json`. "
+                        "Local OpenAlex discovery failed. Retry later, try `--sources free_core`, "
+                        "or configure an OpenAlex key with `mdtero config academic --json`. "
                         "Use `--source server` only if you intentionally want the Mdtero proxy."
                     ),
                     "next_commands": [
-                        "mdtero discover \"<topic>\" --source local --sources free_core --json",
-                        "mdtero config academic --json",
-                        "mdtero discover \"<topic>\" --source server --json",
+                        "mdtero discover \"<topic>\" --source local --sources openalex --json",
+                        "mdtero config academic --openalex-key <key> --json",
+                        "mdtero discover \"<topic>\" --sources free_core --json",
                     ],
                 }
             ) from exc

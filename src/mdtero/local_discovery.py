@@ -13,6 +13,7 @@ from typing import Any
 from .discovery_http import LocalDiscoveryError
 from .discovery_merge import deduplicate_discovery_records, prepare_discovery_record
 from .discovery_providers import (
+    DEFAULT_PUBLICATION_PROVIDERS,
     FREE_CORE_PROVIDERS,
     PROVIDER_SEARCHERS,
     provider_capability_matrix,
@@ -22,6 +23,7 @@ from .discovery_providers import (
 from .discovery_providers import openalex as openalex_provider
 from .discovery_providers import semantic_scholar as semantic_provider
 from .discovery_rank import rank_discovery_items, sanitize_discovery_item
+from .discovery_relevance import filter_by_relevance, score_query_match
 
 DEFAULT_OPENALEX_API_BASE = openalex_provider.DEFAULT_API_BASE
 DEFAULT_SEMANTIC_SCHOLAR_API_BASE = semantic_provider.DEFAULT_API_BASE
@@ -32,6 +34,7 @@ __all__ = [
     "search_openalex_local",
     "search_semantic_scholar_local",
     "provider_capability_matrix",
+    "DEFAULT_PUBLICATION_PROVIDERS",
     "FREE_CORE_PROVIDERS",
 ]
 
@@ -90,6 +93,8 @@ def search_local_discovery(
     openalex_api_base: str = DEFAULT_OPENALEX_API_BASE,
     semantic_scholar_api_base: str = DEFAULT_SEMANTIC_SCHOLAR_API_BASE,
     max_workers: int = 5,
+    relevance: str = "baseline",
+    relax: bool = False,
 ) -> dict[str, Any]:
     query_text = str(query or "").strip()
     if not query_text:
@@ -102,8 +107,18 @@ def search_local_discovery(
             reason_code="invalid_discovery_entity_type",
         )
 
+    relevance_mode = str(relevance or "baseline").strip().lower() or "baseline"
+    if relevance_mode not in {"baseline", "denoise"}:
+        raise LocalDiscoveryError(
+            f"Unsupported relevance mode: {relevance}",
+            reason_code="invalid_discovery_relevance",
+        )
+    relevance_relax = bool(relax)
+
     page_number = max(1, int(page or 1))
     per_page = max(1, min(int(limit or 10), 25))
+    # Over-fetch a bit under denoise so hard filtering still fills the page.
+    provider_limit = per_page if relevance_mode == "baseline" else min(25, max(per_page, per_page * 2))
     selected = resolve_provider_names(providers, entity_type=entity)
     enrichers = resolve_enrichers(enrich, entity_type=entity, selected_providers=selected)
     credentials = {
@@ -134,7 +149,7 @@ def search_local_discovery(
         try:
             payload = searcher(
                 query_text,
-                limit=per_page,
+                limit=provider_limit,
                 page=page_number,
                 **_provider_kwargs(name, credentials),
             )
@@ -174,7 +189,7 @@ def search_local_discovery(
                 item.setdefault("source", name)
                 item.setdefault("external_source", name)
                 item.setdefault("entity_type", entity)
-                item.update(_query_match_summary(item, query=query_text))
+                item.update(score_query_match(item, query=query_text, mode=relevance_mode))
                 prepared_items.append(prepare_discovery_record(item))
             bucket_by_provider[name] = prepared_items
             sources_succeeded.append(name)
@@ -195,6 +210,7 @@ def search_local_discovery(
     ranked = rank_discovery_items([sanitize_discovery_item(item) for item in merged])
     # Re-prepare after sanitize so identifier fields stay consistent.
     ranked = [prepare_discovery_record(item) for item in ranked]
+    ranked, relevance_meta = filter_by_relevance(ranked, mode=relevance_mode, relax=relevance_relax)
     page_items = ranked[:per_page]
 
     enrichment_meta: dict[str, Any] = {
@@ -256,6 +272,7 @@ def search_local_discovery(
             "sources_succeeded": sources_succeeded,
             "sources_skipped": sources_skipped,
             "enrichment_sources": list(enrichers),
+            **relevance_meta,
             **enrichment_meta,
         },
         "discovery_diagnostics": {
@@ -270,8 +287,10 @@ def search_local_discovery(
             "server_openalex_attempted": False,
             "scihub_enabled_for_search": False,
             "semantic_scholar_default_role": "enrich",
+            **relevance_meta,
             **enrichment_meta,
         },
+        "relevance": relevance_meta,
     }
 
 
@@ -338,24 +357,3 @@ def _ordered_diagnostics(diagnostics: list[dict[str, Any]], selected: tuple[str,
     return [by_name[name] for name in selected if name in by_name]
 
 
-def _query_match_summary(item: dict[str, Any], *, query: str) -> dict[str, Any]:
-    import re
-
-    tokens = [
-        token
-        for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9+\-]{1,}", str(query or "").lower())
-        if token not in {"and", "the", "for", "with", "from", "into", "via", "using", "review"}
-    ]
-    if not tokens:
-        return {}
-    haystack = " ".join(
-        str(value or "")
-        for value in (item.get("title"), item.get("venue"), item.get("abstract_preview"), item.get("doi"), item.get("nct_id"))
-    ).lower()
-    matched = sorted({token for token in tokens if token in haystack})
-    score = round(len(matched) / len(set(tokens)), 4) if tokens else 0.0
-    return {
-        "query_match_score": score,
-        "query_matched_terms": matched,
-        "query_match_warning": "low_query_term_overlap" if score < 0.25 else None,
-    }

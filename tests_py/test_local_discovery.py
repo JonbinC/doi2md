@@ -13,6 +13,9 @@ from mdtero.local_discovery import LocalDiscoveryError, search_local_discovery
 
 
 def test_resolve_provider_names_profiles():
+    assert resolve_provider_names(None) == ("openalex",)
+    assert resolve_provider_names("default") == ("openalex",)
+    assert resolve_provider_names("openalex") == ("openalex",)
     free = resolve_provider_names("free_core")
     assert "openalex" in free
     assert "arxiv" in free
@@ -210,13 +213,26 @@ def test_trial_entity_uses_clinicaltrials(monkeypatch):
 def test_client_discover_defaults_to_local(monkeypatch):
     captured: dict[str, Any] = {}
 
-    def fake_local(self, query, *, limit, page=1, providers=None, enrich=None, entity_type="publication"):
+    def fake_local(
+        self,
+        query,
+        *,
+        limit,
+        page=1,
+        providers=None,
+        enrich=None,
+        entity_type="publication",
+        relevance="baseline",
+        relax=False,
+    ):
         captured["query"] = query
         captured["limit"] = limit
         captured["page"] = page
         captured["providers"] = providers
         captured["enrich"] = enrich
         captured["entity_type"] = entity_type
+        captured["relevance"] = relevance
+        captured["relax"] = relax
         return {
             "source": "local_multi_source",
             "items": [{"title": "Local paper"}],
@@ -240,6 +256,8 @@ def test_client_discover_defaults_to_local(monkeypatch):
         "providers": None,
         "enrich": None,
         "entity_type": "publication",
+        "relevance": "baseline",
+        "relax": False,
     }
 
 

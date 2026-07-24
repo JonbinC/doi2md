@@ -141,13 +141,13 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
         "status": "saved" if saved else "current",
         "config_path": str(path),
         "configured": configured,
-        "discover_source": "local_multi_source",
+        "discover_source": "local_openalex",
         "discover_behavior": {
-            "provider": "local_multi_source",
+            "provider": "openalex",
             "action_hint": (
-                "Discovery defaults to local multi-source search (OpenAlex, Semantic Scholar, Crossref, "
-                "arXiv, PubMed, EuropePMC, and more). Optional keys raise quotas; Sci-Hub download is "
-                "opt-in and disabled by default; `--source server` only forwards through the Mdtero proxy."
+                "Discovery defaults to OpenAlex only. Use `--sources free_core` (or a comma list) when you "
+                "want broader fan-out. Optional keys raise quotas; Sci-Hub download is opt-in and disabled "
+                "by default; `--source server` only forwards through the Mdtero proxy."
             ),
         },
         "application_links": {
@@ -241,12 +241,13 @@ def build_onboarding_checklist(
         {
             "id": "discovery",
             "title": "Discover papers",
-            "status": "local_multi_source",
+            "status": "local_openalex",
             "primary_command": "mdtero discover \"<topic>\" --limit 5 --interactive",
             "action_hint": (
-                "Defaults to local multi-source discovery (`--sources free_core`). Use space-bar multi-select "
-                "in interactive discovery, or `--add --select 1,3 --json` for agent-safe project intake. "
-                "Pass `--source server` only if you want the Mdtero proxy. Sci-Hub is never used for search."
+                "Defaults to OpenAlex (`--sources openalex`). Pass `--sources free_core` for broader recall. "
+                "Use space-bar multi-select in interactive discovery, or `--add --select 1,3 --json` for "
+                "agent-safe project intake. Pass `--source server` only if you want the Mdtero proxy. "
+                "Sci-Hub is never used for search."
             ),
         },
         {

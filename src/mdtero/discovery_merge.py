@@ -191,6 +191,14 @@ def merge_discovery_records(target: dict[str, Any], incoming: Mapping[str, Any])
             target["query_match_score"] = prepared.get("query_match_score")
             target["query_matched_terms"] = prepared.get("query_matched_terms")
             target["query_match_warning"] = prepared.get("query_match_warning")
+            for key in (
+                "query_matched_groups",
+                "query_match_mode",
+                "concept_group_coverage",
+                "concept_groups",
+            ):
+                if prepared.get(key) is not None:
+                    target[key] = prepared.get(key)
     except (TypeError, ValueError):
         pass
 
