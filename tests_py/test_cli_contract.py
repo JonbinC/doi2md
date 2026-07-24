@@ -432,7 +432,7 @@ def test_smoke_runs_discover_parse_download_and_rag(monkeypatch, tmp_path: Path,
     assert coverage["goal"] == "production_cli_smoke"
     assert coverage["covered_by_this_command"] == [
         "auth_config_presence",
-        "server_openalex_discovery",
+        "local_multi_source_discovery",
         "doi_or_url_route_parse_status",
         "artifact_download",
         "translation_task",
@@ -1286,11 +1286,10 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     assert payload["status"] == "ok"
     assert payload["authenticated"] is True
     assert payload["api_key_source"] == "saved config"
-    assert payload["academic"] == {
-        "elsevier_api_key": True,
-        "wiley_tdm_token": True,
-        "discover_source": "server_openalex",
-    }
+    assert payload["academic"]["elsevier_api_key"] is True
+    assert payload["academic"]["wiley_tdm_token"] is True
+    assert payload["academic"]["discover_source"] == "local_multi_source"
+    assert payload["academic"]["enable_scihub"] is False
     assert payload["zotero"] == {"configured": True, "library_id": "123", "library_type": "user"}
     assert payload["project"]["server_project_id"] == "42"
     assert payload["project"]["ready_for_ingest_count"] == 1
@@ -1441,12 +1440,13 @@ def test_academic_setup_selection_accepts_numbered_enter_flow():
     assert _parse_academic_selection("") == set()
     assert _parse_academic_selection("1,2") == {"1", "2"}
     assert _parse_academic_selection("2") == {"2"}
-    assert _parse_academic_selection("all") == {"1", "2"}
+    assert _parse_academic_selection("3,4") == {"3", "4"}
+    assert _parse_academic_selection("all") == {"1", "2", "3", "4"}
 
     try:
-        _parse_academic_selection("3")
+        _parse_academic_selection("9")
     except ValueError as exc:
-        assert "Choose 1, 2" in str(exc)
+        assert "Choose 1-4" in str(exc)
     else:
         raise AssertionError("expected invalid academic option")
 
@@ -1488,15 +1488,12 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
     assert cfg.academic.elsevier_api_key == "elsevier-secret"
     assert cfg.academic.wiley_tdm_token == "wiley-secret"
     assert payload["status"] == "saved"
-    assert payload["configured"] == {
-        "elsevier_api_key": True,
-        "wiley_tdm_token": True,
-    }
-    assert payload["discover_source"] == "server_openalex"
-    assert payload["discover_behavior"] == {
-        "provider": "server_openalex",
-        "action_hint": "Discovery uses the Mdtero server OpenAlex search API.",
-    }
+    assert payload["configured"]["elsevier_api_key"] is True
+    assert payload["configured"]["wiley_tdm_token"] is True
+    assert payload["configured"]["enable_scihub"] is False
+    assert payload["discover_source"] == "local_multi_source"
+    assert payload["discover_behavior"]["provider"] == "local_multi_source"
+    assert "multi-source" in payload["discover_behavior"]["action_hint"]
     assert "mdtero smoke --json" in payload["next_commands"]
     assert "mdtero mcp briefing --json" in payload["next_commands"]
     groups = {group["title"]: group["commands"] for group in payload["next_command_groups"]}
@@ -1510,7 +1507,7 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
     assert "wiley-secret" not in output
 
 
-def test_config_academic_json_reports_server_openalex_discovery(monkeypatch, tmp_path: Path, capsys):
+def test_config_academic_json_reports_local_discovery(monkeypatch, tmp_path: Path, capsys):
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
     args = build_parser().parse_args(["config", "academic", "--json"])
 
@@ -1518,9 +1515,9 @@ def test_config_academic_json_reports_server_openalex_discovery(monkeypatch, tmp
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "current"
-    assert payload["discover_source"] == "server_openalex"
-    assert payload["discover_behavior"]["provider"] == "server_openalex"
-    assert "OpenAlex" in payload["discover_behavior"]["action_hint"]
+    assert payload["discover_source"] == "local_multi_source"
+    assert payload["discover_behavior"]["provider"] == "local_multi_source"
+    assert "multi-source" in payload["discover_behavior"]["action_hint"]
 
 
 def test_setup_next_steps_cover_project_rag_zotero_and_agent_workflows(capsys):
@@ -1608,29 +1605,39 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
     assert state.papers[0].title == "Paper A"
 
 
-def test_discover_uses_server_openalex(monkeypatch):
-    captured = {}
+def test_discover_defaults_to_local_and_server_is_opt_in(monkeypatch):
+    local_calls = {}
+    server_calls = {}
+
+    def fake_local(self, query, *, limit, page=1, providers=None):
+        local_calls.update({"query": query, "limit": limit, "page": page, "providers": providers})
+        return {
+            "source": "local_multi_source",
+            "items": [{"title": "Local paper"}],
+            "meta": {"count": 1, "page": page, "per_page": limit, "has_next": False, "has_previous": False},
+            "discovery_diagnostics": {"mode": "local", "server_openalex_attempted": False},
+        }
 
     def fake_request(self, method, path, **kwargs):
-        captured["method"] = method
-        captured["path"] = path
-        captured["params"] = kwargs.get("params")
+        server_calls.update({"method": method, "path": path, "params": kwargs.get("params")})
         return {"items": [{"title": "OA paper"}], "meta": {"count": 1, "page": 1, "per_page": 1, "has_next": False, "has_previous": False}}
 
+    monkeypatch.setattr(MdteroClient, "_local_discovery_search", fake_local)
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
-    result = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1, page=2)
+    local = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1, page=2)
+    assert local["source"] == "local_multi_source"
+    assert local_calls == {"query": "rag", "limit": 1, "page": 2, "providers": None}
+    assert server_calls == {}
 
-    assert result["source"] == "openalex_server"
-    assert captured == {
+    server = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1, page=2, source="server")
+    assert server["source"] == "openalex_server"
+    assert server_calls == {
         "method": "GET",
         "path": "/api/v1/discovery/search",
         "params": {"query": "rag", "limit": 1, "page": 2},
     }
-    assert result["discovery_diagnostics"] == {
-        "provider": "openalex_server",
-        "server_openalex_attempted": True,
-    }
+    assert server["discovery_diagnostics"]["server_openalex_attempted"] is True
 
 
 def test_discovery_session_uses_server_page_meta():
@@ -1650,10 +1657,10 @@ def test_discovery_session_uses_server_page_meta():
 
 
 def test_interactive_discover_fetches_next_server_page(monkeypatch):
-    calls: list[tuple[str, int, int]] = []
+    calls: list[tuple[str, int, int, str]] = []
 
-    def fake_discover(self, query, *, limit=10, page=1):
-        calls.append((query, limit, page))
+    def fake_discover(self, query, *, limit=10, page=1, source="local", providers="free_core"):
+        calls.append((query, limit, page, source, providers))
         return {
             "items": [{"title": f"page-{page}-item", "doi": f"10.1/{page}"}],
             "meta": {
@@ -1669,10 +1676,20 @@ def test_interactive_discover_fetches_next_server_page(monkeypatch):
     replies = iter(["n", "q"])
     monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: next(replies))
 
-    initial = fake_discover(None, "topic", limit=5, page=1)
-    result = _run_discovery_interactive_session(query="topic", page_size=5, initial_result=initial, initial_page=1)
+    initial = fake_discover(None, "topic", limit=5, page=1, source="local", providers="free_core")
+    result = _run_discovery_interactive_session(
+        query="topic",
+        page_size=5,
+        initial_result=initial,
+        initial_page=1,
+        source="local",
+        providers="free_core",
+    )
 
-    assert calls == [("topic", 5, 1), ("topic", 5, 2)]
+    assert calls == [
+        ("topic", 5, 1, "local", "free_core"),
+        ("topic", 5, 2, "local", "free_core"),
+    ]
     assert result["discovery_session"]["page"] == 2
     assert result["discovery_session"]["pagination_mode"] == "server_page"
     assert result["interactive_action"] == "skip"
@@ -1687,7 +1704,7 @@ def test_discover_returns_structured_failure_when_server_discovery_fails(monkeyp
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
     try:
-        MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1)
+        MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=1, source="server")
     except Exception as exc:
         payload = exc.payload
     else:
@@ -1706,7 +1723,7 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
     monkeypatch.setattr(MdteroClient, "_request", fake_request)
 
     try:
-        MdteroClient(config=MdteroConfig(api_key=None)).discover("rag", limit=1)
+        MdteroClient(config=MdteroConfig(api_key=None)).discover("rag", limit=1, source="server")
     except Exception as exc:
         payload = exc.payload
     else:
@@ -1715,8 +1732,12 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
     assert payload["error_code"] == "authentication_required"
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
-    assert "mdtero setup --api-key --json" in payload["action_hint"]
-    assert payload["next_commands"] == ["mdtero setup --api-key --json", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+    assert "Prefer local discovery" in payload["action_hint"]
+    assert payload["next_commands"] == [
+        "mdtero discover \"<topic>\" --source local --json",
+        "mdtero setup --api-key --json",
+        "mdtero doctor --json",
+    ]
 
 
 def test_acquisition_selects_route_candidate_and_uploads_with_client_metadata(monkeypatch, tmp_path: Path):
@@ -4133,7 +4154,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["pipx_install_command"] == "pipx install --force git+https://github.com/JonbinC/doi2md.git"
     assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git"
     assert payload["dependencies"]["pypi_install_command"] == "uv tool install mdtero"
-    assert payload["academic"]["discover_source"] == "server_openalex"
+    assert payload["academic"]["discover_source"] == "local_multi_source"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
     assert payload["input_routes"]["server_apis"] == {
         "route": "/api/v1/route",
@@ -4191,7 +4212,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
     assert checklist["academic_keys"]["elsevier_guidance"]["configure_command"] == "mdtero config academic --elsevier-key <key> --json"
     assert "does not bypass licensed-access requirements" in checklist["academic_keys"]["elsevier_guidance"]["action_hint"]
-    assert checklist["discovery"]["status"] == "server_openalex"
+    assert checklist["discovery"]["status"] == "local_multi_source"
     assert checklist["discovery"]["primary_command"] == "mdtero discover \"<topic>\" --limit 5 --interactive"
     assert "space-bar multi-select" in checklist["discovery"]["action_hint"]
     assert checklist["project"]["primary_command"] == "mdtero project init --name literature-review"
@@ -4208,7 +4229,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert any(group["title"] == "Server RAG and local agents" for group in payload["next_command_groups"])
 
 
-def test_setup_json_onboarding_reports_server_openalex_discovery(monkeypatch, tmp_path: Path, capsys):
+def test_setup_json_onboarding_reports_local_discovery(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
@@ -4228,10 +4249,10 @@ def test_setup_json_onboarding_reports_server_openalex_discovery(monkeypatch, tm
     assert_onboarding_payload_commands_parse(payload)
 
     assert "wiley-secret" not in output
-    assert payload["academic"]["discover_source"] == "server_openalex"
+    assert payload["academic"]["discover_source"] == "local_multi_source"
     assert payload["input_routes"]["routes"][0]["id"] == "doi_or_url"
     assert checklist["academic_keys"]["status"] == "partial"
-    assert checklist["discovery"]["status"] == "server_openalex"
+    assert checklist["discovery"]["status"] == "local_multi_source"
     assert checklist["agent_skills"]["status"] == "not_detected"
 
 
@@ -4807,7 +4828,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     ]
     assert checklist["auth"]["status"] == "complete"
     assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
-    assert checklist["discovery"]["status"] == "server_openalex"
+    assert checklist["discovery"]["status"] == "local_multi_source"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in checklist["rag"]["secondary_commands"]
     assert "Mdtero backend" in checklist["rag"]["action_hint"]
@@ -6577,7 +6598,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert_dashboard_model_commands_parse(model)
     rendered = render_dashboard_text(model)
 
-    assert model["academic"]["discover_source"] == "server OpenAlex"
+    assert model["academic"]["discover_source"] == "local multi-source"
     assert model["health"]["status"] == "results_ready"
     assert model["health"]["counts"]["ready_artifacts"] == 1
     assert model["health"]["counts"]["pending_agent_installs"] == 1
