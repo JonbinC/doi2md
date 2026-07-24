@@ -1076,7 +1076,8 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
         _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
         _dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"),
-        ("Discovery", "server", "OpenAlex via Mdtero API"),
+        ("Discovery", "local", "multi-source local APIs; OpenAlex/S2 keys optional"),
+        _doctor_discovery_keys_row(cfg),
         ("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg)),
     ]
     current_project = project_path(root)
@@ -1118,10 +1119,12 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "unpaywall_email": bool((cfg.academic.unpaywall_email or "").strip()),
             "core_api_key": bool((cfg.academic.core_api_key or "").strip()),
             "enable_scihub": bool(getattr(cfg.academic, "enable_scihub", False)),
+            "keys_optional": True,
             "discover_source": "local_multi_source",
             "discovery_providers": "free_core",
             "discovery_enrich_default": "semantic_scholar",
             "discovery_entity_types": ["publication", "trial"],
+            "discovery_key_hints": _discovery_key_hints(cfg),
             "discovery_capability_matrix": provider_capability_matrix(),
         },
         "zotero": {
@@ -5078,12 +5081,18 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
 
 
 def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
-    console.print("\nStep 2: academic source keys.")
-    console.print("Elsevier is recommended first for publisher-heavy English literature reviews when you have ScienceDirect/Elsevier API access. These keys stay in local Mdtero config and do not bypass licensed-access requirements.")
+    console.print("\nStep 2: academic source keys (all optional — Enter skips).")
+    console.print(
+        "Local discover works without these keys. OpenAlex/Semantic Scholar keys mainly reduce 429s; "
+        "Elsevier/Wiley help publisher routing and do not bypass licensed access. Keys stay on this machine."
+    )
     for option in ACADEMIC_OPTIONS:
         hint = f" — {option['hint']}" if option.get("hint") else ""
         console.print(f"  ({option['index']}) {option['label']}: {option['url']}{hint}")
-    console.print("Press Enter to skip for now. Choose one or more numbers, for example `1 2`; choose `1` first when Elsevier access matters.")
+    console.print(
+        "Examples: `3` for OpenAlex only; `3 4` for OpenAlex + Semantic Scholar; "
+        "`1` first when Elsevier/ScienceDirect access matters; Enter to skip."
+    )
     while True:
         selection = Prompt.ask("Configure optional keys", default="").strip()
         try:
@@ -5100,17 +5109,62 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
     path = save_config(cfg)
     console.print(f"Saved config to {path}")
     console.print(
-        "Discover defaults to local OpenAlex + Semantic Scholar (no Mdtero key required). "
+        "Discover defaults to local multi-source search and works without academic keys. "
         "Optional OpenAlex/S2 keys raise quotas; use `--source server` only for the Mdtero proxy."
     )
+    if not (cfg.academic.openalex_api_key or "").strip():
+        console.print(
+            "Tip: OpenAlex without a key rate-limits quickly. Free key: https://openalex.org/settings/api "
+            "then `mdtero config academic --openalex-key <key> --json`."
+        )
     if cfg.academic.elsevier_api_key:
         console.print("Elsevier key configured. Use `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` to confirm the selected route per paper.")
     else:
-        console.print("Elsevier key is not configured. For many ScienceDirect-heavy literature reviews, add it later with `mdtero config academic --elsevier-key <key> --json` when the user has a valid key.")
+        console.print("Elsevier key is not configured. Add later with `mdtero config academic --elsevier-key <key> --json` when needed.")
 
 
 def _academic_config_summary(cfg: MdteroConfig, *, path: Path, saved: bool) -> dict[str, Any]:
     return build_academic_onboarding_summary(cfg, path=path, saved=saved)
+
+
+def _doctor_discovery_keys_row(cfg: MdteroConfig) -> tuple[str, str, str]:
+    openalex = bool((cfg.academic.openalex_api_key or "").strip())
+    s2 = bool((cfg.academic.semantic_scholar_api_key or "").strip())
+    if openalex and s2:
+        return ("Discovery keys", "ready", "OpenAlex + Semantic Scholar configured")
+    if openalex or s2:
+        missing = "Semantic Scholar" if openalex else "OpenAlex"
+        return (
+            "Discovery keys",
+            "partial",
+            f"{missing} optional; discover still works. Tip: mdtero config academic",
+        )
+    return (
+        "Discovery keys",
+        "optional",
+        "Works without keys; OpenAlex anonymous quota is tiny — free key at https://openalex.org/settings/api",
+    )
+
+
+def _discovery_key_hints(cfg: MdteroConfig) -> list[dict[str, str]]:
+    hints: list[dict[str, str]] = []
+    if not (cfg.academic.openalex_api_key or "").strip():
+        hints.append(
+            {
+                "provider": "openalex",
+                "status": "missing_optional_key",
+                "action_hint": "Discover works without OpenAlex key, but 429s are common. Get a free key at https://openalex.org/settings/api then run `mdtero config academic --openalex-key <key> --json`.",
+            }
+        )
+    if not (cfg.academic.semantic_scholar_api_key or "").strip():
+        hints.append(
+            {
+                "provider": "semantic_scholar",
+                "status": "missing_optional_key",
+                "action_hint": "Default enrich uses Semantic Scholar strong-ID lookups; a free key reduces rate limits.",
+            }
+        )
+    return hints
 
 
 def _parse_academic_selection(selection: str) -> set[str]:

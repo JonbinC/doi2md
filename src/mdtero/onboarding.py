@@ -13,7 +13,7 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
         "url": "https://dev.elsevier.com/apikey/manage",
         "field": "elsevier_api_key",
         "prompt": "Elsevier API key",
-        "hint": "Improves ScienceDirect/Elsevier routing when the user has valid Elsevier API access or institutional entitlement; it does not bypass publisher access rules.",
+        "hint": "Optional but valuable for ScienceDirect/Elsevier routing when you have valid API/institutional entitlement; it does not bypass publisher access rules.",
     },
     {
         "index": "2",
@@ -21,23 +21,23 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
         "url": "https://onlinelibrary.wiley.com/library-info/resources/text-and-datamining",
         "field": "wiley_tdm_token",
         "prompt": "Wiley TDM token",
-        "hint": "Use when the user's Wiley access includes TDM rights.",
+        "hint": "Optional. Use when your Wiley access includes TDM rights.",
     },
     {
         "index": "3",
-        "label": "OpenAlex key (optional; improves local discovery quota)",
-        "url": "https://openalex.org/",
+        "label": "OpenAlex key (optional; strongly recommended for local discover)",
+        "url": "https://openalex.org/settings/api",
         "field": "openalex_api_key",
         "prompt": "OpenAlex API key",
-        "hint": "Optional. Local discovery works without a key under OpenAlex's free daily budget; a free key raises the daily allowance.",
+        "hint": "Optional. Discover works without it, but anonymous OpenAlex hits 429 easily; a free key (~30s signup) raises the daily budget ~10×.",
     },
     {
         "index": "4",
-        "label": "Semantic Scholar key (optional; improves local discovery rate limits)",
+        "label": "Semantic Scholar key (optional; improves enrich / rate limits)",
         "url": "https://www.semanticscholar.org/product/api",
         "field": "semantic_scholar_api_key",
         "prompt": "Semantic Scholar API key",
-        "hint": "Optional. Local discovery works without a key under a shared rate limit; a key reduces 429s.",
+        "hint": "Optional. Discover/enrich works without it under a shared limit; a key reduces 429s on Semantic Scholar enrich.",
     },
 ]
 
@@ -154,11 +154,12 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
             str(option["field"]): option["url"] for option in ACADEMIC_OPTIONS
         },
         "recommended_order": [
-            "elsevier_api_key",
-            "wiley_tdm_token",
             "openalex_api_key",
             "semantic_scholar_api_key",
+            "elsevier_api_key",
+            "wiley_tdm_token",
         ],
+        "keys_optional": True,
         "priority_hints": {
             str(option["field"]): option["hint"] for option in ACADEMIC_OPTIONS
         },
@@ -219,17 +220,21 @@ def build_onboarding_checklist(
         },
         {
             "id": "academic_keys",
-            "title": "Academic source keys (Elsevier first)",
-            "status": "elsevier_ready" if configured_academic.get("elsevier_api_key") else ("partial" if any(configured_academic.values()) else "recommended"),
+            "title": "Academic source keys (all optional)",
+            "status": (
+                "discover_ready"
+                if configured_academic.get("openalex_api_key")
+                else ("partial" if any(configured_academic.values()) else "optional")
+            ),
             "primary_command": "mdtero config academic",
             "action_hint": (
-                "For publisher-heavy literature reviews, ask whether the user can provide an Elsevier API key and configure it first. "
-                "Academic keys stay local. Discovery defaults to local OpenAlex + Semantic Scholar without requiring Mdtero API auth."
+                "Keys are optional: local discover works without them. Prefer a free OpenAlex key to avoid 429s; "
+                "add Semantic Scholar for enrich; ask about Elsevier when ScienceDirect-heavy parsing matters. Keys stay local."
             ),
             "links": academic.get("application_links", {}),
             "recommended_order": academic.get(
                 "recommended_order",
-                ["elsevier_api_key", "wiley_tdm_token", "openalex_api_key", "semantic_scholar_api_key"],
+                ["openalex_api_key", "semantic_scholar_api_key", "elsevier_api_key", "wiley_tdm_token"],
             ),
             "elsevier_guidance": academic.get("elsevier_guidance", {}),
         },
