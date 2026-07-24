@@ -137,7 +137,7 @@ def build_dashboard_model(
             "wiley_tdm": bool(cfg.academic.wiley_tdm_token),
             "openalex": bool(cfg.academic.openalex_api_key),
             "semantic_scholar": bool(cfg.academic.semantic_scholar_api_key),
-            "discover_source": "local multi-source",
+            "discover_source": "local OpenAlex",
             "configure_command": "mdtero config academic",
             "application_links": build_academic_onboarding_summary(cfg, path=config_path(), saved=False)["application_links"],
         },

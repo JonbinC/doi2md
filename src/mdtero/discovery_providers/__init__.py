@@ -65,9 +65,12 @@ PROVIDER_SEARCHERS: dict[str, ProviderFn] = {
     "clinicaltrials_gov": clinicaltrials.search,
 }
 
-# Default free-first publication profile. Semantic Scholar is enrich-only by default
-# (rate-limit sensitive); pass it explicitly in --sources to fan-out search.
-# Keep the default set lean: noisy/fragile sources stay available via --sources all.
+# Default publication discovery: OpenAlex only. Broader fan-out is opt-in via
+# `--sources free_core` / `--sources all` — more sources is not automatically better.
+DEFAULT_PUBLICATION_PROVIDERS: tuple[str, ...] = ("openalex",)
+
+# Explicit multi-source profile. Semantic Scholar stays enrich-only unless listed.
+# Noisy/fragile sources remain available via --sources all.
 FREE_CORE_PROVIDERS: tuple[str, ...] = (
     "openalex",
     "crossref",
@@ -134,7 +137,7 @@ def resolve_provider_names(
     if entity == "trial":
         defaults = TRIAL_PROVIDERS
     else:
-        defaults = FREE_CORE_PROVIDERS
+        defaults = DEFAULT_PUBLICATION_PROVIDERS
 
     if spec is None:
         return defaults
@@ -142,8 +145,10 @@ def resolve_provider_names(
         tokens = [str(item).strip().lower() for item in spec if str(item).strip()]
     else:
         text = str(spec).strip().lower()
-        if not text or text in {"free", "free_core", "default"}:
+        if not text or text in {"default"}:
             return defaults
+        if text in {"free", "free_core"}:
+            return FREE_CORE_PROVIDERS if entity == "publication" else TRIAL_PROVIDERS
         if text in {"all", "*"}:
             if entity == "trial":
                 return TRIAL_PROVIDERS
@@ -207,7 +212,8 @@ def provider_capability_matrix() -> list[dict[str, Any]]:
             "search": True,
             "needs_key": False,
             "key_improves_quota": True,
-            "notes": "Free tiny daily budget without key",
+            "default_role": "search",
+            "notes": "Default discover source; free tiny daily budget without key",
         },
         {
             "provider": "semantic_scholar",

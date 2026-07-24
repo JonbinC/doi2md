@@ -266,8 +266,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     discover.add_argument(
         "--sources",
-        default="free_core",
-        help="Local providers: free_core (default, no S2 fan-out), all, or comma list (arxiv,pubmed,crossref,openalex,...). Sci-Hub is never a search source.",
+        default="openalex",
+        help="Local providers: openalex (default), free_core (broader fan-out), all, or comma list (arxiv,pubmed,crossref,...). Sci-Hub is never a search source.",
     )
     discover.add_argument(
         "--enrich",
@@ -279,6 +279,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["publication", "trial"],
         default="publication",
         help="publication (default papers/preprints) or trial (ClinicalTrials.gov registrations).",
+    )
+    discover.add_argument(
+        "--relevance",
+        choices=["baseline", "denoise"],
+        default="baseline",
+        help="Local relevance: baseline (legacy token overlap) or denoise (concept-group filter). Default baseline.",
+    )
+    discover.add_argument(
+        "--relax",
+        action="store_true",
+        help="With --relevance denoise: lower the hard-filter threshold.",
     )
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
@@ -1076,7 +1087,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         _dependency_check_row("curl_cffi", import_name="curl_cffi.requests", ok_detail="local route acquisition", missing_detail="httpx fallback only"),
         _dependency_check_row("FastMCP", import_name="fastmcp", ok_detail="MCP server available", missing_detail="install mdtero with FastMCP support"),
         _dependency_check_row("pyzotero", import_name="pyzotero", ok_detail="Zotero client available", missing_detail="Zotero import/sync unavailable"),
-        ("Discovery", "local", "multi-source local APIs; OpenAlex/S2 keys optional"),
+        ("Discovery", "local", "OpenAlex by default; free_core/all opt-in; keys optional"),
         _doctor_discovery_keys_row(cfg),
         ("Zotero config", "ok" if _zotero_configured(cfg) else "optional", _zotero_config_detail(cfg)),
     ]
@@ -1120,8 +1131,9 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "core_api_key": bool((cfg.academic.core_api_key or "").strip()),
             "enable_scihub": bool(getattr(cfg.academic, "enable_scihub", False)),
             "keys_optional": True,
-            "discover_source": "local_multi_source",
-            "discovery_providers": "free_core",
+            "discover_source": "local_openalex",
+            "discovery_providers": "openalex",
+            "discovery_providers_broad": "free_core",
             "discovery_enrich_default": "semantic_scholar",
             "discovery_entity_types": ["publication", "trial"],
             "discovery_key_hints": _discovery_key_hints(cfg),
@@ -2224,9 +2236,11 @@ def cmd_discover(args: argparse.Namespace) -> int:
     query = _discover_query(args.query)
     page = max(1, int(getattr(args, "page", 1) or 1))
     source = str(getattr(args, "source", "local") or "local")
-    providers = str(getattr(args, "sources", "free_core") or "free_core")
+    providers = str(getattr(args, "sources", "openalex") or "openalex")
     enrich = str(getattr(args, "enrich", "semantic_scholar") or "semantic_scholar")
     entity_type = str(getattr(args, "entity_type", "publication") or "publication")
+    relevance = str(getattr(args, "relevance", "baseline") or "baseline")
+    relax = bool(getattr(args, "relax", False))
     try:
         result = MdteroClient().discover(
             query,
@@ -2236,6 +2250,8 @@ def cmd_discover(args: argparse.Namespace) -> int:
             providers=providers,
             enrich=enrich,
             entity_type=entity_type,
+            relevance=relevance,
+            relax=relax,
         )
     except ProxyValidationError as exc:
         if args.json:
@@ -2263,6 +2279,8 @@ def cmd_discover(args: argparse.Namespace) -> int:
                 providers=providers,
                 enrich=enrich,
                 entity_type=entity_type,
+                relevance=relevance,
+                relax=relax,
             )
             selection = str(result.get("interactive_selection") or "")
             project_add = _add_discovery_results_to_project(result, selection=selection)
@@ -2340,9 +2358,11 @@ def _run_discovery_interactive_session(
     initial_result: dict[str, Any],
     initial_page: int = 1,
     source: str = "local",
-    providers: str = "free_core",
+    providers: str = "openalex",
     enrich: str = "semantic_scholar",
     entity_type: str = "publication",
+    relevance: str = "baseline",
+    relax: bool = False,
 ) -> dict[str, Any]:
     console = Console(stderr=True)
     client = MdteroClient()
@@ -2350,7 +2370,9 @@ def _run_discovery_interactive_session(
     safe_page_size = max(int(page_size or 1), 1)
     page = max(1, int(initial_page or 1))
     discovery_source = str(source or "local")
-    discovery_providers = str(providers or "free_core")
+    discovery_providers = str(providers or "openalex")
+    discovery_relevance = str(relevance or "baseline")
+    discovery_relax = bool(relax)
     discovery_enrich = str(enrich or "semantic_scholar")
     discovery_entity_type = str(entity_type or "publication")
     result = dict(initial_result)
@@ -2392,6 +2414,8 @@ def _run_discovery_interactive_session(
                 providers=discovery_providers,
                 enrich=discovery_enrich,
                 entity_type=discovery_entity_type,
+                relevance=discovery_relevance,
+                relax=discovery_relax,
             )
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
@@ -2408,6 +2432,8 @@ def _run_discovery_interactive_session(
                 providers=discovery_providers,
                 enrich=discovery_enrich,
                 entity_type=discovery_entity_type,
+                relevance=discovery_relevance,
+                relax=discovery_relax,
             )
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
@@ -2425,6 +2451,8 @@ def _run_discovery_interactive_session(
                 providers=discovery_providers,
                 enrich=discovery_enrich,
                 entity_type=discovery_entity_type,
+                relevance=discovery_relevance,
+                relax=discovery_relax,
             )
             accumulated = []
             seen = set()
@@ -5109,7 +5137,7 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
     path = save_config(cfg)
     console.print(f"Saved config to {path}")
     console.print(
-        "Discover defaults to local multi-source search and works without academic keys. "
+        "Discover defaults to OpenAlex (local) and works without academic keys. "
         "Optional OpenAlex/S2 keys raise quotas; use `--source server` only for the Mdtero proxy."
     )
     if not (cfg.academic.openalex_api_key or "").strip():
