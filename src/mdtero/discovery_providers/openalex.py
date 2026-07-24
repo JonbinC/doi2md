@@ -57,7 +57,8 @@ def _normalize(work: dict[str, Any]) -> dict[str, Any]:
         venue = str(source.get("display_name") or "").strip() or None
     external_id = str(work.get("id") or "").rstrip("/").rsplit("/", 1)[-1] or None
     abstract = _flatten_abstract(work.get("abstract_inverted_index"))
-    return discovery_item(
+    citation_count = int(work.get("cited_by_count") or 0)
+    item = discovery_item(
         source="openalex",
         external_id=external_id,
         title=str(work.get("display_name") or "").strip(),
@@ -65,11 +66,19 @@ def _normalize(work: dict[str, Any]) -> dict[str, Any]:
         year=work.get("publication_year"),
         venue=venue,
         abstract_preview=abstract,
-        citation_count=int(work.get("cited_by_count") or 0),
+        citation_count=citation_count,
         doi=doi,
         source_url=source_url,
         open_access_pdf_url=str(open_access.get("oa_url") or "").strip() or None,
     )
+    item["openalex_id"] = external_id
+    item["entity_type"] = "publication"
+    item["citation_count_source"] = "openalex"
+    item["citation_counts"] = {"openalex": citation_count}
+    pmid = str(ids.get("pmid") or "").rstrip("/").rsplit("/", 1)[-1].strip() or None
+    if pmid and pmid.isdigit():
+        item["pmid"] = pmid
+    return item
 
 
 def _flatten_abstract(index: Any) -> str | None:

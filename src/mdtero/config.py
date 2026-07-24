@@ -46,12 +46,25 @@ class ZoteroConfig:
 
 
 @dataclass
+class AccessOutletConfig:
+    """Local access outlets alongside campus relay / proxy.
+
+    CARSI cookies are stored separately under config_dir/carsi_cookies.json.
+    """
+
+    carsi_enabled: bool = False
+    carsi_institution: str | None = None
+    carsi_entity_id: str | None = None
+
+
+@dataclass
 class MdteroConfig:
     api_base_url: str = DEFAULT_API_BASE
     site_base_url: str = DEFAULT_SITE_BASE
     api_key: str | None = None
     academic: AcademicKeys = field(default_factory=AcademicKeys)
     zotero: ZoteroConfig = field(default_factory=ZoteroConfig)
+    access: AccessOutletConfig = field(default_factory=AccessOutletConfig)
     default_project: str | None = None
     proxy_url: str | None = None
     require_campus_proxy: bool = False
@@ -97,6 +110,7 @@ def load_config(path: Path | None = None) -> MdteroConfig:
     payload = json.loads(target.read_text(encoding="utf-8"))
     academic = payload.get("academic") or {}
     zotero = payload.get("zotero") or {}
+    access = payload.get("access") or {}
     cfg = MdteroConfig(
         api_base_url=str(payload.get("api_base_url") or os.environ.get("MDTERO_API_URL") or DEFAULT_API_BASE),
         site_base_url=str(payload.get("site_base_url") or os.environ.get("MDTERO_SITE_URL") or DEFAULT_SITE_BASE),
@@ -104,6 +118,12 @@ def load_config(path: Path | None = None) -> MdteroConfig:
         default_project=payload.get("default_project") or None,
         proxy_url=payload.get("proxy_url") or os.environ.get("MDTERO_PROXY_URL") or None,
         require_campus_proxy=bool(payload.get("require_campus_proxy")) or str(os.environ.get("MDTERO_REQUIRE_CAMPUS_PROXY") or "").strip().lower() in {"1", "true", "yes", "on"},
+        access=AccessOutletConfig(
+            carsi_enabled=_as_bool(access.get("carsi_enabled"), default=False)
+            or str(os.environ.get("MDTERO_CARSI_ENABLED") or "").strip().lower() in {"1", "true", "yes", "on"},
+            carsi_institution=access.get("carsi_institution") or os.environ.get("MDTERO_CARSI_INSTITUTION") or None,
+            carsi_entity_id=access.get("carsi_entity_id") or os.environ.get("MDTERO_CARSI_ENTITY_ID") or None,
+        ),
         academic=AcademicKeys(
             elsevier_api_key=academic.get("elsevier_api_key") or academic_env.elsevier_api_key or None,
             wiley_tdm_token=academic.get("wiley_tdm_token") or academic_env.wiley_tdm_token or None,

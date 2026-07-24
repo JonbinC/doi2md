@@ -56,7 +56,7 @@ def _normalize(article: ET.Element) -> dict[str, Any]:
     year = int(year_text) if year_text.isdigit() else None
     doi = _text(article.find('.//ELocationID[@EIdType="doi"]')) or extract_doi(abstract)
     journal = _text(article.find(".//Journal/Title"))
-    return discovery_item(
+    item = discovery_item(
         source="pubmed",
         external_id=pmid or None,
         title=title,
@@ -67,6 +67,9 @@ def _normalize(article: ET.Element) -> dict[str, Any]:
         doi=doi,
         source_url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else None,
     )
+    item["pmid"] = pmid or None
+    item["entity_type"] = "publication"
+    return item
 
 
 def _text(node: ET.Element | None) -> str:

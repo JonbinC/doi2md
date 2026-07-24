@@ -10,6 +10,7 @@ from . import (
     biorxiv,
     chemrxiv,
     citeseerx,
+    clinicaltrials,
     core,
     crossref,
     dblp,
@@ -60,32 +61,39 @@ PROVIDER_SEARCHERS: dict[str, ProviderFn] = {
     "unpaywall": unpaywall.search,
     "ieee": ieee.search,
     "acm": acm.search,
+    "clinicaltrials": clinicaltrials.search,
+    "clinicaltrials_gov": clinicaltrials.search,
 }
 
-# Default free-first profile (no keys required). Keys only improve quotas where applicable.
+# Default free-first publication profile. Semantic Scholar is enrich-only by default
+# (rate-limit sensitive); pass it explicitly in --sources to fan-out search.
+# Keep the default set lean: noisy/fragile sources stay available via --sources all.
 FREE_CORE_PROVIDERS: tuple[str, ...] = (
     "openalex",
-    "semantic_scholar",
     "crossref",
     "arxiv",
     "pubmed",
     "europepmc",
     "pmc",
     "biorxiv",
-    "medrxiv",
     "dblp",
     "doaj",
     "zenodo",
-    "hal",
-    "iacr",
-    "openaire",
     "chemrxiv",
 )
+
+TRIAL_PROVIDERS: tuple[str, ...] = ("clinicaltrials",)
+DEFAULT_ENRICHERS: tuple[str, ...] = ("semantic_scholar",)
 
 ALL_SEARCH_PROVIDERS: tuple[str, ...] = tuple(
     name
     for name in (
         *FREE_CORE_PROVIDERS,
+        "medrxiv",
+        "hal",
+        "iacr",
+        "openaire",
+        "semantic_scholar",
         "core",
         "citeseerx",
         "base",
@@ -94,6 +102,7 @@ ALL_SEARCH_PROVIDERS: tuple[str, ...] = tuple(
         "unpaywall",
         "ieee",
         "acm",
+        "clinicaltrials",
     )
     if name in PROVIDER_SEARCHERS
 )
@@ -103,20 +112,42 @@ PROVIDER_ALIASES = {
     "semantic": "semantic_scholar",
     "gs": "google_scholar",
     "scholar": "google_scholar",
+    "ctg": "clinicaltrials",
+    "clinicaltrials.gov": "clinicaltrials",
+    "clinicaltrials_gov": "clinicaltrials",
 }
 
+PUBLICATION_ONLY_PROVIDERS = frozenset(
+    name for name in PROVIDER_SEARCHERS if name not in {"clinicaltrials", "clinicaltrials_gov"}
+)
+TRIAL_ONLY_PROVIDERS = frozenset({"clinicaltrials", "clinicaltrials_gov"})
 
-def resolve_provider_names(spec: str | None | tuple[str, ...] | list[str]) -> tuple[str, ...]:
+
+def resolve_provider_names(
+    spec: str | None | tuple[str, ...] | list[str],
+    *,
+    entity_type: str = "publication",
+) -> tuple[str, ...]:
+    entity = str(entity_type or "publication").strip().lower()
+    if entity not in {"publication", "trial"}:
+        entity = "publication"
+    if entity == "trial":
+        defaults = TRIAL_PROVIDERS
+    else:
+        defaults = FREE_CORE_PROVIDERS
+
     if spec is None:
-        return FREE_CORE_PROVIDERS
+        return defaults
     if isinstance(spec, (tuple, list)):
         tokens = [str(item).strip().lower() for item in spec if str(item).strip()]
     else:
         text = str(spec).strip().lower()
         if not text or text in {"free", "free_core", "default"}:
-            return FREE_CORE_PROVIDERS
+            return defaults
         if text in {"all", "*"}:
-            return ALL_SEARCH_PROVIDERS
+            if entity == "trial":
+                return TRIAL_PROVIDERS
+            return tuple(name for name in ALL_SEARCH_PROVIDERS if name in PUBLICATION_ONLY_PROVIDERS)
         tokens = [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
     resolved: list[str] = []
     seen: set[str] = set()
@@ -127,9 +158,46 @@ def resolve_provider_names(spec: str | None | tuple[str, ...] | list[str]) -> tu
             continue
         if name not in PROVIDER_SEARCHERS or name in seen:
             continue
+        if entity == "trial" and name not in TRIAL_ONLY_PROVIDERS:
+            continue
+        if entity == "publication" and name in TRIAL_ONLY_PROVIDERS:
+            continue
         seen.add(name)
         resolved.append(name)
-    return tuple(resolved) if resolved else FREE_CORE_PROVIDERS
+    return tuple(resolved) if resolved else defaults
+
+
+def resolve_enrichers(
+    spec: str | None | tuple[str, ...] | list[str] | None,
+    *,
+    entity_type: str = "publication",
+    selected_providers: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
+    entity = str(entity_type or "publication").strip().lower()
+    if entity != "publication":
+        return ()
+    selected = set(selected_providers or ())
+    if spec is None:
+        # Default: enrich via S2 unless it was already used as a search fan-out source.
+        return tuple(name for name in DEFAULT_ENRICHERS if name not in selected)
+    if isinstance(spec, (tuple, list)):
+        tokens = [str(item).strip().lower() for item in spec if str(item).strip()]
+    else:
+        text = str(spec).strip().lower()
+        if not text or text in {"default", "auto"}:
+            return tuple(name for name in DEFAULT_ENRICHERS if name not in selected)
+        if text in {"none", "off", "false", "0"}:
+            return ()
+        tokens = [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        name = PROVIDER_ALIASES.get(token, token)
+        if name not in {"semantic_scholar"} or name in seen:
+            continue
+        seen.add(name)
+        resolved.append(name)
+    return tuple(resolved)
 
 
 def provider_capability_matrix() -> list[dict[str, Any]]:
@@ -144,9 +212,11 @@ def provider_capability_matrix() -> list[dict[str, Any]]:
         {
             "provider": "semantic_scholar",
             "search": True,
+            "enrich": True,
             "needs_key": False,
             "key_improves_quota": True,
-            "notes": "Shared rate limit without key",
+            "default_role": "enrich",
+            "notes": "Default enrich-only via strong IDs; pass in --sources to search",
         },
         {"provider": "crossref", "search": True, "needs_key": False, "key_improves_quota": False},
         {"provider": "arxiv", "search": True, "needs_key": False, "key_improves_quota": False},
@@ -194,5 +264,12 @@ def provider_capability_matrix() -> list[dict[str, Any]]:
             "download": True,
             "default_enabled": False,
             "notes": "Optional download fallback only; never used in discover search",
+        },
+        {
+            "provider": "clinicaltrials",
+            "search": True,
+            "entity_type": "trial",
+            "needs_key": False,
+            "notes": "Trial registrations only; use --entity-type trial",
         },
     ]

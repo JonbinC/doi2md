@@ -39,25 +39,17 @@ def _normalize(row: dict[str, Any]) -> dict[str, Any]:
     creators = metadata.get("creators") if isinstance(metadata.get("creators"), list) else []
     authors = [str(c.get("name") or "").strip() for c in creators if isinstance(c, dict) and c.get("name")]
     doi = normalize_doi(metadata.get("doi") or row.get("doi"))
+    record_id = str(row.get("id") or "").strip()
     files = row.get("files") if isinstance(row.get("files"), list) else []
-    pdf = None
-    for file_row in files:
-        if not isinstance(file_row, dict):
-            continue
-        key = str(file_row.get("key") or "").lower()
-        links = file_row.get("links") if isinstance(file_row.get("links"), dict) else {}
-        if key.endswith(".pdf") or str(file_row.get("mimetype") or "").endswith("pdf"):
-            pdf = str(links.get("download") or links.get("self") or "").strip() or None
-            if pdf:
-                break
+    pdf = _first_pdf_url(files)
     links = row.get("links") if isinstance(row.get("links"), dict) else {}
     year = None
     pub = str(metadata.get("publication_date") or "")
     if len(pub) >= 4 and pub[:4].isdigit():
         year = int(pub[:4])
-    return discovery_item(
+    item = discovery_item(
         source="zenodo",
-        external_id=str(row.get("id") or "").strip() or doi,
+        external_id=record_id or doi,
         title=str(metadata.get("title") or "").strip(),
         authors=authors,
         year=year,
@@ -66,3 +58,23 @@ def _normalize(row: dict[str, Any]) -> dict[str, Any]:
         source_url=str(links.get("html") or (f"https://doi.org/{doi}" if doi else "")).strip() or None,
         open_access_pdf_url=pdf,
     )
+    if pdf:
+        # Prefer the PDF file over the HTML landing page (landing often yields abstract_only).
+        item["parse_preference"] = "open_access_pdf"
+        item["parse_input_kind"] = "url"
+        item["parse_input_value"] = pdf
+        item["parse_readiness"] = "ready_via_url"
+    return item
+
+
+def _first_pdf_url(files: list[Any]) -> str | None:
+    for file_row in files:
+        if not isinstance(file_row, dict):
+            continue
+        key = str(file_row.get("key") or "").lower()
+        links = file_row.get("links") if isinstance(file_row.get("links"), dict) else {}
+        if key.endswith(".pdf") or "pdf" in str(file_row.get("mimetype") or "").lower():
+            pdf = str(links.get("download") or links.get("content") or links.get("self") or "").strip()
+            if pdf:
+                return pdf
+    return None
