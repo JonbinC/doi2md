@@ -10,6 +10,7 @@ import httpx
 
 from .acquisition import AcquiredArtifact, acquire_from_route, should_acquire_locally
 from .config import MdteroConfig, load_config
+from .local_discovery import LocalDiscoveryError, search_local_discovery
 from .network import ProxyValidationError, assert_required_campus_proxy, local_egress_is_campus_outlet, proxy_settings_from_config
 
 
@@ -256,8 +257,39 @@ class MdteroClient:
             jitter = random.uniform(-0.5, 0.5)
             time.sleep(max(0.25, poll_interval + backoff + jitter))
 
-    def discover(self, query: str, *, limit: int = 10, page: int = 1) -> dict[str, Any]:
+    def discover(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        page: int = 1,
+        source: str = "local",
+        providers: str | None = None,
+    ) -> dict[str, Any]:
+        """Search literature metadata.
+
+        Default ``source='local'`` talks to multi-source academic APIs from the
+        workstation (OpenAlex, Semantic Scholar, Crossref, arXiv, PubMed, ...).
+        The Mdtero API path is only a proxy and is opt-in via ``source='server'``.
+        """
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
+        mode = str(source or "local").strip().lower() or "local"
+        if mode not in {"local", "server", "auto"}:
+            raise DiscoveryError(
+                {
+                    "status": "failed",
+                    "error_code": "invalid_discovery_source",
+                    "reason_code": "invalid_discovery_source",
+                    "message": f"Unsupported discovery source: {source}",
+                    "action_hint": "Use --source local (default), --source server, or --source auto.",
+                }
+            )
+        if mode in {"local", "auto"}:
+            try:
+                return self._local_discovery_search(query, limit=limit, page=page, providers=providers)
+            except DiscoveryError:
+                if mode == "local":
+                    raise
         try:
             result = self._server_discovery_search(query, limit=limit, page=page)
         except (MdteroApiError, httpx.HTTPError, ValueError) as exc:
@@ -265,9 +297,57 @@ class MdteroClient:
         result.setdefault("source", "openalex_server")
         result["discovery_diagnostics"] = {
             "provider": "openalex_server",
+            "mode": "server",
             "server_openalex_attempted": True,
         }
         return result
+
+    def _local_discovery_search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        page: int = 1,
+        providers: str | None = None,
+    ) -> dict[str, Any]:
+        academic = self.config.academic
+        try:
+            return search_local_discovery(
+                query,
+                limit=limit,
+                page=page,
+                providers=providers,
+                openalex_api_key=getattr(academic, "openalex_api_key", None),
+                semantic_scholar_api_key=getattr(academic, "semantic_scholar_api_key", None),
+                core_api_key=getattr(academic, "core_api_key", None),
+                doaj_api_key=getattr(academic, "doaj_api_key", None),
+                zenodo_access_token=getattr(academic, "zenodo_access_token", None),
+                ieee_api_key=getattr(academic, "ieee_api_key", None),
+                acm_api_key=getattr(academic, "acm_api_key", None),
+                unpaywall_email=getattr(academic, "unpaywall_email", None),
+                proxy_url=self.config.effective_proxy_url,
+            )
+        except LocalDiscoveryError as exc:
+            raise DiscoveryError(
+                {
+                    "status": "failed",
+                    "error_code": "discovery_failed",
+                    "reason_code": exc.reason_code,
+                    "source": "local_multi_source",
+                    "detail": exc.detail,
+                    "message": str(exc),
+                    "action_hint": (
+                        "Local multi-source discovery failed. Retry later, narrow `--sources`, "
+                        "or configure optional free keys with `mdtero config academic --json`. "
+                        "Use `--source server` only if you intentionally want the Mdtero proxy."
+                    ),
+                    "next_commands": [
+                        "mdtero discover \"<topic>\" --source local --sources free_core --json",
+                        "mdtero config academic --json",
+                        "mdtero discover \"<topic>\" --source server --json",
+                    ],
+                }
+            ) from exc
 
     def _server_discovery_search(self, query: str, *, limit: int, page: int = 1) -> dict[str, Any]:
         return self._request(
@@ -493,8 +573,15 @@ def _discovery_failure_payload(exc: Exception) -> dict[str, Any]:
         "error_code": "discovery_failed",
         "source": "openalex_server",
         "server_error": exc.__class__.__name__,
-        "action_hint": "Check Mdtero API connectivity and whether server OpenAlex discovery is enabled.",
-        "next_commands": ["mdtero doctor --json", "mdtero setup --api-key --json", "mdtero discover \"<topic>\" --json"],
+        "action_hint": (
+            "Server discovery proxy failed. Prefer local discovery "
+            "(`mdtero discover \"<topic>\" --source local --json`); use `--source server` only as fallback."
+        ),
+        "next_commands": [
+            "mdtero discover \"<topic>\" --source local --json",
+            "mdtero doctor --json",
+            "mdtero discover \"<topic>\" --source server --json",
+        ],
     }
     if isinstance(exc, ProxyValidationError):
         payload.update(exc.payload)
@@ -511,8 +598,16 @@ def _discovery_failure_payload(exc: Exception) -> dict[str, Any]:
         if response.status_code in {401, 403}:
             payload["error_code"] = "authentication_required" if response.status_code == 401 else "forbidden"
             payload["reason_code"] = "authentication_required" if response.status_code == 401 else "access_forbidden"
-            payload["action_hint"] = "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for headless environments, then rerun `mdtero doctor --json` before server OpenAlex discovery."
-            payload["next_commands"] = ["mdtero setup --api-key --json", "mdtero doctor --json", "mdtero discover \"<topic>\" --json"]
+            payload["action_hint"] = (
+                "Server discovery proxy needs Mdtero auth. Prefer local discovery "
+                "(`mdtero discover \"<topic>\" --source local --json`); or run "
+                "`mdtero setup --api-key --json` then `--source server`."
+            )
+            payload["next_commands"] = [
+                "mdtero discover \"<topic>\" --source local --json",
+                "mdtero setup --api-key --json",
+                "mdtero doctor --json",
+            ]
     else:
         payload["detail"] = str(exc)
     return payload

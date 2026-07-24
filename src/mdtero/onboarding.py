@@ -23,6 +23,22 @@ ACADEMIC_OPTIONS: list[dict[str, str]] = [
         "prompt": "Wiley TDM token",
         "hint": "Use when the user's Wiley access includes TDM rights.",
     },
+    {
+        "index": "3",
+        "label": "OpenAlex key (optional; improves local discovery quota)",
+        "url": "https://openalex.org/",
+        "field": "openalex_api_key",
+        "prompt": "OpenAlex API key",
+        "hint": "Optional. Local discovery works without a key under OpenAlex's free daily budget; a free key raises the daily allowance.",
+    },
+    {
+        "index": "4",
+        "label": "Semantic Scholar key (optional; improves local discovery rate limits)",
+        "url": "https://www.semanticscholar.org/product/api",
+        "field": "semantic_scholar_api_key",
+        "prompt": "Semantic Scholar API key",
+        "hint": "Optional. Local discovery works without a key under a shared rate limit; a key reduces 429s.",
+    },
 ]
 
 
@@ -112,20 +128,37 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
     configured = {
         "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
         "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
+        "openalex_api_key": bool((cfg.academic.openalex_api_key or "").strip()),
+        "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
+        "unpaywall_email": bool((cfg.academic.unpaywall_email or "").strip()),
+        "core_api_key": bool((cfg.academic.core_api_key or "").strip()),
+        "doaj_api_key": bool((cfg.academic.doaj_api_key or "").strip()),
+        "ieee_api_key": bool((cfg.academic.ieee_api_key or "").strip()),
+        "acm_api_key": bool((cfg.academic.acm_api_key or "").strip()),
+        "enable_scihub": bool(getattr(cfg.academic, "enable_scihub", False)),
     }
     return {
         "status": "saved" if saved else "current",
         "config_path": str(path),
         "configured": configured,
-        "discover_source": "server_openalex",
+        "discover_source": "local_multi_source",
         "discover_behavior": {
-            "provider": "server_openalex",
-            "action_hint": "Discovery uses the Mdtero server OpenAlex search API.",
+            "provider": "local_multi_source",
+            "action_hint": (
+                "Discovery defaults to local multi-source search (OpenAlex, Semantic Scholar, Crossref, "
+                "arXiv, PubMed, EuropePMC, and more). Optional keys raise quotas; Sci-Hub download is "
+                "opt-in and disabled by default; `--source server` only forwards through the Mdtero proxy."
+            ),
         },
         "application_links": {
             str(option["field"]): option["url"] for option in ACADEMIC_OPTIONS
         },
-        "recommended_order": ["elsevier_api_key", "wiley_tdm_token"],
+        "recommended_order": [
+            "elsevier_api_key",
+            "wiley_tdm_token",
+            "openalex_api_key",
+            "semantic_scholar_api_key",
+        ],
         "priority_hints": {
             str(option["field"]): option["hint"] for option in ACADEMIC_OPTIONS
         },
@@ -189,17 +222,27 @@ def build_onboarding_checklist(
             "title": "Academic source keys (Elsevier first)",
             "status": "elsevier_ready" if configured_academic.get("elsevier_api_key") else ("partial" if any(configured_academic.values()) else "recommended"),
             "primary_command": "mdtero config academic",
-            "action_hint": "For publisher-heavy literature reviews, ask whether the user can provide an Elsevier API key and configure it first. Academic keys stay local; discovery uses server OpenAlex.",
+            "action_hint": (
+                "For publisher-heavy literature reviews, ask whether the user can provide an Elsevier API key and configure it first. "
+                "Academic keys stay local. Discovery defaults to local OpenAlex + Semantic Scholar without requiring Mdtero API auth."
+            ),
             "links": academic.get("application_links", {}),
-            "recommended_order": academic.get("recommended_order", ["elsevier_api_key", "wiley_tdm_token"]),
+            "recommended_order": academic.get(
+                "recommended_order",
+                ["elsevier_api_key", "wiley_tdm_token", "openalex_api_key", "semantic_scholar_api_key"],
+            ),
             "elsevier_guidance": academic.get("elsevier_guidance", {}),
         },
         {
             "id": "discovery",
             "title": "Discover papers",
-            "status": "server_openalex",
+            "status": "local_multi_source",
             "primary_command": "mdtero discover \"<topic>\" --limit 5 --interactive",
-            "action_hint": "Use space-bar multi-select in interactive discovery, or `--add --select 1,3 --json` for agent-safe project intake.",
+            "action_hint": (
+                "Defaults to local multi-source discovery (`--sources free_core`). Use space-bar multi-select "
+                "in interactive discovery, or `--add --select 1,3 --json` for agent-safe project intake. "
+                "Pass `--source server` only if you want the Mdtero proxy. Sci-Hub is never used for search."
+            ),
         },
         {
             "id": "project",

@@ -23,6 +23,7 @@ from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
 from .config import MdteroConfig, config_path, load_config, save_config
+from .discovery_providers import provider_capability_matrix
 from .extension_handoff import (
     attach_extension_handoff,
     classify_acquisition_path,
@@ -130,6 +131,24 @@ def build_parser() -> argparse.ArgumentParser:
     academic_config = _cmd(config_sub, "academic", "Configure local academic source keys; ask about Elsevier first for publisher-heavy literature reviews.", cmd_config_academic)
     academic_config.add_argument("--elsevier-key", help="Save an Elsevier API key without opening the interactive prompt.")
     academic_config.add_argument("--wiley-tdm-token", help="Save a Wiley TDM token without opening the interactive prompt.")
+    academic_config.add_argument("--openalex-key", help="Save an optional OpenAlex API key for higher local discovery quota.")
+    academic_config.add_argument(
+        "--semantic-scholar-key",
+        help="Save an optional Semantic Scholar API key for higher local discovery rate limits.",
+    )
+    academic_config.add_argument("--unpaywall-email", help="Email for Unpaywall polite pool / DOI OA lookup.")
+    academic_config.add_argument("--core-key", help="Optional CORE API key.")
+    academic_config.add_argument("--doaj-key", help="Optional DOAJ API key.")
+    academic_config.add_argument("--zenodo-token", help="Optional Zenodo access token.")
+    academic_config.add_argument("--ieee-key", help="Optional IEEE Xplore API key (enables IEEE search).")
+    academic_config.add_argument("--acm-key", help="Optional ACM DL API key (enables ACM search).")
+    academic_config.add_argument(
+        "--enable-scihub",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Opt-in Sci-Hub download fallback (default: disabled). Never used for discover search.",
+    )
+    academic_config.add_argument("--scihub-base-url", help="Optional Sci-Hub mirror URL when Sci-Hub is enabled.")
     academic_config.add_argument("--json", action="store_true", help="Print a machine-readable safe summary without echoing secrets.")
     zotero_config = _cmd(config_sub, "zotero", "Configure Zotero library credentials.", cmd_config_zotero)
     zotero_config.add_argument("--library-id")
@@ -230,7 +249,18 @@ def build_parser() -> argparse.ArgumentParser:
     discover = _cmd(sub, "discover", "Search papers.", cmd_discover)
     discover.add_argument("query", nargs="+")
     discover.add_argument("--limit", type=int, default=10)
-    discover.add_argument("--page", type=int, default=1, help="1-based OpenAlex result page (non-interactive).")
+    discover.add_argument("--page", type=int, default=1, help="1-based result page (non-interactive).")
+    discover.add_argument(
+        "--source",
+        choices=["local", "server", "auto"],
+        default="local",
+        help="Discovery backend. Default local talks to multi-source academic APIs from this machine; server only proxies via Mdtero API.",
+    )
+    discover.add_argument(
+        "--sources",
+        default="free_core",
+        help="Local providers: free_core (default), all, or comma list (arxiv,pubmed,crossref,openalex,...). Sci-Hub is never a search source.",
+    )
     discover.add_argument("--add", action="store_true", help="Add selected discovery results to the current project.")
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
     discover.add_argument("--interactive", action="store_true", help="Open a discovery session with paging, refinement, and project-add prompts.")
@@ -1037,7 +1067,14 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "academic": {
             "elsevier_api_key": bool((cfg.academic.elsevier_api_key or "").strip()),
             "wiley_tdm_token": bool((cfg.academic.wiley_tdm_token or "").strip()),
-            "discover_source": "server_openalex",
+            "openalex_api_key": bool((cfg.academic.openalex_api_key or "").strip()),
+            "semantic_scholar_api_key": bool((cfg.academic.semantic_scholar_api_key or "").strip()),
+            "unpaywall_email": bool((cfg.academic.unpaywall_email or "").strip()),
+            "core_api_key": bool((cfg.academic.core_api_key or "").strip()),
+            "enable_scihub": bool(getattr(cfg.academic, "enable_scihub", False)),
+            "discover_source": "local_multi_source",
+            "discovery_providers": "free_core",
+            "discovery_capability_matrix": provider_capability_matrix(),
         },
         "zotero": {
             "configured": _zotero_configured(cfg),
@@ -1468,13 +1505,28 @@ def cmd_config_academic(_args: argparse.Namespace) -> int:
     explicit = {
         "elsevier_api_key": getattr(_args, "elsevier_key", None),
         "wiley_tdm_token": getattr(_args, "wiley_tdm_token", None),
+        "openalex_api_key": getattr(_args, "openalex_key", None),
+        "semantic_scholar_api_key": getattr(_args, "semantic_scholar_key", None),
+        "unpaywall_email": getattr(_args, "unpaywall_email", None),
+        "core_api_key": getattr(_args, "core_key", None),
+        "doaj_api_key": getattr(_args, "doaj_key", None),
+        "zenodo_access_token": getattr(_args, "zenodo_token", None),
+        "ieee_api_key": getattr(_args, "ieee_key", None),
+        "acm_api_key": getattr(_args, "acm_key", None),
+        "scihub_base_url": getattr(_args, "scihub_base_url", None),
     }
     provided = {field: str(value).strip() for field, value in explicit.items() if value is not None and str(value).strip()}
+    if getattr(_args, "enable_scihub", None) is not None:
+        cfg.academic.enable_scihub = bool(_args.enable_scihub)
+        provided["enable_scihub"] = cfg.academic.enable_scihub
     if provided or getattr(_args, "json", False):
         path = config_path()
         if provided:
             for field, value in provided.items():
-                setattr(cfg.academic, field, value)
+                if field == "enable_scihub":
+                    cfg.academic.enable_scihub = bool(value)
+                else:
+                    setattr(cfg.academic, field, value)
             path = save_config(cfg)
         payload = _academic_config_summary(cfg, path=path, saved=bool(provided))
         if getattr(_args, "json", False):
@@ -2120,8 +2172,10 @@ def _preferred_parse_artifact(result: dict[str, Any]) -> str:
 def cmd_discover(args: argparse.Namespace) -> int:
     query = _discover_query(args.query)
     page = max(1, int(getattr(args, "page", 1) or 1))
+    source = str(getattr(args, "source", "local") or "local")
+    providers = str(getattr(args, "sources", "free_core") or "free_core")
     try:
-        result = MdteroClient().discover(query, limit=args.limit, page=page)
+        result = MdteroClient().discover(query, limit=args.limit, page=page, source=source, providers=providers)
     except ProxyValidationError as exc:
         if args.json:
             print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
@@ -2139,7 +2193,14 @@ def cmd_discover(args: argparse.Namespace) -> int:
     project_add = None
     if args.interactive:
         try:
-            result = _run_discovery_interactive_session(query=query, page_size=args.limit, initial_result=result, initial_page=page)
+            result = _run_discovery_interactive_session(
+                query=query,
+                page_size=args.limit,
+                initial_result=result,
+                initial_page=page,
+                source=source,
+                providers=providers,
+            )
             selection = str(result.get("interactive_selection") or "")
             project_add = _add_discovery_results_to_project(result, selection=selection)
         except ValueError as exc:
@@ -2215,12 +2276,16 @@ def _run_discovery_interactive_session(
     page_size: int,
     initial_result: dict[str, Any],
     initial_page: int = 1,
+    source: str = "local",
+    providers: str = "free_core",
 ) -> dict[str, Any]:
     console = Console(stderr=True)
     client = MdteroClient()
     session_query = query
     safe_page_size = max(int(page_size or 1), 1)
     page = max(1, int(initial_page or 1))
+    discovery_source = str(source or "local")
+    discovery_providers = str(providers or "free_core")
     result = dict(initial_result)
     selection = ""
     action = "skip"
@@ -2252,7 +2317,13 @@ def _run_discovery_interactive_session(
                 console.print("No more pages.")
                 continue
             page += 1
-            result = client.discover(session_query, limit=safe_page_size, page=page)
+            result = client.discover(
+                session_query,
+                limit=safe_page_size,
+                page=page,
+                source=discovery_source,
+                providers=discovery_providers,
+            )
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
         if lowered in {"p", "prev", "previous"}:
@@ -2260,7 +2331,13 @@ def _run_discovery_interactive_session(
                 console.print("Already on the first page.")
                 continue
             page -= 1
-            result = client.discover(session_query, limit=safe_page_size, page=page)
+            result = client.discover(
+                session_query,
+                limit=safe_page_size,
+                page=page,
+                source=discovery_source,
+                providers=discovery_providers,
+            )
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
             continue
         if lowered.startswith("r ") or lowered.startswith("refine "):
@@ -2269,7 +2346,13 @@ def _run_discovery_interactive_session(
             if not session_query:
                 continue
             page = 1
-            result = client.discover(session_query, limit=safe_page_size, page=page)
+            result = client.discover(
+                session_query,
+                limit=safe_page_size,
+                page=page,
+                source=discovery_source,
+                providers=discovery_providers,
+            )
             accumulated = []
             seen = set()
             _merge_discovery_items(accumulated, [item for item in result.get("items") or [] if isinstance(item, dict)], seen)
@@ -3476,7 +3559,9 @@ def _smoke_coverage_contract(args: argparse.Namespace) -> dict[str, Any]:
         "goal": "production_cli_smoke",
         "covered_by_this_command": [
             "auth_config_presence",
-            "server_openalex_discovery" if not getattr(args, "skip_discovery", False) else "discovery_skipped",
+            "local_multi_source_discovery"
+            if not getattr(args, "skip_discovery", False)
+            else "discovery_skipped",
             "doi_or_url_route_parse_status",
             "artifact_download" if not getattr(args, "skip_download", False) else "artifact_download_skipped",
             "translation_task" if not getattr(args, "skip_translate", False) else "translation_skipped",
@@ -4837,7 +4922,10 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
             setattr(cfg.academic, str(option["field"]), value)
     path = save_config(cfg)
     console.print(f"Saved config to {path}")
-    console.print("Discover uses server OpenAlex through the Mdtero API.")
+    console.print(
+        "Discover defaults to local OpenAlex + Semantic Scholar (no Mdtero key required). "
+        "Optional OpenAlex/S2 keys raise quotas; use `--source server` only for the Mdtero proxy."
+    )
     if cfg.academic.elsevier_api_key:
         console.print("Elsevier key configured. Use `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` to confirm the selected route per paper.")
     else:
@@ -4858,7 +4946,9 @@ def _parse_academic_selection(selection: str) -> set[str]:
     tokens = [token for token in cleaned.replace(",", " ").split() if token]
     invalid = [token for token in tokens if token not in allowed]
     if invalid:
-        raise ValueError(f"Unknown academic key option(s): {', '.join(invalid)}. Choose 1, 2, all, or Enter to skip.")
+        raise ValueError(
+            f"Unknown academic key option(s): {', '.join(invalid)}. Choose 1-4, all, or Enter to skip."
+        )
     return set(tokens)
 
 
