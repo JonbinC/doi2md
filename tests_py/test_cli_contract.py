@@ -1068,7 +1068,7 @@ def test_doctor_reports_optional_fallbacks_when_integrations_are_missing(monkeyp
 
     assert "httpx fallback only" in output
     assert "Zotero import/sync unavailable" in output
-    assert "OpenAlex via Mdtero API" in output
+    assert "multi-source local APIs" in output or "Discovery keys" in output
     assert "run mdtero config zotero" in output
 
 
@@ -4206,9 +4206,10 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert checklist["auth"]["primary_command"] == "mdtero doctor --json"
     assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
     assert checklist["local_dependencies"]["status"] in {"ready", "needs_install"}
-    assert checklist["academic_keys"]["status"] == "recommended"
+    assert checklist["academic_keys"]["status"] == "optional"
     assert "https://dev.elsevier.com/apikey/manage" in checklist["academic_keys"]["links"]["elsevier_api_key"]
-    assert checklist["academic_keys"]["recommended_order"][:2] == ["elsevier_api_key", "wiley_tdm_token"]
+    assert checklist["academic_keys"]["recommended_order"][:2] == ["openalex_api_key", "semantic_scholar_api_key"]
+    assert checklist["academic_keys"]["links"]["openalex_api_key"] == "https://openalex.org/settings/api"
     assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
     assert checklist["academic_keys"]["elsevier_guidance"]["configure_command"] == "mdtero config academic --elsevier-key <key> --json"
     assert "does not bypass licensed-access requirements" in checklist["academic_keys"]["elsevier_guidance"]["action_hint"]
