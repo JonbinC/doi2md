@@ -110,6 +110,10 @@ CHALLENGE_MARKERS = (
     "just a moment", "verify you are human", "checking if the site connection is secure",
     "cf-browser-verification", "challenge-platform", "captcha",
 )
+CHALLENGE_FRAME_MARKERS = (
+    "challenges.cloudflare.com", "challenge-platform", "turnstile", "captcha",
+    "recaptcha.net", "google.com/recaptcha",
+)
 LOGIN_MARKERS = (
     "institutional sign in", "login via your institution", "access through your institution",
     "your institution does not have access", "purchase a subscription to gain access",
@@ -141,6 +145,21 @@ def classify_shell(html: str) -> Optional[str]:
         return "browser_challenge_required"
     if any(marker in lowered for marker in LOGIN_MARKERS):
         return "browser_login_required"
+    return None
+
+
+def classify_frame_urls(urls: list[str]) -> Optional[str]:
+    """Classify a visible challenge frame without reading its contents.
+
+    Publisher challenges commonly isolate their UI in a cross-origin frame.
+    The Relay only uses its URL as a page-state signal so it can foreground the
+    tab for the account holder; it never queries a frame's DOM, clicks a
+    control, or reads a challenge token.
+    """
+    for value in urls:
+        lowered = str(value or "").lower()
+        if any(marker in lowered for marker in CHALLENGE_FRAME_MARKERS):
+            return "browser_challenge_required"
     return None
 
 
@@ -381,7 +400,9 @@ class BrowserWorker:
         attention_requested = False
         while time.monotonic() < deadline:
             html = page.evaluate("document.documentElement.outerHTML")
-            shell = classify_shell(html)
+            shell = classify_shell(html) or classify_frame_urls(
+                [frame.url for frame in page.frames]
+            )
             if shell is None:
                 return
             last_shell = shell
