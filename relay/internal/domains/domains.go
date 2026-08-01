@@ -59,6 +59,7 @@ var allowedSuffixes = []string{
 	"plos.org",
 	"pnas.org",
 	"pubs.acs.org",
+	"pubs.rsc.org",
 	"pubmed.ncbi.nlm.nih.gov",
 	"rupress.org",
 	"sagepub.com",

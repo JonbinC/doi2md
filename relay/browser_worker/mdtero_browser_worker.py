@@ -399,9 +399,19 @@ class BrowserWorker:
         last_shell: Optional[str] = None
         attention_requested = False
         while time.monotonic() < deadline:
-            html = page.evaluate("document.documentElement.outerHTML")
+            try:
+                # A few publisher pages make one or more client-side redirects
+                # immediately after DOMContentLoaded.  Re-read after that
+                # navigation instead of turning a normal browser transition
+                # into an opaque relay failure.  This does not inspect or act
+                # on challenge controls.
+                html = page.evaluate("document.documentElement.outerHTML")
+                frame_urls = [frame.url for frame in page.frames]
+            except PlaywrightError:
+                page.wait_for_timeout(250)
+                continue
             shell = classify_shell(html) or classify_frame_urls(
-                [frame.url for frame in page.frames]
+                frame_urls
             )
             if shell is None:
                 return
