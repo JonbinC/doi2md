@@ -1729,13 +1729,9 @@ def cmd_route(args: argparse.Namespace) -> int:
         "acquisition_path": acquisition_path,
         "cli_only": acquisition_path in {"cli_server", "cli_local"},
         "route_kind": route.get("route_kind"),
-        "top_connector": route.get("top_connector"),
-        "preferred_format": route.get("preferred_format"),
         "requires_browser_capture": bool(route.get("requires_browser_capture")),
         "requires_raw_upload": bool(route.get("requires_raw_upload")),
-        "action_sequence": route.get("action_sequence") or [],
         "action_hint": route.get("action_hint") or route.get("user_message"),
-        "route": route,
     }
     if acquisition_path == "extension_required":
         if getattr(args, "native_capture", False):
