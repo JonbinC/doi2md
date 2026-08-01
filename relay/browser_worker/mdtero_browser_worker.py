@@ -176,6 +176,11 @@ class BrowserWorker:
             r'<a[^>]+href=["\']([^"\']*(?:/pdf|\.pdf|stampPDF)[^"\']*)',
         ):
             candidates.extend(re.findall(pattern, html, flags=re.IGNORECASE))
+        ieee_arnumber = _ieee_arnumber(article_url)
+        if ieee_arnumber:
+            candidates.append(
+                "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=" + ieee_arnumber + "&ref="
+            )
         if "/pdf" in article_url.lower() or article_url.lower().endswith(".pdf"):
             candidates.insert(0, article_url)
         for candidate in candidates:
@@ -206,6 +211,17 @@ class BrowserWorker:
 
 
 WORKER = BrowserWorker()
+
+
+def _ieee_arnumber(url: str) -> str:
+    parsed = urlparse(url)
+    if not (parsed.hostname or "").lower().endswith("ieeexplore.ieee.org"):
+        return ""
+    for pattern in (r"/document/(\d+)", r"[?&]arnumber=(\d+)"):
+        match = re.search(pattern, url, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
 
 
 class Handler(BaseHTTPRequestHandler):
