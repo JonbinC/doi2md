@@ -574,6 +574,19 @@ def _publisher_pdf_candidates(article_url: str) -> list[str]:
     elif doi and (host == "pubs.acs.org" or host.endswith(".acs.org")):
         candidates.append(f"https://pubs.acs.org/doi/pdf/{doi}")
         candidates.append(f"https://pubs.acs.org/doi/epdf/{doi}")
+    elif host == "pubs.rsc.org":
+        # RSC's landing pages often omit a conventional citation_pdf_url, but
+        # expose the same article through this documented representation.
+        match = re.search(
+            r"/en/content/article(?:landing|html|pdf)/(\d{4})/([a-z]+)/([a-z0-9]+)",
+            parsed.path,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            year, journal, article_id = match.groups()
+            candidates.append(
+                f"https://pubs.rsc.org/en/content/articlepdf/{year}/{journal}/{article_id}"
+            )
     elif host == "link.springer.com":
         # Springer article identifiers are normally their DOI suffix and its
         # PDF endpoint accepts the complete DOI path.

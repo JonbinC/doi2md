@@ -64,6 +64,14 @@ class ArticlePdfCandidateTests(unittest.TestCase):
         self.assertTrue(self.worker.allowed_url("https://pubs.acs.org/doi/pdf/10.1021/example"))
         self.assertFalse(self.worker.allowed_url("https://example.invalid/paper.pdf"))
 
+    def test_derives_rsc_native_pdf_from_landing_page(self):
+        self.assertEqual(
+            self.worker._publisher_pdf_candidates(
+                "https://pubs.rsc.org/en/content/articlelanding/2025/ra/d5ra09148a"
+            ),
+            ["https://pubs.rsc.org/en/content/articlepdf/2025/ra/d5ra09148a"],
+        )
+
     def test_classifies_challenge_frame_without_inspecting_its_document(self):
         self.assertEqual(
             self.worker.classify_frame_urls(
