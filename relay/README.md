@@ -2,6 +2,19 @@
 
 Standalone campus-network relay for Mdtero. Install this on a school/office machine so cloud agents can fetch publisher URLs through your campus IP.
 
+## Optional: authorized local browser
+
+If the same user has lawful institutional access in a local browser but a
+publisher challenges automated requests, Relay can optionally use a separate
+`Mdtero Access` Chrome profile. This is a **user-bound article capture**, not a
+browser proxy: it accepts only `article_html` and `article_pdf` for approved
+publisher domains and returns no cookies, credentials, browser storage, or
+screenshots. It cannot grant access that the local user does not already have.
+
+See [`browser_worker/README.md`](browser_worker/README.md). The local worker is
+advertised to the backend as `browser_fetch`; it can only be scheduled by that
+same Mdtero account's tasks.
+
 ## One-line install
 
 **macOS / Linux**

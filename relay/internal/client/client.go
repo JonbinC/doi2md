@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/mdtero/mdtero-relay/internal/browserfetch"
 	"github.com/mdtero/mdtero-relay/internal/campus"
 	"github.com/mdtero/mdtero-relay/internal/config"
+	"github.com/mdtero/mdtero-relay/internal/domains"
 	"github.com/mdtero/mdtero-relay/internal/fetch"
 )
 
@@ -20,8 +23,9 @@ const reconnectDelay = 5 * time.Second
 type Logger func(format string, args ...any)
 
 type Options struct {
-	Label  string
-	Logger Logger
+	Label   string
+	Logger  Logger
+	Browser *browserfetch.Client
 }
 
 func DefaultLogger() Logger {
@@ -60,7 +64,7 @@ func Run(cfg config.Config, opts Options) error {
 	}
 
 	for {
-		if err := runOnce(wsURL, headers, label, outlet.Summary, logger); err != nil {
+		if err := runOnce(wsURL, headers, label, outlet.Summary, opts.Browser, logger); err != nil {
 			if isStop(err) {
 				return nil
 			}
@@ -74,7 +78,7 @@ func Run(cfg config.Config, opts Options) error {
 	}
 }
 
-func runOnce(wsURL string, headers http.Header, label string, outlet campus.OutletSummary, logger Logger) error {
+func runOnce(wsURL string, headers http.Header, label string, outlet campus.OutletSummary, browser *browserfetch.Client, logger Logger) error {
 	dialer := websocket.Dialer{HandshakeTimeout: 20 * time.Second}
 	conn, _, err := dialer.Dial(wsURL, headers)
 	if err != nil {
@@ -93,9 +97,10 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 	}
 
 	register := map[string]any{
-		"type":   "register",
-		"label":  label,
-		"outlet": outlet,
+		"type":         "register",
+		"label":        label,
+		"outlet":       outlet,
+		"capabilities": relayCapabilities(browser),
 	}
 	if err := conn.WriteJSON(register); err != nil {
 		return err
@@ -129,8 +134,21 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 			if err := conn.WriteJSON(response); err != nil {
 				return err
 			}
+		case "browser_fetch":
+			response := handleBrowserFetch(message, browser)
+			if err := conn.WriteJSON(response); err != nil {
+				return err
+			}
 		}
 	}
+}
+
+func relayCapabilities(browser *browserfetch.Client) []string {
+	capabilities := []string{"http_fetch"}
+	if browser != nil && browser.Enabled() {
+		capabilities = append(capabilities, "browser_fetch")
+	}
+	return capabilities
 }
 
 func handleFetch(message map[string]any) map[string]any {
@@ -156,6 +174,40 @@ func handleFetch(message map[string]any) map[string]any {
 	if result.ReasonCode != "" || result.Error != "" {
 		response["error"] = firstNonEmpty(result.Error, "Relay fetch failed.")
 		response["reason_code"] = firstNonEmpty(result.ReasonCode, "relay_fetch_failed")
+		return response
+	}
+	response["status_code"] = result.StatusCode
+	response["headers"] = result.Headers
+	response["body_b64"] = result.BodyB64
+	return response
+}
+
+func handleBrowserFetch(message map[string]any, browser *browserfetch.Client) map[string]any {
+	requestID := fmt.Sprint(message["request_id"])
+	rawURL := fmt.Sprint(message["url"])
+	recipe := fmt.Sprint(message["recipe"])
+	timeoutSeconds := 90.0
+	if value, ok := message["timeout"].(float64); ok && value > 0 {
+		timeoutSeconds = value
+	}
+	response := map[string]any{
+		"type":       "browser_fetch_result",
+		"request_id": requestID,
+	}
+	if browser == nil || !browser.Enabled() {
+		response["error"] = "Browser capture is not configured on this relay."
+		response["reason_code"] = "browser_relay_unavailable"
+		return response
+	}
+	if reason := domains.RejectionReason(rawURL); reason != "" {
+		response["error"] = "Browser capture is limited to approved research publisher domains over HTTP/HTTPS."
+		response["reason_code"] = reason
+		return response
+	}
+	result := browser.Fetch(context.Background(), recipe, rawURL, time.Duration(timeoutSeconds)*time.Second)
+	if result.ReasonCode != "" || result.Error != "" {
+		response["error"] = firstNonEmpty(result.Error, "Browser capture failed.")
+		response["reason_code"] = firstNonEmpty(result.ReasonCode, "browser_relay_failed")
 		return response
 	}
 	response["status_code"] = result.StatusCode

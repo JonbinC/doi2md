@@ -72,6 +72,7 @@ func TestRunOnceRegistersAndReturnsFetchResult(t *testing.T) {
 		http.Header{"Authorization": []string{"ApiKey mdt_test"}},
 		"lab-mac",
 		campus.OutletSummary{ASN: "AS786", City: "Nottingham"},
+		nil,
 		func(string, ...any) {},
 	)
 	if err == nil {
