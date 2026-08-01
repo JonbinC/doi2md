@@ -121,15 +121,17 @@ def should_acquire_locally(
         return False
     if route.get("requires_raw_upload"):
         return True
-    actions = {str(action) for action in route.get("action_sequence") or []}
-    if "fetch_wiley_tdm_pdf" in actions and _wiley_tdm_token(config):
-        return True
     if _should_prefer_cloud_via_relay(
         config,
         relay_connected=relay_connected,
         local_outlet_is_campus=local_outlet_is_campus,
     ):
         return False
+    if bool(route.get("can_acquire_locally")) and _candidate_urls(route, input_value):
+        return True
+    # Compatibility with older servers: new route projections use the boolean
+    # above, while historical servers still expose action labels.
+    actions = {str(action) for action in route.get("action_sequence") or []}
     local_actions = {"fetch_remote_html", "fetch_epub_asset", "fetch_structured_xml", "fallback_pdf_parse"}
     if actions.intersection(local_actions) and _candidate_urls(route, input_value):
         return True
@@ -292,14 +294,12 @@ def curl_cffi_available() -> bool:
 
 def _credential_headers(route: dict[str, Any], candidate: dict[str, str], url: str, *, config: Any | None) -> dict[str, str]:
     headers: dict[str, str] = {}
-    connector = str(candidate.get("connector") or "").lower()
-    actions = {str(action) for action in route.get("action_sequence") or []}
     host = urllib.parse.urlparse(url).netloc.lower()
-    if ("fetch_elsevier_xml" in actions or connector == "elsevier_article_retrieval_api" or host == "api.elsevier.com"):
+    if host == "api.elsevier.com":
         key = _elsevier_api_key(config)
         if key:
             headers["X-ELS-APIKey"] = key
-    if connector == "wiley_tdm" or host == "api.wiley.com" or "fetch_wiley_tdm_pdf" in actions:
+    if host == "api.wiley.com":
         token = _wiley_tdm_token(config)
         if token:
             headers["Wiley-TDM-Client-Token"] = token

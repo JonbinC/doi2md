@@ -31,13 +31,7 @@ BROWSER_HANDOFF_REASON_CODES = {
 def classify_acquisition_path(route: dict[str, Any] | None) -> str:
     """Return cli_server | cli_local | extension_required."""
     payload = dict(route or {})
-    actions = {str(action) for action in payload.get("action_sequence") or []}
-    top = str(payload.get("top_connector") or "").strip()
-    if (
-        payload.get("requires_browser_capture")
-        or "fetch_browser_source" in actions
-        or top == "ieee_html_document"
-    ):
+    if payload.get("requires_browser_capture") or str(payload.get("top_connector") or "").strip() == "ieee_html_document":
         return "extension_required"
     if payload.get("requires_raw_upload"):
         return "cli_local"
