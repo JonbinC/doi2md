@@ -64,6 +64,22 @@ class ArticlePdfCandidateTests(unittest.TestCase):
         self.assertTrue(self.worker.allowed_url("https://pubs.acs.org/doi/pdf/10.1021/example"))
         self.assertFalse(self.worker.allowed_url("https://example.invalid/paper.pdf"))
 
+    def test_classifies_challenge_frame_without_inspecting_its_document(self):
+        self.assertEqual(
+            self.worker.classify_frame_urls(
+                [
+                    "https://link.springer.com/article/10.1000/example",
+                    "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv/0",
+                ]
+            ),
+            "browser_challenge_required",
+        )
+        self.assertIsNone(
+            self.worker.classify_frame_urls(
+                ["https://link.springer.com/article/10.1000/example"]
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
