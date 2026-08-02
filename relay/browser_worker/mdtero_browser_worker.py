@@ -294,7 +294,7 @@ class BrowserWorker:
             if not allowed_url(final_url):
                 raise WorkerFailure("browser_final_url_not_allowed", "Browser ended outside the approved publisher domains.")
             if recipe == "article_html":
-                body = page.evaluate("document.documentElement.outerHTML").encode("utf-8")
+                body = self._sanitized_article_html(page).encode("utf-8")
                 return self._artifact(status_code=response.status if response else 200, content_type="text/html; charset=utf-8", body=body)
             return self._pdf_artifact(context, page, final_url)
         except PlaywrightTimeoutError as exc:
@@ -435,6 +435,50 @@ class BrowserWorker:
             page.bring_to_front()
         except PlaywrightError:
             pass
+
+    @staticmethod
+    def _sanitized_article_html(page) -> str:
+        """Return static article HTML without executable or session material."""
+        result = page.evaluate(
+            """() => {
+                const root = document.documentElement.cloneNode(true);
+                root.querySelectorAll('script,noscript,style,link,base,iframe,frame,object,embed,form,button,input,textarea,select,option').forEach((node) => node.remove());
+                const safeMetaNames = new Set(['citation_title', 'citation_doi', 'citation_author', 'citation_journal_title', 'citation_publication_date', 'dc.title', 'dc.identifier', 'prism.doi']);
+                root.querySelectorAll('meta').forEach((node) => {
+                    const name = (node.getAttribute('name') || node.getAttribute('property') || '').toLowerCase();
+                    if (!safeMetaNames.has(name)) node.remove();
+                });
+                const sensitiveName = /(?:token|auth|cookie|session|nonce|csrf|xsrf)/i;
+                const urlName = /^(?:src|href|xlink:href|poster|action|data-src|data-href)$/i;
+                for (const element of root.querySelectorAll('*')) {
+                    for (const attribute of [...element.attributes]) {
+                        const name = attribute.name;
+                        if (/^on/i.test(name) || name.toLowerCase() === 'style' || sensitiveName.test(name)) {
+                            element.removeAttribute(name);
+                            continue;
+                        }
+                        if (/^(?:srcset|data-srcset)$/i.test(name)) {
+                            element.removeAttribute(name);
+                            continue;
+                        }
+                        if (urlName.test(name)) {
+                            try {
+                                const parsed = new URL(attribute.value, document.baseURI);
+                                if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+                                    parsed.search = '';
+                                    parsed.hash = '';
+                                    element.setAttribute(name, parsed.href);
+                                }
+                            } catch (_) {
+                                element.removeAttribute(name);
+                            }
+                        }
+                    }
+                }
+                return '<!doctype html>\\n' + root.outerHTML;
+            }"""
+        )
+        return str(result or "")
 
     def _pdf_artifact(self, context, page, article_url: str) -> dict[str, Any]:
         html = page.evaluate("document.documentElement.outerHTML")
