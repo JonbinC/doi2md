@@ -306,12 +306,7 @@ class BrowserWorker:
                     # user-visible browser operation. This prevents an
                     # intermittent relay reconnect from losing a readable
                     # article between two otherwise independent recipes.
-                    body = self._sanitized_article_html(page).encode("utf-8")
-                    return self._artifact(
-                        status_code=response.status if response else 200,
-                        content_type="text/html; charset=utf-8",
-                        body=body,
-                    )
+                    return self._article_html_fallback_artifact(page, response)
             return self._pdf_artifact(context, page, final_url)
         except PlaywrightTimeoutError as exc:
             raise WorkerFailure("browser_fetch_timeout", "Authorized browser session timed out.") from exc
@@ -507,6 +502,38 @@ class BrowserWorker:
             }"""
         )
         return str(result or "")
+
+    def _article_html_fallback_artifact(self, page, response) -> dict[str, Any]:
+        """Return HTML only when the browser has a real readable article.
+
+        A missing PDF does not imply that every resulting browser page is safe
+        to parse.  In particular, do not turn a publisher 429/403 response, a
+        thin error page, or a login shell into an apparently successful HTML
+        artifact.  The page has already passed the interaction-shell wait; this
+        final artifact gate protects the PDF→HTML fallback itself.
+        """
+        status_code = int(response.status) if response is not None else 200
+        if status_code == HTTPStatus.TOO_MANY_REQUESTS:
+            raise WorkerFailure(
+                "rate_limited",
+                "Publisher rate limited the authorized browser request; wait briefly before retrying.",
+            )
+        if status_code >= HTTPStatus.BAD_REQUEST:
+            raise WorkerFailure(
+                "browser_article_unavailable",
+                "Authorized browser page did not return a readable article.",
+            )
+        html = self._sanitized_article_html(page)
+        if not text_looks_like_article(html):
+            raise WorkerFailure(
+                "browser_article_not_fulltext",
+                "Authorized browser page did not contain a complete readable article.",
+            )
+        return self._artifact(
+            status_code=status_code,
+            content_type="text/html; charset=utf-8",
+            body=html.encode("utf-8"),
+        )
 
     def _pdf_artifact(self, context, page, article_url: str) -> dict[str, Any]:
         html = page.evaluate("document.documentElement.outerHTML")

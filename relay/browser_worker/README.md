@@ -1,13 +1,16 @@
 # Authorized Browser Worker
 
-This optional, loopback-only sidecar adds two narrowly scoped capabilities to
-`mdtero-relay`: capture an authenticated publisher article as HTML, or download
-its publisher PDF after the user has authorized access in the dedicated
-`Mdtero Access` browser profile.
+This optional, loopback-only sidecar captures an authorized publisher article
+for `mdtero-relay`: it prefers the publisher PDF after the user has authorized
+access in the dedicated `Mdtero Access` browser profile, otherwise it can return
+sanitized static HTML only for a complete readable article.
 
-It is not a general browser proxy. The Relay only accepts the `article_html`
-and `article_pdf` recipes, both are publisher-domain allowlisted, and the
-worker never returns browser cookies or profile data.
+It is not a general browser proxy. The Relay only accepts the
+publisher-domain-allowlisted `article_html`, `article_pdf`, and
+`article_fulltext` recipes, and the worker never returns browser cookies or
+profile data. `article_fulltext` is preferred: it returns a verified publisher
+PDF when possible, otherwise static article HTML after a full-text guard. It
+does not return short errors, HTTP 4xx/5xx pages, or rate-limit pages as HTML.
 
 `article_html` is a static parse fallback for a readable article that has no
 usable PDF endpoint. Before it leaves the computer, the worker removes scripts,
@@ -38,7 +41,8 @@ keeps that one profile and its Chrome session alive while it runs, so a user
 can complete institutional login or a publisher challenge once and a later
 article task can reuse the resulting lawful session. It returns
 `browser_login_required` or `browser_challenge_required` when that has not
-happened.
+happened, and returns a specific unavailable/rate-limit result rather than
+parsing a publisher error page as an article.
 
 The worker must own this dedicated profile. If an older `Mdtero Access` Chrome
 window is already open, close **that profile only** once and retry; the worker
@@ -54,7 +58,7 @@ mdtero-relay browser-open https://publisher.example/article
 
 This action is local-only and returns no cookies, storage, screenshots, or
 page content to the Relay or backend. Use it only to complete your own login
-or challenge; subsequent task capture remains limited to the two fixed article
+or challenge; subsequent task capture remains limited to the fixed article
 recipes.
 
 The worker is intentionally single-concurrency so two paper tasks cannot mix

@@ -1,3 +1,4 @@
+import base64
 import importlib.util
 import sys
 import types
@@ -119,6 +120,35 @@ class ArticlePdfCandidateTests(unittest.TestCase):
 
         self.assertEqual(submit.call_args.args[0], "fetch")
         self.assertEqual(submit.call_args.kwargs["recipe"], "article_fulltext")
+
+    def test_fulltext_html_fallback_rejects_rate_limited_page(self):
+        worker = object.__new__(self.worker.BrowserWorker)
+        response = types.SimpleNamespace(status=429)
+
+        with self.assertRaisesRegex(self.worker.WorkerFailure, "rate limited") as raised:
+            worker._article_html_fallback_artifact(object(), response)
+
+        self.assertEqual(raised.exception.reason_code, "rate_limited")
+
+    def test_fulltext_html_fallback_requires_complete_article(self):
+        worker = object.__new__(self.worker.BrowserWorker)
+        response = types.SimpleNamespace(status=200)
+        with mock.patch.object(worker, "_sanitized_article_html", return_value="<html><body>short</body></html>"):
+            with self.assertRaisesRegex(self.worker.WorkerFailure, "complete readable article") as raised:
+                worker._article_html_fallback_artifact(object(), response)
+
+        self.assertEqual(raised.exception.reason_code, "browser_article_not_fulltext")
+
+    def test_fulltext_html_fallback_returns_sanitized_complete_article(self):
+        worker = object.__new__(self.worker.BrowserWorker)
+        response = types.SimpleNamespace(status=200)
+        html = "<html><head><meta name='citation_title' content='Demo'></head><body><article>" + ("Full text. " * 500) + "</article></body></html>"
+        with mock.patch.object(worker, "_sanitized_article_html", return_value=html):
+            artifact = worker._article_html_fallback_artifact(object(), response)
+
+        self.assertEqual(artifact["status_code"], 200)
+        self.assertEqual(artifact["headers"]["content-type"], "text/html; charset=utf-8")
+        self.assertIn(b"Full text", base64.b64decode(artifact["body_b64"]))
 
     def test_wait_for_access_retries_destroyed_navigation_context(self):
         class Page:
