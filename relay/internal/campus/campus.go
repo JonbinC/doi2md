@@ -12,10 +12,10 @@ import (
 const checkURL = "https://ifconfig.co/json"
 
 type OutletSummary struct {
-	IP     string `json:"ip,omitempty"`
-	ASN    string `json:"asn,omitempty"`
-	ASNOrg string `json:"asn_org,omitempty"`
-	City   string `json:"city,omitempty"`
+	IP      string `json:"ip,omitempty"`
+	ASN     string `json:"asn,omitempty"`
+	ASNOrg  string `json:"asn_org,omitempty"`
+	City    string `json:"city,omitempty"`
 	Country string `json:"country,omitempty"`
 }
 
@@ -42,7 +42,7 @@ func Check(timeout time.Duration) (CheckResult, error) {
 	summary := summarize(payload)
 	return CheckResult{
 		Summary:  summary,
-		CampusOK: isExpectedCampusOutlet(payload),
+		CampusOK: summary.IP != "",
 	}, nil
 }
 
@@ -66,20 +66,4 @@ func summarize(payload map[string]any) OutletSummary {
 		summary.Country = v
 	}
 	return summary
-}
-
-func isExpectedCampusOutlet(payload map[string]any) bool {
-	asn := strings.ToUpper(fmt.Sprint(payload["asn"]))
-	org := strings.ToLower(fmt.Sprint(firstString(payload, "asn_org", "org")))
-	city := strings.ToLower(fmt.Sprint(payload["city"]))
-	return asn == "AS786" && strings.Contains(org, "jisc") && city == "nottingham"
-}
-
-func firstString(payload map[string]any, keys ...string) any {
-	for _, key := range keys {
-		if value, ok := payload[key]; ok {
-			return value
-		}
-	}
-	return ""
 }

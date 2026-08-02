@@ -21,6 +21,8 @@ func New() Manager {
 		return launchdManager{}
 	case "windows":
 		return windowsManager{}
+	case "linux":
+		return systemdManager{}
 	default:
 		return unsupportedManager{goos: runtime.GOOS}
 	}
@@ -39,6 +41,13 @@ func LogPath() (string, error) {
 		base := os.Getenv("LOCALAPPDATA")
 		if base == "" {
 			base = filepath.Join(home, "AppData", "Local")
+		}
+		return filepath.Join(base, "mdtero-relay", "relay.log"), nil
+	}
+	if runtime.GOOS == "linux" {
+		base := strings.TrimSpace(os.Getenv("XDG_STATE_HOME"))
+		if base == "" {
+			base = filepath.Join(home, ".local", "state")
 		}
 		return filepath.Join(base, "mdtero-relay", "relay.log"), nil
 	}

@@ -73,11 +73,13 @@ The installer will:
 1. Download a native `mdtero-relay` binary
 2. Open the Mdtero sign-in page when no API key was supplied, or save the key
    provided by an automated install
-3. Register a background service (launchd on macOS, login task on Windows)
+3. Register a background service (launchd on macOS, systemd user service on Linux, login task on Windows)
 4. Start relaying automatically on login
 
 For a normal campus computer, use the no-key command and finish the browser
-sign-in. For a headless install, pass `--api-key` from a secret manager or run
+sign-in. Linux desktops and servers use a per-user systemd service when
+available; on minimal images without systemd, keep `mdtero-relay serve` under
+the host's process supervisor. For a headless install, pass `--api-key` from a secret manager or run
 `mdtero-relay login --browser=false` interactively; do not put the key in a
 shell history or a checked-in script.
 
@@ -111,8 +113,8 @@ Forgejo/GitHub workflow: `public/.forgejo/workflows/release-relay.yml`
 
 ```bash
 # Tag-driven release
-git tag relay/v0.1.3
-git push origin relay/v0.1.3
+git tag relay/v0.1.4
+git push origin relay/v0.1.4
 
 # Manual release
 # Forgejo: run "Release Campus Relay" with the desired version
@@ -123,7 +125,7 @@ Local publish to nextmdtero static assets:
 ```bash
 cd public/relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.3
+MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.4
 ```
 
 Required Forgejo secrets/vars for automatic site publish:
@@ -170,4 +172,5 @@ Environment overrides:
 ## Logs
 
 - macOS: `~/Library/Logs/mdtero-relay.log`
+- Linux: `${XDG_STATE_HOME:-~/.local/state}/mdtero-relay/relay.log`
 - Windows: `%LOCALAPPDATA%\mdtero-relay\relay.log`

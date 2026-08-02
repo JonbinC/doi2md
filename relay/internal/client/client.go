@@ -47,7 +47,12 @@ func Run(cfg config.Config, opts Options) error {
 
 	outlet, err := campus.Check(20 * time.Second)
 	if err != nil {
-		return err
+		// Public IP/ASN lookup is diagnostic only.  A campus firewall, captive
+		// portal, or transient outage must not prevent the outbound WebSocket
+		// relay from starting; the publisher request itself is the source of
+		// truth for whether this outlet can reach the article.
+		logger("Campus network check unavailable: %v", err)
+		outlet = campus.CheckResult{}
 	}
 	if outlet.CampusOK {
 		logger("Campus network: ok (%s, %s)", outlet.Summary.ASN, outlet.Summary.City)
