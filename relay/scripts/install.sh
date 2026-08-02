@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.4}"
+MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.5}"
 MDTERO_RELAY_BASE_URL="${MDTERO_RELAY_BASE_URL:-https://mdtero.com/releases/relay}"
 INSTALL_DIR="${MDTERO_RELAY_INSTALL_DIR:-${HOME}/.local/bin}"
 

@@ -19,7 +19,7 @@ import (
 
 // version is overridden by the release build with -ldflags -X main.version=...
 // so the binary and the published install manifest always agree.
-var version = "0.1.4"
+var version = "0.1.5"
 
 func main() {
 	if len(os.Args) < 2 {
