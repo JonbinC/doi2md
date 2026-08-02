@@ -13,6 +13,10 @@ from mdtero.relay_domains import relay_url_allowed, relay_url_rejection_reason
 
 def test_relay_url_allowlist():
     assert relay_url_allowed("https://doi.org/10.1038/nature12373")
+    assert relay_url_allowed(
+        "https://mdpi-res.com/d_attachment/energies/energies-16-02875/"
+        "article_deploy/energies-16-02875.epub"
+    )
     assert relay_url_allowed("https://pubs.acs.org/doi/pdf/10.1021/demo")
     assert relay_url_allowed("https://api.wiley.com/onlinelibrary/tdm/v1/articles/10.1002%2Fdemo")
     assert relay_url_rejection_reason("https://example.com/paper.pdf") == "relay_url_domain_not_allowed"

@@ -24,6 +24,7 @@ RELAY_ALLOWED_HOST_SUFFIXES = (
     "journals.aps.org",
     "link.springer.com",
     "mdpi.com",
+    "mdpi-res.com",
     "nature.com",
     "ncbi.nlm.nih.gov",
     "onlinelibrary.wiley.com",
