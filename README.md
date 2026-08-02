@@ -60,6 +60,19 @@ mdtero tui
 
 Use the browser extension when content depends on browser login, campus-network/session-bound access, a publisher challenge page, or current-page capture. The extension can hand the DOI, URL, PDF, EPUB, HTML, or XML artifact back to the CLI so route planning, raw upload, task polling, downloads, and structured failure fields remain visible.
 
+### Choose the surface for your environment
+
+| Environment | Best surface | What it can solve | Boundary |
+| --- | --- | --- | --- |
+| Campus Windows/macOS with a full browser | Extension + optional local Relay | OA, campus-IP routes, browser login/challenges, entitled closed articles | The user completes visible login or verification. |
+| CLI/Agent on a server only | CLI/API | OA, structured APIs, ordinary HTTP, VPN/IP-authorized files, and uploads | No browser session; WAF/login-only closed content needs a file or another desktop. |
+| Server Agent plus a separate campus desktop | Server CLI/API + Relay on the desktop; extension as manual fallback | Full authorized browser acquisition on the desktop, then cloud parsing | The extension alone is user-triggered; use Relay when the server must request the article remotely. |
+| Server connected to campus VPN without a browser | CLI/API with the VPN or proxy | IP-authorized machine-readable PDF/XML/HTML | VPN supplies network access, not browser cookies or challenge completion. |
+
+In short: a browser is required for browser-bound entitlement; a campus IP or
+VPN is sufficient only when the publisher exposes a machine-readable route.
+Mdtero never bypasses a paywall or exports browser session material.
+
 ## Project Workflow
 
 Use a local Mdtero project when you are handling a paper set:
