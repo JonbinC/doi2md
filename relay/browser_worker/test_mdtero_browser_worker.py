@@ -74,6 +74,17 @@ class ArticlePdfCandidateTests(unittest.TestCase):
             ["https://pubs.rsc.org/en/content/articlepdf/2025/ra/d5ra09148a"],
         )
 
+    def test_derives_sciencedirect_native_pdf_from_pii_landing_page(self):
+        self.assertEqual(
+            self.worker._publisher_pdf_candidates(
+                "https://www.sciencedirect.com/science/article/pii/S036054422600294X"
+            ),
+            [
+                "https://www.sciencedirect.com/science/article/pii/"
+                "S036054422600294X/pdfft?isDTMRedir=true&download=true"
+            ],
+        )
+
     def test_classifies_challenge_frame_without_inspecting_its_document(self):
         self.assertEqual(
             self.worker.classify_frame_urls(
