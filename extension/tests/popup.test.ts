@@ -24,9 +24,7 @@ import {
   getTaskFailureCliHandoff,
   getTaskProcessingSummary,
   buildApiErrorCliHandoffPlan,
-  buildApiErrorHandoffContext,
   buildTaskFailureCliHandoffPlan,
-  buildTaskHandoffContext,
   buildCliHandoffCommandPlan,
   formatCliHandoffClipboard,
   firstNextCommand,
@@ -330,7 +328,7 @@ describe("getSourceArtifactKeys", () => {
 });
 
 describe("getTaskProcessingSummary", () => {
-  it("summarizes provider, strategy, acquisition, outcome, and artifacts for popup visibility", () => {
+  it("shows artifacts without exposing processing telemetry", () => {
     expect(
       getTaskProcessingSummary(
         {
@@ -356,9 +354,6 @@ describe("getTaskProcessingSummary", () => {
         "en"
       )
     ).toEqual([
-      "Processing path: Backend parsing",
-      "Acquisition: curl_cffi · pdf · HTTP 200 · application/pdf",
-      "Outcome: fulltext_accepted",
       "Preferred artifact: paper_md",
       "Downloads: paper_md: gholami2019drone.md; paper_bundle: gholami2019drone.zip"
     ]);
@@ -377,7 +372,7 @@ describe("getTaskProcessingSummary", () => {
     ).toEqual(["Queue position: 3 (2 ahead)"]);
   });
 
-  it("localizes failure diagnostics and redacts sensitive hints", () => {
+  it("does not expose failure diagnostics from legacy task records", () => {
     expect(
       getTaskProcessingSummary(
         {
@@ -386,10 +381,7 @@ describe("getTaskProcessingSummary", () => {
         },
         "zh"
       )
-    ).toEqual([
-      "原因：client_acquisition_challenge_page",
-      "下一步：Retry with Bearer [redacted] at https://oss.example.com/file.pdf?token=[redacted]"
-    ]);
+    ).toEqual([]);
   });
 });
 
@@ -517,14 +509,14 @@ describe("getPreflightHintText", () => {
 });
 
 describe("getCliHandoffNote", () => {
-  it("explains terminal handoff for campus-network and challenge-page cases", () => {
-    expect(getCliHandoffNote("mdtero parse https://example.org/paper --trace --wait --timeout 300 --json", "en")).toContain("campus networks");
-    expect(getCliHandoffNote("mdtero parse https://example.org/paper --trace --wait --timeout 300 --json", "zh")).toContain("反爬挑战页");
+  it("explains terminal handoff without implementation details", () => {
+    expect(getCliHandoffNote("mdtero parse https://example.org/paper --wait --timeout 300 --json", "en")).toBe("Continue parsing in the terminal and follow the prompts.");
+    expect(getCliHandoffNote("mdtero parse https://example.org/paper --wait --timeout 300 --json", "zh")).toBe("在终端继续解析，并按提示完成后续操作。");
   });
 
   it("explains file-upload command placeholders separately", () => {
-    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json", "en")).toContain("replace the path");
-    expect(getCliHandoffNote("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json", "zh")).toContain("文件路径");
+    expect(getCliHandoffNote("mdtero parse --file paper.pdf --wait --timeout 600 --json", "en")).toContain("replace the path");
+    expect(getCliHandoffNote("mdtero parse --file paper.pdf --wait --timeout 600 --json", "zh")).toContain("文件路径");
   });
 
   it("redacts sensitive URLs and provider secrets from task failure text", () => {
@@ -551,8 +543,8 @@ describe("getCliHandoffNote", () => {
       "en"
     );
 
-    expect(text).toContain("[redacted-url]");
-    expect(text).toContain("Bearer [redacted]");
+    expect(text).toBe("failed");
+    expect(text).not.toContain("Bearer");
     expect(text).not.toContain("OSSAccessKeyId=abc");
     expect(text).not.toContain("Signature=sig");
     expect(text).not.toContain("security-token=tok");
@@ -590,7 +582,7 @@ describe("getSavedResultSummary", () => {
 });
 
 describe("getDownloadFailureText", () => {
-  it("surfaces backend download failure detail without leaking signed URLs", () => {
+  it("uses a stable download failure message without backend diagnostics", () => {
     const text = getDownloadFailureText(
       new Error(
         "artifact not available. Reason: parser_failed Next: retry https://artifact.oss-cn-shanghai.aliyuncs.com/file.pdf?OSSAccessKeyId=abc&Signature=sig&security-token=tok"
@@ -599,9 +591,9 @@ describe("getDownloadFailureText", () => {
       "en"
     );
 
-    expect(text).toContain("Download failed. Please try again. Detail: artifact not available");
-    expect(text).toContain("Reason: parser_failed");
-    expect(text).toContain("[redacted-url]");
+    expect(text).toBe("Download failed. Please try again.");
+    expect(text).not.toContain("parser_failed");
+    expect(text).not.toContain("aliyuncs");
     expect(text).not.toContain("OSSAccessKeyId=abc");
     expect(text).not.toContain("Signature=sig");
     expect(text).not.toContain("security-token=tok");
@@ -625,25 +617,16 @@ describe("getDownloadFailureText", () => {
       primaryCommand: "mdtero status task-123 --wait --timeout 300 --json",
       commands: [
         "mdtero status task-123 --wait --timeout 300 --json",
-        "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+        "mdtero parse --file paper.pdf --wait --timeout 600 --json"
       ],
       source: "backend_task",
       kind: "parse"
-    });
-    expect(buildApiErrorHandoffContext(error, "parse")).toEqual({
-      kind: "parse",
-      reasonCode: "artifact_not_available",
-      actionHint: "Inspect task status before retrying.",
-      nextCommands: [
-        "mdtero status task-123 --wait --timeout 300 --json",
-        "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
-      ]
     });
   });
 });
 
 describe("getResultWarningText", () => {
-  it("localizes abstract-only publisher access hints", () => {
+  it("gives a generic recovery hint when only an abstract is available", () => {
     expect(
       getResultWarningText(
         {
@@ -652,7 +635,7 @@ describe("getResultWarningText", () => {
         },
         "en"
       )
-    ).toContain("institutional access");
+    ).toBe("This page only provided an abstract. Open the full-text page or upload a PDF/EPUB.");
     expect(
       getResultWarningText(
         {
@@ -661,7 +644,7 @@ describe("getResultWarningText", () => {
         },
         "zh"
       )
-    ).toContain("校园网");
+    ).toBe("当前页面仅提供摘要。请打开全文页面，或上传 PDF/EPUB。");
   });
 
   it("keeps legacy abstract-only warning codes generic while backend rollout catches up", () => {
@@ -678,7 +661,7 @@ describe("getResultWarningText", () => {
 });
 
 describe("getTaskFailureText", () => {
-  it("surfaces backend reason codes and action hints for failed tasks", () => {
+  it("uses the stable user-facing fallback for failed tasks", () => {
     expect(
       getTaskFailureText(
         {
@@ -686,17 +669,15 @@ describe("getTaskFailureText", () => {
           error_code: "uploaded_pdf_v2_parse_failed",
           reason_code: "backend_parser_timeout",
           action_hint: "Retry later or upload a smaller PDF.",
-          next_commands: ["mdtero parse --file paper.pdf --trace --json"]
+          next_commands: ["mdtero parse --file paper.pdf --json"]
         },
         "Parse failed. Please try again.",
         "en"
       )
-    ).toBe(
-      "Backend parser timed out while fetching the PDF. Reason: backend_parser_timeout Next: Retry later or upload a smaller PDF. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
-    );
+    ).toBe("Parse failed. Please try again.");
   });
 
-  it("falls back to result-level reasons and localizes labels", () => {
+  it("does not surface result-level implementation reasons", () => {
     expect(
       getTaskFailureText(
         {
@@ -712,10 +693,10 @@ describe("getTaskFailureText", () => {
         "解析失败，请重试。",
         "zh"
       )
-    ).toBe("解析失败，请重试。 原因：client_acquisition_challenge_page 下一步：请用扩展上传 PDF/EPUB，或在 CLI 中继续。");
+    ).toBe("解析失败，请重试。");
   });
 
-  it("does not mask Elsevier Article Retrieval XML failures as generic parser failures", () => {
+  it("does not expose source-specific failure diagnostics", () => {
     const task = {
       task_id: "task-elsevier",
       status: "failed",
@@ -731,13 +712,10 @@ describe("getTaskFailureText", () => {
 
     const text = getTaskFailureText(task, "Parse failed. Please try again.", "en");
 
-    expect(text).toContain("Reason: elsevier_article_retrieval_api_failed");
-    expect(text).toContain("Next: Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response");
-    expect(text).toContain("Command: mdtero parse <doi-or-url> --trace --wait --timeout 300 --json");
-    expect(text).not.toContain("Reason: parser_failed");
+    expect(text).toBe("Parse failed. Please try again.");
   });
 
-  it("uses normalized Elsevier XML diagnostics in task summaries and handoff context", () => {
+  it("keeps source-specific diagnostics out of summaries and handoff context", () => {
     const task = {
       task_id: "task-elsevier",
       status: "failed",
@@ -751,22 +729,10 @@ describe("getTaskFailureText", () => {
       next_commands: [`mdtero status task-elsevier --json`]
     };
 
-    expect(getTaskProcessingSummary(task, "zh")).toEqual([
-      "原因：elsevier_article_retrieval_api_failed",
-      "下一步：Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response; retry with CLI trace mode or upload the source XML/PDF/HTML file directly."
-    ]);
-    expect(buildTaskHandoffContext(task, "parse")).toMatchObject({
-      reasonCode: "elsevier_article_retrieval_api_failed",
-      actionHint: "Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response; retry with CLI trace mode or upload the source XML/PDF/HTML file directly.",
-      nextCommands: [
-        "mdtero parse <doi-or-url> --trace --wait --timeout 300 --json",
-        "mdtero parse --file <paper.xml|paper.pdf|paper.html> --trace --wait --timeout 600 --json",
-        "mdtero status task-elsevier --json"
-      ]
-    });
+    expect(getTaskProcessingSummary(task, "zh")).toEqual([]);
   });
 
-  it("summarizes translation provider attempts for failed translation tasks", () => {
+  it("does not summarize translation provider attempts", () => {
     expect(
       getTaskFailureText(
         {
@@ -794,12 +760,10 @@ describe("getTaskFailureText", () => {
         "Translation failed. Please try again.",
         "en"
       )
-    ).toContain(
-      "Provider attempts: codex: translation_provider_auth_failed 401; local_legacy: translation_provider_rate_limited 429"
-    );
+    ).toBe("Translation failed. Please try again.");
   });
 
-  it("localizes translation provider attempt summaries", () => {
+  it("returns no translation provider attempt summary", () => {
     expect(
       getTranslationAttemptSummary(
         [
@@ -811,10 +775,10 @@ describe("getTaskFailureText", () => {
         ],
         "zh"
       )
-    ).toBe("服务端尝试：translation_provider_a: translation_provider_auth_failed 401");
+    ).toBe("");
   });
 
-  it("summarizes skipped translation provider configuration attempts", () => {
+  it("does not expose skipped translation provider configuration", () => {
     expect(
       getTaskFailureText(
         {
@@ -842,14 +806,12 @@ describe("getTaskFailureText", () => {
         "Translation failed. Please try again.",
         "en"
       )
-    ).toContain(
-      "Provider attempts: translation_provider_a: translation_provider_not_configured skipped missing TRANSLATION_PROVIDER_API_KEY; codex: translation_provider_not_configured skipped missing CODEX_API_KEY or OPENAI_API_KEY"
-    );
+    ).toBe("Translation failed. Please try again.");
   });
 
   it("selects the first non-empty next command for CLI handoff", () => {
     expect(firstNextCommand(["", "  ", "mdtero rag status --json"])).toBe("mdtero rag status --json");
-    expect(firstNextCommand(["mdtero parse --file paper.pdf --trace --json"])).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json");
+    expect(firstNextCommand(["mdtero parse --file paper.pdf --json"])).toBe("mdtero parse --file paper.pdf --wait --timeout 600 --json");
     expect(firstNextCommand(null)).toBe("");
   });
 
@@ -874,7 +836,7 @@ describe("getTaskFailureText", () => {
           next_commands: [
             "mdtero parse --file paper.pdf --json",
             "mdtero status task-123 --wait --timeout 300 --json",
-            "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+            "mdtero parse --file paper.pdf --wait --timeout 600 --json"
           ],
           result: {
             next_commands: ["mdtero doctor --json"]
@@ -884,9 +846,9 @@ describe("getTaskFailureText", () => {
         "parse"
       )
     ).toEqual({
-      primaryCommand: "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
+      primaryCommand: "mdtero parse --file paper.pdf --wait --timeout 600 --json",
       commands: [
-        "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
+        "mdtero parse --file paper.pdf --wait --timeout 600 --json",
         "mdtero status task-123 --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
@@ -904,8 +866,8 @@ describe("getTaskFailureText", () => {
   });
 
   it("fills missing parse handoff follow-up commands for extension fallback plans", () => {
-    expect(buildCliHandoffCommandPlan("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json")).toEqual([
-      "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+    expect(buildCliHandoffCommandPlan("mdtero parse 10.1000/demo --wait --timeout 300 --json")).toEqual([
+      "mdtero parse 10.1000/demo --wait --timeout 300 --json",
       "mdtero status <task-id> --wait --timeout 300 --json",
       "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
       "mdtero project ingest --json",
@@ -931,11 +893,10 @@ describe("getTaskFailureText", () => {
     ).toBe([
       "# Mdtero CLI handoff",
       "",
-      "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-      "Preserve task_id, reason_code, action_hint, acquisition diagnostics, parse diagnostics, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+      "Continue this paper in the Mdtero CLI.",
       "",
       "Run these commands in order:",
-      "1. mdtero parse --file paper.pdf --trace --wait --timeout 600 --json",
+      "1. mdtero parse --file paper.pdf --wait --timeout 600 --json",
       "2. mdtero status task-123 --wait --timeout 300 --json",
       "3. mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
       "4. mdtero project ingest --json",
@@ -947,65 +908,27 @@ describe("getTaskFailureText", () => {
       "10. mdtero mcp briefing --json",
       "11. mdtero mcp serve",
       "",
-      "Agent handoff:",
-      "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
-      "- Start `mdtero mcp serve` from the local project root when the agent needs live FastMCP stdio tools.",
-      "- When `mcp_tool_plan` says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`.",
-      "- Use `mdtero rag query \"<question>\" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.",
-      "- Preserve `citation_contract.required_for_final_answer`; final RAG answers must keep `citations` and `source_nodes` alongside the prose answer."
+      "The CLI will show the next available actions after parsing finishes."
     ].join("\n"));
 
     expect(formatCliHandoffClipboard("mdtero rag status --json", [])).toBe("mdtero rag status --json");
   });
 
-  it("includes sanitized failed-task context in parse handoffs for local agents", () => {
-    const context = buildTaskHandoffContext(
-      {
-        task_id: "task-failed-1",
-        status: "failed",
-        stage: "failed",
-        task_kind: "parse",
-        selected_provider: "backend_parser",
-        parser_strategy: "backend_parser_ast",
-        client_acquisition: {
-          source: "curl_cffi",
-          artifact_kind: "pdf",
-          status_code: 200,
-          url: "https://oss.example.com/paper.pdf?token=secret-token"
-        },
-        parse_outcome: {
-          outcome_code: "fulltext_rejected",
-          reason_code: "client_acquisition_challenge_page"
-        },
-        reason_code: "client_acquisition_challenge_page",
-        action_hint: "Use browser upload or CLI curl_cffi; Bearer secret-token",
-        preferred_artifact: "paper_md",
-        next_commands: ["mdtero parse https://example.org/paper --json"],
-        result: {
-          download_artifacts: [
-            { artifact: "paper_md", filename: "paper.md" },
-            { artifact: "paper_bundle", filename: "paper.zip" }
-          ]
-        }
-      },
-      "parse"
-    );
-
+  it("omits task diagnostics from parse handoff text", () => {
     const text = formatCliHandoffClipboard(
       "mdtero parse https://example.org/paper --json",
-      ["mdtero parse https://example.org/paper --json"],
-      context
+      ["mdtero parse https://example.org/paper --json"]
     );
 
-    expect(text).toContain("Failure context for agent:");
-    expect(text).toContain("- task_id: task-failed-1");
+    expect(text).not.toContain("Failure context for agent:");
+    expect(text).not.toContain("task-failed-1");
     expect(text).not.toContain("selected_provider");
     expect(text).not.toContain("parser_strategy");
-    expect(text).toContain("- client_acquisition: source=curl_cffi, artifact_kind=pdf, status_code=200, url=https://oss.example.com/paper.pdf?token=[redacted]");
-    expect(text).toContain("- parse_outcome: outcome_code=fulltext_rejected, reason_code=client_acquisition_challenge_page");
-    expect(text).toContain("- reason_code: client_acquisition_challenge_page");
-    expect(text).toContain("- action_hint: Use browser upload or CLI curl_cffi; Bearer [redacted]");
-    expect(text).toContain("- download_artifacts: paper_md: paper.md; paper_bundle: paper.zip");
+    expect(text).not.toContain("client_acquisition");
+    expect(text).not.toContain("parse_outcome");
+    expect(text).not.toContain("reason_code");
+    expect(text).not.toContain("action_hint");
+    expect(text).not.toContain("curl_cffi");
     expect(text).toContain("mdtero mcp briefing --json");
     expect(text).toContain("mdtero mcp serve");
     expect(text).not.toContain("secret-token");
@@ -1042,9 +965,9 @@ describe("getTaskFailureText", () => {
       buildTaskFailureCliHandoffPlan({ next_commands: [] }, "10.1000/demo", "parse")
     ).toMatchObject({
       source: "fallback_parse",
-      primaryCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      primaryCommand: "mdtero parse 10.1000/demo --wait --timeout 300 --json",
       commands: [
-        "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+        "mdtero parse 10.1000/demo --wait --timeout 300 --json",
         "mdtero status <task-id> --wait --timeout 300 --json",
         "mdtero download <task-id> paper_md --output-dir ./mdtero-output --json",
         "mdtero project ingest --json",
@@ -1069,7 +992,7 @@ describe("getTaskFailureText", () => {
         "parse"
       )
     ).toBe(
-      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace --wait --timeout 300 --json"
+      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --wait --timeout 300 --json"
     );
   });
 
@@ -1094,14 +1017,14 @@ describe("getTaskFailureText", () => {
           next_commands: ["mdtero parse https://example.org/paper --json"]
         }
       })
-    ).toBe("mdtero parse https://example.org/paper --trace --wait --timeout 300 --json");
+    ).toBe("mdtero parse https://example.org/paper --wait --timeout 300 --json");
   });
 });
 
 describe("normalizeCliHandoffCommand", () => {
   it("keeps parse handoffs aligned with the wait-first CLI contract", () => {
-    expect(normalizeCliHandoffCommand("mdtero parse 10.1000/demo --json")).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
-    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --timeout 300 --json")).toBe("mdtero parse --file paper.pdf --trace --wait --timeout 600 --json");
+    expect(normalizeCliHandoffCommand("mdtero parse 10.1000/demo --json")).toBe("mdtero parse 10.1000/demo --wait --timeout 300 --json");
+    expect(normalizeCliHandoffCommand("mdtero parse --file paper.pdf --wait --timeout 300 --json")).toBe("mdtero parse --file paper.pdf --wait --timeout 600 --json");
     expect(normalizeCliHandoffCommand("mdtero rag status --json")).toBe("mdtero rag status --json");
   });
 });
@@ -1109,16 +1032,16 @@ describe("normalizeCliHandoffCommand", () => {
 describe("buildCliParseCommand", () => {
   it("builds a traceable wait-and-json CLI handoff command for DOI and URL inputs", () => {
     expect(buildCliParseCommand("10.48550/arXiv.1706.03762")).toBe(
-      "mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json"
+      "mdtero parse 10.48550/arXiv.1706.03762 --wait --timeout 300 --json"
     );
     expect(buildCliParseCommand("https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML")).toBe(
-      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --trace --wait --timeout 300 --json"
+      "mdtero parse https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7517829/fullTextXML --wait --timeout 300 --json"
     );
   });
 
   it("quotes shell-sensitive URLs and avoids fake local-file commands", () => {
     expect(buildCliParseCommand("https://example.org/paper?q=a b&x='demo'")).toBe(
-      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --trace --wait --timeout 300 --json"
+      "mdtero parse 'https://example.org/paper?q=a b&x='\"'\"'demo'\"'\"'' --wait --timeout 300 --json"
     );
     expect(buildCliParseCommand("paper.pdf")).toBe("");
     expect(buildCliParseCommand("")).toBe("");
@@ -1128,25 +1051,25 @@ describe("buildCliParseCommand", () => {
 describe("buildCliFileParseCommand", () => {
   it("builds terminal handoff commands for failed local file uploads", () => {
     expect(buildCliFileParseCommand("paper.pdf", "pdf")).toBe(
-      "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+      "mdtero parse --file paper.pdf --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("paper.epub", "epub")).toBe(
-      "mdtero parse --file paper.epub --trace --wait --timeout 600 --json"
+      "mdtero parse --file paper.epub --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("fulltext.xml", "xml")).toBe(
-      "mdtero parse --file fulltext.xml --trace --wait --timeout 600 --json"
+      "mdtero parse --file fulltext.xml --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("paper.html", "html")).toBe(
-      "mdtero parse --file paper.html --trace --wait --timeout 600 --json"
+      "mdtero parse --file paper.html --wait --timeout 600 --json"
     );
   });
 
   it("quotes shell-sensitive local filenames and uses stable placeholders", () => {
     expect(buildCliFileParseCommand("My Paper's Draft.pdf", "pdf")).toBe(
-      "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 600 --json"
+      "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --wait --timeout 600 --json"
     );
     expect(buildCliFileParseCommand("", "epub")).toBe(
-      "mdtero parse --file paper.epub --trace --wait --timeout 600 --json"
+      "mdtero parse --file paper.epub --wait --timeout 600 --json"
     );
   });
 });

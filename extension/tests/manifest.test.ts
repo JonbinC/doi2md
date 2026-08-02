@@ -123,8 +123,8 @@ describe("extension manifest", () => {
     expect(optionsSource).toContain("Website OAuth is connected");
     expect(optionsSource).toContain("browser-side paper capture");
     expect(optionsSource).toContain("Browser capture reuses the active tab");
-    expect(optionsSource).toContain("Elsevier API key");
-    expect(optionsSource).toContain("Elsevier access");
+    expect(optionsSource).toContain("Access key");
+    expect(optionsSource).toContain("Authorized source access");
     expect(optionsSource).not.toContain("Wiley TDM");
     expect(optionsSource).not.toContain("wiley-tdm-token");
     expect(optionsSource).not.toContain("springer-oa-api-key");
@@ -149,7 +149,7 @@ describe("extension manifest", () => {
     expect(contentSource).not.toContain("announceBridgePageReady");
   });
 
-  it("allows user-owned Elsevier API access without exposing TDM key storage", () => {
+  it("keeps user-owned source access local without exposing other source keys", () => {
     const manifest = JSON.parse(readFileSync(resolve("manifest.json"), "utf-8")) as { host_permissions?: string[] };
     const storageSource = readFileSync(resolve("src/lib/storage.ts"), "utf-8");
     const backgroundSource = readFileSync(resolve("src/background.ts"), "utf-8");

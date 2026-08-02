@@ -60,17 +60,17 @@
       <section class="card" id="elsevier-settings-card">
         <div class="setting-card-header">
           <div>
-            <h2 id="elsevier-settings-title">Elsevier access</h2>
-            <p id="elsevier-settings-note" class="meta-label">Add your own Elsevier API key to let the extension fetch Article Retrieval XML directly from supported ScienceDirect pages.</p>
+            <h2 id="elsevier-settings-title">Authorized source access</h2>
+            <p id="elsevier-settings-note" class="meta-label">Optionally add an access key issued to you by an authorized source.</p>
           </div>
           <span id="elsevier-key-status" class="meta-pill">Not configured</span>
         </div>
-        <label id="elsevier-api-key-label" for="elsevier-api-key">Elsevier API key</label>
+        <label id="elsevier-api-key-label" for="elsevier-api-key">Access key</label>
         <div class="sensitive-input-row">
-          <input id="elsevier-api-key" type="password" autocomplete="off" placeholder="Paste your Elsevier API key" />
+          <input id="elsevier-api-key" type="password" autocomplete="off" placeholder="Paste your access key" />
           <button id="toggle-elsevier-key" type="button" class="ghost-chip">Show</button>
         </div>
-        <p id="elsevier-api-key-note" class="meta-label">Stored only in this browser. Used for Elsevier XML capture before backend fallback.</p>
+        <p id="elsevier-api-key-note" class="meta-label">Stored only in this browser and used only when you enable this access.</p>
         <div class="button-row settings-action-row">
           <button id="save-settings" type="button" class="secondary-button">Save settings</button>
           <button id="clear-elsevier-key" type="button" class="ghost-chip">Clear key</button>

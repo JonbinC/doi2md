@@ -10,9 +10,6 @@ import { isSupportedPaperPage } from "../lib/supported-page";
 
 const SECONDARY_ORDER = ["paper_md", "paper_bundle", "translated_md"] as const;
 const SOURCE_ORDER = ["paper_pdf", "paper_epub", "paper_html", "paper_xml"] as const;
-const ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_REASON = "elsevier_article_retrieval_api_failed";
-const ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_HINT =
-  "Verify ELSEVIER_API_KEY, institutional entitlement, and the Elsevier Article Retrieval API response; retry with CLI trace mode or upload the source XML/PDF/HTML file directly.";
 
 function getArtifactKeys(result?: TaskResult | null): string[] {
   const keyed = Object.keys(result?.artifacts ?? {});
@@ -57,22 +54,10 @@ export function getTaskProcessingSummary(
   task:
     | (Pick<
         TaskRecord,
-        | "selected_provider"
-        | "parser_strategy"
-        | "client_acquisition"
-        | "parse_outcome"
-        | "reason_code"
-        | "action_hint"
         | "preferred_artifact"
       > & {
         result?: Pick<
           TaskResult,
-          | "selected_provider"
-          | "parser_strategy"
-          | "client_acquisition"
-          | "parse_outcome"
-          | "reason_code"
-          | "action_hint"
           | "preferred_artifact"
           | "download_artifacts"
           | "artifacts"
@@ -82,12 +67,7 @@ export function getTaskProcessingSummary(
     | undefined,
   language: UiLanguage = "en"
 ): string[] {
-  const diagnostic = normalizeTaskFailureDiagnostic(task);
   const result = task?.result;
-  const acquisition = summarizeClientAcquisition(task?.client_acquisition || result?.client_acquisition);
-  const outcome = summarizeParseOutcome(task?.parse_outcome || result?.parse_outcome);
-  const reason = diagnostic.reasonCode ?? firstPresentString(task?.reason_code, result?.reason_code);
-  const actionHint = diagnostic.actionHint ?? firstPresentString(task?.action_hint, result?.action_hint);
   const preferredArtifact = firstPresentString(task?.preferred_artifact, result?.preferred_artifact);
   const artifacts = summarizeDownloadArtifacts(result);
   const lines: string[] = [];
@@ -100,26 +80,11 @@ export function getTaskProcessingSummary(
     );
   }
 
-  if (task?.selected_provider || result?.selected_provider || task?.parser_strategy || result?.parser_strategy) {
-    lines.push(language === "zh" ? "处理路径：后端解析" : "Processing path: Backend parsing");
-  }
-  if (acquisition) {
-    lines.push(language === "zh" ? `本地/浏览器抓取：${acquisition}` : `Acquisition: ${acquisition}`);
-  }
-  if (outcome) {
-    lines.push(language === "zh" ? `解析结果：${outcome}` : `Outcome: ${outcome}`);
-  }
   if (preferredArtifact) {
     lines.push(language === "zh" ? `首选产物：${preferredArtifact}` : `Preferred artifact: ${preferredArtifact}`);
   }
   if (artifacts) {
     lines.push(language === "zh" ? `可下载：${artifacts}` : `Downloads: ${artifacts}`);
-  }
-  if (reason) {
-    lines.push(language === "zh" ? `原因：${reason}` : `Reason: ${reason}`);
-  }
-  if (actionHint) {
-    lines.push(language === "zh" ? `下一步：${redactSensitiveText(actionHint)}` : `Next: ${redactSensitiveText(actionHint)}`);
   }
   return lines.map(redactSensitiveText).filter(Boolean);
 }
@@ -358,12 +323,12 @@ export function getCliHandoffNote(command?: string | null, language: UiLanguage 
     if (/^mdtero\s+parse\s+--file\b/.test(normalized)) {
       return "在终端继续上传本地文件；复制命令后把文件路径替换为你的 PDF/EPUB。";
     }
-    return "在终端继续解析；适合校园网、反爬挑战页或需要本机依赖的补抓取场景。";
+    return "在终端继续解析，并按提示完成后续操作。";
   }
   if (/^mdtero\s+parse\s+--file\b/.test(normalized)) {
     return "Continue local file upload in the terminal; replace the path with your PDF/EPUB.";
   }
-  return "Continue parsing in the terminal; useful for campus networks, challenge pages, or local acquisition dependencies.";
+  return "Continue parsing in the terminal and follow the prompts.";
 }
 
 export function getSavedResultSummary(
@@ -383,77 +348,41 @@ export function getResultWarningText(result?: TaskResult | null, language: UiLan
   }
   if (result.warning_code === "publisher_abstract_only" || result.warning_code === "elsevier_abstract_only") {
     return language === "zh"
-      ? "当前来源仅返回摘要。请确认浏览器已登录机构资源、处于校园网/机构 IP，或改为上传 PDF/XML/EPUB。"
-      : "The source only returned an abstract. Confirm your browser has institutional access, use a campus/IP session, or upload the PDF/XML/EPUB directly.";
+      ? "当前页面仅提供摘要。请打开全文页面，或上传 PDF/EPUB。"
+      : "This page only provided an abstract. Open the full-text page or upload a PDF/EPUB.";
   }
   return redactSensitiveText(result.warning_message ?? "");
 }
 
 export function getTaskFailureText(
   task:
-    | (Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint" | "next_commands"> & {
-        result?: Pick<TaskResult, "reason_code" | "action_hint" | "next_commands" | "translation_attempts"> | null;
+    | (Pick<TaskRecord, "error_message" | "next_commands"> & {
+        result?: Pick<TaskResult, "next_commands"> | null;
       })
     | null
     | undefined,
   fallback: string,
-  language: UiLanguage = "en"
+  _language: UiLanguage = "en"
 ): string {
-  const diagnostic = normalizeTaskFailureDiagnostic(task);
-  const message = redactSensitiveText(task?.error_message?.trim() || fallback);
-  const reason = (diagnostic.reasonCode || task?.reason_code || task?.result?.reason_code || task?.error_code || "").trim();
-  const actionHint = redactSensitiveText((diagnostic.actionHint || task?.action_hint || task?.result?.action_hint || "").trim());
-  const parts = [message];
-  if (reason) {
-    parts.push(language === "zh" ? `原因：${reason}` : `Reason: ${reason}`);
-  }
-  if (actionHint) {
-    parts.push(language === "zh" ? `下一步：${actionHint}` : `Next: ${actionHint}`);
-  }
-  const attempts = getTranslationAttemptSummary(task?.result?.translation_attempts, language);
-  if (attempts) {
-    parts.push(attempts);
-  }
-  const nextCommand = firstTaskNextCommand(task);
-  if (nextCommand) {
-    parts.push(language === "zh" ? `命令：${nextCommand}` : `Command: ${nextCommand}`);
-  }
-  return parts.join(" ");
+  // Backend diagnostics are intentionally not part of the browser product contract.
+  // The popup provides a stable recovery path without exposing implementation details.
+  void task;
+  return fallback;
 }
 
 export function getDownloadFailureText(
-  error: unknown,
+  _error: unknown,
   fallback: string,
-  language: UiLanguage = "en"
+  _language: UiLanguage = "en"
 ): string {
-  const message = redactSensitiveText(
-    error instanceof Error ? error.message : String(error || "")
-  ).trim();
-  if (!message) {
-    return fallback;
-  }
-  return language === "zh" ? `${fallback} 详情：${message}` : `${fallback} Detail: ${message}`;
+  return fallback;
 }
 
 export function getTranslationAttemptSummary(
-  attempts: TaskResult["translation_attempts"] | null | undefined,
-  language: UiLanguage = "en"
+  _attempts: TaskResult["translation_attempts"] | null | undefined,
+  _language: UiLanguage = "en"
 ): string {
-  const items = (attempts ?? [])
-    .map((attempt) => {
-      const provider = String(attempt?.provider || "provider").trim();
-      const reason = String(attempt?.reason_code || attempt?.provider_error_code || "failed").trim();
-      const statusCode = attempt?.provider_status_code;
-      const status = typeof statusCode === "number" ? String(statusCode) : String(attempt?.status || "").trim();
-      const message = redactSensitiveText(String(attempt?.message || "").trim());
-      const details = [status, message].filter(Boolean).join(" ");
-      return `${provider}: ${reason}${details ? ` ${details}` : ""}`;
-    })
-    .filter(Boolean);
-  if (!items.length) {
-    return "";
-  }
-  return language === "zh" ? `服务端尝试：${items.join("; ")}` : `Provider attempts: ${items.join("; ")}`;
+  return "";
 }
 
 export function firstTaskNextCommand(
@@ -464,8 +393,7 @@ export function firstTaskNextCommand(
     | null
     | undefined
 ): string {
-  const diagnostic = normalizeTaskFailureDiagnostic(task);
-  return firstNextCommand([...(diagnostic.nextCommands ?? []), ...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]);
+  return firstNextCommand([...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]);
 }
 
 export function getTaskFailureCliHandoff(
@@ -493,23 +421,7 @@ export interface CliHandoffPlan {
   kind: "parse" | "translate";
 }
 
-export interface CliHandoffContext {
-  taskId?: string;
-  status?: string;
-  stage?: string;
-  kind?: "parse" | "translate";
-  clientAcquisition?: string;
-  parseOutcome?: string;
-  reasonCode?: string;
-  actionHint?: string;
-  preferredArtifact?: string;
-  downloadArtifacts?: string[];
-  nextCommands?: string[];
-}
-
 export type ApiErrorLike = Error & {
-  reasonCode?: string;
-  actionHint?: string;
   nextCommands?: string[];
 };
 
@@ -525,23 +437,6 @@ export function buildApiErrorCliHandoffPlan(
     ? (error as ApiErrorLike).nextCommands
     : [];
   return buildTaskFailureCliHandoffPlan({ next_commands: nextCommands }, input, kind);
-}
-
-export function buildApiErrorHandoffContext(error: unknown, kind: "parse" | "translate"): CliHandoffContext | null {
-  if (!error || typeof error !== "object") {
-    return null;
-  }
-  const apiError = error as ApiErrorLike;
-  const nextCommands = Array.isArray(apiError.nextCommands) ? apiError.nextCommands : [];
-  if (!apiError.reasonCode && !apiError.actionHint && nextCommands.length === 0) {
-    return null;
-  }
-  return {
-    kind,
-    reasonCode: apiError.reasonCode,
-    actionHint: apiError.actionHint,
-    nextCommands: normalizeCommandList(nextCommands),
-  };
 }
 
 const PARSE_HANDOFF_FOLLOWUPS = [
@@ -605,118 +500,31 @@ export function buildCliHandoffCommandPlan(primaryCommand: string, planCommands?
 
 export function formatCliHandoffClipboard(
   primaryCommand: string,
-  planCommands?: string[] | null,
-  context?: CliHandoffContext | null
+  planCommands?: string[] | null
 ): string {
   const commands = buildCliHandoffCommandPlan(primaryCommand, planCommands);
   if (commands.length <= 1) {
     return commands[0] || "";
   }
   const parseHandoff = /^mdtero\s+parse\b/.test(commands[0] || "");
-  const contextLines = parseHandoff ? formatHandoffContextLines(context) : [];
   return [
     "# Mdtero CLI handoff",
     "",
     ...(parseHandoff
       ? [
-          "Use this when browser capture, publisher session access, campus-network routing, or local file upload needs to continue in the Python CLI or local agent.",
-          "Preserve task_id, reason_code, action_hint, acquisition diagnostics, parse diagnostics, download_artifacts, preferred_artifact, and next_commands when reporting results back to the browser or dashboard.",
+          "Continue this paper in the Mdtero CLI.",
           "",
         ]
-      : []),
-    ...(contextLines.length
-      ? ["Failure context for agent:", ...contextLines, ""]
       : []),
     "Run these commands in order:",
     ...commands.map((command, index) => `${index + 1}. ${command}`),
     ...(parseHandoff
       ? [
           "",
-          "Agent handoff:",
-          "- Start with `mdtero mcp briefing --json` after parse/download so the local agent sees project status, RAG readiness, and extension_handoff.",
-          "- Start `mdtero mcp serve` from the local project root when the agent needs live FastMCP stdio tools.",
-          "- When `mcp_tool_plan` says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`.",
-          "- Use `mdtero rag query \"<question>\" --build-if-needed --json` only after at least one Markdown artifact exists or the command can bootstrap one.",
-          "- Preserve `citation_contract.required_for_final_answer`; final RAG answers must keep `citations` and `source_nodes` alongside the prose answer.",
+          "The CLI will show the next available actions after parsing finishes.",
         ]
       : []),
   ].join("\n");
-}
-
-export function buildTaskHandoffContext(
-  task:
-    | (Pick<
-        TaskRecord,
-        | "task_id"
-        | "status"
-        | "stage"
-        | "task_kind"
-        | "selected_provider"
-        | "parser_strategy"
-        | "client_acquisition"
-        | "parse_outcome"
-        | "reason_code"
-        | "action_hint"
-        | "preferred_artifact"
-        | "next_commands"
-      > & {
-        result?: Pick<
-          TaskResult,
-          | "preferred_artifact"
-          | "download_artifacts"
-          | "selected_provider"
-          | "parser_strategy"
-          | "client_acquisition"
-          | "parse_outcome"
-          | "reason_code"
-          | "action_hint"
-          | "next_commands"
-        > | null;
-      })
-    | null
-    | undefined,
-  kind: "parse" | "translate"
-): CliHandoffContext {
-  const diagnostic = normalizeTaskFailureDiagnostic(task);
-  const downloadArtifacts = (task?.result?.download_artifacts ?? [])
-    .map((artifact) => {
-      const name = String(artifact.artifact || "").trim();
-      const filename = String(artifact.filename || "").trim();
-      return [name, filename].filter(Boolean).join(": ");
-    })
-    .filter(Boolean);
-  return {
-    taskId: task?.task_id,
-    status: task?.status,
-    stage: task?.stage,
-    kind: task?.task_kind ?? kind,
-    clientAcquisition: summarizeObjectForHandoff(task?.client_acquisition || task?.result?.client_acquisition),
-    parseOutcome: summarizeObjectForHandoff(task?.parse_outcome || task?.result?.parse_outcome),
-    reasonCode: diagnostic.reasonCode || task?.reason_code || task?.result?.reason_code || undefined,
-    actionHint: diagnostic.actionHint || task?.action_hint || task?.result?.action_hint || undefined,
-    preferredArtifact: task?.preferred_artifact || task?.result?.preferred_artifact || undefined,
-    downloadArtifacts,
-    nextCommands: normalizeCommandList([...(diagnostic.nextCommands ?? []), ...(task?.next_commands ?? []), ...(task?.result?.next_commands ?? [])]),
-  };
-}
-
-function formatHandoffContextLines(context?: CliHandoffContext | null): string[] {
-  if (!context) {
-    return [];
-  }
-  const lines: string[] = [];
-  appendContextLine(lines, "task_id", context.taskId);
-  appendContextLine(lines, "status", context.status);
-  appendContextLine(lines, "stage", context.stage);
-  appendContextLine(lines, "kind", context.kind);
-  appendContextLine(lines, "client_acquisition", context.clientAcquisition);
-  appendContextLine(lines, "parse_outcome", context.parseOutcome);
-  appendContextLine(lines, "reason_code", context.reasonCode);
-  appendContextLine(lines, "action_hint", context.actionHint);
-  appendContextLine(lines, "preferred_artifact", context.preferredArtifact);
-  appendContextList(lines, "download_artifacts", context.downloadArtifacts);
-  appendContextList(lines, "next_commands", context.nextCommands);
-  return lines;
 }
 
 function firstPresentString(...values: unknown[]): string | undefined {
@@ -727,30 +535,6 @@ function firstPresentString(...values: unknown[]): string | undefined {
     }
   }
   return undefined;
-}
-
-function summarizeClientAcquisition(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const record = value as Record<string, unknown>;
-  const source = firstPresentString(record.source);
-  const artifactKind = firstPresentString(record.artifact_kind, record.kind);
-  const statusCode = firstPresentString(record.status_code);
-  const contentType = firstPresentString(record.content_type);
-  const parts = [source, artifactKind, statusCode ? `HTTP ${statusCode}` : undefined, contentType].filter(Boolean);
-  return parts.length ? parts.join(" · ") : summarizeObjectForHandoff(value);
-}
-
-function summarizeParseOutcome(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const record = value as Record<string, unknown>;
-  const outcome = firstPresentString(record.outcome_code, record.outcome, record.status);
-  const reason = firstPresentString(record.reason_code);
-  const parts = [outcome, reason].filter(Boolean);
-  return parts.length ? parts.join(" · ") : summarizeObjectForHandoff(value);
 }
 
 function summarizeDownloadArtifacts(result?: Pick<TaskResult, "download_artifacts" | "artifacts"> | null): string | undefined {
@@ -768,31 +552,6 @@ function summarizeDownloadArtifacts(result?: Pick<TaskResult, "download_artifact
   return artifacts.length ? artifacts.join("; ") : undefined;
 }
 
-function summarizeObjectForHandoff(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([key, item]) => key.length > 0 && item !== null && item !== undefined && item !== "")
-    .slice(0, 12)
-    .map(([key, item]) => `${key}=${String(item)}`);
-  return entries.length ? entries.join(", ") : undefined;
-}
-
-function appendContextLine(lines: string[], label: string, value?: string | null) {
-  const normalized = redactSensitiveText(String(value || "").trim());
-  if (normalized) {
-    lines.push(`- ${label}: ${normalized}`);
-  }
-}
-
-function appendContextList(lines: string[], label: string, values?: string[] | null) {
-  const normalized = normalizeCommandList(values).map(redactSensitiveText);
-  if (normalized.length) {
-    lines.push(`- ${label}: ${normalized.join("; ")}`);
-  }
-}
-
 export function buildTaskFailureCliHandoffPlan(
   task:
     | (Pick<TaskRecord, "next_commands"> & {
@@ -803,8 +562,7 @@ export function buildTaskFailureCliHandoffPlan(
   input?: string | null,
   kind: "parse" | "translate" = "parse"
 ): CliHandoffPlan {
-  const diagnostic = normalizeTaskFailureDiagnostic(task);
-  const taskCommands = normalizeCommandList([...(diagnostic.nextCommands ?? []), ...(task?.next_commands ?? [])]);
+  const taskCommands = normalizeCommandList(task?.next_commands);
   if (taskCommands.length > 0) {
     return {
       primaryCommand: taskCommands[0],
@@ -842,50 +600,6 @@ export function buildTaskFailureCliHandoffPlan(
   };
 }
 
-function normalizeTaskFailureDiagnostic(
-  task:
-    | (Partial<Pick<TaskRecord, "error_message" | "error_code" | "reason_code" | "action_hint" | "next_commands">> & {
-        result?: Partial<Pick<TaskResult, "reason_code" | "action_hint" | "next_commands">> | null;
-      })
-    | null
-    | undefined
-): { reasonCode?: string; actionHint?: string; nextCommands?: string[] } {
-  const explicitReason = firstPresentString(task?.reason_code, task?.result?.reason_code);
-  if (explicitReason && explicitReason !== "parser_failed") {
-    return {};
-  }
-  if (!isElsevierArticleRetrievalFailure(task)) {
-    return {};
-  }
-  return {
-    reasonCode: ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_REASON,
-    actionHint: ELSEVIER_ARTICLE_RETRIEVAL_FAILURE_HINT,
-    nextCommands: [
-      "mdtero parse <doi-or-url> --trace --json",
-      "mdtero parse --file <paper.xml|paper.pdf|paper.html> --json",
-    ],
-  };
-}
-
-function isElsevierArticleRetrievalFailure(
-  task:
-    | (Partial<Pick<TaskRecord, "error_message" | "error_code">> & {
-        result?: Partial<Pick<TaskResult, "reason_code">> | null;
-      })
-    | null
-    | undefined
-): boolean {
-  if (firstPresentString(task?.error_code, task?.result?.reason_code) !== "parser_failed") {
-    return false;
-  }
-  const message = String(task?.error_message || "").toLowerCase();
-  return (
-    message.includes("elsevier") &&
-    message.includes("sciencedirect") &&
-    message.includes("article retrieval api") &&
-    message.includes("xml acquisition failed")
-  );
-}
 
 function normalizeCommandList(commands?: string[] | null): string[] {
   const normalized = (commands ?? [])

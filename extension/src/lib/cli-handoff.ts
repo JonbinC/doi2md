@@ -16,7 +16,7 @@ export function normalizeCliHandoffCommand(command?: string | null): string {
   const withoutJson = withoutTraceOnly.replace(/\s+--json(?!\S)/g, "");
   const withoutTimeout = withoutJson.replace(/\s+--timeout\s+\S+/g, "").replace(/\s+--interval\s+\S+/g, "");
   const withoutWait = withoutTimeout.replace(/\s+--wait(?!\S)/g, "");
-  return `${withoutWait} --trace --wait --timeout ${timeout} --json`;
+  return `${withoutWait} --wait --timeout ${timeout} --json`;
 }
 
 export function buildCliParseCommand(input?: string | null): string {
@@ -27,7 +27,7 @@ export function buildCliParseCommand(input?: string | null): string {
   if (!/^https?:\/\//i.test(normalized) && !/^10\.\S+/i.test(normalized)) {
     return "";
   }
-  return `mdtero parse ${shellQuote(normalized)} --trace --wait --timeout 300 --json`;
+  return `mdtero parse ${shellQuote(normalized)} --wait --timeout 300 --json`;
 }
 
 export function buildCliFileParseCommand(
@@ -37,7 +37,7 @@ export function buildCliFileParseCommand(
   const normalized = String(filename || "").trim();
   const extension = inferFileExtension(normalized, artifactKind);
   const path = normalized || `paper.${extension}`;
-  return `mdtero parse --file ${shellQuote(path)} --trace --wait --timeout 600 --json`;
+  return `mdtero parse --file ${shellQuote(path)} --wait --timeout 600 --json`;
 }
 
 function inferFileExtension(

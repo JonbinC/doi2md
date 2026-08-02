@@ -236,7 +236,7 @@ describe("createApiClient", () => {
     expect(route.action_sequence).toEqual(["server_parse"]);
     expect(route.server_entrypoint).toBe("/api/v1/tasks/parse");
     expect(route.upload_entrypoint).toBe("/api/v1/tasks/upload");
-    expect(route.client_command).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
+    expect(route.client_command).toBe("mdtero parse 10.1000/demo --wait --timeout 300 --json");
   });
 
   it("fetches extension-aware route plans from the v1 extension route", async () => {
@@ -394,7 +394,7 @@ describe("createApiClient", () => {
     );
 
     await expect(client.downloadArtifact("task-123", "paper_md")).rejects.toThrow(
-      "Backend parser timed out while fetching the uploaded PDF. Reason: backend_parser_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+      "Backend parser timed out while fetching the uploaded PDF. Reason: backend_parser_timeout Next: Retry later or upload the PDF again from the browser extension. Command: mdtero parse --file paper.pdf --wait --timeout 600 --json"
     );
   });
 
@@ -441,7 +441,7 @@ describe("createApiClient", () => {
     expect((caught as MdteroApiError).actionHint).toBe("Inspect task status, then retry parse from the CLI.");
     expect((caught as MdteroApiError).nextCommands).toEqual([
       "mdtero status task-123 --wait --timeout 300 --json",
-      "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json"
+      "mdtero parse --file paper.pdf --wait --timeout 600 --json"
     ]);
   });
 

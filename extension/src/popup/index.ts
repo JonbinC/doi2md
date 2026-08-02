@@ -42,11 +42,8 @@ import {
   getTaskFailureText,
   buildCliHandoffCommandPlan,
   buildApiErrorCliHandoffPlan,
-  buildApiErrorHandoffContext,
   buildTaskFailureCliHandoffPlan,
-  buildTaskHandoffContext,
   formatCliHandoffClipboard,
-  type CliHandoffContext,
   getDownloadFailureText,
   buildCliParseCommand,
   buildCliFileParseCommand,
@@ -264,7 +261,6 @@ let hasDownloadableArtifact = false;
 let detectedPageContext: { tabId: number; tabUrl?: string; detectedInput: string } | null = null;
 let currentBridgeStatus: { state?: string | null; runnerState?: string | null } | null = null;
 let currentCliHandoffCommands: string[] = [];
-let currentCliHandoffContext: CliHandoffContext | null = null;
 
 function copyFor(language: UiLanguage) {
   return COPY[language];
@@ -314,8 +310,7 @@ function updateWorkflowState() {
 function setCliHandoff(
   input?: string | null,
   commandOverride?: string | null,
-  planCommands?: string[] | null,
-  context?: CliHandoffContext | null
+  planCommands?: string[] | null
 ) {
   const commands = normalizeHandoffCommands(planCommands);
   const command = String(commandOverride || commands[0] || "").trim() || buildCliParseCommand(input);
@@ -327,7 +322,6 @@ function setCliHandoff(
   cliHandoffNoteEl.textContent = getCliHandoffNote(command, uiLanguage);
   cliHandoffCommandEl.textContent = command;
   currentCliHandoffCommands = handoffCommands;
-  currentCliHandoffContext = context ?? null;
   renderCliHandoffPlan(currentCliHandoffCommands);
   copyCliHandoffButton.textContent = getCurrentCopy().copyCliCommand;
 }
@@ -355,7 +349,7 @@ async function copyCliHandoff() {
   if (!command) {
     return;
   }
-  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands, currentCliHandoffContext));
+  await navigator.clipboard?.writeText(formatCliHandoffClipboard(command, currentCliHandoffCommands));
   setResult(getCurrentCopy().cliCommandCopied);
 }
 
@@ -438,8 +432,7 @@ async function saveArtifact(taskId: string, artifactKey: string, preferredFilena
       setCliHandoff(
         currentInput,
         handoffPlan.primaryCommand,
-        handoffPlan.commands,
-        buildApiErrorHandoffContext(error, "parse")
+        handoffPlan.commands
       );
     }
   }
@@ -809,7 +802,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
     etag: cached?.etag
   });
   if (!response?.ok) {
-    setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setResult(kind === "parse" ? getCurrentCopy().parseFailed : getCurrentCopy().translationFailed);
     if (kind === "parse") {
       setCliHandoff(currentInput);
     }
@@ -859,8 +852,7 @@ async function pollTask(taskId: string, kind: "parse" | "translate") {
       setCliHandoff(
         currentInput,
         failureHandoffPlan.primaryCommand,
-        failureHandoffPlan.commands,
-        buildTaskHandoffContext(task, kind)
+        failureHandoffPlan.commands
       );
     } else {
       setCliHandoff(null);
@@ -1085,7 +1077,7 @@ async function submitLocalFile(file: File, artifactKind: LocalFileArtifactKind) 
     isParsing = false;
     updateWorkflowState();
     renderActionButtons();
-    setResult(response?.error ?? getCurrentCopy().localFileParseFailed);
+    setResult(getCurrentCopy().localFileParseFailed);
     setCliHandoff(file.name, buildCliFileParseCommand(file.name, artifactKind));
     return;
   }
@@ -1145,7 +1137,7 @@ parseButton?.addEventListener("click", async () => {
     isParsing = false;
     updateWorkflowState();
     renderActionButtons();
-    setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setResult(getCurrentCopy().parseFailed);
     setCliHandoff(input, response?.nextCommand);
     return;
   }
@@ -1195,7 +1187,7 @@ captureHtmlButton?.addEventListener("click", async () => {
     isParsing = false;
     updateWorkflowState();
     renderActionButtons();
-    setResult(response?.error ?? getCurrentCopy().parseFailed);
+    setResult(getCurrentCopy().parseFailed);
     setCliHandoff(input, response?.nextCommand);
     return;
   }
@@ -1251,7 +1243,7 @@ translateButton?.addEventListener("click", async () => {
     isTranslating = false;
     updateWorkflowState();
     renderActionButtons();
-    setResult(response?.error ?? getCurrentCopy().translationFailed);
+    setResult(getCurrentCopy().translationFailed);
     return;
   }
 

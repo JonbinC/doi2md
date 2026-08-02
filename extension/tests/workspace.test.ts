@@ -45,7 +45,7 @@ describe("workspace", () => {
     expect(popupHtml).not.toContain("MinerU");
     expect(popupHtml).not.toContain("PMC");
     expect(popupHtml).not.toContain("Wiley");
-    expect(optionsHtml).toContain("Elsevier");
+    expect(optionsHtml).toContain("Authorized source access");
     expect(optionsHtml).not.toContain("PMC");
     expect(optionsHtml).not.toContain("Wiley");
     expect(optionsHtml).toContain('href="./styles.css"');
@@ -93,16 +93,15 @@ describe("workspace", () => {
     expect(() => readFileSync(resolve("../site/src/index.html"), "utf-8")).toThrow();
   });
 
-  it("documents extension auth and helper boundaries", () => {
+  it("documents extension authorization and routing boundaries", () => {
     const readme = readFileSync(resolve("README.md"), "utf-8");
 
-    expect(readme).toContain("The auth bridge only accepts messages from `https://mdtero.com` and `https://www.mdtero.com`");
-    expect(readme).toContain("Publisher pages cannot mint extension tokens");
-    expect(readme).toContain("can store your own Elsevier API key locally");
-    expect(readme).toContain("Web Store / store-profile build does not use native messaging");
-    expect(readme).toContain("unpackaged **dev** build");
-    expect(readme).toContain("The options page keeps CLI setup and campus-network tooling out of the extension product surface");
-    expect(readme).toContain("Campus Relay");
+    expect(readme).toContain("Paper pages cannot issue account tokens to the extension.");
+    expect(readme).toContain("access key issued to you by an authorized source");
+    expect(readme).toContain("does not expose or require a processing provider or parser setting");
+    expect(readme).not.toContain("native messaging");
+    expect(readme).not.toContain("Article Retrieval XML");
+    expect(readme).not.toContain("Campus Relay");
   });
 
   it("declares warm brand assets for the extension", () => {

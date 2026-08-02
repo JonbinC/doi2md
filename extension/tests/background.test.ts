@@ -458,7 +458,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "upload timed out",
-        nextCommand: "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --trace --wait --timeout 600 --json"
+        nextCommand: "mdtero parse --file 'My Paper'\"'\"'s Draft.pdf' --wait --timeout 600 --json"
       });
     });
   });
@@ -489,7 +489,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "upload timed out",
-        nextCommand: "mdtero parse --file fulltext.xml --trace --wait --timeout 600 --json"
+        nextCommand: "mdtero parse --file fulltext.xml --wait --timeout 600 --json"
       });
     });
   });
@@ -943,7 +943,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "This source requires browser capture. Open the article page and retry.",
-        nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json"
+        nextCommand: "mdtero parse 10.1000/demo --wait --timeout 300 --json"
       });
     });
   });
@@ -1240,7 +1240,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "The tab is open, but Mdtero received a login, access, or subscription page instead of the article. Open the full-text or PDF view in this browser session, or upload the PDF/XML/EPUB.",
-        nextCommand: "mdtero parse https://example.com/paper --trace --wait --timeout 300 --json"
+        nextCommand: "mdtero parse https://example.com/paper --wait --timeout 300 --json"
       });
     });
   });
@@ -1296,7 +1296,7 @@ describe("extension background routing", () => {
       expect(sendResponse).toHaveBeenCalledWith({
         ok: false,
         error: "The tab is open, but Mdtero could not find a parsable article body in the captured page. Open the full-text/PDF view or upload the PDF/XML/EPUB.",
-        nextCommand: "mdtero parse https://example.com/paper --trace --wait --timeout 300 --json"
+        nextCommand: "mdtero parse https://example.com/paper --wait --timeout 300 --json"
       });
     });
   });

@@ -90,7 +90,7 @@ describe("extension options page", () => {
     globalThis.chrome = createChromeMock() as any;
   });
 
-  it("shows extension-focused signed-out guidance and direct Elsevier key setup", async () => {
+  it("shows extension-focused signed-out guidance and optional authorized access", async () => {
     await loadOptionsModule();
 
     expect(document.querySelector("#account-status")?.textContent).toBe("Not signed in with website OAuth.");
@@ -98,9 +98,9 @@ describe("extension options page", () => {
     expect(document.querySelector("#open-account")?.textContent).toBe("Open website OAuth");
     expect(document.querySelector("#connection-guide-title")?.textContent).toBe("Connection guide");
     expect(document.querySelector("#connection-guide-list")?.textContent).toContain("upload a local PDF/EPUB");
-    expect(document.querySelector("#elsevier-settings-title")?.textContent).toBe("Elsevier access");
+    expect(document.querySelector("#elsevier-settings-title")?.textContent).toBe("Authorized source access");
     expect(document.querySelector("#proxy-settings-card")).toBeNull();
-    expect(document.querySelector("#elsevier-settings-note")?.textContent).toContain("Article Retrieval XML");
+    expect(document.querySelector("#elsevier-settings-note")?.textContent).toContain("authorized source");
     expect(document.querySelector("#elsevier-key-status")?.textContent).toBe("Not configured");
     expect(document.querySelector("#elsevier-api-key-note")?.textContent).toContain("Stored only in this browser");
     expect((document.querySelector("#history-section") as HTMLElement | null)?.hidden).toBe(true);

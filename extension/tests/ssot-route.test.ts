@@ -162,7 +162,7 @@ describe("ssot-route", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("submit failed");
-    expect(result.nextCommand).toBe("mdtero parse 10.1000/demo --trace --wait --timeout 300 --json");
+    expect(result.nextCommand).toBe("mdtero parse 10.1000/demo --wait --timeout 300 --json");
   });
 
   it("uses shell-safe CLI handoff when server-parse fallback submission fails", async () => {
@@ -189,7 +189,7 @@ describe("ssot-route", () => {
     expect(result).toEqual({
       success: false,
       error: "Error: server parse unavailable",
-      nextCommand: "mdtero parse 'https://example.org/paper?q=a b'\"'\"'s' --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 'https://example.org/paper?q=a b'\"'\"'s' --wait --timeout 300 --json",
     });
   });
 
@@ -278,7 +278,7 @@ describe("ssot-route", () => {
       success: false,
       requiresUpload: true,
       error: "PDF upload required",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 10.1000/demo --wait --timeout 300 --json",
     });
 
     const parseClient = {
@@ -297,7 +297,7 @@ describe("ssot-route", () => {
       requiresBrowserCapture: undefined,
       requiresUpload: true,
       error: "PDF upload required",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 10.1000/demo --wait --timeout 300 --json",
     });
   });
 
@@ -306,7 +306,7 @@ describe("ssot-route", () => {
       success: false,
       requiresBrowserCapture: true,
       error: "Open the article page and retry browser capture.",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 10.1000/demo --wait --timeout 300 --json",
     });
 
     const parseClient = {
@@ -325,7 +325,7 @@ describe("ssot-route", () => {
       requiresBrowserCapture: true,
       requiresUpload: undefined,
       error: "Open the article page and retry browser capture.",
-      nextCommand: "mdtero parse 10.1000/demo --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 10.1000/demo --wait --timeout 300 --json",
     });
   });
 
@@ -348,7 +348,7 @@ describe("ssot-route", () => {
     expect(result).toEqual({
       success: false,
       error: "Capture failed without a next command",
-      nextCommand: "mdtero parse 'https://example.org/paper?q=a b' --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 'https://example.org/paper?q=a b' --wait --timeout 300 --json",
     });
   });
 
