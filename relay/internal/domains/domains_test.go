@@ -12,6 +12,9 @@ func TestAllowedPublisherURL(t *testing.T) {
 	if !Allowed("https://pubs.rsc.org/en/content/articlelanding/2025/ra/d5ra09148a") {
 		t.Fatal("expected pubs.rsc.org to be allowed")
 	}
+	if !Allowed("https://mdpi-res.com/d_attachment/energies/energies-18-02643/article_deploy/energies-18-02643-v2.pdf") {
+		t.Fatal("expected mdpi-res.com to be allowed")
+	}
 	if !Allowed("https://api.wiley.com/onlinelibrary/tdm/v1/articles/10.1002%2Fdemo") {
 		t.Fatal("expected api.wiley.com to be allowed")
 	}

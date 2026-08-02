@@ -140,7 +140,7 @@ ALLOWED_SUFFIXES = (
     "degruyter.com", "degruyterbrill.com", "diabetesjournals.org", "dl.acm.org", "elsevier.com",
     "emerald.com", "frontiersin.org", "ieee.org", "ieeexplore.ieee.org", "ingentaconnect.com",
     "jci.org", "journals.aps.org", "journals.uchicago.edu", "jstage.jst.go.jp", "jstor.org",
-    "karger.com", "liebertpub.com", "link.springer.com", "lww.com", "mdpi.com", "nature.com",
+    "karger.com", "liebertpub.com", "link.springer.com", "lww.com", "mdpi.com", "mdpi-res.com", "nature.com",
     "nejm.org", "onlinelibrary.wiley.com", "optica.org", "oup.com", "plos.org", "pnas.org",
     "pubs.acs.org", "pubs.rsc.org", "rupress.org", "sagepub.com", "science.org", "sciencedirect.com",
     "sciendo.com", "siam.org", "spandidos-publications.com", "springer.com", "tandfonline.com",

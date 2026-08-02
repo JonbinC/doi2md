@@ -49,6 +49,7 @@ var allowedSuffixes = []string{
 	"liebertpub.com",
 	"lww.com",
 	"mdpi.com",
+	"mdpi-res.com",
 	"nature.com",
 	"ncbi.nlm.nih.gov",
 	"nejm.org",

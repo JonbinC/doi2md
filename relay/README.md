@@ -113,8 +113,8 @@ Forgejo/GitHub workflow: `public/.forgejo/workflows/release-relay.yml`
 
 ```bash
 # Tag-driven release
-git tag relay/v0.1.4
-git push origin relay/v0.1.4
+git tag relay/v0.1.5
+git push origin relay/v0.1.5
 
 # Manual release
 # Forgejo: run "Release Campus Relay" with the desired version
@@ -125,7 +125,7 @@ Local publish to nextmdtero static assets:
 ```bash
 cd public/relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.4
+MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.5
 ```
 
 Required Forgejo secrets/vars for automatic site publish:
