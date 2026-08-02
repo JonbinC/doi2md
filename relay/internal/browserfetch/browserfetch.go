@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,15 @@ type Result struct {
 	ReasonCode string            `json:"reason_code"`
 }
 
+// Health is the deliberately small local browser-worker status surface.  It
+// never includes the worker URL, bearer token, CDP endpoint, or profile path.
+type Health struct {
+	Configured    bool   `json:"configured"`
+	Reachable     bool   `json:"reachable"`
+	SessionActive bool   `json:"session_active"`
+	Status        string `json:"status"`
+}
+
 type Client struct {
 	baseURL string
 	token   string
@@ -38,7 +48,13 @@ type localConfig struct {
 }
 
 func FromEnv() *Client {
-	endpoint := strings.TrimRight(strings.TrimSpace(os.Getenv(EnvWorkerURL)), "/")
+	rawEndpoint := strings.TrimSpace(os.Getenv(EnvWorkerURL))
+	endpoint := localWorkerEndpoint(rawEndpoint)
+	if rawEndpoint != "" && endpoint == "" {
+		// An explicit non-loopback endpoint is never a valid Relay worker. Do
+		// not fall back to a config file and accidentally use a token with it.
+		return nil
+	}
 	token := strings.TrimSpace(os.Getenv(EnvWorkerToken))
 	if endpoint == "" || token == "" {
 		configuredEndpoint, configuredToken := loadLocalConfig()
@@ -73,11 +89,70 @@ func loadLocalConfig() (string, string) {
 	if err := json.Unmarshal(content, &cfg); err != nil {
 		return "", ""
 	}
-	return strings.TrimRight(strings.TrimSpace(cfg.WorkerURL), "/"), strings.TrimSpace(cfg.Token)
+	return localWorkerEndpoint(cfg.WorkerURL), strings.TrimSpace(cfg.Token)
+}
+
+func localWorkerEndpoint(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return ""
+	}
+	return strings.TrimRight(parsed.String(), "/")
 }
 
 func (c *Client) Enabled() bool {
 	return c != nil && c.baseURL != "" && c.token != ""
+}
+
+// Health probes only the loopback worker health endpoint.  A failed probe is
+// reported as a status value so `mdtero-relay status` remains useful even when
+// the optional worker has not been started yet.
+func (c *Client) Health(ctx context.Context) Health {
+	if !c.Enabled() {
+		return Health{Configured: false, Status: "not_configured"}
+	}
+	result := Health{Configured: true, Status: "unreachable"}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/health", nil)
+	if err != nil {
+		return result
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/json")
+	httpClient := c.http
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 2 * time.Second}
+	}
+	response, err := httpClient.Do(req)
+	if err != nil {
+		return result
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 64*1024))
+	if err != nil || response.StatusCode >= 400 {
+		return result
+	}
+	var payload struct {
+		Status        string `json:"status"`
+		SessionActive bool   `json:"session_active"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return result
+	}
+	result.Reachable = true
+	result.SessionActive = payload.SessionActive
+	result.Status = strings.TrimSpace(payload.Status)
+	if result.Status == "" {
+		result.Status = "ready"
+	}
+	return result
 }
 
 func (c *Client) Fetch(ctx context.Context, recipe, rawURL string, timeout time.Duration) Result {

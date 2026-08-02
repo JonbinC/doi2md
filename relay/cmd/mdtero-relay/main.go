@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -16,7 +17,9 @@ import (
 	"github.com/mdtero/mdtero-relay/internal/service"
 )
 
-const version = "0.1.2"
+// version is overridden by the release build with -ldflags -X main.version=...
+// so the binary and the published install manifest always agree.
+var version = "0.1.3"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -52,9 +55,9 @@ func printUsage() {
 	fmt.Print(`Mdtero campus relay — keep one command running on a campus-network machine.
 
 Usage:
-  mdtero-relay install [--api-key <key>] [--label <name>]
+  mdtero-relay install [--api-key <key>] [--browser=false] [--label <name>]
   mdtero-relay serve [--label <name>]
-  mdtero-relay status
+  mdtero-relay status [--json]
   mdtero-relay login [--browser] [--api-key <key>] [--label <name>]
   mdtero-relay browser-open <publisher-url>
   mdtero-relay uninstall
@@ -116,21 +119,60 @@ func runServe(args []string) int {
 }
 
 func runStatus(args []string) int {
-	_ = args
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	jsonOutput := fs.Bool("json", false, "Print a machine-readable status object")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
+		if *jsonOutput {
+			printJSON(map[string]any{"connected": false, "reason_code": "config_error", "error": err.Error()})
+			return 1
+		}
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	browser := browserfetch.FromEnv()
+	browserStatus := localBrowserStatus(browser)
 	if !cfg.Authenticated() {
+		payload := map[string]any{
+			"connected":     false,
+			"reason_code":   "auth_missing",
+			"action_hint":   "Run `mdtero-relay login` or re-run the installer.",
+			"local_browser": browserStatus,
+		}
+		if *jsonOutput {
+			printJSON(payload)
+			return 1
+		}
 		fmt.Println("Campus relay: auth missing")
 		fmt.Println("Run `mdtero-relay login` or re-run the installer.")
+		printLocalBrowserStatus(browserStatus)
 		return 1
 	}
 	payload, err := client.FetchStatus(cfg)
 	if err != nil {
+		if *jsonOutput {
+			printJSON(map[string]any{
+				"connected":     false,
+				"reason_code":   "status_unavailable",
+				"error":         err.Error(),
+				"local_browser": browserStatus,
+			})
+			return 1
+		}
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+	payload["local_browser"] = browserStatus
+	if *jsonOutput {
+		printJSON(payload)
+		if connected, _ := payload["connected"].(bool); !connected {
+			return 1
+		}
+		return 0
 	}
 	if connected, _ := payload["connected"].(bool); connected {
 		fmt.Println("Campus relay: connected")
@@ -138,17 +180,60 @@ func runStatus(args []string) int {
 			fmt.Println("Label:", label)
 		}
 		if outlet, ok := payload["outlet"].(map[string]any); ok {
-			fmt.Printf("Outlet: %v / %v / %v\n", outlet["asn"], outlet["city"], outlet["ip"])
+			if city, ok := outlet["city"].(string); ok && strings.TrimSpace(city) != "" {
+				fmt.Println("Network:", city)
+			} else {
+				fmt.Println("Network: campus outlet detected")
+			}
 		}
+		printLocalBrowserStatus(browserStatus)
 		fmt.Println(payload["action_hint"])
 		return 0
 	}
 	fmt.Println("Campus relay: offline")
+	printLocalBrowserStatus(browserStatus)
 	fmt.Println(payload["action_hint"])
 	for _, command := range []string{"mdtero-relay install", "mdtero-relay serve"} {
 		fmt.Println(" ", command)
 	}
 	return 1
+}
+
+func localBrowserStatus(browser *browserfetch.Client) map[string]any {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	health := browser.Health(ctx)
+	return map[string]any{
+		"configured":     health.Configured,
+		"reachable":      health.Reachable,
+		"session_active": health.SessionActive,
+		"status":         health.Status,
+	}
+}
+
+func printLocalBrowserStatus(payload map[string]any) {
+	configured, _ := payload["configured"].(bool)
+	if !configured {
+		fmt.Println("Browser capture: not configured")
+		return
+	}
+	reachable, _ := payload["reachable"].(bool)
+	if !reachable {
+		fmt.Println("Browser capture: configured, worker offline")
+		return
+	}
+	active, _ := payload["session_active"].(bool)
+	if active {
+		fmt.Println("Browser capture: ready (session active)")
+		return
+	}
+	fmt.Println("Browser capture: ready (no active session)")
+}
+
+func printJSON(payload map[string]any) {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	_ = encoder.Encode(payload)
 }
 
 func runLogin(args []string) int {
@@ -206,6 +291,8 @@ func runInstall(args []string) int {
 	apiKey := fs.String("api-key", "", "Mdtero API key")
 	apiBase := fs.String("api-base", config.DefaultAPIBase, "Mdtero API base URL")
 	label := fs.String("label", "", "Optional relay label")
+	browser := fs.Bool("browser", true, "Use browser login when no API key is configured")
+	timeout := fs.Duration("timeout", 3*time.Minute, "How long to wait for browser login")
 	_ = fs.Parse(args)
 
 	cfg, err := config.Load()
@@ -222,10 +309,18 @@ func runInstall(args []string) int {
 	if strings.TrimSpace(*label) != "" {
 		cfg.Label = strings.TrimSpace(*label)
 	}
+	if !cfg.Authenticated() && *browser {
+		result, loginErr := auth.WebLogin(*timeout)
+		if loginErr != nil {
+			fmt.Fprintln(os.Stderr, loginErr)
+			return 1
+		}
+		cfg.APIKey = result.APIKey
+	}
 	if !cfg.Authenticated() {
-		fmt.Println("Mdtero API key required.")
+		fmt.Println("Mdtero API key required for a headless install.")
 		fmt.Println("Get one at https://mdtero.com/settings/api-keys")
-		fmt.Println("Then rerun: mdtero-relay install --api-key <key>")
+		fmt.Println("Then rerun: mdtero-relay install --api-key <key> --browser=false")
 		return 1
 	}
 	if err := config.Save(cfg); err != nil {
@@ -253,6 +348,7 @@ func runInstall(args []string) int {
 	fmt.Printf("Campus relay installed (%s).\n", status)
 	fmt.Println("It will start automatically on login and reconnect in the background.")
 	fmt.Println("Check status anytime with: mdtero-relay status")
+	fmt.Println("Browser capture is optional; status reports whether its local worker is ready.")
 	return 0
 }
 

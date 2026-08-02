@@ -4411,10 +4411,15 @@ def cmd_relay_status(args: argparse.Namespace) -> int:
         console.print("Campus relay: connected")
         if label:
             console.print(f"Label: {label}")
-        if outlet:
-            console.print(
-                f"Outlet: {outlet.get('asn') or 'unknown ASN'} / {outlet.get('city') or 'unknown city'} / {outlet.get('ip') or 'unknown IP'}"
-            )
+        city = str(outlet.get("city") or "").strip()
+        console.print(f"Network: {city}" if city else "Network: campus outlet detected")
+        browser = payload.get("browser") if isinstance(payload.get("browser"), dict) else {}
+        if browser.get("fulltext"):
+            console.print("Browser capture: ready")
+        elif browser.get("enabled"):
+            console.print("Browser capture: configured")
+        else:
+            console.print("Browser capture: not configured")
         console.print(str(payload.get("action_hint") or "Cloud agents can fetch publisher URLs through this relay."))
     else:
         console.print("Campus relay: offline")

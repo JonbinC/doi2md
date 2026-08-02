@@ -2,6 +2,21 @@
 
 Standalone campus-network relay for Mdtero. Install this on a school/office machine so cloud agents can fetch publisher URLs through your campus IP.
 
+## Choose your setup
+
+| Your setup | What to install | What it covers |
+| --- | --- | --- |
+| Campus desktop | Browser extension; optional Relay | Readable pages and files already open in the browser. Add Relay when a cloud Agent must use this computer's campus route. |
+| Server only | Mdtero CLI/API key | OA, publisher APIs, normal HTTP, and uploads. There is no browser session on the server. |
+| Server plus campus desktop | CLI on the server, Relay on the campus computer | Recommended for user-authorized closed or bot-protected publisher content. The Agent stays in the cloud; the desktop performs acquisition. |
+| Server plus campus VPN | CLI/API key and VPN/proxy | IP-authorized machine-readable sources. A VPN alone does not supply browser cookies or a user login. |
+
+For the third setup, install Relay on the computer that already has the
+institutional browser access. It connects outward to Mdtero, so the server
+does not need an inbound port, public IP, or SSH tunnel. The cloud Agent sends
+an approved article request; Relay returns only a verified PDF or sanitized
+static article HTML for parsing.
+
 ## Optional: authorized local browser
 
 If the same user has lawful institutional access in a local browser but a
@@ -12,9 +27,13 @@ browser proxy: it accepts only `article_html`, `article_pdf`, and
 publisher domains and returns no cookies, credentials, browser storage, or
 screenshots. It cannot grant access that the local user does not already have.
 
-See [`browser_worker/README.md`](browser_worker/README.md). The local worker is
-advertised to the backend as `browser_fetch`; it can only be scheduled by that
-same Mdtero account's tasks.
+The native Relay always provides campus-network HTTP fetch. Browser capture is
+an opt-in local capability for the third setup and is advertised to the
+backend as `browser_fetch` / `browser_fulltext`. `mdtero-relay status` reports
+whether the worker is configured and reachable without showing its token,
+profile path, or CDP endpoint. See
+[`browser_worker/README.md`](browser_worker/README.md) for the one-time local
+worker setup.
 
 When a publisher needs a manual institution login or browser challenge, open
 the article URL locally with `mdtero-relay browser-open <publisher-url>`,
@@ -52,16 +71,22 @@ $env:MDTERO_API_KEY="mdt_xxx"; irm https://mdtero.com/relay.ps1 | iex
 The installer will:
 
 1. Download a native `mdtero-relay` binary
-2. Save your API key (if provided)
+2. Open the Mdtero sign-in page when no API key was supplied, or save the key
+   provided by an automated install
 3. Register a background service (launchd on macOS, login task on Windows)
 4. Start relaying automatically on login
+
+For a normal campus computer, use the no-key command and finish the browser
+sign-in. For a headless install, pass `--api-key` from a secret manager or run
+`mdtero-relay login --browser=false` interactively; do not put the key in a
+shell history or a checked-in script.
 
 ## Commands
 
 ```bash
-mdtero-relay install [--api-key <key>] [--label <name>]
+mdtero-relay install [--api-key <key>] [--browser=false] [--label <name>]
 mdtero-relay serve [--label <name>]
-mdtero-relay status
+mdtero-relay status [--json]
 mdtero-relay login [--browser] [--api-key <key>]
 mdtero-relay browser-open <publisher-url>
 mdtero-relay uninstall
@@ -86,11 +111,11 @@ Forgejo/GitHub workflow: `public/.forgejo/workflows/release-relay.yml`
 
 ```bash
 # Tag-driven release
-git tag relay/v0.1.0
-git push origin relay/v0.1.0
+git tag relay/v0.1.3
+git push origin relay/v0.1.3
 
 # Manual release
-# Forgejo: run "Release Campus Relay" with version 0.1.0
+# Forgejo: run "Release Campus Relay" with the desired version
 ```
 
 Local publish to nextmdtero static assets:
@@ -98,7 +123,7 @@ Local publish to nextmdtero static assets:
 ```bash
 cd public/relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.0
+MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.3
 ```
 
 Required Forgejo secrets/vars for automatic site publish:

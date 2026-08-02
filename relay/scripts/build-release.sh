@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${MDTERO_RELAY_VERSION:-0.1.2}"
+VERSION="${MDTERO_RELAY_VERSION:-0.1.3}"
 OUT="$ROOT/dist/v$VERSION"
 
 mkdir -p "$OUT"
@@ -16,7 +16,7 @@ build_one() {
     output="$OUT/mdtero-relay.exe"
   fi
   echo "Building $archive ..."
-  GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "-s -w" -o "$output" "$ROOT/cmd/mdtero-relay"
+  GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$output" "$ROOT/cmd/mdtero-relay"
   if [[ "$goos" == "windows" ]]; then
     tar -C "$OUT" -czf "$OUT/$archive.tgz" mdtero-relay.exe
   else

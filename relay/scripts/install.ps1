@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 param(
   [string]$ApiKey = $env:MDTERO_API_KEY,
   [string]$Label = "",
-  [string]$Version = $(if ($env:MDTERO_RELAY_VERSION) { $env:MDTERO_RELAY_VERSION } else { "0.1.2" }),
+  [string]$Version = $(if ($env:MDTERO_RELAY_VERSION) { $env:MDTERO_RELAY_VERSION } else { "0.1.3" }),
   [string]$BaseUrl = $(if ($env:MDTERO_RELAY_BASE_URL) { $env:MDTERO_RELAY_BASE_URL } else { "https://mdtero.com/releases/relay" }),
   [string]$InstallDir = $(Join-Path $env:LOCALAPPDATA "Mdtero\bin")
 )
@@ -43,8 +43,16 @@ $InstallArgs = @("install")
 if ($ApiKey) { $InstallArgs += @("--api-key", $ApiKey) }
 if ($Label) { $InstallArgs += @("--label", $Label) }
 
-Write-Info "Setting up background service ..."
-& $Target @InstallArgs
+Write-Info "Signing in to Mdtero and setting up the background service ..."
+if ($ApiKey) {
+  & $Target @InstallArgs
+} else {
+  # Desktop installs normally have a visible browser.  The login flow avoids
+  # putting a long-lived API key in PowerShell history.
+  & $Target login
+  if ($LASTEXITCODE -ne 0) { throw "Mdtero browser login failed." }
+  & $Target @InstallArgs
+}
 
 Write-Info ""
 Write-Info "Done. Campus relay is installed."

@@ -105,11 +105,15 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 		return fmt.Errorf("relay handshake failed: expected hello")
 	}
 
+	capabilities := relayCapabilities(browser)
+	if browser != nil && browser.Enabled() && len(capabilities) == 1 {
+		logger("Browser capture is configured but its local worker is not reachable; continuing with campus HTTP relay.")
+	}
 	register := map[string]any{
 		"type":         "register",
 		"label":        label,
 		"outlet":       outlet,
-		"capabilities": relayCapabilities(browser),
+		"capabilities": capabilities,
 	}
 	if err := writeJSON(register); err != nil {
 		return err
@@ -127,8 +131,7 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 		))
 	}
 
-	logger("Campus relay is live. Keep this running while cloud agents fetch papers.")
-	logger("Press Ctrl+C to stop.")
+	logger("Campus Relay is live. The background service will reconnect automatically.")
 	// A campus relay can be idle for minutes between papers. Keep the WebSocket
 	// active through proxies/CDNs without sending any article or session state.
 	done := make(chan struct{})
@@ -179,6 +182,12 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 func relayCapabilities(browser *browserfetch.Client) []string {
 	capabilities := []string{"http_fetch"}
 	if browser != nil && browser.Enabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		health := browser.Health(ctx)
+		cancel()
+		if !health.Reachable {
+			return capabilities
+		}
 		// This one bounded operation prefers PDF and falls back to sanitized
 		// article HTML, so an intermittent websocket reconnect cannot split the
 		// two representations across separate requests.

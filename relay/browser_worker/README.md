@@ -18,6 +18,11 @@ forms, frames, event handlers, session-like DOM attributes, and URL
 query/fragment values. It is not a page mirror and cannot be used to replay a
 browser session elsewhere.
 
+This is the browser-enabled part of the **server plus campus desktop** setup.
+Most desktop users should start with the browser extension instead. Enable
+this worker when the Agent runs on a separate server and needs the campus
+computer to acquire a publisher artifact on its behalf.
+
 Run it only on a machine controlled by the authorized user. The normal
 background configuration is an owner-readable file at
 `~/.config/mdtero-relay/browser-worker.json`:
@@ -35,6 +40,18 @@ export MDTERO_BROWSER_WORKER_URL=http://127.0.0.1:8788
 export MDTERO_BROWSER_WORKER_TOKEN=<same-random-token>
 python3 mdtero_browser_worker.py
 ```
+
+After starting the worker, verify the local side without revealing its local
+configuration:
+
+```bash
+mdtero-relay status --json
+```
+
+The output contains `local_browser.configured`, `reachable`, and
+`session_active`. The account-level `browser` object in the same response only
+describes the capabilities advertised to Mdtero; neither object contains a
+token, cookie, CDP URL, or profile path.
 
 The first headed launch creates the `Mdtero Access` Chrome profile. The user
 controls that dedicated visible profile; when configured for loopback CDP the
