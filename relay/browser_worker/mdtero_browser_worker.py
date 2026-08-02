@@ -217,7 +217,7 @@ class BrowserWorker:
         return self._submit("prepare", url=url, timeout_seconds=max(10, min(timeout_seconds, 120)))
 
     def fetch(self, *, recipe: str, url: str, timeout_seconds: int) -> dict[str, Any]:
-        if recipe not in {"article_html", "article_pdf"}:
+        if recipe not in {"article_html", "article_pdf", "article_fulltext"}:
             raise WorkerFailure("browser_recipe_not_allowed", "Unsupported browser capture recipe.")
         if not allowed_url(url):
             raise WorkerFailure("relay_url_domain_not_allowed", "URL is not an approved publisher HTTPS URL.")
@@ -296,6 +296,22 @@ class BrowserWorker:
             if recipe == "article_html":
                 body = self._sanitized_article_html(page).encode("utf-8")
                 return self._artifact(status_code=response.status if response else 200, content_type="text/html; charset=utf-8", body=body)
+            if recipe == "article_fulltext":
+                try:
+                    return self._pdf_artifact(context, page, final_url)
+                except WorkerFailure as exc:
+                    if exc.reason_code != "browser_pdf_not_available":
+                        raise
+                    # Keep PDF preference and HTML fallback in one bounded,
+                    # user-visible browser operation. This prevents an
+                    # intermittent relay reconnect from losing a readable
+                    # article between two otherwise independent recipes.
+                    body = self._sanitized_article_html(page).encode("utf-8")
+                    return self._artifact(
+                        status_code=response.status if response else 200,
+                        content_type="text/html; charset=utf-8",
+                        body=body,
+                    )
             return self._pdf_artifact(context, page, final_url)
         except PlaywrightTimeoutError as exc:
             raise WorkerFailure("browser_fetch_timeout", "Authorized browser session timed out.") from exc
@@ -414,6 +430,14 @@ class BrowserWorker:
                 # This is not a challenge interaction.
                 time.sleep(0.25)
                 continue
+            except Exception as exc:
+                # Some Playwright releases surface this navigation race as an
+                # implementation-layer Error rather than sync_api.Error. Do
+                # not turn a normal redirect into an acquisition failure.
+                if "execution context was destroyed" in str(exc).lower():
+                    time.sleep(0.25)
+                    continue
+                raise
             shell = classify_shell(html) or classify_frame_urls(
                 frame_urls
             )

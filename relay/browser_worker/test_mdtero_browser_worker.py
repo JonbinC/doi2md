@@ -107,6 +107,19 @@ class ArticlePdfCandidateTests(unittest.TestCase):
         self.assertIn("safeMetaNames", page.script)
         self.assertIn("srcset|data-srcset", page.script)
 
+    def test_fetch_accepts_single_fulltext_recipe(self):
+        worker = object.__new__(self.worker.BrowserWorker)
+        worker._stopping = False
+        with mock.patch.object(worker, "_submit", return_value={"status_code": 200}) as submit:
+            worker.fetch(
+                recipe="article_fulltext",
+                url="https://onlinelibrary.wiley.com/doi/full/10.1002/demo",
+                timeout_seconds=30,
+            )
+
+        self.assertEqual(submit.call_args.args[0], "fetch")
+        self.assertEqual(submit.call_args.kwargs["recipe"], "article_fulltext")
+
     def test_wait_for_access_retries_destroyed_navigation_context(self):
         class Page:
             def __init__(self, error_type):
@@ -124,6 +137,30 @@ class ArticlePdfCandidateTests(unittest.TestCase):
                 return []
 
         page = Page(self.worker.PlaywrightError)
+        worker = object.__new__(self.worker.BrowserWorker)
+        with mock.patch.object(self.worker.time, "sleep"):
+            worker._wait_for_access(page, self.worker.time.monotonic() + 1)
+        self.assertEqual(page.attempts, 2)
+
+    def test_wait_for_access_tolerates_implementation_layer_navigation_error(self):
+        class ImplementationNavigationError(Exception):
+            pass
+
+        class Page:
+            def __init__(self):
+                self.attempts = 0
+
+            def evaluate(self, _script):
+                self.attempts += 1
+                if self.attempts == 1:
+                    raise ImplementationNavigationError("Execution context was destroyed during navigation")
+                return "<html><article><p>Article</p></article></html>"
+
+            @property
+            def frames(self):
+                return []
+
+        page = Page()
         worker = object.__new__(self.worker.BrowserWorker)
         with mock.patch.object(self.worker.time, "sleep"):
             worker._wait_for_access(page, self.worker.time.monotonic() + 1)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -30,6 +31,8 @@ func main() {
 		os.Exit(runStatus(os.Args[2:]))
 	case "login":
 		os.Exit(runLogin(os.Args[2:]))
+	case "browser-open":
+		os.Exit(runBrowserOpen(os.Args[2:]))
 	case "install":
 		os.Exit(runInstall(os.Args[2:]))
 	case "uninstall":
@@ -53,6 +56,7 @@ Usage:
   mdtero-relay serve [--label <name>]
   mdtero-relay status
   mdtero-relay login [--browser] [--api-key <key>] [--label <name>]
+  mdtero-relay browser-open <publisher-url>
   mdtero-relay uninstall
   mdtero-relay version
 
@@ -60,6 +64,32 @@ One-line install:
   macOS:   curl -fsSL https://mdtero.com/relay | bash
   Windows: irm https://mdtero.com/relay.ps1 | iex
 `)
+}
+
+func runBrowserOpen(args []string) int {
+	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
+		fmt.Fprintln(os.Stderr, "Usage: mdtero-relay browser-open <publisher-url>")
+		return 2
+	}
+	browser := browserfetch.FromEnv()
+	if browser == nil || !browser.Enabled() {
+		fmt.Fprintln(os.Stderr, "Authorized browser capture is not configured on this relay.")
+		return 1
+	}
+	result := browser.Prepare(context.Background(), strings.TrimSpace(args[0]), 120*time.Second)
+	if result.Error != "" || result.ReasonCode != "" {
+		message := strings.TrimSpace(result.Error)
+		if message == "" {
+			message = strings.TrimSpace(result.ReasonCode)
+		}
+		if message == "" {
+			message = "Could not open the authorized browser."
+		}
+		fmt.Fprintln(os.Stderr, message)
+		return 1
+	}
+	fmt.Println("Mdtero Access browser is ready. Complete any institution sign-in or publisher challenge there, then retry the paper task.")
+	return 0
 }
 
 func runServe(args []string) int {
