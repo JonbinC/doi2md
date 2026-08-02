@@ -695,6 +695,17 @@ def _publisher_pdf_candidates(article_url: str) -> list[str]:
             springer_doi = match.group(1) if match else ""
         if springer_doi:
             candidates.append(f"https://link.springer.com/content/pdf/{springer_doi}.pdf")
+    elif host == "www.sciencedirect.com" or host.endswith(".sciencedirect.com"):
+        # ScienceDirect's reader frequently renders the PDF action client-side
+        # instead of advertising a citation_pdf_url in the initial document.
+        # Its first-party PII representation stays on the already-authorized
+        # publisher origin and is still accepted only after a real PDF check.
+        match = re.search(r"/science/article/pii/(S[0-9A-Z]{8,})", parsed.path, flags=re.IGNORECASE)
+        if match:
+            pii = match.group(1).upper()
+            candidates.append(
+                f"https://www.sciencedirect.com/science/article/pii/{pii}/pdfft?isDTMRedir=true&download=true"
+            )
     ieee_arnumber = _ieee_arnumber(article_url)
     if ieee_arnumber:
         candidates.append(
