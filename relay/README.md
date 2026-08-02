@@ -15,6 +15,11 @@ See [`browser_worker/README.md`](browser_worker/README.md). The local worker is
 advertised to the backend as `browser_fetch`; it can only be scheduled by that
 same Mdtero account's tasks.
 
+When a publisher needs a manual institution login or browser challenge, open
+the article URL locally with `mdtero-relay browser-open <publisher-url>`,
+complete that step in the visible **Mdtero Access** profile, then retry the
+task. The browser session remains local and is reused by later eligible tasks.
+
 ## One-line install
 
 **macOS / Linux**
@@ -55,6 +60,7 @@ mdtero-relay install [--api-key <key>] [--label <name>]
 mdtero-relay serve [--label <name>]
 mdtero-relay status
 mdtero-relay login [--browser] [--api-key <key>]
+mdtero-relay browser-open <publisher-url>
 mdtero-relay uninstall
 mdtero-relay version
 ```

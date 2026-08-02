@@ -146,7 +146,10 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 func relayCapabilities(browser *browserfetch.Client) []string {
 	capabilities := []string{"http_fetch"}
 	if browser != nil && browser.Enabled() {
-		capabilities = append(capabilities, "browser_fetch")
+		// This one bounded operation prefers PDF and falls back to sanitized
+		// article HTML, so an intermittent websocket reconnect cannot split the
+		// two representations across separate requests.
+		capabilities = append(capabilities, "browser_fetch", "browser_fulltext")
 	}
 	return capabilities
 }
