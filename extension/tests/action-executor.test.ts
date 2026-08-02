@@ -76,7 +76,7 @@ describe("executeAction", () => {
     expect(result).toEqual({
       success: false,
       error: "Elsevier API key is not configured in the extension.",
-      nextCommand: "mdtero parse 10.1016/j.energy.2026.140192 --trace --wait --timeout 300 --json",
+      nextCommand: "mdtero parse 10.1016/j.energy.2026.140192 --wait --timeout 300 --json",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -231,7 +231,7 @@ describe("executeAction", () => {
     expect(result.error).toContain("publisher_pdf_guess:ieee_stamp_gateway");
     expect(result.error).toContain("institution_browser");
     expect(result.error).toContain("https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9919149");
-    expect(result.nextCommand).toBe("mdtero parse 10.1109/demo --trace --wait --timeout 300 --json");
+    expect(result.nextCommand).toBe("mdtero parse 10.1109/demo --wait --timeout 300 --json");
   });
 
   it("downloads PDF handoff candidates through the active browser action", async () => {
@@ -424,6 +424,6 @@ describe("executeAction", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe("The tab is open, but Mdtero received a challenge or blocked page instead of article content.");
-    expect(result.nextCommand).toBe("mdtero parse 'https://www.mdpi.com/2071-1050/17/5/2018?x=a b' --trace --wait --timeout 300 --json");
+    expect(result.nextCommand).toBe("mdtero parse 'https://www.mdpi.com/2071-1050/17/5/2018?x=a b' --wait --timeout 300 --json");
   });
 });

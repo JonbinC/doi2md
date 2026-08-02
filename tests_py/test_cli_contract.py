@@ -8532,7 +8532,7 @@ def test_extension_dist_smoke_script_covers_shipping_mv3_bundle(tmp_path: Path):
     (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff mdtero parse", encoding="utf-8")
     (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
     (dist / "options.html").write_text(
-        "Website sign-in Connection guide Website OAuth is connected Elsevier access Elsevier API key Interface language API URL Why Mdtero asks for these permissions browser-side paper capture Parse / Upload Translate Download",
+        "Website sign-in Connection guide Website OAuth is connected Authorized source access Access key Interface language API URL Why Mdtero asks for these permissions browser-side paper capture Parse / Upload Translate Download",
         encoding="utf-8",
     )
     (dist / "options.js").write_text(
@@ -8633,7 +8633,7 @@ def test_extension_dist_smoke_rejects_cli_mcp_content_in_options_page(tmp_path: 
     (dist / "popup.html").write_text("Website OAuth Parse / Upload Translate Download local-file-input copy-cli-handoff mdtero parse", encoding="utf-8")
     (dist / "popup.js").write_text("/api/v1/tasks/translate /api/v1/tasks/upload /download/", encoding="utf-8")
     (dist / "options.html").write_text(
-        "Website sign-in Connection guide Website OAuth is connected Elsevier access Elsevier API key Interface language API URL Why Mdtero asks for these permissions browser-side paper capture Parse / Upload Translate Download CLI setup checklist",
+        "Website sign-in Connection guide Website OAuth is connected Authorized source access Access key Interface language API URL Why Mdtero asks for these permissions browser-side paper capture Parse / Upload Translate Download CLI setup checklist",
         encoding="utf-8",
     )
     (dist / "options.js").write_text("browser capture, upload, translation, and download settings mdtero mcp serve", encoding="utf-8")

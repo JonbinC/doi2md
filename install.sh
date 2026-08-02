@@ -103,6 +103,13 @@ install_mdtero_runtime() {
     refresh_user_path
   fi
 
+  # A dry run only previews the commands. The runtime and its executable do
+  # not exist yet, so PATH/doctor checks would turn a valid preview into an
+  # installation failure.
+  if [ "$DRY_RUN" = "1" ]; then
+    return 0
+  fi
+
   if ! command_exists mdtero; then
     fail "mdtero was installed but is not on PATH. Add \$HOME/.local/bin to PATH or open a new shell, then rerun mdtero setup."
   fi
@@ -152,7 +159,13 @@ if [ -n "$TARGET" ]; then
   run mdtero agent install --target "$TARGET"
 fi
 
-cat <<'EOF'
+if [ "$DRY_RUN" = "1" ]; then
+  cat <<'EOF'
+
+Dry run complete. No changes were made.
+EOF
+else
+  cat <<'EOF'
 
 Mdtero is installed. Next steps:
   mdtero setup
@@ -160,3 +173,4 @@ Mdtero is installed. Next steps:
 
 For headless agents, create an API key in Mdtero Account and paste the dashboard install prompt into the agent.
 EOF
+fi
