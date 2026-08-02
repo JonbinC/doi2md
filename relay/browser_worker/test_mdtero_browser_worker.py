@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -105,6 +106,28 @@ class ArticlePdfCandidateTests(unittest.TestCase):
         self.assertIn("sensitiveName", page.script)
         self.assertIn("safeMetaNames", page.script)
         self.assertIn("srcset|data-srcset", page.script)
+
+    def test_wait_for_access_retries_destroyed_navigation_context(self):
+        class Page:
+            def __init__(self, error_type):
+                self.error_type = error_type
+                self.attempts = 0
+
+            def evaluate(self, _script):
+                self.attempts += 1
+                if self.attempts == 1:
+                    raise self.error_type("navigation")
+                return "<html><article><p>Article</p></article></html>"
+
+            @property
+            def frames(self):
+                return []
+
+        page = Page(self.worker.PlaywrightError)
+        worker = object.__new__(self.worker.BrowserWorker)
+        with mock.patch.object(self.worker.time, "sleep"):
+            worker._wait_for_access(page, self.worker.time.monotonic() + 1)
+        self.assertEqual(page.attempts, 2)
 
 
 if __name__ == "__main__":

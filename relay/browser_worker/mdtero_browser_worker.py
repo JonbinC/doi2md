@@ -408,7 +408,11 @@ class BrowserWorker:
                 html = page.evaluate("document.documentElement.outerHTML")
                 frame_urls = [frame.url for frame in page.frames]
             except PlaywrightError:
-                page.wait_for_timeout(250)
+                # During a publisher redirect the previous execution context
+                # can disappear between evaluate() and Playwright's own wait.
+                # Sleep locally, then retry against the current page context.
+                # This is not a challenge interaction.
+                time.sleep(0.25)
                 continue
             shell = classify_shell(html) or classify_frame_urls(
                 frame_urls
