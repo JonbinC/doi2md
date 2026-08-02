@@ -95,3 +95,26 @@ def test_attach_extension_handoff_on_challenge_reason():
     assert payload["extension_handoff"]["status"] == "extension_required"
     assert payload["extension_handoff"]["open_url"] == "https://ieeexplore.ieee.org/document/5206848"
     assert preferred_open_url(None, "10.1109/ACCESS.2023.3340044").startswith("https://doi.org/")
+
+
+def test_elsevier_missing_key_is_a_local_browser_handoff_reason():
+    assert reason_needs_extension_handoff("elsevier_api_key_missing")
+
+
+def test_elsevier_api_candidate_opens_doi_page_instead_of_api_endpoint():
+    handoff = build_extension_handoff(
+        input_value="10.1016/j.energy.2026.140192",
+        route={
+            "publisher_family": "elsevier",
+            "top_connector": "elsevier_article_retrieval_api",
+            "acquisition_candidates": [
+                {
+                    "connector": "elsevier_article_retrieval_api",
+                    "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+                }
+            ],
+        },
+        reason_code="elsevier_api_key_missing",
+    )
+
+    assert handoff["open_url"] == "https://doi.org/10.1016/j.energy.2026.140192"

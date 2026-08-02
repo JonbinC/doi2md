@@ -50,6 +50,7 @@ export interface AcquisitionCandidate {
   tier?: string;
   reason?: string;
   requires_api_key?: boolean;
+  credential_name?: string;
 }
 
 export interface ClientHandoffCandidate {
@@ -104,6 +105,9 @@ export interface ExtensionRouteResponse {
   acceptance_rules: Record<string, unknown>;
   fail_closed: boolean;
   user_message?: string;
+  required_credentials?: string[];
+  configured_credentials?: string[];
+  missing_credentials?: string[];
   matched_connectors: string[];
   provider_id?: string;
   preferred_format?: string;

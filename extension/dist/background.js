@@ -1072,7 +1072,11 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
   }
   let lastActionError;
   let lastNextCommand;
-  for (const action of routePlan.action_sequence) {
+  const missingServerElsevierKey = routePlan.action_sequence.includes("fetch_elsevier_xml") && (routePlan.missing_credentials || []).some((name) => String(name).trim().toUpperCase() === "ELSEVIER_API_KEY") && !String(context.elsevierApiKey || "").trim();
+  const plannedActions = routePlan.action_sequence.flatMap(
+    (action) => action === "fetch_elsevier_xml" && missingServerElsevierKey ? [action, "fetch_browser_source"] : [action]
+  );
+  for (const action of plannedActions) {
     const result = await executeAction(action, context, {
       top_connector: routePlan.top_connector,
       fail_closed: routePlan.fail_closed,
@@ -1115,6 +1119,11 @@ async function executeSsotActionSequence(parseClient, routePlan, context) {
       };
     }
     if (action === "fetch_elsevier_xml") {
+      if (missingServerElsevierKey) {
+        lastActionError = result.error || lastActionError;
+        lastNextCommand = result.nextCommand || lastNextCommand;
+        continue;
+      }
       const serverResult = await submitServerParse(parseClient, context.input);
       if (serverResult.success) {
         return serverResult;

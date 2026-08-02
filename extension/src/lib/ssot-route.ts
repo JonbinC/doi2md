@@ -66,7 +66,21 @@ export async function executeSsotActionSequence(
   let lastActionError: string | undefined;
   let lastNextCommand: string | undefined;
 
-  for (const action of routePlan.action_sequence) {
+  // A cloud route may be missing the server's Elsevier credential while the
+  // extension is already attached to an entitled article tab.  In that case
+  // keep the work local: try the user's extension key first, then capture the
+  // visible article page before considering a server parse fallback.
+  const missingServerElsevierKey =
+    routePlan.action_sequence.includes("fetch_elsevier_xml") &&
+    (routePlan.missing_credentials || []).some((name) => String(name).trim().toUpperCase() === "ELSEVIER_API_KEY") &&
+    !String(context.elsevierApiKey || "").trim();
+  const plannedActions = routePlan.action_sequence.flatMap((action) =>
+    action === "fetch_elsevier_xml" && missingServerElsevierKey
+      ? [action, "fetch_browser_source"]
+      : [action],
+  );
+
+  for (const action of plannedActions) {
     const result = await executeAction(action as ActionType, context, {
       top_connector: routePlan.top_connector,
       fail_closed: routePlan.fail_closed,
@@ -114,6 +128,11 @@ export async function executeSsotActionSequence(
     }
 
     if (action === "fetch_elsevier_xml") {
+      if (missingServerElsevierKey) {
+        lastActionError = result.error || lastActionError;
+        lastNextCommand = result.nextCommand || lastNextCommand;
+        continue;
+      }
       const serverResult = await submitServerParse(parseClient, context.input);
       if (serverResult.success) {
         return serverResult;

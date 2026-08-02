@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import webbrowser
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 EXTENSION_CHROME_WEBSTORE_URL = (
     "https://chromewebstore.google.com/detail/mdtero/knpihhcooldgedbklgjghebijcpejibp"
@@ -20,6 +20,7 @@ EXTENSION_INSTALL_DOC_URL = "https://mdtero.com/docs/install"
 
 BROWSER_HANDOFF_REASON_CODES = {
     "browser_extension_required",
+    "elsevier_api_key_missing",
     "client_acquisition_browser_session_required",
     "client_acquisition_challenge_page",
     "publisher_blocked_remote_pdf",
@@ -44,22 +45,25 @@ def reason_needs_extension_handoff(reason_code: str | None) -> bool:
 
 def preferred_open_url(route: dict[str, Any] | None, input_value: str) -> str:
     payload = dict(route or {})
+    publisher = str(payload.get("publisher_family") or "").strip().lower()
+    if not publisher and str(payload.get("top_connector") or "").strip() == "elsevier_article_retrieval_api":
+        publisher = "elsevier"
     for key in ("best_oa_url", "source_url"):
         value = str(payload.get(key) or "").strip()
-        if value.startswith("http"):
+        if value.startswith("http") and not _is_elsevier_api_endpoint(value, publisher=publisher):
             return value
     for candidate in payload.get("client_handoff_candidates") or []:
         if not isinstance(candidate, dict):
             continue
         for key in ("artifact_url", "source_url", "url"):
             value = str(candidate.get(key) or "").strip()
-            if value.startswith("http"):
+            if value.startswith("http") and not _is_elsevier_api_endpoint(value, publisher=publisher):
                 return value
     for candidate in payload.get("acquisition_candidates") or []:
         if not isinstance(candidate, dict):
             continue
         value = str(candidate.get("url") or candidate.get("pdf_url") or candidate.get("html_url") or "").strip()
-        if value.startswith("http"):
+        if value.startswith("http") and not _is_elsevier_api_endpoint(value, publisher=publisher):
             return value
     raw = str(input_value or "").strip()
     if raw.startswith("http"):
@@ -67,6 +71,15 @@ def preferred_open_url(route: dict[str, Any] | None, input_value: str) -> str:
     if raw.lower().startswith("10."):
         return f"https://doi.org/{quote(raw)}"
     return ""
+
+
+def _is_elsevier_api_endpoint(value: str, *, publisher: str) -> bool:
+    if publisher != "elsevier":
+        return False
+    try:
+        return urlparse(value).netloc.lower() == "api.elsevier.com"
+    except Exception:
+        return False
 
 
 def build_extension_handoff(

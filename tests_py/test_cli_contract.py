@@ -14,7 +14,7 @@ import httpx
 import pytest
 from rich.console import Console
 
-from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, should_acquire_locally
+from mdtero.acquisition import AcquiredArtifact, AcquisitionError, acquire_from_route, route_needs_browser_fallback, should_acquire_locally
 from mdtero.agent import default_interactive_targets, detect_target_status, detect_targets, install_targets, parse_agent_selection, uninstall_targets
 from mdtero.auth import WebLoginResult, build_cli_login_url, run_web_login
 from mdtero.cli import (
@@ -2242,6 +2242,78 @@ def test_elsevier_xml_route_skips_local_fetch_off_campus_without_relay():
         )
         is False
     )
+
+
+def test_elsevier_serialized_local_capability_still_requires_campus_or_relay(monkeypatch):
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "can_acquire_locally": True,
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+    config = MdteroConfig(academic=AcademicKeys(elsevier_api_key="elsevier-secret"))
+
+    assert (
+        should_acquire_locally(
+            route,
+            "10.1016/j.energy.2026.140192",
+            config=config,
+            relay_connected=False,
+            local_outlet_is_campus=False,
+        )
+        is False
+    )
+    assert (
+        should_acquire_locally(
+            route,
+            "10.1016/j.energy.2026.140192",
+            config=config,
+            relay_connected=False,
+            local_outlet_is_campus=True,
+        )
+        is True
+    )
+
+
+def test_missing_server_elsevier_key_offers_local_browser_without_relay():
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "missing_credentials": ["ELSEVIER_API_KEY"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "access": "licensed",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            }
+        ],
+    }
+
+    assert route_needs_browser_fallback(route, config=MdteroConfig()) is True
+
+
+def test_missing_elsevier_key_does_not_block_public_fallback():
+    route = {
+        "action_sequence": ["fetch_elsevier_xml"],
+        "missing_credentials": ["ELSEVIER_API_KEY"],
+        "acquisition_candidates": [
+            {
+                "connector": "elsevier_article_retrieval_api",
+                "access": "licensed",
+                "url": "https://api.elsevier.com/content/article/doi/10.1016/j.energy.2026.140192?httpAccept=text/xml",
+            },
+            {
+                "connector": "europe_pmc_fulltext_xml",
+                "access": "open",
+                "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC123/fullTextXML",
+            },
+        ],
+    }
+
+    assert route_needs_browser_fallback(route, config=MdteroConfig()) is False
 
 
 @pytest.mark.parametrize(
