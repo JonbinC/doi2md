@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mdtero/mdtero-relay/internal/auth"
+	"github.com/mdtero/mdtero-relay/internal/browserfetch"
 	"github.com/mdtero/mdtero-relay/internal/client"
 	"github.com/mdtero/mdtero-relay/internal/config"
 	"github.com/mdtero/mdtero-relay/internal/service"
@@ -72,7 +73,8 @@ func runServe(args []string) int {
 		return 1
 	}
 	if err := client.Run(cfg, client.Options{
-		Label: *label,
+		Label:   *label,
+		Browser: browserfetch.FromEnv(),
 		Logger: func(format string, args ...any) {
 			fmt.Printf(format+"\n", args...)
 		},
@@ -213,7 +215,7 @@ func runInstall(args []string) int {
 	}
 
 	manager := service.New()
-	if err := manager.Install(binaryPath); err != nil {
+	if err := manager.Install(binaryPath, "serve"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

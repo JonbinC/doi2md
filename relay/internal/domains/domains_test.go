@@ -9,8 +9,17 @@ func TestAllowedPublisherURL(t *testing.T) {
 	if !Allowed("https://pubs.acs.org/doi/pdf/10.1021/demo") {
 		t.Fatal("expected pubs.acs.org to be allowed")
 	}
+	if !Allowed("https://pubs.rsc.org/en/content/articlelanding/2025/ra/d5ra09148a") {
+		t.Fatal("expected pubs.rsc.org to be allowed")
+	}
 	if !Allowed("https://api.wiley.com/onlinelibrary/tdm/v1/articles/10.1002%2Fdemo") {
 		t.Fatal("expected api.wiley.com to be allowed")
+	}
+	if !Allowed("https://journals.sagepub.com/doi/pdf/10.1177/example") {
+		t.Fatal("expected journals.sagepub.com to be allowed")
+	}
+	if !Allowed("https://www.annualreviews.org/doi/pdf/10.1146/example") {
+		t.Fatal("expected annualreviews.org to be allowed")
 	}
 }
 
