@@ -17,7 +17,9 @@ import logging
 import os
 import queue
 import re
+import shutil
 import subprocess
+import sys
 import threading
 import time
 from http import HTTPStatus
@@ -80,17 +82,55 @@ def _configured_cdp_url() -> str:
 
 TOKEN = _configured_token()
 CDP_URL = _configured_cdp_url()
-PROFILE_DIR = Path(
-    os.environ.get(
-        "MDTERO_BROWSER_PROFILE_DIR",
-        str(Path.home() / "Library" / "Application Support" / "Mdtero Access"),
+
+
+def _default_profile_dir() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Mdtero Access"
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "Mdtero Access"
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "mdtero-relay" / "browser-profile"
+
+
+PROFILE_DIR = Path(os.environ.get("MDTERO_BROWSER_PROFILE_DIR", str(_default_profile_dir()))).expanduser()
+
+
+def _default_browser_executable() -> str:
+    """Find a locally installed browser without assuming the host OS.
+
+    An empty result is intentional: Playwright then uses its managed browser
+    when the operator has installed it with ``playwright install chromium``.
+    """
+    if sys.platform == "darwin":
+        mac_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if Path(mac_path).exists():
+            return mac_path
+    candidates = (
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "chrome",
+        "msedge",
     )
-).expanduser()
-CHROME_EXECUTABLE = os.environ.get(
-    "MDTERO_BROWSER_EXECUTABLE",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-).strip()
-HEADLESS = os.environ.get("MDTERO_BROWSER_HEADLESS", "false").strip().lower() in {"1", "true", "yes"}
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return ""
+
+
+CHROME_EXECUTABLE = os.environ.get("MDTERO_BROWSER_EXECUTABLE", "").strip() or _default_browser_executable()
+_headless_override = os.environ.get("MDTERO_BROWSER_HEADLESS")
+if _headless_override is None:
+    # A server usually has no display; a desktop Linux session should remain
+    # visible so the owner can complete an institution login or challenge.
+    _has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    HEADLESS = sys.platform == "linux" and not _has_display
+else:
+    HEADLESS = _headless_override.strip().lower() in {"1", "true", "yes"}
 MAX_ARTIFACT_BYTES = 30 * 1024 * 1024
 
 ALLOWED_SUFFIXES = (

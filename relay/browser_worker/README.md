@@ -41,6 +41,19 @@ export MDTERO_BROWSER_WORKER_TOKEN=<same-random-token>
 python3 mdtero_browser_worker.py
 ```
 
+For a local checkout, install the sidecar once with:
+
+```bash
+cd relay/browser_worker
+python3 -m venv ~/.local/share/mdtero-relay/browser-venv
+~/.local/share/mdtero-relay/browser-venv/bin/pip install -r requirements.txt
+~/.local/share/mdtero-relay/browser-venv/bin/playwright install chromium
+```
+
+Then start `mdtero_browser_worker.py` under the desktop's launch agent,
+systemd user unit, or server process supervisor. Keep the worker bound to
+`127.0.0.1`; the native Relay is the only process that should call it.
+
 After starting the worker, verify the local side without revealing its local
 configuration:
 
@@ -61,6 +74,14 @@ resulting lawful session. It returns
 `browser_login_required` or `browser_challenge_required` when that has not
 happened, and returns a specific unavailable/rate-limit result rather than
 parsing a publisher error page as an article.
+
+On Linux, the worker automatically uses an installed Chrome/Chromium binary
+when one is available. With no `DISPLAY` or `WAYLAND_DISPLAY` it defaults to
+headless mode, which is suitable for open-access pages and non-interactive
+server workers; set `MDTERO_BROWSER_HEADLESS=false` when a desktop user needs
+to see and complete a login or challenge. If no system browser is installed,
+install Playwright's managed Chromium with `playwright install chromium` or set
+`MDTERO_BROWSER_EXECUTABLE` explicitly.
 
 Never point it at a regular Chrome profile. The worker can either launch the
 dedicated profile itself or attach through a loopback-only CDP endpoint to the

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.3}"
+MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.4}"
 MDTERO_RELAY_BASE_URL="${MDTERO_RELAY_BASE_URL:-https://mdtero.com/releases/relay}"
 INSTALL_DIR="${MDTERO_RELAY_INSTALL_DIR:-${HOME}/.local/bin}"
 
@@ -123,4 +123,8 @@ fi
 echo
 echo "Done. Campus relay is installed."
 echo "Check status: mdtero-relay status"
-echo "Logs (macOS): ~/Library/Logs/mdtero-relay.log"
+if [[ "$PLATFORM" == "darwin" ]]; then
+  echo "Logs: ~/Library/Logs/mdtero-relay.log"
+else
+  echo "Logs: ${XDG_STATE_HOME:-$HOME/.local/state}/mdtero-relay/relay.log"
+fi

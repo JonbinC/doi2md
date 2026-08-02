@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${MDTERO_RELAY_VERSION:-0.1.3}"
+VERSION="${MDTERO_RELAY_VERSION:-0.1.4}"
 OUT="$ROOT/dist/v$VERSION"
 
 mkdir -p "$OUT"
