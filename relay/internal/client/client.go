@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,6 +20,7 @@ import (
 )
 
 const reconnectDelay = 5 * time.Second
+const relayKeepaliveInterval = 20 * time.Second
 
 type Logger func(format string, args ...any)
 
@@ -85,6 +87,13 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 		return err
 	}
 	defer conn.Close()
+	var writeMu sync.Mutex
+	writeJSON := func(payload any) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		return conn.WriteJSON(payload)
+	}
 
 	logger("Connecting campus relay ...")
 
@@ -102,7 +111,7 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 		"outlet":       outlet,
 		"capabilities": relayCapabilities(browser),
 	}
-	if err := conn.WriteJSON(register); err != nil {
+	if err := writeJSON(register); err != nil {
 		return err
 	}
 
@@ -120,6 +129,30 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 
 	logger("Campus relay is live. Keep this running while cloud agents fetch papers.")
 	logger("Press Ctrl+C to stop.")
+	// A campus relay can be idle for minutes between papers. Keep the WebSocket
+	// active through proxies/CDNs without sending any article or session state.
+	done := make(chan struct{})
+	var keepalive sync.WaitGroup
+	keepalive.Add(1)
+	go func() {
+		defer keepalive.Done()
+		ticker := time.NewTicker(relayKeepaliveInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if err := writeJSON(map[string]string{"type": "ping"}); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	defer func() {
+		close(done)
+		keepalive.Wait()
+	}()
 
 	for {
 		var message map[string]any
@@ -128,15 +161,15 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 		}
 		switch fmt.Sprint(message["type"]) {
 		case "ping":
-			_ = conn.WriteJSON(map[string]string{"type": "pong"})
+			_ = writeJSON(map[string]string{"type": "pong"})
 		case "fetch":
 			response := handleFetch(message)
-			if err := conn.WriteJSON(response); err != nil {
+			if err := writeJSON(response); err != nil {
 				return err
 			}
 		case "browser_fetch":
 			response := handleBrowserFetch(message, browser)
-			if err := conn.WriteJSON(response); err != nil {
+			if err := writeJSON(response); err != nil {
 				return err
 			}
 		}
