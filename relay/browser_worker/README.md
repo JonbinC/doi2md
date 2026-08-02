@@ -36,18 +36,19 @@ export MDTERO_BROWSER_WORKER_TOKEN=<same-random-token>
 python3 mdtero_browser_worker.py
 ```
 
-The first headed launch creates the `Mdtero Access` Chrome profile. The worker
-keeps that one profile and its Chrome session alive while it runs, so a user
-can complete institutional login or a publisher challenge once and a later
-article task can reuse the resulting lawful session. It returns
+The first headed launch creates the `Mdtero Access` Chrome profile. The user
+controls that dedicated visible profile; when configured for loopback CDP the
+worker attaches to it without closing Chrome. A user can complete institutional
+login or a publisher challenge once and a later article task can reuse the
+resulting lawful session. It returns
 `browser_login_required` or `browser_challenge_required` when that has not
 happened, and returns a specific unavailable/rate-limit result rather than
 parsing a publisher error page as an article.
 
-The worker must own this dedicated profile. If an older `Mdtero Access` Chrome
-window is already open, close **that profile only** once and retry; the worker
-will then open and keep the replacement session alive. Never point it at your
-regular Chrome profile.
+Never point it at a regular Chrome profile. The worker can either launch the
+dedicated profile itself or attach through a loopback-only CDP endpoint to the
+same user-controlled profile; neither mode exports profile data or closes the
+user's visible Chrome when attached.
 
 To deliberately open an approved publisher page in the visible dedicated
 profile before retrying a task, use the Relay locally:
