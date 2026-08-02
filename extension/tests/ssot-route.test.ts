@@ -458,4 +458,59 @@ describe("ssot-route", () => {
     expect(parseClient.createParseTask).toHaveBeenCalledWith({ input: "10.1016/j.energy.2026.140192" });
     expect(result).toEqual({ success: true, taskId: "task-server", task });
   });
+
+  it("captures the entitled Elsevier tab when both server and extension keys are missing", async () => {
+    executeAction
+      .mockResolvedValueOnce({
+        success: false,
+        error: "Elsevier API key is not configured in the extension.",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        rawArtifact: new Blob(["<html><body>authorized article</body></html>"], { type: "text/html" }),
+        filename: "paper.html",
+        artifactKind: "html",
+        sourceDoi: "10.1016/j.energy.2026.140192",
+      });
+    const task = { task_id: "task-campus", status: "queued" };
+    const parseClient = {
+      createParseTask: vi.fn(),
+      createRawUploadTask: vi.fn().mockResolvedValue(task),
+    };
+
+    const { executeSsotActionSequence } = await import("../src/lib/ssot-route");
+    const result = await executeSsotActionSequence(
+      parseClient,
+      buildRoutePlan({
+        top_connector: "elsevier_article_retrieval_api",
+        route_kind: "server",
+        acquisition_mode: "server_parse",
+        requires_browser_capture: false,
+        allows_current_tab: false,
+        action_sequence: ["fetch_elsevier_xml"],
+        missing_credentials: ["ELSEVIER_API_KEY"],
+      }),
+      {
+        input: "10.1016/j.energy.2026.140192",
+        tabId: 42,
+        tabUrl: "https://www.sciencedirect.com/science/article/pii/S036054422600294X",
+      },
+    );
+
+    expect(executeAction).toHaveBeenNthCalledWith(
+      2,
+      "fetch_browser_source",
+      expect.objectContaining({ tabId: 42 }),
+      expect.objectContaining({ top_connector: "elsevier_article_retrieval_api" }),
+    );
+    expect(parseClient.createParseTask).not.toHaveBeenCalled();
+    expect(parseClient.createRawUploadTask).toHaveBeenCalledWith({
+      rawFile: expect.any(Blob),
+      filename: "paper.html",
+      sourceDoi: "10.1016/j.energy.2026.140192",
+      sourceInput: "10.1016/j.energy.2026.140192",
+      artifactKind: "html",
+    });
+    expect(result).toEqual({ success: true, taskId: "task-campus", task });
+  });
 });

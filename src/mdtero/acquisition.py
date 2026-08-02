@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import os
 import re
 import tempfile
 import urllib.parse
@@ -127,21 +128,63 @@ def should_acquire_locally(
         local_outlet_is_campus=local_outlet_is_campus,
     ):
         return False
-    if bool(route.get("can_acquire_locally")) and _candidate_urls(route, input_value):
+    actions = {str(action) for action in route.get("action_sequence") or []}
+    candidate_urls = _candidate_urls(route, input_value)
+    # Elsevier XML is a credentialed publisher API route.  Apply the campus
+    # outlet policy before the generic can_acquire_locally projection; the
+    # latter is intentionally broad and would otherwise make an off-campus
+    # CLI fetch without Relay look local merely because a URL is available.
+    if "fetch_elsevier_xml" in actions:
+        if not _elsevier_api_key(config):
+            return False
+        if candidate_urls:
+            return _should_fetch_elsevier_locally(
+                config,
+                relay_connected=relay_connected,
+                local_outlet_is_campus=local_outlet_is_campus,
+            )
+        return False
+    # A server-side Elsevier key is a valid route even when this client has no
+    # local publisher key.  Do not send an unauthenticated local request first;
+    # the server can use its configured key and still try public OA fallbacks.
+    if bool(route.get("can_acquire_locally")) and candidate_urls:
         return True
     # Compatibility with older servers: new route projections use the boolean
     # above, while historical servers still expose action labels.
-    actions = {str(action) for action in route.get("action_sequence") or []}
     local_actions = {"fetch_remote_html", "fetch_epub_asset", "fetch_structured_xml", "fallback_pdf_parse"}
-    if actions.intersection(local_actions) and _candidate_urls(route, input_value):
+    if actions.intersection(local_actions) and candidate_urls:
         return True
-    if "fetch_elsevier_xml" in actions and _elsevier_api_key(config) and _candidate_urls(route, input_value):
-        return _should_fetch_elsevier_locally(
-            config,
-            relay_connected=relay_connected,
-            local_outlet_is_campus=local_outlet_is_campus,
-        )
     return False
+
+
+def route_needs_browser_fallback(route: dict[str, Any], *, config: Any | None = None) -> bool:
+    """Return whether a missing server credential should fall back to a local browser.
+
+    This is deliberately limited to an Elsevier institutional route without a
+    public candidate.  An OA/repository candidate remains a normal server
+    route, and a locally configured key remains subject to the campus/Relay
+    egress policy in :func:`should_acquire_locally`.
+    """
+    actions = {str(action) for action in route.get("action_sequence") or []}
+    if "fetch_elsevier_xml" not in actions or _elsevier_api_key(config):
+        return False
+    missing = {
+        str(name or "").strip().upper()
+        for name in route.get("missing_credentials") or []
+        if str(name or "").strip()
+    }
+    if "ELSEVIER_API_KEY" not in missing:
+        return False
+    candidates = route.get("acquisition_candidates") or []
+    if not isinstance(candidates, (list, tuple)):
+        candidates = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        access = str(candidate.get("access") or "").strip().lower()
+        if access == "open" and not bool(candidate.get("requires_user_rights")) and not bool(candidate.get("requires_api_key")):
+            return False
+    return True
 
 
 def _should_fetch_elsevier_locally(
@@ -239,6 +282,18 @@ def _try_acquire_candidates(
                     "reason_code": "client_acquisition_artifact_kind_not_allowed",
                     "action_hint": f"Route acceptance rules allow {sorted(allowed_kinds)}, not {artifact_kind}.",
                     "diagnostics": {"artifact_kind": artifact_kind, "allowed_artifact_kinds": sorted(allowed_kinds)},
+                }
+            )
+            continue
+        if _candidate_requires_api_key(candidate) and not _candidate_credential_configured(candidate, config=config):
+            credential_name = str(candidate.get("credential_name") or "provider API key").strip()
+            errors.append(
+                {
+                    "url": url,
+                    "reason_code": "missing_api_key",
+                    "action_hint": f"Configure {credential_name} before local acquisition, or let the Mdtero server try its route.",
+                    **_candidate_error_context(candidate),
+                    "diagnostics": {"credential_name": credential_name},
                 }
             )
             continue
@@ -360,7 +415,31 @@ def _candidate_error_context(candidate: dict[str, str]) -> dict[str, Any]:
         context["candidate_connector"] = candidate.get("connector")
     if candidate.get("requires_browser"):
         context["requires_browser"] = True
+    if candidate.get("credential_name"):
+        context["credential_name"] = candidate.get("credential_name")
     return context
+
+
+def _candidate_requires_api_key(candidate: dict[str, str]) -> bool:
+    value = candidate.get("requires_api_key")
+    return value is True or str(value or "").strip().lower() in {"1", "true", "yes"}
+
+
+def _candidate_credential_configured(candidate: dict[str, str], *, config: Any | None) -> bool:
+    name = str(candidate.get("credential_name") or "").strip().upper()
+    if name == "ELSEVIER_API_KEY":
+        return bool(_elsevier_api_key(config))
+    if name in {"WILEY_TDM_API_KEY", "WILEY_TDM_TOKEN", "TDM_API_TOKEN"}:
+        return bool(_wiley_tdm_token(config))
+    if name in {"SPRINGER_API_KEY", "SPRINGER_NATURE_API_KEY"}:
+        academic = getattr(config, "academic", None)
+        return bool(
+            str(getattr(academic, "springer_api_key", "") or "").strip()
+            or str(getattr(academic, "springer_nature_api_key", "") or "").strip()
+            or os.environ.get("SPRINGER_API_KEY", "").strip()
+            or os.environ.get("SPRINGER_NATURE_API_KEY", "").strip()
+        )
+    return True
 
 
 def curl_cffi_available() -> bool:
@@ -421,6 +500,8 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
         prefer_mdpi_epub: bool = True,
         source: str | None = None,
         requires_browser: bool = False,
+        requires_api_key: bool = False,
+        credential_name: str | None = None,
     ) -> None:
         value = str(url or "").strip()
         if not value or not URL_PATTERN.match(value) or value in seen:
@@ -439,6 +520,10 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
             item["source"] = source
         if requires_browser:
             item["requires_browser"] = "true"
+        if requires_api_key:
+            item["requires_api_key"] = "true"
+        if credential_name:
+            item["credential_name"] = credential_name
         candidates.append(item)
 
     for candidate in route.get("acquisition_candidates") or []:
@@ -446,13 +531,15 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
             continue
         connector = str(candidate.get("connector") or "") or None
         candidate_kind = str(candidate.get("artifact_kind") or "").strip().lower() or None
-        add(candidate.get("url"), kind=candidate_kind, connector=connector)
+        candidate_requires_api_key = candidate.get("requires_api_key") is True or str(candidate.get("requires_api_key") or "").strip().lower() in {"1", "true", "yes"}
+        credential_name = str(candidate.get("credential_name") or "").strip() or None
+        add(candidate.get("url"), kind=candidate_kind, connector=connector, requires_api_key=candidate_requires_api_key, credential_name=credential_name)
         html_url = str(candidate.get("html_url") or "").strip()
-        add(html_url, kind=None if _direct_artifact_kind_from_url(html_url) else "html", connector=connector)
-        add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector)
-        add(candidate.get("epub_url"), kind="epub", connector=connector)
-        add(candidate.get("pdf_url"), kind="pdf", connector=connector)
-        add(candidate.get("tdm_url"), kind="pdf", connector=connector or "wiley_tdm")
+        add(html_url, kind=None if _direct_artifact_kind_from_url(html_url) else "html", connector=connector, requires_api_key=candidate_requires_api_key, credential_name=credential_name)
+        add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector, requires_api_key=candidate_requires_api_key, credential_name=credential_name)
+        add(candidate.get("epub_url"), kind="epub", connector=connector, requires_api_key=candidate_requires_api_key, credential_name=credential_name)
+        add(candidate.get("pdf_url"), kind="pdf", connector=connector, requires_api_key=candidate_requires_api_key, credential_name=credential_name)
+        add(candidate.get("tdm_url"), kind="pdf", connector=connector or "wiley_tdm", requires_api_key=candidate_requires_api_key, credential_name=credential_name)
 
     browser_required: list[dict[str, str]] = []
     for handoff in route.get("client_handoff_candidates") or []:
@@ -745,6 +832,27 @@ def _summarize_acquisition_failures(errors: list[dict[str, Any]]) -> tuple[str, 
         return (
             "publisher_blocked_remote_pdf",
             "The publisher returned an HTML error shell instead of the routed PDF. Open the article in an entitled browser session and use extension capture, upload an authorized PDF/HTML/XML/EPUB, or import an authorized Zotero attachment.",
+            diagnostics,
+        )
+    if "missing_api_key" in all_reason_codes:
+        credential_names = sorted(
+            {
+                str(error.get("credential_name") or "").strip()
+                for error in attempts
+                if str(error.get("credential_name") or "").strip()
+            }
+        )
+        credential_text = ", ".join(credential_names) or "the provider API key"
+        if "ELSEVIER_API_KEY" in credential_names:
+            return (
+                "elsevier_api_key_missing",
+                "This Elsevier route needs ELSEVIER_API_KEY for the official XML API. "
+                "Let the Mdtero server try its configured route, or use the browser extension/upload on your campus computer.",
+                diagnostics,
+            )
+        return (
+            "provider_api_key_missing",
+            f"This route needs {credential_text}. Configure it locally or let the Mdtero server try the route.",
             diagnostics,
         )
     if any(bool(error.get("requires_browser")) for error in attempts):

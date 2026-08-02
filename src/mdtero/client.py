@@ -92,7 +92,7 @@ class MdteroClient:
         return bool(payload.get("connected"))
 
     def parse_with_route(self, input_value: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
-        from .acquisition import AcquisitionError
+        from .acquisition import AcquisitionError, route_needs_browser_fallback
         from .extension_handoff import build_extension_handoff, classify_acquisition_path
 
         assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
@@ -106,6 +106,18 @@ class MdteroClient:
             raise AcquisitionError(
                 "browser_extension_required",
                 str(handoff.get("action_hint") or "Use the Mdtero browser extension for this route."),
+                diagnostics={"route": route, "extension_handoff": handoff},
+            )
+        if route_needs_browser_fallback(route, config=self.config):
+            handoff = build_extension_handoff(
+                input_value=input_value,
+                route=route,
+                reason_code="elsevier_api_key_missing",
+                action_hint=str(route.get("action_hint") or "").strip() or None,
+            )
+            raise AcquisitionError(
+                "elsevier_api_key_missing",
+                str(handoff.get("action_hint") or "This Elsevier route needs ELSEVIER_API_KEY or an entitled browser session."),
                 diagnostics={"route": route, "extension_handoff": handoff},
             )
         relay_connected = None
