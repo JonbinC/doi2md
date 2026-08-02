@@ -47,6 +47,37 @@ def test_html_only_route_falls_back_to_pdf(monkeypatch):
     assert any("html" in call for call in calls)
 
 
+def test_pdf_candidate_preserves_explicit_kind_for_repository_landing():
+    from mdtero.acquisition import _candidate_urls
+
+    route = {
+        "acquisition_candidates": [
+            {
+                "url": "https://research.example.edu/en/publications/example",
+                "artifact_kind": "pdf",
+            }
+        ]
+    }
+
+    candidates = _candidate_urls(route, "10.1016/example")
+
+    assert candidates == [
+        {
+            "url": "https://research.example.edu/en/publications/example",
+            "artifact_kind": "pdf",
+        }
+    ]
+
+
+def test_extract_pdf_url_from_repository_landing_page():
+    from mdtero.acquisition import _extract_pdf_url_from_landing
+
+    assert _extract_pdf_url_from_landing(
+        b'<a href="/files/12345/article.pdf">Download PDF</a>',
+        base_url="https://research.example.edu/en/publications/example",
+    ) == "https://research.example.edu/files/12345/article.pdf"
+
+
 def test_carsi_cookie_injected_when_enabled(monkeypatch, tmp_path):
     from mdtero.config import AccessOutletConfig, MdteroConfig
     from mdtero import access_outlets

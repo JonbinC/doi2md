@@ -243,6 +243,21 @@ def _try_acquire_candidates(
             )
             continue
         extra_headers = _credential_headers(route, candidate, url, config=config)
+        # Repository OA records often expose a landing page but no direct PDF
+        # URL. Treat a routed PDF candidate as a landing-page discovery step
+        # before recording the publisher response as a terminal failure.
+        if artifact_kind == "pdf" and _direct_artifact_kind_from_url(url) != "pdf":
+            try:
+                artifact = _fetch_pdf_from_landing(
+                    url,
+                    timeout=timeout,
+                    extra_headers=extra_headers,
+                    config=config,
+                )
+                if artifact is not None:
+                    return artifact
+            except AcquisitionError as exc:
+                errors.append({"url": url, "source": "landing_pdf_discovery", **_candidate_error_context(candidate), **exc.to_dict()})
         try:
             return _fetch_with_curl_cffi(url, artifact_kind=artifact_kind, timeout=timeout, extra_headers=extra_headers, config=config)
         except AcquisitionError as exc:
@@ -252,6 +267,70 @@ def _try_acquire_candidates(
         except AcquisitionError as exc:
             errors.append({"url": url, "source": "httpx", **_candidate_error_context(candidate), **exc.to_dict()})
     return None
+
+
+def _fetch_pdf_from_landing(
+    landing_url: str,
+    *,
+    timeout: float,
+    extra_headers: dict[str, str] | None,
+    config: Any | None,
+) -> AcquiredArtifact | None:
+    try:
+        landing_artifact = _fetch_with_curl_cffi(
+            landing_url,
+            artifact_kind="html",
+            timeout=timeout,
+            extra_headers=extra_headers,
+            config=config,
+        )
+    except AcquisitionError:
+        landing_artifact = _fetch_with_httpx(
+            landing_url,
+            artifact_kind="html",
+            timeout=timeout,
+            extra_headers=extra_headers,
+            config=config,
+        )
+    try:
+        try:
+            html_bytes = landing_artifact.path.read_bytes()
+        except OSError:
+            return None
+    finally:
+        landing_artifact.path.unlink(missing_ok=True)
+    pdf_url = _extract_pdf_url_from_landing(html_bytes, base_url=landing_url)
+    if not pdf_url:
+        return None
+    try:
+        return _fetch_with_curl_cffi(
+            pdf_url,
+            artifact_kind="pdf",
+            timeout=timeout,
+            extra_headers=extra_headers,
+            config=config,
+        )
+    except AcquisitionError:
+        return _fetch_with_httpx(
+            pdf_url,
+            artifact_kind="pdf",
+            timeout=timeout,
+            extra_headers=extra_headers,
+            config=config,
+        )
+
+
+def _extract_pdf_url_from_landing(html_bytes: bytes, *, base_url: str) -> str:
+    text = html_bytes.decode("utf-8", errors="ignore")
+    candidates: list[str] = []
+    for match in re.finditer(r"(?:href|data-href|data-url)=[\"']([^\"']+)[\"']", text, flags=re.I):
+        candidates.append(match.group(1))
+    candidates.extend(re.findall(r"https?://[^\"'<>\\s]+?\.pdf(?:\?[^\"'<>\\s]*)?", text, flags=re.I))
+    for raw_url in candidates:
+        value = urllib.parse.urljoin(base_url, raw_url.strip())
+        if _direct_artifact_kind_from_url(value) == "pdf":
+            return value
+    return ""
 
 
 def _has_pdf_candidate(route: dict[str, Any], candidates: list[dict[str, str]]) -> bool:
@@ -366,7 +445,8 @@ def _candidate_urls(route: dict[str, Any], input_value: str) -> list[dict[str, s
         if not isinstance(candidate, dict):
             continue
         connector = str(candidate.get("connector") or "") or None
-        add(candidate.get("url"), connector=connector)
+        candidate_kind = str(candidate.get("artifact_kind") or "").strip().lower() or None
+        add(candidate.get("url"), kind=candidate_kind, connector=connector)
         html_url = str(candidate.get("html_url") or "").strip()
         add(html_url, kind=None if _direct_artifact_kind_from_url(html_url) else "html", connector=connector)
         add(candidate.get("xml_url") or candidate.get("jats_url") or candidate.get("jatsxml"), kind="xml", connector=connector)
@@ -462,7 +542,14 @@ def _direct_artifact_kind_from_url(url: str) -> str:
         return "xml"
     if lowered_path.endswith((".epub", "/epub")) or "/doi/epub/" in lowered_url:
         return "epub"
-    if lowered_path.endswith((".pdf", "/pdf")) or "/doi/pdf/" in lowered_url or "/doi/epdf/" in lowered_url:
+    if (
+        lowered_path.endswith((".pdf", "/pdf"))
+        or "/doi/pdf/" in lowered_url
+        or "/doi/epdf/" in lowered_url
+        or "/doi/pdfdirect/" in lowered_url
+        or "/stamppdf/" in lowered_url
+        or "/stamp/" in lowered_url
+    ):
         return "pdf"
     if lowered_path.endswith((".xml", "/xml", "/fulltextxml")) or "fulltextxml" in lowered_url:
         return "xml"
