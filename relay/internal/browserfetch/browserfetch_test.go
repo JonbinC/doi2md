@@ -58,3 +58,38 @@ func TestFetchAcceptsFulltextRecipe(t *testing.T) {
 		t.Fatalf("fulltext recipe must be accepted: %#v", result)
 	}
 }
+
+func TestHealthDoesNotExposeWorkerConfiguration(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/health" {
+			t.Fatalf("unexpected health request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer local-token" {
+			t.Fatalf("unexpected auth header: %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","session_active":true,"worker_url":"http://127.0.0.1:8788"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, token: "local-token", http: server.Client()}
+	health := client.Health(context.Background())
+	if !health.Configured || !health.Reachable || !health.SessionActive || health.Status != "ok" {
+		t.Fatalf("unexpected health: %#v", health)
+	}
+}
+
+func TestHealthReportsUnconfiguredWorker(t *testing.T) {
+	health := (*Client)(nil).Health(context.Background())
+	if health.Configured || health.Reachable || health.Status != "not_configured" {
+		t.Fatalf("unexpected health: %#v", health)
+	}
+}
+
+func TestFromEnvRejectsRemoteWorkerEndpoint(t *testing.T) {
+	t.Setenv(EnvWorkerURL, "https://worker.example.test")
+	t.Setenv(EnvWorkerToken, "local-token")
+	if client := FromEnv(); client != nil {
+		t.Fatal("browser worker token must not be sent to a remote endpoint")
+	}
+}

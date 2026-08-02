@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/websocket"
+	"github.com/mdtero/mdtero-relay/internal/browserfetch"
 	"github.com/mdtero/mdtero-relay/internal/campus"
 )
 
@@ -88,5 +89,34 @@ func TestRunOnceRegistersAndReturnsFetchResult(t *testing.T) {
 	}
 	if result["reason_code"] != "relay_url_domain_not_allowed" {
 		t.Fatalf("unexpected reason_code: %v", result["reason_code"])
+	}
+}
+
+func TestRelayCapabilitiesAdvertiseBrowserOnlyWhenWorkerIsReachable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","session_active":false}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(browserfetch.EnvWorkerURL, server.URL)
+	t.Setenv(browserfetch.EnvWorkerToken, "local-token")
+	client := browserfetch.FromEnv()
+	if client == nil {
+		t.Fatal("expected browser client from test environment")
+	}
+	caps := relayCapabilities(client)
+	if len(caps) != 3 || caps[1] != "browser_fetch" || caps[2] != "browser_fulltext" {
+		t.Fatalf("unexpected capabilities: %#v", caps)
+	}
+
+	t.Setenv(browserfetch.EnvWorkerURL, "http://127.0.0.1:1")
+	caps = relayCapabilities(browserfetch.FromEnv())
+	if len(caps) != 1 || caps[0] != "http_fetch" {
+		t.Fatalf("unreachable worker must not advertise browser capture: %#v", caps)
 	}
 }

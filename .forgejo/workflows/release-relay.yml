@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Relay semver to release, for example 0.1.0"
+        description: "Relay semver to release, for example 0.1.3"
         required: true
-        default: "0.1.0"
+        default: "0.1.3"
       publish_site:
         description: "Copy install scripts and binaries into the nextmdtero site repo"
         required: false
@@ -123,7 +123,7 @@ jobs:
           if [[ "$GOOS" == "windows" ]]; then
             output="${output}.exe"
           fi
-          go build -trimpath -ldflags "-s -w" -o "$output" ./cmd/mdtero-relay
+          go build -trimpath -ldflags "-s -w -X main.version=${RELAY_VERSION}" -o "$output" ./cmd/mdtero-relay
           if [[ "$GOOS" == "windows" ]]; then
             tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay.exe
           else

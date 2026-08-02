@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.2}"
+MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.3}"
 MDTERO_RELAY_BASE_URL="${MDTERO_RELAY_BASE_URL:-https://mdtero.com/releases/relay}"
 INSTALL_DIR="${MDTERO_RELAY_INSTALL_DIR:-${HOME}/.local/bin}"
 
@@ -14,7 +14,7 @@ Usage:
   curl -fsSL https://mdtero.com/relay | bash -s -- --api-key <key>
 
 Options:
-  --api-key <key>   Save your Mdtero API key during install
+  --api-key <key>   Use an Mdtero API key without opening browser login
   --label <name>    Optional relay label
   --dir <path>      Install directory (default: ~/.local/bin)
 EOF
@@ -108,8 +108,17 @@ if [[ -n "$LABEL" ]]; then
   INSTALL_ARGS+=(--label "$LABEL")
 fi
 
-echo "Setting up background service ..."
-"$TARGET" install "${INSTALL_ARGS[@]}"
+echo "Signing in to Mdtero and setting up the background service ..."
+if [[ -n "$API_KEY" ]]; then
+  "$TARGET" install "${INSTALL_ARGS[@]}"
+else
+  # Desktop installs have a visible browser available in the normal case.  Use
+  # the same account login as the Relay command so users do not have to place
+  # a long-lived API key in shell history.  Headless/server installs should
+  # pass --api-key explicitly or run `mdtero-relay login --browser=false`.
+  "$TARGET" login
+  "$TARGET" install "${INSTALL_ARGS[@]}"
+fi
 
 echo
 echo "Done. Campus relay is installed."
