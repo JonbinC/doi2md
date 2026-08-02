@@ -7,7 +7,8 @@ Standalone campus-network relay for Mdtero. Install this on a school/office mach
 If the same user has lawful institutional access in a local browser but a
 publisher challenges automated requests, Relay can optionally use a separate
 `Mdtero Access` Chrome profile. This is a **user-bound article capture**, not a
-browser proxy: it accepts only `article_html` and `article_pdf` for approved
+browser proxy: it accepts only `article_html`, `article_pdf`, and
+`article_fulltext` for approved
 publisher domains and returns no cookies, credentials, browser storage, or
 screenshots. It cannot grant access that the local user does not already have.
 
@@ -18,7 +19,9 @@ same Mdtero account's tasks.
 When a publisher needs a manual institution login or browser challenge, open
 the article URL locally with `mdtero-relay browser-open <publisher-url>`,
 complete that step in the visible **Mdtero Access** profile, then retry the
-task. The browser session remains local and is reused by later eligible tasks.
+task. `article_fulltext` prefers a verified publisher PDF and otherwise returns
+sanitized static article HTML. The browser session remains local and is reused
+by later eligible tasks.
 
 ## One-line install
 
