@@ -88,6 +88,24 @@ class ArticlePdfCandidateTests(unittest.TestCase):
             )
         )
 
+    def test_sanitized_article_html_preserves_static_article_payload(self):
+        class Page:
+            script = ""
+
+            def evaluate(self, script):
+                self.script = script
+                return "<!doctype html>\n<html><head><meta name='citation_title' content='Demo'></head><body><article>Text</article></body></html>"
+
+        page = Page()
+        html = self.worker.BrowserWorker._sanitized_article_html(page)
+
+        self.assertIn("citation_title", html)
+        self.assertIn("<article>", html)
+        self.assertIn("script,noscript,style,link,base,iframe", page.script)
+        self.assertIn("sensitiveName", page.script)
+        self.assertIn("safeMetaNames", page.script)
+        self.assertIn("srcset|data-srcset", page.script)
+
 
 if __name__ == "__main__":
     unittest.main()
