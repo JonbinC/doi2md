@@ -1,6 +1,6 @@
-"""Chrome native-messaging host for the Mdtero *dev* extension.
+"""Chromium native-messaging host for the Mdtero *dev* extension.
 
-Chrome launches this process for stdio length-prefixed JSON. The CLI also uses
+Chrome or Edge launches this process for stdio length-prefixed JSON. The CLI also uses
 the same module to enqueue/wait on filesystem jobs under the mdtero config dir.
 """
 

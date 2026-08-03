@@ -8,10 +8,17 @@
   "scriptInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh",
   "pypiInstallCommand": "uv tool install mdtero",
   "cliCommand": "mdtero",
+  "localAccess": {
+    "managedByCli": true,
+    "componentManifestUrl": "https://mdtero.com/releases/relay/manifest.json",
+    "desktopBehavior": "prepared automatically after installation and enabled after Mdtero sign-in",
+    "serverBehavior": "skipped on headless/server environments",
+    "browserFallback": "Mdtero browser extension remains available for current-tab or existing-session capture"
+  },
   "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
     "packageName": "mdtero",
-    "packageVersion": "0.2.0a25",
+    "packageVersion": "0.2.0a26",
     "packageManager": "uv",
     "runtimeInstallCommand": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
     "scriptInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh",
@@ -86,11 +93,11 @@
       "pythonRuntimeSourceOfTruth": "cli.runtimeInstallCommand",
       "agentSkillInstallSourceOfTruth": "targets[*].skillInstallCommand except openclaw",
       "openclawInstallSourceOfTruth": "targets[target=openclaw]",
-      "desktopPublicationMode": "retired from the current public install contract; the active launch path is CLI plus browser extension"
+      "desktopPublicationMode": "CLI-managed local access helper; browser extension is a fallback for current-tab/session capture"
     },
     "current": {
       "cli": {
-        "version": "0.2.0a25",
+        "version": "0.2.0a26",
         "packageName": "mdtero",
         "packageManager": "uv",
         "installCommand": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",

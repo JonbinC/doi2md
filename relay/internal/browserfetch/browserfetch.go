@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mdtero/mdtero-relay/internal/config"
 )
 
 const (
@@ -76,11 +78,11 @@ func FromEnv() *Client {
 }
 
 func loadLocalConfig() (string, string) {
-	home, err := os.UserHomeDir()
+	dir, err := config.Dir()
 	if err != nil {
 		return "", ""
 	}
-	path := filepath.Join(home, ".config", "mdtero-relay", "browser-worker.json")
+	path := filepath.Join(dir, "browser-worker.json")
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", ""

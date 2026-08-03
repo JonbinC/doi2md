@@ -8,6 +8,8 @@
 
 Mdtero turns papers into reusable Markdown packages for reading, translation, project research, and local agents.
 
+Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as the public client surfaces.
+
 **Languages:** English | [简体中文](./README_CN.md)
 
 ## Install
@@ -32,13 +34,18 @@ The installer supports `uv`, `pipx`, and Python fallbacks. `--agent <target>` in
 ```bash
 mdtero discover "thermal energy storage" --limit 5 --interactive
 mdtero parse <doi-or-url> --wait --timeout 300 --json
-mdtero parse --file paper.pdf --wait --timeout 600 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
 mdtero status <task-id> --wait --timeout 300 --json
 mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
 mdtero translate <task-id> --to zh-CN --wait --timeout 600 --json
 ```
 
-Use the browser extension when content depends on browser login, campus-network/session-bound access, a publisher challenge page, or current-page capture. The extension can hand the DOI, URL, PDF, EPUB, HTML, or XML artifact back to the CLI so route planning, raw upload, task polling, downloads, and structured failure fields remain visible.
+`mdtero doctor --json` returns safe auth/dependency/academic/Zotero/project/RAG summaries without echoing credentials.
+
+The CLI is the default path. Desktop installs prepare the local access helper
+automatically for campus-network and browser-required routes. Use the browser
+extension only for current-page capture or when an existing browser session is
+needed; it can hand DOI, URL, PDF, EPUB, HTML, or XML artifacts back to the CLI.
 
 ### Choose the surface for your environment
 
@@ -68,7 +75,9 @@ Zotero support is conservative: `mdtero zotero sync` adds Mdtero result notes an
 
 ## Browser And Agents
 
-Use the browser extension for a paper open in your browser, content accessed through your own session, or a file you want to upload. The extension and CLI share task history, downloads, and translation.
+Use the browser extension as a lightweight fallback for a paper open in your
+browser, content accessed through your own session, or a file you want to
+upload. The extension and CLI share task history, downloads, and translation.
 
 Install a local agent skill with:
 
@@ -84,6 +93,18 @@ The briefing provides safe task state, available downloads, citations, and sugge
 Mdtero helps process material you are permitted to access. Publisher subscriptions, institutional access, and source-specific credentials remain your responsibility. When a source needs your browser session or a local copy, use the extension or upload the saved file.
 
 Parser and source-selection implementation are service internals, not user configuration. The stable workflow is submit, check status, download, translate, and use the resulting Markdown in a project.
+
+## Product Boundary
+
+Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local `mdtero config academic` configuration. The CLI-managed local access helper and browser extension remain separate from provider credentials.
+
+## Shared `/api/v1` server contract
+
+The CLI, extension, dashboard, and MCP briefing expose this contract: `/api/v1/route`, `/api/v1/extension/route`, `/api/v1/tasks/parse`, `/api/v1/tasks/upload`, `/api/v1/tasks/{task_id}`, `/api/v1/tasks/{task_id}/download/{artifact}`, `/api/v1/discovery/search`, `/api/v1/tasks/translate`, `/api/v1/projects`, `/api/v1/projects/{project_id}/tasks/{task_id}/import`, `/api/v1/projects/{project_id}/rag/status`, `/api/v1/projects/{project_id}/rag/build`, and `/api/v1/projects/{project_id}/rag/query`.
+
+## Repo Map
+
+The Python package owns the CLI and local workflow; the `extension/` package is the lightweight browser fallback and `nextmdtero/` is the website/dashboard workspace.
 
 ## Documentation
 

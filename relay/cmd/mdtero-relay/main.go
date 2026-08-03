@@ -12,6 +12,7 @@ import (
 
 	"github.com/mdtero/mdtero-relay/internal/auth"
 	"github.com/mdtero/mdtero-relay/internal/browserfetch"
+	"github.com/mdtero/mdtero-relay/internal/browserworker"
 	"github.com/mdtero/mdtero-relay/internal/client"
 	"github.com/mdtero/mdtero-relay/internal/config"
 	"github.com/mdtero/mdtero-relay/internal/service"
@@ -19,7 +20,7 @@ import (
 
 // version is overridden by the release build with -ldflags -X main.version=...
 // so the binary and the published install manifest always agree.
-var version = "0.1.5"
+var version = "0.1.6"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -105,6 +106,14 @@ func runServe(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	worker, workerErr := browserworker.Start()
+	if workerErr != nil {
+		// Browser capture is an optional local enhancement. Campus HTTP relay
+		// remains usable when Python/Playwright is unavailable or a profile is
+		// temporarily busy.
+		fmt.Printf("Browser capture is unavailable; continuing with campus HTTP relay (%s).\n", workerErr)
+	}
+	defer worker.Stop()
 	if err := client.Run(cfg, client.Options{
 		Label:   *label,
 		Browser: browserfetch.FromEnv(),
@@ -327,6 +336,11 @@ func runInstall(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	if browserStatus, browserErr := browserworker.Ensure(); browserErr != nil {
+		fmt.Printf("Browser capture: skipped (%s). Campus HTTP relay remains available.\n", browserErr)
+	} else if browserStatus.Status == "ready" {
+		fmt.Println("Browser capture: prepared for this desktop and will start with the Relay.")
+	}
 
 	binaryPath, err := os.Executable()
 	if err != nil {
@@ -348,7 +362,7 @@ func runInstall(args []string) int {
 	fmt.Printf("Campus relay installed (%s).\n", status)
 	fmt.Println("It will start automatically on login and reconnect in the background.")
 	fmt.Println("Check status anytime with: mdtero-relay status")
-	fmt.Println("Browser capture is optional; status reports whether its local worker is ready.")
+	fmt.Println("Browser capture starts automatically on supported desktop installs; the extension remains a lightweight fallback.")
 	return 0
 }
 

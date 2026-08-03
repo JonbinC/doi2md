@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.5}"
+MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.6}"
 MDTERO_RELAY_BASE_URL="${MDTERO_RELAY_BASE_URL:-https://mdtero.com/releases/relay}"
 INSTALL_DIR="${MDTERO_RELAY_INSTALL_DIR:-${HOME}/.local/bin}"
 
@@ -85,6 +85,14 @@ fi
 TMP_DIR="$(mktemp -d)"
 tar -xzf "$ARCHIVE" -C "$TMP_DIR"
 install -m 0755 "$TMP_DIR/mdtero-relay" "$TARGET"
+WORKER_ROOT="${MDTERO_RELAY_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mdtero-relay}"
+if [[ -d "$TMP_DIR/browser_worker" ]]; then
+  mkdir -p "$WORKER_ROOT"
+  rm -rf "$WORKER_ROOT/browser_worker"
+  cp -R "$TMP_DIR/browser_worker" "$WORKER_ROOT/browser_worker"
+  chmod 700 "$WORKER_ROOT/browser_worker"
+  chmod 600 "$WORKER_ROOT/browser_worker"/*
+fi
 rm -rf "$TMP_DIR" "$ARCHIVE"
 
 case ":$PATH:" in

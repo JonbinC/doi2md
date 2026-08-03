@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 param(
   [string]$ApiKey = $env:MDTERO_API_KEY,
   [string]$Label = "",
-  [string]$Version = $(if ($env:MDTERO_RELAY_VERSION) { $env:MDTERO_RELAY_VERSION } else { "0.1.5" }),
+  [string]$Version = $(if ($env:MDTERO_RELAY_VERSION) { $env:MDTERO_RELAY_VERSION } else { "0.1.6" }),
   [string]$BaseUrl = $(if ($env:MDTERO_RELAY_BASE_URL) { $env:MDTERO_RELAY_BASE_URL } else { "https://mdtero.com/releases/relay" }),
   [string]$InstallDir = $(Join-Path $env:LOCALAPPDATA "Mdtero\bin")
 )
@@ -30,6 +30,15 @@ tar -xzf $Archive -C $InstallDir
 Remove-Item $Archive -Force
 if (-not (Test-Path $Target)) {
   Rename-Item (Join-Path $InstallDir "mdtero-relay") $Target
+}
+$workerRoot = if ($env:MDTERO_RELAY_DATA_DIR) { $env:MDTERO_RELAY_DATA_DIR } else { Join-Path $env:LOCALAPPDATA "Mdtero\relay" }
+$workerSource = Join-Path $InstallDir "browser_worker"
+if (Test-Path $workerSource) {
+  New-Item -ItemType Directory -Force -Path $workerRoot | Out-Null
+  $workerTarget = Join-Path $workerRoot "browser_worker"
+  if (Test-Path $workerTarget) { Remove-Item $workerTarget -Recurse -Force }
+  Copy-Item $workerSource $workerTarget -Recurse -Force
+  Remove-Item $workerSource -Recurse -Force
 }
 
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")

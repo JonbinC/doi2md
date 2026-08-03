@@ -114,6 +114,14 @@ install_mdtero_runtime() {
     fail "mdtero was installed but is not on PATH. Add \$HOME/.local/bin to PATH or open a new shell, then rerun mdtero setup."
   fi
   run mdtero --version
+  # The native campus/browser helper is a CLI-managed component.  It is
+  # intentionally best-effort here: setup will register it after sign-in, and
+  # headless/server installs simply skip it.
+  if mdtero __ensure-local-access --json >/dev/null 2>&1; then
+    printf '%s\n' "Local access helper prepared when this machine supports it."
+  else
+    printf '%s\n' "Local access helper will be prepared by mdtero setup when needed."
+  fi
   if mdtero doctor --json >/dev/null 2>&1; then
     printf '%s\n' "mdtero doctor completed."
   else

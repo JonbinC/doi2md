@@ -6,7 +6,7 @@ Standalone campus-network relay for Mdtero. Install this on a school/office mach
 
 | Your setup | What to install | What it covers |
 | --- | --- | --- |
-| Campus desktop | Browser extension; optional Relay | Readable pages and files already open in the browser. Add Relay when a cloud Agent must use this computer's campus route. |
+| Campus desktop | Mdtero CLI (Relay is prepared automatically) | Campus HTTP and an isolated authorized browser profile are available to cloud Agents. The extension remains a lightweight current-tab fallback. |
 | Server only | Mdtero CLI/API key | OA, publisher APIs, normal HTTP, and uploads. There is no browser session on the server. |
 | Server plus campus desktop | CLI on the server, Relay on the campus computer | Recommended for user-authorized closed or bot-protected publisher content. The Agent stays in the cloud; the desktop performs acquisition. |
 | Server plus campus VPN | CLI/API key and VPN/proxy | IP-authorized machine-readable sources. A VPN alone does not supply browser cookies or a user login. |
@@ -17,30 +17,31 @@ does not need an inbound port, public IP, or SSH tunnel. The cloud Agent sends
 an approved article request; Relay returns only a verified PDF or sanitized
 static article HTML for parsing.
 
-## Optional: authorized local browser
+## Authorized local browser
 
 If the same user has lawful institutional access in a local browser but a
-publisher challenges automated requests, Relay can optionally use a separate
+publisher challenges automated requests, Relay uses a separate
 `Mdtero Access` Chrome profile. This is a **user-bound article capture**, not a
 browser proxy: it accepts only `article_html`, `article_pdf`, and
 `article_fulltext` for approved
 publisher domains and returns no cookies, credentials, browser storage, or
 screenshots. It cannot grant access that the local user does not already have.
 
-The native Relay always provides campus-network HTTP fetch. Browser capture is
-an opt-in local capability for the third setup and is advertised to the
-backend as `browser_fetch` / `browser_fulltext`. `mdtero-relay status` reports
+The native Relay always provides campus-network HTTP fetch. On a supported
+desktop install, the CLI packages and starts the browser worker automatically
+(using an installed Chrome/Edge or a managed Playwright Chromium). Browser
+capture is advertised to the backend as `browser_fetch` / `browser_fulltext`.
+`mdtero-relay status` reports
 whether the worker is configured and reachable without showing its token,
-profile path, or CDP endpoint. See
-[`browser_worker/README.md`](browser_worker/README.md) for the one-time local
-worker setup.
+profile path, or CDP endpoint. Headless/server installs skip the worker.
 
 When a publisher needs a manual institution login or browser challenge, open
 the article URL locally with `mdtero-relay browser-open <publisher-url>`,
 complete that step in the visible **Mdtero Access** profile, then retry the
 task. `article_fulltext` prefers a verified publisher PDF and otherwise returns
 sanitized static article HTML. The browser session remains local and is reused
-by later eligible tasks.
+by later eligible tasks. The extension remains available when a user wants to
+capture the page already open in their ordinary browser.
 
 ## One-line install
 
@@ -113,8 +114,8 @@ Forgejo/GitHub workflow: `public/.forgejo/workflows/release-relay.yml`
 
 ```bash
 # Tag-driven release
-git tag relay/v0.1.5
-git push origin relay/v0.1.5
+git tag relay/v0.1.6
+git push forgejo relay/v0.1.6
 
 # Manual release
 # Forgejo: run "Release Campus Relay" with the desired version
@@ -125,7 +126,7 @@ Local publish to nextmdtero static assets:
 ```bash
 cd public/relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.5
+MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.6
 ```
 
 Required Forgejo secrets/vars for automatic site publish:
