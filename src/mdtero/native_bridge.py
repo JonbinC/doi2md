@@ -1,4 +1,4 @@
-"""Install/diagnose the Chrome native-messaging host and enqueue capture jobs."""
+"""Install/diagnose the Chromium native-messaging host and enqueue captures."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def write_host_launcher() -> Path:
     launcher = host_launcher_path()
     # Prefer the same interpreter running mdtero.
     python = Path(sys.executable).resolve()
-    # Copy a minimal importable package into a stable config path so Chrome can
+    # Copy a minimal importable package into a stable config path so Chromium can
     # launch the host even when the developer checkout lived under /tmp.
     import shutil
 
@@ -107,7 +107,7 @@ exec "{python}" -c 'from mdtero.native_host import main; raise SystemExit(main()
         pass
     env_hint = config_native_dir() / "README.txt"
     env_hint.write_text(
-        "Chrome launches mdtero-native-host via this wrapper.\n"
+        "Chromium browsers launch mdtero-native-host via this wrapper.\n"
         f"Host name: {NATIVE_HOST_NAME}\n"
         f"Dev extension id: {DEV_EXTENSION_ID}\n"
         f"Jobs dir: {jobs_dir()}\n"
@@ -160,7 +160,7 @@ def install_native_host(*, extension_ids: list[str] | None = None) -> dict[str, 
         "next_steps": [
             "Load the Mdtero *dev* extension unpacked (build with npm run build:dev).",
             "Confirm chrome://extensions ID matches the installed allowed_origins (or pass --extension-id).",
-            "Keep Chrome open and signed into Mdtero + publisher/campus session.",
+        "Keep Chrome or Edge open and signed into Mdtero + publisher/campus session.",
             "Run: mdtero capture <doi-or-url> --wait --json",
         ],
     }
@@ -220,7 +220,7 @@ def request_native_capture(
         "opened_urls": opened,
         "host_doctor": doctor,
         "action_hint": (
-            "Chrome native host job queued. Keep the Mdtero *dev* extension loaded and signed in; "
+            "Chromium native host job queued. Keep the Mdtero *dev* extension loaded and signed in; "
             "it will dequeue this job, capture HTML, and upload via /api/v1/tasks/upload."
         ),
     }

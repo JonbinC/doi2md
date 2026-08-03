@@ -11,7 +11,7 @@ The current public product shape is:
 - Dashboard task history can copy `dashboard_handoff_json`; agents must treat it as a starting state, validate it with `task_status`, preserve task ids, route diagnostics, parse diagnostics, download artifacts, and next commands, then continue through `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query`.
 - Agent skill installation through `mdtero agent install`; the npm runtime path is retired.
 - Backend-owned auth, quota, task state, document parsing, discovery fallback, translation, and RAG with structured `source_nodes` / `evidence_pack` / `citation_contract` output for agents.
-- Agent-facing CLI JSON and MCP payloads must keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible while sanitizing signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters.
+- Agent-facing CLI JSON and MCP payloads must keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible while sanitizing signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters. Structured failures retain `primary_failure` and `failed_steps` for continuation.
 - MCP briefing payloads must expose `mcp_tool_plan`: a structured agent playbook with `step`, `tool`, `when`, `arguments`, `success_signal`, and `failure_fields` so local agents choose `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `server_rag_status`, `server_rag_build`, or `rag_query` without guessing from prose.
 - Zotero reverse sync is limited to Mdtero result notes/tags for succeeded Zotero-origin tasks; it must not be described as bibliographic metadata rewriting.
 

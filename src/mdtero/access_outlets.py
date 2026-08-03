@@ -29,13 +29,16 @@ def carsi_cookies_path() -> Path:
 
 def suggest_carsi_locale() -> bool:
     """Soft locale hint only — never auto-enable from IP/geo."""
-    lang = (
-        str(os.environ.get("LC_ALL") or "")
-        or str(os.environ.get("LC_MESSAGES") or "")
-        or str(os.environ.get("LANG") or "")
-        or str(locale.getdefaultlocale()[0] or "")
-    ).lower()
-    if "zh_cn" in lang or lang.startswith("zh-cn") or lang.startswith("zh_hans"):
+    locale_values = [
+        str(os.environ.get("LC_ALL") or ""),
+        str(os.environ.get("LC_MESSAGES") or ""),
+        str(os.environ.get("LANG") or ""),
+        str(locale.getdefaultlocale()[0] or ""),
+    ]
+    if any(
+        "zh_cn" in lang.lower() or lang.lower().startswith("zh-cn") or lang.lower().startswith("zh_hans")
+        for lang in locale_values
+    ):
         return True
     tz = str(os.environ.get("TZ") or "").strip()
     if tz in {"Asia/Shanghai", "Asia/Chongqing", "Asia/Urumqi", "Asia/Harbin"}:

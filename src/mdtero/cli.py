@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import shutil
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -40,6 +41,7 @@ from .extension_handoff import (
 )
 from .native_bridge import install_native_host, native_host_doctor, request_native_capture
 from .network import ProxyValidationError, SUPPORTED_PROXY_SCHEMES, assert_required_campus_proxy, normalize_proxy_url, proxy_settings_from_config
+from .local_access import ensure_local_access, local_access_status
 from .onboarding import (
     ACADEMIC_OPTIONS,
     GENERIC_RAG_QUERY_COMMAND,
@@ -84,6 +86,9 @@ RAG_MCP_SERVE_COMMAND = "mdtero mcp serve"
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    if raw_args and raw_args[0] == "__ensure-local-access":
+        return cmd_access_ensure(argparse.Namespace(json="--json" in raw_args))
     parser = build_parser()
     args = parser.parse_args(argv)
     if not hasattr(args, "func"):
@@ -198,20 +203,20 @@ def build_parser() -> argparse.ArgumentParser:
     extension_install_host = _cmd(
         extension_sub,
         "install-host",
-        "Install the Chrome native-messaging host for the unpackaged/dev Mdtero extension.",
+        "Install the Chromium native-messaging host for the unpackaged/dev Mdtero extension.",
         cmd_extension_install_host,
     )
     extension_install_host.add_argument(
         "--extension-id",
         action="append",
         default=[],
-        help="Extra Chrome extension ID to allow (repeatable). Dev default ID is always included.",
+        help="Extra Chrome/Edge extension ID to allow (repeatable). Dev default ID is always included.",
     )
     extension_install_host.add_argument("--json", action="store_true")
     extension_doctor = _cmd(
         extension_sub,
         "doctor",
-        "Check whether the Chrome native-messaging host is installed.",
+        "Check whether the Chromium native-messaging host is installed.",
         cmd_extension_doctor,
     )
     extension_doctor.add_argument("--json", action="store_true")
@@ -223,7 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
         cmd_capture,
     )
     capture.add_argument("input")
-    capture.add_argument("--open-url", help="Override the article URL opened in Chrome.")
+    capture.add_argument("--open-url", help="Override the article URL opened in the default browser.")
     capture.add_argument("--no-open", action="store_true", help="Do not open the article URL in a browser.")
     capture.add_argument("--wait", action="store_true", help="Wait until the extension completes the capture job.")
     capture.add_argument("--timeout", type=float, default=300.0)
@@ -809,6 +814,11 @@ def cmd_setup(_args: argparse.Namespace) -> int:
             headless_auth = True
     _configure_academic(cfg, console)
     _configure_detected_agent_skills(console, skip_prompt=headless_auth)
+    local_access = ensure_local_access(cfg)
+    if local_access.get("status") in {"ready", "installed"}:
+        console.print("Local access helper: ready for eligible campus/browser routes.")
+    elif local_access.get("status") == "unavailable":
+        console.print("Local access helper: unavailable; CLI/API routes remain available.")
     console.print("\n[bold green]Configuration complete.[/bold green]")
     _print_next_steps(console)
     return 0
@@ -844,12 +854,26 @@ def _cmd_setup_json(_args: argparse.Namespace) -> int:
         print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
         return 1
     headless = api_key_arg is not None or cfg.api_key_source == "MDTERO_API_KEY"
-    payload = _setup_summary_payload(cfg, auth_mode=auth_mode, headless=headless, saved_config=saved_config)
+    local_access = ensure_local_access(cfg)
+    payload = _setup_summary_payload(
+        cfg,
+        auth_mode=auth_mode,
+        headless=headless,
+        saved_config=saved_config,
+        local_access=local_access,
+    )
     print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
     return 0
 
 
-def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool, saved_config: bool) -> dict[str, Any]:
+def _setup_summary_payload(
+    cfg: MdteroConfig,
+    *,
+    auth_mode: str,
+    headless: bool,
+    saved_config: bool,
+    local_access: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     academic = _academic_config_summary(cfg, path=config_path(), saved=False)
     dependencies = _local_dependency_summary()
     agent_status: list[dict[str, Any]] = []
@@ -885,6 +909,7 @@ def _setup_summary_payload(cfg: MdteroConfig, *, auth_mode: str, headless: bool,
             "application_links": academic["application_links"],
         },
         "dependencies": dependencies,
+        "local_access": local_access or local_access_status(),
         "agents": {
             "detection_skipped": agent_detection_skipped,
             "status": agent_status,
@@ -1080,6 +1105,7 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
         ("Config", "ok" if config_path().exists() else "not created", str(config_path())),
         ("API base", "ok", cfg.api_base_url),
         ("Proxy", "required" if cfg.campus_proxy_required else ("configured" if cfg.effective_proxy_url else "optional"), _proxy_config_detail(cfg)),
+        _local_access_row(),
         ("Campus relay", "online" if relay_status.get("connected") else ("offline" if relay_status.get("status") != "skipped" else "optional"), _relay_config_detail(relay_status)),
         doctor_access_row(cfg, relay_connected=bool(relay_status.get("connected"))),
         ("Install boundary", str(install_boundary["status"]), str(install_boundary["action_hint"])),
@@ -1098,6 +1124,13 @@ def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] |
     return rows
 
 
+def _local_access_row() -> tuple[str, str, str]:
+    payload = local_access_status()
+    status = str(payload.get("status") or "unknown")
+    mapped = "ready" if status == "ready" else ("available" if status == "available" else ("optional" if status == "not_applicable" else status))
+    return ("Local access", mapped, str(payload.get("action_hint") or ""))
+
+
 def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None, server_pdf_fallback: dict[str, Any] | None = None) -> dict[str, Any]:
     row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
@@ -1113,6 +1146,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "config_path": str(config_path()),
         "api_base_url": cfg.api_base_url,
         "proxy": _proxy_config_payload(cfg),
+        "local_access": local_access_status(),
         "relay": relay_status,
         "access": access_status(cfg, relay_connected=bool(relay_status.get("connected"))),
         "install_boundary": _install_boundary_summary(),
@@ -4278,16 +4312,31 @@ def cmd_access_status(args: argparse.Namespace) -> int:
         except Exception:
             relay_connected = False
     payload = access_status(cfg, relay_connected=relay_connected)
+    payload["local_access"] = local_access_status()
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
     console = Console()
+    local_access = payload.get("local_access") if isinstance(payload.get("local_access"), dict) else {}
+    console.print(f"Local access helper: {local_access.get('status') or 'unknown'}")
     console.print("Access outlets (campus relay ≈ remote egress; CARSI ≈ local SSO cookies)")
     for row in payload.get("outlets") or []:
         console.print(f"- {row.get('outlet')}: enabled={row.get('enabled')} ready={row.get('ready')} — {row.get('detail')}")
     if payload.get("carsi_suggested"):
         console.print("Hint: Chinese locale detected; CARSI is optional via `mdtero access carsi enable`.")
     return 0
+
+
+def cmd_access_ensure(args: argparse.Namespace) -> int:
+    """Internal installer hook; keep the user-facing workflow on `mdtero setup`."""
+
+    cfg = load_config()
+    payload = ensure_local_access(cfg)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        Console().print(str(payload.get("action_hint") or "Local access helper checked."))
+    return 0 if payload.get("status") not in {"unavailable", "error"} else 1
 
 
 def cmd_access_carsi_enable(args: argparse.Namespace) -> int:

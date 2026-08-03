@@ -15,6 +15,9 @@ from urllib.parse import quote, urlparse
 EXTENSION_CHROME_WEBSTORE_URL = (
     "https://chromewebstore.google.com/detail/mdtero/knpihhcooldgedbklgjghebijcpejibp"
 )
+EXTENSION_EDGE_ADDONS_URL = (
+    "https://microsoftedge.microsoft.com/addons/detail/mdtero/bgikfidgigjnkgfdhhopojgpckilknic"
+)
 EXTENSION_DEV_ZIP_URL = "https://mdtero.com/downloads/mdtero-extension-dev.zip"
 EXTENSION_INSTALL_DOC_URL = "https://mdtero.com/docs/install"
 
@@ -107,11 +110,12 @@ def build_extension_handoff(
         "install_url": EXTENSION_CHROME_WEBSTORE_URL,
         "extension": {
             "chrome_webstore_url": EXTENSION_CHROME_WEBSTORE_URL,
+            "edge_addons_url": EXTENSION_EDGE_ADDONS_URL,
             "dev_zip_url": EXTENSION_DEV_ZIP_URL,
             "install_doc_url": EXTENSION_INSTALL_DOC_URL,
         },
         "steps": [
-            "Install the Mdtero extension from the Chrome Web Store (or load the dev zip for local testing).",
+            "Install the Mdtero extension from Chrome Web Store or Microsoft Edge Add-ons (or load the dev zip for local testing).",
             "Sign in to Mdtero Account from the extension popup.",
             "Open the article URL in the same browser with your publisher/campus login.",
             "Click Parse in the extension popup (or upload a saved PDF/EPUB/HTML/XML).",

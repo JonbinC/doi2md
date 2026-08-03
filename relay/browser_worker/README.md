@@ -1,6 +1,6 @@
 # Authorized Browser Worker
 
-This optional, loopback-only sidecar captures an authorized publisher article
+This loopback-only sidecar captures an authorized publisher article
 for `mdtero-relay`: it prefers the publisher PDF after the user has authorized
 access in the dedicated `Mdtero Access` browser profile, otherwise it can return
 sanitized static HTML only for a complete readable article.
@@ -19,9 +19,9 @@ query/fragment values. It is not a page mirror and cannot be used to replay a
 browser session elsewhere.
 
 This is the browser-enabled part of the **server plus campus desktop** setup.
-Most desktop users should start with the browser extension instead. Enable
-this worker when the Agent runs on a separate server and needs the campus
-computer to acquire a publisher artifact on its behalf.
+The native Relay package prepares and supervises it automatically on supported
+desktop installs. The browser extension remains a lightweight fallback for a
+page already open in the user's ordinary browser.
 
 Run it only on a machine controlled by the authorized user. The normal
 background configuration is an owner-readable file at
@@ -41,7 +41,8 @@ export MDTERO_BROWSER_WORKER_TOKEN=<same-random-token>
 python3 mdtero_browser_worker.py
 ```
 
-For a local checkout, install the sidecar once with:
+For a local checkout, the native Relay will perform this setup. To repair an
+older install manually, use:
 
 ```bash
 cd relay/browser_worker

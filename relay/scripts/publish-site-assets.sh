@@ -27,9 +27,26 @@ install -m 0755 "$RELAY_ROOT/scripts/install.sh" "$SITE_ROOT/public/relay"
 install -m 0644 "$RELAY_ROOT/scripts/install.ps1" "$SITE_ROOT/public/relay.ps1"
 
 MANIFEST="$SITE_ROOT/public/releases/relay/manifest.json"
+sha256_for() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+  else
+    shasum -a 256 "$path" | awk '{print $1}'
+  fi
+}
+
+SHA_DARWIN_AMD64="$(sha256_for "$DIST/mdtero-relay-darwin-amd64.tgz")"
+SHA_DARWIN_ARM64="$(sha256_for "$DIST/mdtero-relay-darwin-arm64.tgz")"
+SHA_LINUX_AMD64="$(sha256_for "$DIST/mdtero-relay-linux-amd64.tgz")"
+SHA_LINUX_ARM64="$(sha256_for "$DIST/mdtero-relay-linux-arm64.tgz")"
+SHA_WINDOWS_AMD64="$(sha256_for "$DIST/mdtero-relay-windows-amd64.tgz")"
+SHA_WINDOWS_ARM64="$(sha256_for "$DIST/mdtero-relay-windows-arm64.tgz")"
 cat > "$MANIFEST" <<EOF
 {
   "product": "mdtero-relay",
+  "managed_by_cli": true,
+  "component_manifest_url": "https://mdtero.com/releases/relay/manifest.json",
   "latest_version": "$VERSION",
   "install_script_url": "https://mdtero.com/relay",
   "install_script_url_windows": "https://mdtero.com/relay.ps1",
@@ -41,6 +58,14 @@ cat > "$MANIFEST" <<EOF
     "linux-amd64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-linux-amd64.tgz",
     "windows-amd64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-windows-amd64.tgz",
     "windows-arm64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-windows-arm64.tgz"
+  },
+  "sha256": {
+    "darwin-amd64": "$SHA_DARWIN_AMD64",
+    "darwin-arm64": "$SHA_DARWIN_ARM64",
+    "linux-amd64": "$SHA_LINUX_AMD64",
+    "linux-arm64": "$SHA_LINUX_ARM64",
+    "windows-amd64": "$SHA_WINDOWS_AMD64",
+    "windows-arm64": "$SHA_WINDOWS_ARM64"
   },
   "one_line_install": {
     "macos": "curl -fsSL https://mdtero.com/relay | bash",

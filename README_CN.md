@@ -38,13 +38,15 @@ mdtero download <task-id> paper_md --output-dir ./mdtero-output --json
 mdtero translate <task-id> --to zh-CN --wait --timeout 600 --json
 ```
 
-当内容依赖浏览器登录、校园网/登录态、出版社 challenge 页或当前页 capture 时，使用浏览器扩展。扩展可以把 DOI、URL、PDF、EPUB、HTML 或 XML artifact 交还给 CLI，让 route planning、raw upload、任务轮询、下载和结构化失败字段保持可见。
+`mdtero doctor --json` 会返回脱敏的 auth/dependency/academic/Zotero/project/RAG 摘要，不会回显凭据。
+
+CLI 是默认路径。桌面安装会自动准备本地访问能力，用于校园网络和需要浏览器的资源。浏览器扩展只作为当前页面捕获或必须使用既有浏览器登录态时的轻量备用方案；它仍可把 DOI、URL、PDF、EPUB、HTML 或 XML 资源交回 CLI。
 
 ### 按环境选择产品
 
 | 环境 | 推荐入口 | 能解决 | 边界 |
 | --- | --- | --- | --- |
-| 校园网中的 Win/Mac 完整桌面 | 扩展 + 可选本机 Relay | OA、校园 IP 路由、浏览器登录/挑战、用户已有权限的闭源文献 | 登录或验证由用户在可见浏览器完成。 |
+| 校园网中的 Win/Mac 完整桌面 | CLI + 自动准备的本地访问能力 | OA、校园 IP 路由、浏览器登录/挑战、用户已有权限的闭源文献 | 已有普通浏览器会话仍可用扩展兜底。 |
 | 只有服务器上的 CLI/Agent | CLI/API | OA、结构化 API、普通 HTTP、VPN/IP 授权资源和上传 | 没有浏览器会话；仅 WAF/登录态的闭源文献需要文件或另一台桌面。 |
 | 服务器 Agent + 另一台校园桌面 | 服务器 CLI/API + 校园电脑上的 Relay；扩展作为手动兜底 | 校园电脑完成授权浏览器采集，服务器负责云端解析 | 扩展本身需要用户点击；若要让服务器主动请求文章，应使用 Relay。 |
 | 服务器连接校园 VPN、但没有浏览器 | CLI/API 直接走 VPN 或代理 | 按 IP 放行的机器可读 PDF/XML/HTML | VPN 只提供网络出口，不提供浏览器 Cookie 或挑战完成。 |
@@ -66,7 +68,7 @@ Zotero 支持采用保守方式：`mdtero zotero sync` 会为对应的成功项�
 
 ## 浏览器与 Agent
 
-浏览器中已打开论文、内容依赖你自己的登录态，或需要上传文件时，请使用浏览器扩展。扩展与 CLI 共用任务历史、下载和翻译。
+浏览器扩展是轻量备用入口，适用于浏览器中已打开论文、内容依赖你自己的登录态，或需要上传文件的情况。扩展与 CLI 共用任务历史、下载和翻译。
 
 安装本地 agent skill：
 
@@ -82,6 +84,12 @@ briefing 会提供安全的任务状态、可下载成果、引文和建议的�
 Mdtero 用于处理你有权访问的内容。出版社订阅、机构访问和来源专用凭据仍由用户自行负责。来源需要你的浏览器登录态或本地副本时，请使用扩展或上传已保存文件。
 
 解析和来源选择实现属于服务内部，不是用户配置项。稳定流程是提交、查看状态、下载、翻译，再在项目中使用生成的 Markdown。
+
+## 产品边界
+
+Mdtero Account 是 Mdtero API key、额度、计费、历史和安装提示词的控制面。Academic source keys 保存在本地 `mdtero config academic` 配置中。CLI 管理的本地访问能力和浏览器扩展与来源凭据保持分离。
+
+所有输入入口共用同一组 `/api/v1` 服务端契约：`/api/v1/route`、`/api/v1/extension/route`、`/api/v1/tasks/parse`、`/api/v1/tasks/upload`、`/api/v1/tasks/{task_id}`、`/api/v1/tasks/{task_id}/download/{artifact}`、`/api/v1/discovery/search`、`/api/v1/tasks/translate`、`/api/v1/projects`、`/api/v1/projects/{project_id}/tasks/{task_id}/import`、`/api/v1/projects/{project_id}/rag/status`、`/api/v1/projects/{project_id}/rag/build` 和 `/api/v1/projects/{project_id}/rag/query`。CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract。
 
 ## 文档
 

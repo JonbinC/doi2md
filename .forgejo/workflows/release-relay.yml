@@ -124,10 +124,12 @@ jobs:
             output="${output}.exe"
           fi
           go build -trimpath -ldflags "-s -w -X main.version=${RELAY_VERSION}" -o "$output" ./cmd/mdtero-relay
+          mkdir -p "dist/v${RELAY_VERSION}/browser_worker"
+          cp browser_worker/mdtero_browser_worker.py browser_worker/requirements.txt "dist/v${RELAY_VERSION}/browser_worker/"
           if [[ "$GOOS" == "windows" ]]; then
-            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay.exe
+            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay.exe browser_worker
           else
-            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay
+            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay browser_worker
           fi
 
       - name: Upload artifact
