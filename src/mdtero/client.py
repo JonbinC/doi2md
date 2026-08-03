@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import random
+import posixpath
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
@@ -44,6 +47,10 @@ class DownloadResult:
 
     def __str__(self) -> str:
         return str(self.path)
+
+
+_MARKDOWN_IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\(([^)\n]+)\)")
+_HTML_IMAGE_SRC_RE = re.compile(r'(<img\b[^>]*\bsrc=["\'])([^"\']+)(["\'])', re.IGNORECASE)
 
 
 class MdteroClient:
@@ -216,7 +223,10 @@ class MdteroClient:
             raise
         original_filename = _filename_from_disposition(response.headers.get("content-disposition"), artifact)
         target = output_dir / _safe_download_filename(filename or original_filename, fallback=original_filename)
-        target.write_bytes(response.content)
+        body = response.content
+        target.write_bytes(body)
+        if artifact.endswith("_md") or artifact == "paper_md":
+            self._materialize_markdown_assets(task_id, target)
         return DownloadResult(
             path=target,
             filename=original_filename,
@@ -229,6 +239,84 @@ class MdteroClient:
             parse_billable=_bool_header_value(response.headers, "x-mdtero-parse-billable"),
             parse_reason_codes=_csv_header_values(response.headers, "x-mdtero-parse-reason-codes"),
         )
+
+    def _materialize_markdown_assets(self, task_id: str, markdown_path: Path) -> None:
+        """Make task-hosted images usable beside a downloaded Markdown file.
+
+        The API rewrites local task assets to authenticated task URLs so that
+        browser/API consumers can render them.  A downloaded Markdown file has
+        no request headers, however, and would otherwise contain links that
+        fail when opened locally.  Fetch only URLs that identify this task's
+        asset endpoint, plus relative asset references from older responses;
+        arbitrary publisher URLs are left untouched.
+        """
+        try:
+            markdown_text = markdown_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return
+
+        targets = [match.group(1) for match in _MARKDOWN_IMAGE_LINK_RE.finditer(markdown_text)]
+        targets.extend(match.group(2) for match in _HTML_IMAGE_SRC_RE.finditer(markdown_text))
+        if not targets:
+            return
+
+        asset_locations: dict[str, str] = {}
+        for raw_target in dict.fromkeys(targets):
+            asset_key = _task_asset_key(raw_target, task_id)
+            if not asset_key or asset_key in asset_locations:
+                continue
+
+            local_relative = _local_asset_relative_path(asset_key, markdown_path.stem or "paper")
+            local_path = markdown_path.parent / local_relative
+            if not _path_is_within(markdown_path.parent, local_path):
+                continue
+            if not local_path.exists():
+                try:
+                    response = self._raw_request(
+                        "GET",
+                        f"/api/v1/tasks/{task_id}/assets/{quote(asset_key, safe='/')}",
+                    )
+                except (httpx.HTTPError, OSError, TimeoutError):
+                    # Asset localization is best-effort; keep the Markdown
+                    # artifact usable when one auxiliary request is flaky.
+                    continue
+                if response.status_code != 200 or not response.content:
+                    continue
+                content_type = str(response.headers.get("content-type") or "").lower()
+                if content_type.startswith("text/") or content_type.startswith("application/json"):
+                    continue
+                try:
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    local_path.write_bytes(response.content)
+                except OSError:
+                    continue
+            asset_locations[asset_key] = local_relative.as_posix()
+
+        if not asset_locations:
+            return
+
+        def replace_markdown_link(match: re.Match[str]) -> str:
+            raw_target = match.group(1)
+            asset_key = _task_asset_key(raw_target, task_id)
+            local_target = asset_locations.get(asset_key or "")
+            if not local_target:
+                return match.group(0)
+            return match.group(0).replace(raw_target, _replace_markdown_target(raw_target, local_target), 1)
+
+        def replace_html_image(match: re.Match[str]) -> str:
+            asset_key = _task_asset_key(match.group(2), task_id)
+            local_target = asset_locations.get(asset_key or "")
+            if not local_target:
+                return match.group(0)
+            return f"{match.group(1)}{local_target}{match.group(3)}"
+
+        rewritten = _MARKDOWN_IMAGE_LINK_RE.sub(replace_markdown_link, markdown_text)
+        rewritten = _HTML_IMAGE_SRC_RE.sub(replace_html_image, rewritten)
+        if rewritten != markdown_text:
+            try:
+                markdown_path.write_text(rewritten, encoding="utf-8")
+            except OSError:
+                return
 
     def wait(self, task_id: str, *, interval: float = 3.0, timeout: float = 600.0) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
@@ -603,6 +691,57 @@ def _safe_download_filename(value: str, *, fallback: str) -> str:
     if not cleaned or cleaned in {".", ".."}:
         cleaned = Path(str(fallback or "").strip()).name
     return cleaned or "download.bin"
+
+
+def _task_asset_key(raw_target: str, task_id: str) -> str | None:
+    target = str(raw_target or "").strip()
+    if target.startswith("<") and ">" in target:
+        target = target[1 : target.index(">")].strip()
+    elif " " in target:
+        target = target.split(None, 1)[0]
+    if not target:
+        return None
+
+    parsed = urlsplit(target)
+    path = unquote(parsed.path or "").replace("\\", "/")
+    marker = f"/tasks/{task_id}/assets/"
+    if parsed.scheme or parsed.netloc or path.startswith("/"):
+        if marker not in path:
+            return None
+        path = path.split(marker, 1)[1]
+
+    normalized = posixpath.normpath(path.lstrip("/"))
+    if normalized in {"", ".", ".."} or normalized.startswith("../"):
+        return None
+    return normalized
+
+
+def _local_asset_relative_path(asset_key: str, document_stem: str) -> Path:
+    parts = [part for part in posixpath.normpath(asset_key).split("/") if part and part != "."]
+    if parts and parts[0] in {"images", "assets", "source"}:
+        parts = parts[1:]
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(document_stem or "paper")).strip("._") or "paper"
+    return Path("images") / safe_stem / Path(*parts)
+
+
+def _path_is_within(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.resolve(strict=False).relative_to(root.resolve(strict=False))
+        return True
+    except ValueError:
+        return False
+
+
+def _replace_markdown_target(raw_target: str, replacement: str) -> str:
+    raw = str(raw_target or "")
+    leading = raw[: len(raw) - len(raw.lstrip())]
+    stripped = raw.strip()
+    if stripped.startswith("<") and ">" in stripped:
+        suffix = stripped[stripped.index(">") + 1 :]
+        return f"{leading}<{replacement}>{suffix}"
+    bits = stripped.split(None, 1)
+    suffix = f" {bits[1]}" if len(bits) == 2 else ""
+    return f"{leading}{replacement}{suffix}"
 
 
 def _discovery_failure_payload(exc: Exception) -> dict[str, Any]:
