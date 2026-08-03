@@ -3076,6 +3076,73 @@ def test_client_download_captures_quality_headers(monkeypatch, tmp_path: Path):
     assert result.parse_reason_codes == ("content_incomplete", "abstract_only")
 
 
+def test_client_download_materializes_authenticated_markdown_assets(monkeypatch, tmp_path: Path):
+    download_request = httpx.Request("GET", "https://api.mdtero.com/api/v1/tasks/task-1/download/paper_md")
+    asset_request = httpx.Request("GET", "https://api.mdtero.com/api/v1/tasks/task-1/assets/images/fig1.png")
+    calls = []
+
+    def fake_raw_request(self, method, path, **kwargs):
+        calls.append((method, path))
+        if path.endswith("/download/paper_md"):
+            return httpx.Response(
+                200,
+                request=download_request,
+                content=b"# Demo\n\n![Figure](https://api.mdtero.com/tasks/task-1/assets/images/fig1.png)\n",
+                headers={
+                    "content-type": "text/markdown",
+                    "content-disposition": 'attachment; filename="paper.md"',
+                },
+            )
+        assert path == "/api/v1/tasks/task-1/assets/images/fig1.png"
+        return httpx.Response(
+            200,
+            request=asset_request,
+            content=b"fake-png",
+            headers={"content-type": "image/png"},
+        )
+
+    monkeypatch.setattr(MdteroClient, "_raw_request", fake_raw_request)
+
+    result = MdteroClient().download("task-1", "paper_md", tmp_path, filename="article.md")
+
+    assert result.path.read_text(encoding="utf-8") == "# Demo\n\n![Figure](images/article/fig1.png)\n"
+    assert (tmp_path / "images" / "article" / "fig1.png").read_bytes() == b"fake-png"
+    assert calls == [
+        ("GET", "/api/v1/tasks/task-1/download/paper_md"),
+        ("GET", "/api/v1/tasks/task-1/assets/images/fig1.png"),
+    ]
+
+
+def test_task_asset_key_accepts_root_relative_and_query_string_links():
+    from mdtero.client import _task_asset_key
+
+    assert _task_asset_key("/api/v1/tasks/task-1/assets/images/fig%201.png?download=1#full", "task-1") == "images/fig 1.png"
+    assert _task_asset_key("https://api.mdtero.com/tasks/task-1/assets/images/fig.png?download=1", "task-1") == "images/fig.png"
+
+
+def test_client_download_keeps_markdown_when_asset_localization_fails(monkeypatch, tmp_path: Path):
+    download_request = httpx.Request("GET", "https://api.mdtero.com/api/v1/tasks/task-1/download/paper_md")
+
+    def fake_raw_request(self, method, path, **kwargs):
+        if path.endswith("/download/paper_md"):
+            return httpx.Response(
+                200,
+                request=download_request,
+                content=b"# Demo\n\n![Figure](https://api.mdtero.com/tasks/task-1/assets/images/fig1.png)\n",
+                headers={"content-disposition": 'attachment; filename="paper.md"'},
+            )
+        raise TimeoutError("asset request timed out")
+
+    monkeypatch.setattr(MdteroClient, "_raw_request", fake_raw_request)
+
+    result = MdteroClient().download("task-1", "paper_md", tmp_path)
+
+    assert result.path.read_text(encoding="utf-8").endswith(
+        "![Figure](https://api.mdtero.com/tasks/task-1/assets/images/fig1.png)\n"
+    )
+    assert not (tmp_path / "images").exists()
+
+
 def test_parse_batch_waits_downloads_and_writes_manifest(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
