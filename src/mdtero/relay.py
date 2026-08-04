@@ -5,7 +5,7 @@ import base64
 import json
 import signal
 from typing import Any, Callable
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import httpx
 import websockets
@@ -147,11 +147,9 @@ async def run_relay_server(
     if on_status:
         on_status("outlet_checked", outlet_payload)
 
-    ws_url = relay_ws_url(config.api_base_url)
-    headers = {"Authorization": f"ApiKey {api_key}", "X-Client-Channel": "python-relay"}
-
     while not stop_event.is_set():
         try:
+            ws_url, headers = await _relay_connection_target(config, api_key)
             if on_status:
                 on_status("connecting", {"ws_url": ws_url})
             async with websockets.connect(ws_url, additional_headers=headers, ping_interval=20, ping_timeout=20) as websocket:
@@ -195,3 +193,26 @@ async def run_relay_server(
 
     if on_status:
         on_status("stopped", {})
+
+
+async def _relay_connection_target(config: MdteroConfig, api_key: str) -> tuple[str, dict[str, str]]:
+    """Mint a short-lived DO ticket, falling back to the legacy origin WS."""
+    api_base = str(config.api_base_url or "").rstrip("/")
+    api_headers = {"Authorization": f"ApiKey {api_key}", "X-Client-Channel": "python-relay"}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(f"{api_base}/api/v1/relay/ticket", headers=api_headers, json={})
+        payload = response.json() if response.content else {}
+        if response.status_code < 400 and isinstance(payload, dict):
+            ticket = str(payload.get("ticket") or "").strip()
+            ws_url = str(payload.get("ws_url") or "").strip()
+            if ticket and ws_url:
+                separator = "&" if "?" in ws_url else "?"
+                return f"{ws_url}{separator}ticket={quote(ticket, safe='')}" , {"X-Client-Channel": "python-relay"}
+        # A backend without the gateway keeps the old WebSocket contract.
+        if response.status_code in {404, 405, 503}:
+            return relay_ws_url(config.api_base_url), api_headers
+        reason = payload.get("detail") if isinstance(payload, dict) else None
+        raise RuntimeError(str(reason or f"Relay ticket request failed: HTTP {response.status_code}"))
+    except (httpx.HTTPError, ValueError) as exc:
+        raise RuntimeError(f"Relay ticket request failed: {exc}") from exc
