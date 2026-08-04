@@ -111,15 +111,15 @@ Cloud agent / backend
 
 ## Release
 
-Forgejo/GitHub workflow: `public/.forgejo/workflows/release-relay.yml`
+GitHub Actions workflow: `.github/workflows/release-relay.yml`
 
 ```bash
 # Tag-driven release
 git tag relay/v0.1.6
-git push forgejo relay/v0.1.6
+git push github relay/v0.1.6
 
 # Manual release
-# Forgejo: run "Release Campus Relay" with the desired version
+# GitHub: run "Release Campus Relay" with the desired version
 ```
 
 Local publish to nextmdtero static assets:
@@ -130,11 +130,11 @@ bash scripts/build-release.sh
 MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.6
 ```
 
-Required Forgejo secrets/vars for automatic site publish:
+Required GitHub Actions secrets/vars for automatic site publish:
 
 - `NEXTMDTERO_REPO_TOKEN` — push access to site repo
 - `NEXTMDTERO_REPO` — e.g. `mdtero/nextmdtero`
-- optional `FORGEJO_TOKEN` — attach binaries to Forgejo release
+- optional `GITHUB_TOKEN` — attach binaries to the GitHub release (provided by Actions)
 
 ## Build from source
 
