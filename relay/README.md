@@ -102,7 +102,8 @@ mdtero-relay version
 
 ```text
 Campus machine (mdtero-relay)
-  └─ WebSocket ─► api.mdtero.com/api/v1/relay/ws
+  ├─ POST /api/v1/relay/ticket ─► api.mdtero.com (API key stays at origin)
+  └─ WebSocket ─► returned Cloudflare Worker `ws_url` + short-lived ticket
 Cloud agent / backend
   └─ POST /api/v1/relay/fetch { "url": "https://doi.org/..." }
        └─ forwarded to campus machine ─► publisher site
@@ -156,7 +157,9 @@ GOOS=windows GOARCH=amd64 go build -o dist/mdtero-relay-windows-amd64.exe ./cmd/
 
 The Python CLI still includes `mdtero relay serve` for developers and existing users. **`mdtero-relay` is the recommended install for campus machines** — smaller, native, and auto-starts as a service.
 
-Both clients speak the same backend protocol.
+Both clients speak the same backend protocol. The Python CLI and native Relay
+prefer the ticket/Worker path and fall back to the origin WebSocket only when
+the gateway is unavailable.
 
 ## Configuration
 

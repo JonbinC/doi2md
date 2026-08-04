@@ -291,7 +291,7 @@ def _try_acquire_candidates(
                 {
                     "url": url,
                     "reason_code": "missing_api_key",
-                    "action_hint": f"Configure {credential_name} before local acquisition, or let the Mdtero server try its route.",
+                    "action_hint": f"Configure {credential_name} before local acquisition, or let Mdtero's managed route try it.",
                     **_candidate_error_context(candidate),
                     "diagnostics": {"credential_name": credential_name},
                 }
@@ -847,12 +847,12 @@ def _summarize_acquisition_failures(errors: list[dict[str, Any]]) -> tuple[str, 
             return (
                 "elsevier_api_key_missing",
                 "This Elsevier route needs ELSEVIER_API_KEY for the official XML API. "
-                "Let the Mdtero server try its configured route, or use the browser extension/upload on your campus computer.",
+                "Let Mdtero's managed route try it, or use the browser extension/upload on your campus computer.",
                 diagnostics,
             )
         return (
             "provider_api_key_missing",
-            f"This route needs {credential_text}. Configure it locally or let the Mdtero server try the route.",
+            f"This route needs {credential_text}. Configure it locally or let Mdtero's managed route try it.",
             diagnostics,
         )
     if any(bool(error.get("requires_browser")) for error in attempts):
