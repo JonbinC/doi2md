@@ -151,23 +151,32 @@ def test_run_relay_server_registers_and_handles_fetch():
     with patch("mdtero.relay.check_campus_outlet", AsyncMock(return_value={"summary": {"asn": "AS786"}, "campus_ok": True})):
         with patch("mdtero.relay.websockets.connect", return_value=FakeConnect()):
             with patch(
-                "mdtero.relay.execute_relay_fetch",
-                AsyncMock(return_value={"status_code": 200, "headers": {}, "body_b64": "cGFwZXI="}),
-            ):
-                async def _run() -> None:
-                    task = asyncio.create_task(
-                        run_relay_server(
-                            cfg,
-                            label="lab-pc",
-                            on_status=lambda event, detail: events.append((event, detail)),
-                        )
+                "mdtero.relay._relay_connection_target",
+                AsyncMock(
+                    return_value=(
+                        relay_ws_url(cfg.api_base_url),
+                        {"Authorization": "ApiKey mdt_test_key", "X-Client-Channel": "python-relay"},
                     )
-                    await asyncio.sleep(0.05)
-                    task.cancel()
-                    with pytest.raises(asyncio.CancelledError):
-                        await task
+                ),
+            ):
+                with patch(
+                    "mdtero.relay.execute_relay_fetch",
+                    AsyncMock(return_value={"status_code": 200, "headers": {}, "body_b64": "cGFwZXI="}),
+                ):
+                    async def _run() -> None:
+                        task = asyncio.create_task(
+                            run_relay_server(
+                                cfg,
+                                label="lab-pc",
+                                on_status=lambda event, detail: events.append((event, detail)),
+                            )
+                        )
+                        await asyncio.sleep(0.05)
+                        task.cancel()
+                        with pytest.raises(asyncio.CancelledError):
+                            await task
 
-                asyncio.run(_run())
+                    asyncio.run(_run())
 
     assert any(event == "registered" for event, _ in events)
     assert any('"type": "fetch_result"' in payload for payload in fake_ws.sent)

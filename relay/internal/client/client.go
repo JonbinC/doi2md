@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -60,17 +61,19 @@ func Run(cfg config.Config, opts Options) error {
 		logger("Warning: this machine does not look like the expected campus outlet (%s, %s). Relay will still start, but publisher access may fail.", outlet.Summary.ASN, outlet.Summary.City)
 	}
 
-	wsURL := config.WSURL(cfg.APIBaseURL)
-	headers := http.Header{}
-	headers.Set("Authorization", "ApiKey "+strings.TrimSpace(cfg.APIKey))
-	headers.Set("X-Client-Channel", "mdtero-relay")
-
 	label := strings.TrimSpace(opts.Label)
 	if label == "" {
 		label = strings.TrimSpace(cfg.Label)
 	}
 
 	for {
+		wsURL, headers, targetErr := connectionTarget(cfg)
+		if targetErr != nil {
+			logger("Relay ticket error: %v", targetErr)
+			logger("Reconnecting in %s ...", reconnectDelay)
+			time.Sleep(reconnectDelay)
+			continue
+		}
 		if err := runOnce(wsURL, headers, label, outlet.Summary, opts.Browser, logger); err != nil {
 			if isStop(err) {
 				return nil
@@ -83,6 +86,51 @@ func Run(cfg config.Config, opts Options) error {
 		logger("Relay disconnected. Reconnecting in %s ...", reconnectDelay)
 		time.Sleep(reconnectDelay)
 	}
+}
+
+type relayTicketResponse struct {
+	Ticket    string `json:"ticket"`
+	WSURL     string `json:"ws_url"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// connectionTarget keeps API-key authentication at the origin. Once the
+// backend is configured with the Cloudflare Durable Object gateway, it returns
+// a short-lived ticket and Relay connects to the Worker directly. Older
+// deployments retain the original origin WebSocket as a compatibility path.
+func connectionTarget(cfg config.Config) (string, http.Header, error) {
+	apiBase := strings.TrimRight(cfg.APIBaseURL, "/")
+	apiHeaders := http.Header{}
+	apiHeaders.Set("Authorization", "ApiKey "+strings.TrimSpace(cfg.APIKey))
+	apiHeaders.Set("X-Client-Channel", "mdtero-relay")
+
+	req, err := http.NewRequest(http.MethodPost, apiBase+"/api/v1/relay/ticket", strings.NewReader(`{}`))
+	if err != nil {
+		return "", nil, err
+	}
+	req.Header = apiHeaders.Clone()
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+	var payload relayTicketResponse
+	decodeErr := json.NewDecoder(resp.Body).Decode(&payload)
+	if resp.StatusCode < 400 && decodeErr == nil && strings.TrimSpace(payload.Ticket) != "" && strings.TrimSpace(payload.WSURL) != "" {
+		separator := "?"
+		if strings.Contains(payload.WSURL, "?") {
+			separator = "&"
+		}
+		return payload.WSURL + separator + "ticket=" + url.QueryEscape(payload.Ticket), http.Header{"X-Client-Channel": []string{"mdtero-relay"}}, nil
+	}
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusServiceUnavailable {
+		return config.WSURL(cfg.APIBaseURL), apiHeaders, nil
+	}
+	if decodeErr != nil {
+		return "", nil, fmt.Errorf("relay ticket endpoint returned HTTP %d", resp.StatusCode)
+	}
+	return "", nil, fmt.Errorf("relay ticket endpoint returned HTTP %d", resp.StatusCode)
 }
 
 func runOnce(wsURL string, headers http.Header, label string, outlet campus.OutletSummary, browser *browserfetch.Client, logger Logger) error {
