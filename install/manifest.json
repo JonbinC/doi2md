@@ -18,7 +18,7 @@
   "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
   "cli": {
     "packageName": "mdtero",
-    "packageVersion": "0.2.0a28",
+    "packageVersion": "0.3.0",
     "packageManager": "uv",
     "runtimeInstallCommand": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
     "scriptInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh",
@@ -97,7 +97,7 @@
     },
     "current": {
       "cli": {
-        "version": "0.2.0a28",
+        "version": "0.3.0",
         "packageName": "mdtero",
         "packageManager": "uv",
         "installCommand": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
