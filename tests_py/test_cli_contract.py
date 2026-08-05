@@ -8370,6 +8370,9 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
         site_manifest = json.loads(site_manifest_candidates[0].read_text(encoding="utf-8"))
         assert manifest == site_manifest
     package_version = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    from mdtero import __version__
+
+    assert __version__ == package_version
     assert manifest["quickInstallCommand"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git && mdtero setup"
     assert manifest["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
     assert manifest["pypiInstallCommand"] == "uv tool install mdtero"
