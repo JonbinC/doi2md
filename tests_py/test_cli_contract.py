@@ -902,11 +902,13 @@ def test_web_login_loopback_accepts_site_callback():
                 "Origin": "https://mdtero.com",
                 "Access-Control-Request-Method": "POST",
                 "Access-Control-Request-Headers": "Content-Type",
+                "Access-Control-Request-Private-Network": "true",
             },
             timeout=5,
         )
         assert preflight.status_code == 204
         assert preflight.headers["access-control-allow-origin"] == "https://mdtero.com"
+        assert preflight.headers["access-control-allow-private-network"] == "true"
         response = httpx.post(
             query["cli_callback"][0],
             headers={"Origin": "https://mdtero.com"},

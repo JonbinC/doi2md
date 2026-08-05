@@ -101,5 +101,7 @@ def _make_callback_handler(expected_state: str, event: threading.Event, result: 
             if origin in {"https://mdtero.com", "http://localhost:5173", "http://127.0.0.1:5173"}:
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Vary", "Origin")
+                if self.headers.get("Access-Control-Request-Private-Network", "").lower() == "true":
+                    self.send_header("Access-Control-Allow-Private-Network", "true")
 
     return CallbackHandler
