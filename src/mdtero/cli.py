@@ -266,8 +266,8 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument(
         "--source",
         choices=["local", "server", "auto"],
-        default="local",
-        help="Discovery backend. Default local talks to multi-source academic APIs from this machine; server only proxies via Mdtero API.",
+        default="auto",
+        help="Discovery backend. Default auto tries local academic APIs first, then falls back to server OpenAlex; use local or server to force one path.",
     )
     discover.add_argument(
         "--sources",
@@ -1165,7 +1165,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
             "core_api_key": bool((cfg.academic.core_api_key or "").strip()),
             "enable_scihub": bool(getattr(cfg.academic, "enable_scihub", False)),
             "keys_optional": True,
-            "discover_source": "local_openalex",
+            "discover_source": "auto_openalex",
             "discovery_providers": "openalex",
             "discovery_providers_broad": "free_core",
             "discovery_enrich_default": "semantic_scholar",
@@ -2265,7 +2265,7 @@ def _preferred_parse_artifact(result: dict[str, Any]) -> str:
 def cmd_discover(args: argparse.Namespace) -> int:
     query = _discover_query(args.query)
     page = max(1, int(getattr(args, "page", 1) or 1))
-    source = str(getattr(args, "source", "local") or "local")
+    source = str(getattr(args, "source", "auto") or "auto")
     providers = str(getattr(args, "sources", "openalex") or "openalex")
     enrich = str(getattr(args, "enrich", "semantic_scholar") or "semantic_scholar")
     entity_type = str(getattr(args, "entity_type", "publication") or "publication")
@@ -2387,7 +2387,7 @@ def _run_discovery_interactive_session(
     page_size: int,
     initial_result: dict[str, Any],
     initial_page: int = 1,
-    source: str = "local",
+    source: str = "auto",
     providers: str = "openalex",
     enrich: str = "semantic_scholar",
     entity_type: str = "publication",
@@ -2399,7 +2399,7 @@ def _run_discovery_interactive_session(
     session_query = query
     safe_page_size = max(int(page_size or 1), 1)
     page = max(1, int(initial_page or 1))
-    discovery_source = str(source or "local")
+    discovery_source = str(source or "auto")
     discovery_providers = str(providers or "openalex")
     discovery_relevance = str(relevance or "baseline")
     discovery_relax = bool(relax)
@@ -5187,8 +5187,9 @@ def _configure_academic(cfg: MdteroConfig, console: Console) -> None:
     path = save_config(cfg)
     console.print(f"Saved config to {path}")
     console.print(
-        "Discover defaults to OpenAlex (local) and works without academic keys. "
-        "Optional OpenAlex/S2 keys raise quotas; use `--source server` only for the Mdtero proxy."
+        "Discover tries local OpenAlex first and automatically falls back to server OpenAlex when local "
+        "access or anonymous quota is unavailable. Optional OpenAlex/S2 keys raise local quotas; use "
+        "`--source local` or `--source server` to force one path."
     )
     if not (cfg.academic.openalex_api_key or "").strip():
         console.print(

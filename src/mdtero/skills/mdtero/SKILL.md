@@ -18,7 +18,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
 - for headless servers, the user should create a fresh dashboard API key, run `mdtero setup --api-key --json`, paste the secret only at the password prompt, then verify with `mdtero doctor --json`
-- Elsevier is the first academic key to ask about for most publisher-heavy literature-review workflows; keep academic source keys local with `mdtero config academic`
+- Elsevier is the first academic key to ask about for most publisher-heavy literature-review workflows; keep academic source keys local with `mdtero config academic`; OpenAlex discovery has a server-managed fallback, so its local key is optional
 - `mdtero doctor --json` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
 - CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
@@ -50,7 +50,7 @@ description: Use when Mdtero should be available inside an agent workspace for s
 - parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
 - parse a text file of DOI/URL targets and download Markdown: `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`
 - search discovery: `mdtero discover "<query>" --json`; unquoted multi-word queries are also accepted by the CLI
-- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive` (defaults to local OpenAlex + Semantic Scholar; `n`/`p` page, `r <query>` refines, numbers add selections, `a` adds the current page; use `--source server` only for the Mdtero proxy)
+- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive` (tries local OpenAlex + Semantic Scholar first, then falls back to server OpenAlex; `n`/`p` page, `r <query>` refines, numbers add selections, `a` adds the current page; use `--source local` or `--source server` to force one path)
 - non-interactive paging: `mdtero discover "<query>" --limit 5 --page 2 --json`
 - add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3 --json`
 - poll status: `mdtero status <task-id> --wait --timeout 300 --json`

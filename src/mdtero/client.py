@@ -363,7 +363,7 @@ class MdteroClient:
         *,
         limit: int = 10,
         page: int = 1,
-        source: str = "local",
+        source: str = "auto",
         providers: str | None = None,
         enrich: str | None = None,
         entity_type: str = "publication",
@@ -372,15 +372,15 @@ class MdteroClient:
     ) -> dict[str, Any]:
         """Search literature metadata.
 
-        Default ``source='local'`` searches OpenAlex from the workstation.
-        Pass ``providers='free_core'`` (or a comma list) for broader fan-out.
+        Default ``source='auto'`` searches locally first and falls back to the
+        server OpenAlex route when local discovery is unavailable. Pass
+        ``source='local'`` to require local-only discovery, or
+        ``providers='free_core'`` (or a comma list) for broader fan-out.
         Semantic Scholar defaults to strong-ID enrich. Trial registrations use
-        ``entity_type='trial'``. The Mdtero API path is only a proxy and is
-        opt-in via ``source='server'``. ``relevance='denoise'`` applies
-        concept-group hard filtering locally.
+        ``entity_type='trial'``. ``relevance='denoise'`` applies concept-group
+        hard filtering locally.
         """
-        assert_required_campus_proxy(proxy_settings_from_config(self.config), timeout=min(self.timeout, 20.0))
-        mode = str(source or "local").strip().lower() or "local"
+        mode = str(source or "auto").strip().lower() or "auto"
         if mode not in {"local", "server", "auto"}:
             raise DiscoveryError(
                 {
@@ -388,11 +388,16 @@ class MdteroClient:
                     "error_code": "invalid_discovery_source",
                     "reason_code": "invalid_discovery_source",
                     "message": f"Unsupported discovery source: {source}",
-                    "action_hint": "Use --source local (default), --source server, or --source auto.",
+                    "action_hint": "Use --source auto (default), --source local, or --source server.",
                 }
             )
+        local_failure: dict[str, Any] | None = None
         if mode in {"local", "auto"}:
             try:
+                assert_required_campus_proxy(
+                    proxy_settings_from_config(self.config),
+                    timeout=min(self.timeout, 20.0),
+                )
                 return self._local_discovery_search(
                     query,
                     limit=limit,
@@ -403,20 +408,35 @@ class MdteroClient:
                     relevance=relevance,
                     relax=relax,
                 )
-            except DiscoveryError:
+            except (DiscoveryError, ProxyValidationError) as exc:
                 if mode == "local":
                     raise
+                payload = exc.payload if isinstance(exc, (DiscoveryError, ProxyValidationError)) else {}
+                local_failure = {
+                    "error_code": payload.get("error_code") or payload.get("reason_code") or exc.__class__.__name__,
+                    "reason_code": payload.get("reason_code") or payload.get("error_code") or "local_discovery_failed",
+                }
         try:
             result = self._server_discovery_search(query, limit=limit, page=page)
         except (MdteroApiError, httpx.HTTPError, ValueError) as exc:
+            if local_failure:
+                failure_payload = _discovery_failure_payload(exc)
+                failure_payload["local_fallback"] = local_failure
+                failure_payload["action_hint"] = (
+                    "Local discovery was unavailable and the server OpenAlex fallback also failed. "
+                    "Retry later or use `--source local` after configuring a local OpenAlex key."
+                )
+                raise DiscoveryError(failure_payload) from exc
             raise DiscoveryError(_discovery_failure_payload(exc)) from exc
         result.setdefault("source", "openalex_server")
         result["discovery_diagnostics"] = {
             "provider": "openalex_server",
-            "mode": "server",
+            "mode": mode,
+            "local_attempted": mode == "auto",
+            "local_fallback": local_failure,
             "server_openalex_attempted": True,
             "relevance_mode": "baseline",
-            "relevance_note": "server proxy ignores local denoise filters",
+            "relevance_note": "server proxy ignores local denoise filters" if mode == "server" else "local discovery unavailable; server OpenAlex fallback used",
         }
         return result
 
@@ -463,12 +483,12 @@ class MdteroClient:
                     "detail": exc.detail,
                     "message": str(exc),
                     "action_hint": (
-                        "Local OpenAlex discovery failed. Retry later, try `--sources free_core`, "
-                        "or configure an OpenAlex key with `mdtero config academic --json`. "
-                        "Use `--source server` only if you intentionally want the Mdtero proxy."
+                        "Local OpenAlex discovery failed. The default `--source auto` will try the "
+                        "server OpenAlex fallback; use `--source local` to stay local, or configure "
+                        "an OpenAlex key with `mdtero config academic --json`."
                     ),
                     "next_commands": [
-                        "mdtero discover \"<topic>\" --source local --sources openalex --json",
+                        "mdtero discover \"<topic>\" --source auto --json",
                         "mdtero config academic --openalex-key <key> --json",
                         "mdtero discover \"<topic>\" --sources free_core --json",
                     ],
@@ -751,13 +771,13 @@ def _discovery_failure_payload(exc: Exception) -> dict[str, Any]:
         "source": "openalex_server",
         "server_error": exc.__class__.__name__,
         "action_hint": (
-            "Server discovery proxy failed. Prefer local discovery "
-            "(`mdtero discover \"<topic>\" --source local --json`); use `--source server` only as fallback."
+            "Server OpenAlex fallback failed. Retry later, or use "
+            "`mdtero discover \"<topic>\" --source local --json` after checking local access."
         ),
         "next_commands": [
-            "mdtero discover \"<topic>\" --source local --json",
+            "mdtero discover \"<topic>\" --source auto --json",
             "mdtero doctor --json",
-            "mdtero discover \"<topic>\" --source server --json",
+            "mdtero discover \"<topic>\" --source local --json",
         ],
     }
     if isinstance(exc, ProxyValidationError):
@@ -776,14 +796,13 @@ def _discovery_failure_payload(exc: Exception) -> dict[str, Any]:
             payload["error_code"] = "authentication_required" if response.status_code == 401 else "forbidden"
             payload["reason_code"] = "authentication_required" if response.status_code == 401 else "access_forbidden"
             payload["action_hint"] = (
-                "Server discovery proxy needs Mdtero auth. Prefer local discovery "
-                "(`mdtero discover \"<topic>\" --source local --json`); or run "
-                "`mdtero setup --api-key --json` then `--source server`."
+                "Server OpenAlex fallback needs Mdtero auth. Run `mdtero setup --api-key --json`, "
+                "then retry the default `--source auto` discovery command."
             )
             payload["next_commands"] = [
-                "mdtero discover \"<topic>\" --source local --json",
                 "mdtero setup --api-key --json",
                 "mdtero doctor --json",
+                "mdtero discover \"<topic>\" --source auto --json",
             ]
     else:
         payload["detail"] = str(exc)

@@ -141,13 +141,14 @@ def build_academic_onboarding_summary(cfg: MdteroConfig, *, path: Path, saved: b
         "status": "saved" if saved else "current",
         "config_path": str(path),
         "configured": configured,
-        "discover_source": "local_openalex",
+        "discover_source": "auto_openalex",
         "discover_behavior": {
             "provider": "openalex",
             "action_hint": (
-                "Discovery defaults to OpenAlex only. Use `--sources free_core` (or a comma list) when you "
-                "want broader fan-out. Optional keys raise quotas; Sci-Hub download is opt-in and disabled "
-                "by default; `--source server` only forwards through the Mdtero proxy."
+                "Discovery tries local OpenAlex first and falls back to the server OpenAlex route when "
+                "local access or anonymous quota is unavailable. Use `--sources free_core` (or a comma list) "
+                "for broader local fan-out; use `--source local` or `--source server` to force one path. "
+                "Optional keys raise local quotas; Sci-Hub download is opt-in and disabled by default."
             ),
         },
         "application_links": {
@@ -241,12 +242,13 @@ def build_onboarding_checklist(
         {
             "id": "discovery",
             "title": "Discover papers",
-            "status": "local_openalex",
+            "status": "auto_openalex",
             "primary_command": "mdtero discover \"<topic>\" --limit 5 --interactive",
             "action_hint": (
-                "Defaults to OpenAlex (`--sources openalex`). Pass `--sources free_core` for broader recall. "
-                "Use space-bar multi-select in interactive discovery, or `--add --select 1,3 --json` for "
-                "agent-safe project intake. Pass `--source server` only if you want the Mdtero proxy. "
+                "Defaults to local OpenAlex with automatic server fallback (`--sources openalex`). Pass "
+                "`--sources free_core` for broader local recall. Use space-bar multi-select in interactive "
+                "discovery, or `--add --select 1,3 --json` for agent-safe project intake. Pass `--source local` "
+                "or `--source server` to force one path. "
                 "Sci-Hub is never used for search."
             ),
         },
