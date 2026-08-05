@@ -982,12 +982,16 @@ def _local_dependency_summary() -> dict[str, Any]:
         "ready": not missing,
         "missing": missing,
         "checks": checks,
-        "install_command": "uv tool install --force --reinstall mdtero==0.3.1",
+        "install_command": "uv tool install --upgrade mdtero",
         "installer_command": "curl -Ls https://mdtero.com/install.sh | sh",
-        "pipx_install_command": "pipx install --force mdtero==0.3.1",
-        "pip_user_install_command": "python3 -m pip install --user --force-reinstall mdtero==0.3.1",
-        "pypi_install_command": "uv tool install --force --reinstall mdtero==0.3.1",
-        "mirror_install_command": "uv tool install --force --reinstall --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero==0.3.1",
+        "update_command": "uv tool upgrade mdtero",
+        "mirror_update_command": "uv tool upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero",
+        "repair_command": "uv tool install --force --reinstall mdtero",
+        "pipx_install_command": "pipx install mdtero",
+        "pipx_update_command": "pipx upgrade mdtero",
+        "pip_user_install_command": "python3 -m pip install --user --upgrade mdtero",
+        "pypi_install_command": "uv tool install --upgrade mdtero",
+        "mirror_install_command": "uv tool install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero",
         "github_fallback_command": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
         "doctor_command": "mdtero doctor --json",
     }
@@ -1005,7 +1009,7 @@ def _install_boundary_summary() -> dict[str, Any]:
     action_hint = "Public Mdtero CLI package is active."
     if service_origin:
         status = "mixed_environment"
-        action_hint = "A top-level backend `service` package is importable in this Python environment. Reinstall the public CLI with `uv tool install --force --reinstall mdtero==0.3.1` or `curl -Ls https://mdtero.com/install.sh | sh`."
+        action_hint = "A top-level backend `service` package is importable in this Python environment. Repair the public CLI with `uv tool install --force --reinstall mdtero` or `curl -Ls https://mdtero.com/install.sh | sh`."
     return {
         "status": status,
         "package": "mdtero",
@@ -1015,8 +1019,9 @@ def _install_boundary_summary() -> dict[str, Any]:
         "backend_service_origin": str(service_origin) if service_origin else None,
         "action_hint": action_hint,
         "next_commands": [
-            "uv tool install --force --reinstall mdtero==0.3.1",
-            "uv tool install --force --reinstall --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero==0.3.1",
+            "uv tool upgrade mdtero",
+            "uv tool upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero",
+            "uv tool install --upgrade mdtero",
             "curl -Ls https://mdtero.com/install.sh | sh",
             "mdtero doctor --json",
         ],

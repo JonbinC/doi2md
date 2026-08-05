@@ -3,8 +3,6 @@ set -eu
 
 TARGET=""
 DRY_RUN="0"
-PACKAGE_VERSION="0.3.1"
-
 usage() {
   cat <<'EOF'
 Usage:
@@ -103,7 +101,7 @@ install_mdtero_runtime() {
     fi
     for index in $INDEXES; do
       printf '%s\n' "Trying Mdtero package index: $index"
-      if run uv tool install --force --reinstall --index-url "$index" "mdtero==$PACKAGE_VERSION"; then
+      if run uv tool install --upgrade --index-url "$index" mdtero; then
         installed="1"
         break
       fi
@@ -114,17 +112,25 @@ install_mdtero_runtime() {
     fi
   elif command_exists pipx; then
     if [ -n "${MDTERO_PYPI_INDEX:-}" ]; then
-      run env PIP_INDEX_URL="$MDTERO_PYPI_INDEX" pipx install --force "mdtero==$PACKAGE_VERSION"
+      if pipx list --short 2>/dev/null | awk '$1 == "mdtero" { found=1 } END { exit found ? 0 : 1 }'; then
+        run env PIP_INDEX_URL="$MDTERO_PYPI_INDEX" pipx upgrade mdtero
+      else
+        run env PIP_INDEX_URL="$MDTERO_PYPI_INDEX" pipx install mdtero
+      fi
     else
-      run pipx install --force "mdtero==$PACKAGE_VERSION"
+      if pipx list --short 2>/dev/null | awk '$1 == "mdtero" { found=1 } END { exit found ? 0 : 1 }'; then
+        run pipx upgrade mdtero
+      else
+        run pipx install mdtero
+      fi
     fi
   else
     PYTHON="$(python_cmd)"
     printf '%s\n' "uv and pipx are unavailable; falling back to Python user-site install."
     if [ -n "${MDTERO_PYPI_INDEX:-}" ]; then
-      run "$PYTHON" -m pip install --user --force-reinstall --index-url "$MDTERO_PYPI_INDEX" "mdtero==$PACKAGE_VERSION"
+      run "$PYTHON" -m pip install --user --upgrade --index-url "$MDTERO_PYPI_INDEX" mdtero
     else
-      run "$PYTHON" -m pip install --user --force-reinstall "mdtero==$PACKAGE_VERSION"
+      run "$PYTHON" -m pip install --user --upgrade mdtero
     fi
     refresh_user_path
   fi

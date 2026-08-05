@@ -7,7 +7,7 @@ Mdtero Account is the control plane for API keys, quota, billing, history, diagn
 ## Recommended Quick Start
 
 ```bash
-uv tool install --force --reinstall mdtero==0.3.1
+uv tool install --upgrade mdtero
 mdtero setup
 ```
 
@@ -121,7 +121,7 @@ The command prompts for the key securely and returns a secret-safe JSON summary 
 ## Update Or Uninstall
 
 ```bash
-uv tool install --force --reinstall mdtero==0.3.1
+uv tool upgrade mdtero
 mdtero agent install --target codex
 mdtero agent uninstall --target codex
 uv tool uninstall mdtero
@@ -131,7 +131,7 @@ uv tool uninstall mdtero
 
 ## Troubleshooting
 
-- If `mdtero` is missing, imports a top-level `service` package, or fails with `ModuleNotFoundError: No module named 'psycopg'`, reinstall the public client with `uv tool install --force --reinstall mdtero==0.3.1` or `curl -Ls https://mdtero.com/install.sh | sh`. That overwrites the retired PyPI backend bundle.
+- If `mdtero` is missing, imports a top-level `service` package, or fails with `ModuleNotFoundError: No module named 'psycopg'`, repair the public client with `uv tool install --force --reinstall mdtero` or `curl -Ls https://mdtero.com/install.sh | sh`. That overwrites the retired PyPI backend bundle.
 - If `uv` is missing, use the one-command installer above. It will try `uv`, then `pipx`, then Python user-site pip. For manual uv installs, follow `https://docs.astral.sh/uv/getting-started/installation/`.
 - If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero setup --api-key --json`.
 - If no agent workspace is detected, pass an explicit `--target`.
@@ -148,7 +148,7 @@ The browser extension owns browser-context capture, OAuth bridge, user-selected 
 Mdtero 当前公开主线是 Python/uv 客户端。默认安装：
 
 ```bash
-uv tool install --force --reinstall mdtero==0.3.1
+uv tool install --upgrade mdtero
 mdtero setup
 mdtero doctor
 ```

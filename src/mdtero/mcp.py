@@ -2394,8 +2394,8 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
         ]),
         "command_blocks": {
             "workstation_oauth": "\n".join([
-                "uv tool install --force --reinstall mdtero==0.3.1",
-                "# China mirror fallback: uv tool install --force --reinstall --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero==0.3.1",
+                "uv tool install --upgrade mdtero",
+                "# China mirror fallback: uv tool install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero",
                 str(commands.get("setup") or "mdtero setup"),
                 "mdtero setup --json",
                 str(commands.get("doctor") or "mdtero doctor --json"),
@@ -2638,7 +2638,7 @@ def serve_project_context(project_root: Path | None = None) -> None:
     except Exception as exc:  # pragma: no cover - optional runtime import
         raise RuntimeError(
             "FastMCP is required for `mdtero mcp serve`. Run `mdtero doctor --json` first; "
-            "reinstall the public client with `uv tool install --force --reinstall mdtero==0.3.1` "
+            "upgrade the public client with `uv tool upgrade mdtero` "
             "or use the China mirror index from `https://mdtero.com/install/manifest.json`."
         ) from exc
 

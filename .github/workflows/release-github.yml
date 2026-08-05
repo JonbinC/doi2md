@@ -103,7 +103,8 @@ jobs:
             Public Python CLI/TUI v${{ needs.resolve.outputs.version }}.
 
             Install:
-            - `uv tool install mdtero==${{ needs.resolve.outputs.version }}`
+            - `uv tool install --upgrade mdtero`
+            - Existing uv tools can update with `uv tool upgrade mdtero`.
             - or `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git@${{ needs.resolve.outputs.tag }}`
           files: |
             dist/*
