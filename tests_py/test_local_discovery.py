@@ -292,6 +292,23 @@ def test_client_discover_auto_falls_back_to_server_when_local_fails(monkeypatch)
     assert result["discovery_diagnostics"]["local_fallback"]["reason_code"] == "openalex_rate_limited"
 
 
+def test_client_discover_server_skips_local_campus_proxy_check(monkeypatch):
+    def fake_server(self, query, *, limit, page):
+        return {
+            "items": [{"title": "Server paper"}],
+            "meta": {"count": 1, "page": page, "per_page": limit, "has_next": False, "has_previous": False},
+        }
+
+    monkeypatch.setattr(MdteroClient, "_server_discovery_search", fake_server)
+
+    result = MdteroClient(
+        config=MdteroConfig(api_key="key", require_campus_proxy=True),
+    ).discover("rag", source="server")
+
+    assert result["source"] == "openalex_server"
+    assert result["discovery_diagnostics"]["mode"] == "server"
+
+
 def test_client_discover_source_server_uses_api(monkeypatch):
     captured: dict[str, Any] = {}
 
