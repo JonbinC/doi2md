@@ -13,7 +13,7 @@ Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译
 ## 安装
 
 ```bash
-uv tool install --force --reinstall mdtero==0.3.1
+uv tool install --upgrade mdtero
 mdtero setup
 mdtero doctor --json
 ```

@@ -1317,7 +1317,7 @@ def test_doctor_json_reports_public_install_boundary(monkeypatch, tmp_path: Path
     assert payload["install_boundary"]["version"]
     assert payload["install_boundary"]["status"] in {"ok", "mixed_environment"}
     assert payload["install_boundary"]["backend_service_importable"] in {True, False}
-    assert "uv tool install --force --reinstall mdtero==0.3.1" in payload["install_boundary"]["next_commands"]
+    assert "uv tool upgrade mdtero" in payload["install_boundary"]["next_commands"]
     assert any("pypi.tuna.tsinghua.edu.cn" in command for command in payload["install_boundary"]["next_commands"])
 
 
@@ -4373,11 +4373,14 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["checks"]["curl_cffi"]["capability"] == "local publisher route acquisition"
     assert payload["dependencies"]["checks"]["fastmcp"]["capability"] == "local MCP server for agents"
     assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
-    assert payload["dependencies"]["install_command"] == "uv tool install --force --reinstall mdtero==0.3.1"
+    assert payload["dependencies"]["install_command"] == "uv tool install --upgrade mdtero"
+    assert payload["dependencies"]["update_command"] == "uv tool upgrade mdtero"
+    assert payload["dependencies"]["mirror_update_command"] == "uv tool upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero"
     assert payload["dependencies"]["installer_command"] == "curl -Ls https://mdtero.com/install.sh | sh"
-    assert payload["dependencies"]["pipx_install_command"] == "pipx install --force mdtero==0.3.1"
-    assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --force-reinstall mdtero==0.3.1"
-    assert payload["dependencies"]["pypi_install_command"] == "uv tool install --force --reinstall mdtero==0.3.1"
+    assert payload["dependencies"]["pipx_install_command"] == "pipx install mdtero"
+    assert payload["dependencies"]["pipx_update_command"] == "pipx upgrade mdtero"
+    assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --upgrade mdtero"
+    assert payload["dependencies"]["pypi_install_command"] == "uv tool install --upgrade mdtero"
     assert payload["academic"]["discover_source"] == "auto_openalex"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
     assert payload["input_routes"]["server_apis"] == {
@@ -5841,7 +5844,7 @@ def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_pa
         raise AssertionError("serve_project_context should fail when FastMCP is unavailable")
 
     assert "mdtero doctor --json" in message
-    assert "uv tool install --force --reinstall mdtero==0.3.1" in message
+    assert "uv tool upgrade mdtero" in message
     assert "China mirror" in message
     assert "npm" not in message.lower()
 
@@ -8334,7 +8337,7 @@ def test_python_agent_installer_writes_packaged_skill_without_npm(tmp_path: Path
     assert results[0].action == "installed"
     assert skill_path.exists()
     skill_text = skill_path.read_text(encoding="utf-8")
-    assert "uv tool install --force --reinstall mdtero==0.3.1" in skill_text
+    assert "uv tool install --upgrade mdtero" in skill_text
     assert "mirror" in skill_text.lower()
 
 
@@ -8421,18 +8424,21 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
     from mdtero import __version__
 
     assert __version__ == package_version
-    assert manifest["quickInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1 && mdtero setup"
+    assert manifest["quickInstallCommand"] == "uv tool install --upgrade mdtero && mdtero setup"
     assert manifest["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
-    assert manifest["pypiInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1"
+    assert manifest["pypiInstallCommand"] == "uv tool install --upgrade mdtero"
+    assert manifest["updateCommand"] == "uv tool upgrade mdtero"
+    assert manifest["repairCommand"] == "uv tool install --force --reinstall mdtero"
     assert manifest["cli"]["packageName"] == "mdtero"
     assert manifest["cli"]["packageVersion"] == package_version
     assert manifest["releaseTruth"]["current"]["cli"]["version"] == package_version
     assert manifest["cli"]["packageManager"] == "uv"
-    assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1"
+    assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install --upgrade mdtero"
     assert manifest["cli"]["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
-    assert manifest["cli"]["pipxInstallCommand"] == "pipx install --force mdtero==0.3.1"
-    assert manifest["cli"]["pipUserInstallCommand"] == "python3 -m pip install --user --force-reinstall mdtero==0.3.1"
-    assert manifest["cli"]["pypiInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1"
+    assert manifest["cli"]["pipxInstallCommand"] == "pipx install mdtero"
+    assert manifest["cli"]["pipxUpdateCommand"] == "pipx upgrade mdtero"
+    assert manifest["cli"]["pipUserInstallCommand"] == "python3 -m pip install --user --upgrade mdtero"
+    assert manifest["cli"]["pypiInstallCommand"] == "uv tool install --upgrade mdtero"
     assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
     assert manifest["cliCommand"] == "mdtero"
     assert "helperCommand" not in manifest
@@ -8471,8 +8477,9 @@ def test_public_repo_has_no_root_npm_or_per_agent_install_runtime():
     assert "GITHUB_SPEC=\"git+https://github.com/JonbinC/doi2md.git\"" in install_script
     assert "uv tool install --force --reinstall \"$GITHUB_SPEC\"" in install_script
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in install_script
-    assert "pipx install --force" in install_script
-    assert "-m pip install --user --force-reinstall \"mdtero==$PACKAGE_VERSION\"" in install_script
+    assert "pipx upgrade mdtero" in install_script
+    assert "pipx install mdtero" in install_script
+    assert "-m pip install --user --upgrade mdtero" in install_script
     assert "install.sh [--agent" in install_script
     assert "Installing Mdtero CLI" in install_script
     assert "mdtero agent install --target" in install_script

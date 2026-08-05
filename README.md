@@ -15,7 +15,7 @@ Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as 
 ## Install
 
 ```bash
-uv tool install --force --reinstall mdtero==0.3.1
+uv tool install --upgrade mdtero
 mdtero setup
 mdtero doctor --json
 ```

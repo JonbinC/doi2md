@@ -211,7 +211,7 @@ def build_onboarding_checklist(
             "id": "local_dependencies",
             "title": "Local capture, Zotero, and MCP dependencies",
             "status": "ready" if dependency_ready else "needs_install",
-            "primary_command": "mdtero doctor --json" if dependency_ready else "uv tool install --force --reinstall mdtero==0.3.1",
+            "primary_command": "mdtero doctor --json" if dependency_ready else "uv tool install --upgrade mdtero",
             "action_hint": (
                 "curl_cffi, FastMCP, and pyzotero are importable; local acquisition, MCP, and Zotero workflows are available."
                 if dependency_ready
