@@ -96,7 +96,7 @@ Parser and source-selection implementation are service internals, not user confi
 
 ## Product Boundary
 
-Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local `mdtero config academic` configuration. The CLI-managed local access helper and browser extension remain separate from provider credentials.
+Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local `mdtero config academic` configuration; OpenAlex discovery also has a server-managed fallback, so users do not need to configure an OpenAlex key just to search. The CLI-managed local access helper and browser extension remain separate from provider credentials.
 
 ## Shared `/api/v1` server contract
 

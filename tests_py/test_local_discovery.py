@@ -210,7 +210,7 @@ def test_trial_entity_uses_clinicaltrials(monkeypatch):
     assert result["sources_queried"] == ["clinicaltrials"]
 
 
-def test_client_discover_defaults_to_local(monkeypatch):
+def test_client_discover_defaults_to_auto_local_first(monkeypatch):
     captured: dict[str, Any] = {}
 
     def fake_local(
@@ -259,6 +259,37 @@ def test_client_discover_defaults_to_local(monkeypatch):
         "relevance": "baseline",
         "relax": False,
     }
+
+
+def test_client_discover_auto_falls_back_to_server_when_local_fails(monkeypatch):
+    calls: list[str] = []
+
+    def fake_local(*_args, **_kwargs):
+        calls.append("local")
+        raise DiscoveryError(
+            {
+                "error_code": "discovery_failed",
+                "reason_code": "openalex_rate_limited",
+                "message": "local OpenAlex unavailable",
+            }
+        )
+
+    def fake_server(self, query, *, limit, page):
+        calls.append("server")
+        return {
+            "items": [{"title": "Server paper"}],
+            "meta": {"count": 1, "page": page, "per_page": limit, "has_next": False, "has_previous": False},
+        }
+
+    monkeypatch.setattr(MdteroClient, "_local_discovery_search", fake_local)
+    monkeypatch.setattr(MdteroClient, "_server_discovery_search", fake_server)
+
+    result = MdteroClient(config=MdteroConfig(api_key="key")).discover("rag", limit=2, page=3)
+
+    assert calls == ["local", "server"]
+    assert result["source"] == "openalex_server"
+    assert result["discovery_diagnostics"]["mode"] == "auto"
+    assert result["discovery_diagnostics"]["local_fallback"]["reason_code"] == "openalex_rate_limited"
 
 
 def test_client_discover_source_server_uses_api(monkeypatch):

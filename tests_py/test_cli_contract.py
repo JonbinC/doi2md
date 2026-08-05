@@ -1288,7 +1288,7 @@ def test_doctor_json_reports_safe_project_and_rag_summary(monkeypatch, tmp_path:
     assert payload["api_key_source"] == "saved config"
     assert payload["academic"]["elsevier_api_key"] is True
     assert payload["academic"]["wiley_tdm_token"] is True
-    assert payload["academic"]["discover_source"] == "local_openalex"
+    assert payload["academic"]["discover_source"] == "auto_openalex"
     assert payload["academic"]["enable_scihub"] is False
     assert payload["zotero"] == {"configured": True, "library_id": "123", "library_type": "user"}
     assert payload["project"]["server_project_id"] == "42"
@@ -1491,7 +1491,7 @@ def test_config_academic_headless_json_saves_without_echoing_secrets(monkeypatch
     assert payload["configured"]["elsevier_api_key"] is True
     assert payload["configured"]["wiley_tdm_token"] is True
     assert payload["configured"]["enable_scihub"] is False
-    assert payload["discover_source"] == "local_openalex"
+    assert payload["discover_source"] == "auto_openalex"
     assert payload["discover_behavior"]["provider"] == "openalex"
     assert "OpenAlex" in payload["discover_behavior"]["action_hint"]
     assert "mdtero smoke --json" in payload["next_commands"]
@@ -1515,7 +1515,7 @@ def test_config_academic_json_reports_local_discovery(monkeypatch, tmp_path: Pat
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "current"
-    assert payload["discover_source"] == "local_openalex"
+    assert payload["discover_source"] == "auto_openalex"
     assert payload["discover_behavior"]["provider"] == "openalex"
     assert "OpenAlex" in payload["discover_behavior"]["action_hint"]
 
@@ -1605,7 +1605,7 @@ def test_discover_results_can_be_added_to_project_queue(monkeypatch, tmp_path: P
     assert state.papers[0].title == "Paper A"
 
 
-def test_discover_defaults_to_local_and_server_is_opt_in(monkeypatch):
+def test_discover_defaults_to_auto_and_server_is_available(monkeypatch):
     local_calls = {}
     server_calls = {}
 
@@ -1771,11 +1771,11 @@ def test_discover_auth_failure_returns_login_next_commands(monkeypatch):
     assert payload["error_code"] == "authentication_required"
     assert payload["reason_code"] == "authentication_required"
     assert payload["status_code"] == 401
-    assert "Prefer local discovery" in payload["action_hint"]
+    assert "needs Mdtero auth" in payload["action_hint"]
     assert payload["next_commands"] == [
-        "mdtero discover \"<topic>\" --source local --json",
         "mdtero setup --api-key --json",
         "mdtero doctor --json",
+        "mdtero discover \"<topic>\" --source auto --json",
     ]
 
 
@@ -4332,7 +4332,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["pipx_install_command"] == "pipx install --force git+https://github.com/JonbinC/doi2md.git"
     assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git"
     assert payload["dependencies"]["pypi_install_command"] == "uv tool install mdtero"
-    assert payload["academic"]["discover_source"] == "local_openalex"
+    assert payload["academic"]["discover_source"] == "auto_openalex"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
     assert payload["input_routes"]["server_apis"] == {
         "route": "/api/v1/route",
@@ -4391,7 +4391,7 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert checklist["academic_keys"]["elsevier_guidance"]["status"] == "recommended"
     assert checklist["academic_keys"]["elsevier_guidance"]["configure_command"] == "mdtero config academic --elsevier-key <key> --json"
     assert "does not bypass licensed-access requirements" in checklist["academic_keys"]["elsevier_guidance"]["action_hint"]
-    assert checklist["discovery"]["status"] == "local_openalex"
+    assert checklist["discovery"]["status"] == "auto_openalex"
     assert checklist["discovery"]["primary_command"] == "mdtero discover \"<topic>\" --limit 5 --interactive"
     assert "space-bar multi-select" in checklist["discovery"]["action_hint"]
     assert checklist["project"]["primary_command"] == "mdtero project init --name literature-review"
@@ -4428,10 +4428,10 @@ def test_setup_json_onboarding_reports_local_discovery(monkeypatch, tmp_path: Pa
     assert_onboarding_payload_commands_parse(payload)
 
     assert "wiley-secret" not in output
-    assert payload["academic"]["discover_source"] == "local_openalex"
+    assert payload["academic"]["discover_source"] == "auto_openalex"
     assert payload["input_routes"]["routes"][0]["id"] == "doi_or_url"
     assert checklist["academic_keys"]["status"] == "partial"
-    assert checklist["discovery"]["status"] == "local_openalex"
+    assert checklist["discovery"]["status"] == "auto_openalex"
     assert checklist["agent_skills"]["status"] == "not_detected"
 
 
@@ -5007,7 +5007,7 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
     ]
     assert checklist["auth"]["status"] == "complete"
     assert checklist["local_dependencies"]["required_modules"] == ["curl_cffi.requests", "fastmcp", "pyzotero"]
-    assert checklist["discovery"]["status"] == "local_openalex"
+    assert checklist["discovery"]["status"] == "auto_openalex"
     assert checklist["rag"]["primary_command"] == "mdtero rag query \"What are the strongest findings?\" --build-if-needed --json"
     assert "mdtero rag query \"<question>\" --build-if-needed --json" in checklist["rag"]["secondary_commands"]
     assert "Mdtero backend" in checklist["rag"]["action_hint"]
@@ -6777,7 +6777,7 @@ def test_tui_dashboard_model_surfaces_rag_ingest_and_integrations(tmp_path: Path
     assert_dashboard_model_commands_parse(model)
     rendered = render_dashboard_text(model)
 
-    assert model["academic"]["discover_source"] == "local OpenAlex"
+    assert model["academic"]["discover_source"] == "local OpenAlex -> server fallback"
     assert model["health"]["status"] == "results_ready"
     assert model["health"]["counts"]["ready_artifacts"] == 1
     assert model["health"]["counts"]["pending_agent_installs"] == 1

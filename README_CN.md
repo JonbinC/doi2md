@@ -87,7 +87,7 @@ Mdtero 用于处理你有权访问的内容。出版社订阅、机构访问和�
 
 ## 产品边界
 
-Mdtero Account 是 Mdtero API key、额度、计费、历史和安装提示词的控制面。Academic source keys 保存在本地 `mdtero config academic` 配置中。CLI 管理的本地访问能力和浏览器扩展与来源凭据保持分离。
+Mdtero Account 是 Mdtero API key、额度、计费、历史和安装提示词的控制面。Academic source keys 保存在本地 `mdtero config academic` 配置中；OpenAlex 检索还有服务端托管回落，因此用户无需配置 OpenAlex key 才能检索。CLI 管理的本地访问能力和浏览器扩展与来源凭据保持分离。
 
 所有输入入口共用同一组 `/api/v1` 服务端契约：`/api/v1/route`、`/api/v1/extension/route`、`/api/v1/tasks/parse`、`/api/v1/tasks/upload`、`/api/v1/tasks/{task_id}`、`/api/v1/tasks/{task_id}/download/{artifact}`、`/api/v1/discovery/search`、`/api/v1/tasks/translate`、`/api/v1/projects`、`/api/v1/projects/{project_id}/tasks/{task_id}/import`、`/api/v1/projects/{project_id}/rag/status`、`/api/v1/projects/{project_id}/rag/build` 和 `/api/v1/projects/{project_id}/rag/query`。CLI、扩展、dashboard 和 MCP briefing 都会暴露这组 contract。
 
