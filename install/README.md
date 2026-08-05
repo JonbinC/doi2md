@@ -7,11 +7,11 @@ Mdtero Account is the control plane for API keys, quota, billing, history, diagn
 ## Recommended Quick Start
 
 ```bash
-uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall mdtero==0.3.1
 mdtero setup
 ```
 
-During alpha, this GitHub command is the stable public install path. The old PyPI `mdtero` package currently points at a retired backend bundle; use the PyPI command only after the public client is republished there.
+The public client is now published on PyPI. The installer tries the Tsinghua and Alibaba mirrors before the official PyPI index, then keeps GitHub only as a last-resort fallback. Set `MDTERO_PYPI_INDEX` when an institution provides its own mirror.
 
 `mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection. It authenticates, offers optional academic-key setup, detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces, and can install selected agent skills before showing next commands. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` intentionally skips agent detection; run `mdtero agent install --interactive` later on the machine that owns the agent workspace. Do not put the API key value directly in shell history.
 
@@ -31,7 +31,7 @@ curl -Ls https://mdtero.com/install.sh -o install-mdtero.sh
 sh install-mdtero.sh --agent codex
 ```
 
-The install script installs the known-good public GitHub runtime during alpha. It prefers `uv`, falls back to `pipx install --force git+https://github.com/JonbinC/doi2md.git`, then falls back to `python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git`. Pass `--agent <target>` to also install an agent skill.
+The install script installs the pinned PyPI runtime. It prefers `uv`, tries domestic mirrors when available, falls back to `pipx` or Python user-site installation, and uses the public GitHub source only if all package indexes fail. Pass `--agent <target>` to also install an agent skill.
 
 ## Connect An Agent Workspace
 
@@ -121,7 +121,7 @@ The command prompts for the key securely and returns a secret-safe JSON summary 
 ## Update Or Uninstall
 
 ```bash
-uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall mdtero==0.3.1
 mdtero agent install --target codex
 mdtero agent uninstall --target codex
 uv tool uninstall mdtero
@@ -131,7 +131,7 @@ uv tool uninstall mdtero
 
 ## Troubleshooting
 
-- If `mdtero` is missing, imports a top-level `service` package, or fails with `ModuleNotFoundError: No module named 'psycopg'`, reinstall the public client with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git` or `curl -Ls https://mdtero.com/install.sh | sh`. That overwrites the retired PyPI backend bundle.
+- If `mdtero` is missing, imports a top-level `service` package, or fails with `ModuleNotFoundError: No module named 'psycopg'`, reinstall the public client with `uv tool install --force --reinstall mdtero==0.3.1` or `curl -Ls https://mdtero.com/install.sh | sh`. That overwrites the retired PyPI backend bundle.
 - If `uv` is missing, use the one-command installer above. It will try `uv`, then `pipx`, then Python user-site pip. For manual uv installs, follow `https://docs.astral.sh/uv/getting-started/installation/`.
 - If `mdtero doctor` reports a missing API key, run `mdtero setup` or `mdtero setup --api-key --json`.
 - If no agent workspace is detected, pass an explicit `--target`.
@@ -148,7 +148,7 @@ The browser extension owns browser-context capture, OAuth bridge, user-selected 
 Mdtero 当前公开主线是 Python/uv 客户端。默认安装：
 
 ```bash
-uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall mdtero==0.3.1
 mdtero setup
 mdtero doctor
 ```

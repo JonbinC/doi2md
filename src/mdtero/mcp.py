@@ -8,7 +8,7 @@ from .agent import detect_target_status
 from .client import MdteroClient
 from .config import MdteroConfig, config_path, load_config
 from .onboarding import GENERIC_RAG_QUERY_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, build_academic_onboarding_summary, build_input_route_contract, build_onboarding_checklist
-from .projects import PaperRecord, add_paper, bind_server_project, init_project, load_project, paper_from_submission, paper_to_document, project_documents, project_path, update_task
+from .projects import PaperRecord, add_paper, bind_server_project, init_project, load_project, paper_from_submission, paper_ingest_quality, paper_is_ready_for_ingest, paper_to_document, project_documents, project_path, project_rag_local_coverage, update_task
 from .rag_contract import ensure_rag_contract
 from .redact import redact_sensitive_payload, redact_sensitive_text
 
@@ -61,6 +61,8 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
             "project_bridge": build_project_bridge(root),
         }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    ready = [paper for paper in succeeded if paper_is_ready_for_ingest(paper)]
+    coverage = project_rag_local_coverage(state)
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
     running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     failed = [paper for paper in state.papers if paper.status == "failed"]
@@ -80,11 +82,16 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
         reason_code = "project_has_pending_items"
         action_hint = "Submit pending papers, refresh task status, then use the one-command RAG bootstrap query."
         next_commands = [commands["commands"]["parse_pending"], commands["commands"]["refresh"], ONE_COMMAND_RAG_BOOTSTRAP]
-    elif succeeded:
+    elif ready:
         status = "ready"
         reason_code = "project_ready_for_rag"
-        action_hint = "Project has succeeded parse tasks. Ingest completed Markdown, then use the one-command RAG bootstrap query or expose context through MCP."
+        action_hint = "Project has verified full-text tasks. Ingest completed Markdown, then use the one-command RAG bootstrap query or expose context through MCP."
         next_commands = [commands["commands"].get("ingest_for_rag", "mdtero project ingest --json"), ONE_COMMAND_RAG_BOOTSTRAP, commands["commands"]["rag_status"], commands["commands"]["mcp_briefing"]]
+    elif succeeded:
+        status = "needs_attention"
+        reason_code = "low_confidence_tasks_blocked"
+        action_hint = "Completed tasks exist, but partial or citation-only results are blocked from default RAG ingestion. Review them or explicitly use `mdtero project ingest --include-low-confidence`."
+        next_commands = [commands["commands"].get("ingest_for_rag", "mdtero project ingest --json"), commands["commands"]["refresh"]]
     else:
         status = "empty"
         reason_code = "project_empty"
@@ -97,7 +104,11 @@ def build_project_status(project_root: Path | None = None) -> dict[str, Any]:
         "name": state.name,
         "server_project_id": state.server_project_id,
         "paper_count": len(state.papers),
-        "ready_for_ingest_count": len(succeeded),
+        "ready_for_ingest_count": len(ready),
+        "full_text_ready_count": int(coverage.get("full_text_ready_count") or len(ready)),
+        "partial_text_count": int(coverage.get("partial_text_count") or 0),
+        "citation_only_count": int(coverage.get("citation_only_count") or 0),
+        "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
         "pending_count": len(pending),
         "running_count": len(running),
         "failed_count": len(failed),
@@ -319,13 +330,15 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
         ready_for_ingest_count = 0
     else:
         succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+        ready = [paper for paper in succeeded if paper_is_ready_for_ingest(paper)]
+        coverage = project_rag_local_coverage(state)
         pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
         running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
         failed = [paper for paper in state.papers if paper.status == "failed"]
         project_name = state.name
         server_project_id = state.server_project_id
         paper_count = len(state.papers)
-        ready_for_ingest_count = len(succeeded)
+        ready_for_ingest_count = len(ready)
         if state.server_project_id:
             status = "bound"
             reason_code = "server_project_linked"
@@ -338,11 +351,16 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
                 commands["rag_build"],
                 commands["mcp_briefing"],
             ])
-        elif succeeded:
+        elif ready:
             status = "needs_server_binding"
             reason_code = "server_project_not_linked"
             action_hint = f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create or reuse the backend project id, import completed artifacts, build the RAG index, and query without copying a server project id."
             next_commands = _dedupe_commands([commands["project_status"], ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["mcp_briefing"]])
+        elif succeeded:
+            status = "needs_attention"
+            reason_code = "low_confidence_tasks_blocked"
+            action_hint = "Completed tasks exist, but partial or citation-only results are blocked from default RAG ingestion. Review them or explicitly use `mdtero project ingest --include-low-confidence`."
+            next_commands = _dedupe_commands([commands["project_status"], commands.get("ingest_for_rag", "mdtero project ingest --json")])
         elif running:
             status = "waiting_for_parse"
             reason_code = "project_has_running_tasks"
@@ -374,6 +392,10 @@ def build_project_bridge(project_root: Path | None = None) -> dict[str, Any]:
             "initialized": state is not None,
             "paper_count": paper_count,
             "ready_for_ingest_count": ready_for_ingest_count,
+            "full_text_ready_count": int(coverage.get("full_text_ready_count") or ready_for_ingest_count) if state is not None else 0,
+            "partial_text_count": int(coverage.get("partial_text_count") or 0) if state is not None else 0,
+            "citation_only_count": int(coverage.get("citation_only_count") or 0) if state is not None else 0,
+            "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0) if state is not None else 0,
         },
         "server_project": {
             "id": server_project_id,
@@ -406,12 +428,14 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
             "project_bridge": build_project_bridge(root),
         }
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    ready = [paper for paper in succeeded if paper_is_ready_for_ingest(paper)]
+    coverage = project_rag_local_coverage(state)
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
     running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     failed = [paper for paper in state.papers if paper.status == "failed"]
     commands = build_agent_commands(root)["commands"]
 
-    if state.server_project_id and succeeded:
+    if state.server_project_id and ready:
         status = "ready"
         reason_code = "ready"
         action_hint = "Local project has succeeded parse tasks and a linked server project. Ingest or refresh server-side RAG, then query through CLI or MCP."
@@ -423,11 +447,16 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
             commands["rag_query"],
             commands["mcp_briefing"],
         ]
-    elif not state.server_project_id and succeeded:
+    elif not state.server_project_id and ready:
         status = "not_ready"
         reason_code = "server_project_not_linked"
         action_hint = f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build backend RAG, and query without a manual server project id."
         next_commands = [ONE_COMMAND_RAG_BOOTSTRAP, commands["rag_status"], commands["rag_build"]]
+    elif succeeded:
+        status = "not_ready"
+        reason_code = "low_confidence_tasks_blocked"
+        action_hint = "Completed tasks exist, but partial or citation-only results are blocked from default RAG ingestion. Review them or explicitly use `mdtero project ingest --include-low-confidence`."
+        next_commands = [commands.get("ingest_for_rag", "mdtero project ingest --json"), commands["refresh"]]
     elif running:
         status = "not_ready"
         reason_code = "project_has_running_tasks"
@@ -448,8 +477,12 @@ def build_rag_context(project_root: Path | None = None) -> dict[str, Any]:
         "project": state.name,
         "server_project_id": state.server_project_id,
         "status": status,
-        "ready": bool(state.server_project_id and succeeded),
-        "ready_for_ingest_count": len(succeeded),
+        "ready": bool(state.server_project_id and ready),
+        "ready_for_ingest_count": len(ready),
+        "full_text_ready_count": int(coverage.get("full_text_ready_count") or len(ready)),
+        "partial_text_count": int(coverage.get("partial_text_count") or 0),
+        "citation_only_count": int(coverage.get("citation_only_count") or 0),
+        "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
         "local_paper_count": len(state.papers),
         "pending_count": len(pending),
         "running_count": len(running),
@@ -478,7 +511,7 @@ def build_server_rag_status(project_root: Path | None = None, *, fetcher: Any | 
             "next_commands": [commands["project_init_named"], commands["project_add"], commands["parse_doi_or_url"]],
             "project_bridge": build_project_bridge(root),
         }
-    local_ready = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    local_ready = sum(1 for paper in state.papers if paper_is_ready_for_ingest(paper))
     if not state.server_project_id:
         return {
             "status": "not_ready",
@@ -1107,7 +1140,7 @@ def _rag_context_markdown(source_nodes: list[dict[str, Any]]) -> str:
 
 
 def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, commands: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
-    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    succeeded = [paper for paper in state.papers if paper_is_ready_for_ingest(paper)]
     project_id = str(state.server_project_id or "").strip()
     if not succeeded:
         return None, {
@@ -1193,7 +1226,7 @@ def _bootstrap_server_rag_for_query(client: Any, root: Path, state: Any, command
 
 
 def _bootstrap_server_rag_for_build(client: Any, root: Path, state: Any, commands: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
-    succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    succeeded = [paper for paper in state.papers if paper_is_ready_for_ingest(paper)]
     project_id = str(state.server_project_id or "").strip()
     if not succeeded:
         return None, {
@@ -1299,14 +1332,20 @@ def ingest_project_for_agent(
         })
 
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
-    if not succeeded:
+    ready = [paper for paper in succeeded if paper_is_ready_for_ingest(paper)]
+    coverage = project_rag_local_coverage(state)
+    if not ready:
         linked_project_id = str(project_id or state.server_project_id or "").strip() or None
         return redact_sensitive_payload({
             "status": "not_ready",
-            "reason_code": "no_succeeded_tasks",
+            "reason_code": "low_confidence_tasks_blocked" if succeeded else "no_succeeded_tasks",
             "project": state.name,
             "server_project_id": linked_project_id,
             "local_ready_for_ingest_count": 0,
+            "full_text_ready_count": 0,
+            "partial_text_count": int(coverage.get("partial_text_count") or 0),
+            "citation_only_count": int(coverage.get("citation_only_count") or 0),
+            "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
             "local_paper_count": len(state.papers),
             "imported_count": 0,
             "failed_count": 0,
@@ -1317,7 +1356,7 @@ def ingest_project_for_agent(
                 "reused_server_project": False,
                 "bound_local_project": bool(state.server_project_id),
             },
-            "action_hint": "Parse at least one paper successfully before importing documents into backend RAG.",
+            "action_hint": "Parse a verified full-text paper before importing documents into backend RAG. Partial or citation-only results require explicit CLI review with `mdtero project ingest --include-low-confidence`.",
             "next_commands": _rag_recovery_commands(commands),
         })
 
@@ -1359,7 +1398,11 @@ def ingest_project_for_agent(
         "reason_code": reason_code,
         "project": state.name,
         "server_project_id": linked_project_id,
-        "local_ready_for_ingest_count": len(succeeded),
+        "local_ready_for_ingest_count": len(ready),
+        "full_text_ready_count": len(ready),
+        "partial_text_count": int(coverage.get("partial_text_count") or 0),
+        "citation_only_count": int(coverage.get("citation_only_count") or 0),
+        "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
         "local_paper_count": len(state.papers),
         "project_binding": project_binding,
         **ingest,
@@ -1377,8 +1420,21 @@ def ingest_project_for_agent(
 def _import_succeeded_tasks_for_mcp(client: Any, state: Any, project_id: str) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
     for paper in state.papers:
         if paper.status != "succeeded" or not paper.task_id:
+            continue
+        if not paper_is_ready_for_ingest(paper):
+            category, reason_code = paper_ingest_quality(paper)
+            blocked.append({
+                "input": paper.input,
+                "task_id": paper.task_id,
+                "status": "blocked",
+                "quality_label": paper.quality_label,
+                "quality_category": category,
+                "reason_code": reason_code or "quality_unverified",
+                "action_hint": "Partial or citation-only results are blocked from default RAG ingestion. Review and explicitly override with `mdtero project ingest --include-low-confidence` from the CLI if appropriate.",
+            })
             continue
         try:
             result = client.import_task_to_project(project_id, paper.task_id)
@@ -1390,6 +1446,8 @@ def _import_succeeded_tasks_for_mcp(client: Any, state: Any, project_id: str) ->
         "server_project_id": project_id,
         "imported_count": len(items),
         "failed_count": len(failures),
+        "blocked_count": len(blocked),
+        "blocked": blocked,
         "items": items,
         "failures": failures,
     }
@@ -1707,6 +1765,8 @@ def build_agent_briefing(
     pending = [paper for paper in papers if paper.status in {"pending", "created"} and not paper.task_id]
     running = [paper for paper in papers if paper.task_id and paper.status not in {"succeeded", "failed"}]
     succeeded = [paper for paper in papers if paper.status == "succeeded" and paper.task_id]
+    ready = [paper for paper in succeeded if paper_is_ready_for_ingest(paper)]
+    coverage = project_rag_local_coverage(state) if state is not None else {}
     failed = [paper for paper in papers if paper.status == "failed"]
 
     next_commands: list[str] = []
@@ -1728,7 +1788,7 @@ def build_agent_briefing(
         next_commands.append(commands["refresh"])
     if failed:
         next_commands.append("mdtero project parse --include-failed --wait --timeout 300 --json")
-    if succeeded:
+    if ready:
         next_commands.append(commands["download_markdown"])
     if pending_agent_installs:
         next_commands.append(commands["agent_install"])
@@ -1741,7 +1801,7 @@ def build_agent_briefing(
         commands=commands,
         pending=pending,
         running=running,
-        succeeded=succeeded,
+        succeeded=ready,
         failed=failed,
         server_rag=server_rag,
         pending_agent_installs=pending_agent_installs,
@@ -1768,12 +1828,19 @@ def build_agent_briefing(
             "running_count": len(running),
             "succeeded_count": len(succeeded),
             "failed_count": len(failed),
-            "ready_for_ingest_count": len(succeeded),
+            "ready_for_ingest_count": len(ready),
+            "full_text_ready_count": int(coverage.get("full_text_ready_count") or len(ready)),
+            "partial_text_count": int(coverage.get("partial_text_count") or 0),
+            "citation_only_count": int(coverage.get("citation_only_count") or 0),
+            "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
             "rag_status": server_rag.get("status"),
             "rag_reason_code": server_rag.get("reason_code"),
         },
-        "ready_artifacts": [_paper_agent_summary(paper, include_download=True) for paper in succeeded[:20]],
-        "blocked_items": [_paper_agent_summary(paper, include_download=False) for paper in failed[:20]],
+        "ready_artifacts": [_paper_agent_summary(paper, include_download=True) for paper in ready[:20]],
+        "blocked_items": (
+            [_paper_agent_summary(paper, include_download=False) for paper in failed[:20]]
+            + [_paper_agent_summary(paper, include_download=False) for paper in succeeded if not paper_is_ready_for_ingest(paper)][:20]
+        ),
         "active_items": [_paper_agent_summary(paper, include_download=False) for paper in [*pending, *running][:20]],
         "rag": {
             "server_project_id": server_rag.get("server_project_id"),
@@ -2327,8 +2394,8 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
         ]),
         "command_blocks": {
             "workstation_oauth": "\n".join([
-                "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
-                "# PyPI command after the public package is replaced: uv tool install mdtero",
+                "uv tool install --force --reinstall mdtero==0.3.1",
+                "# China mirror fallback: uv tool install --force --reinstall --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero==0.3.1",
                 str(commands.get("setup") or "mdtero setup"),
                 "mdtero setup --json",
                 str(commands.get("doctor") or "mdtero doctor --json"),
@@ -2571,8 +2638,8 @@ def serve_project_context(project_root: Path | None = None) -> None:
     except Exception as exc:  # pragma: no cover - optional runtime import
         raise RuntimeError(
             "FastMCP is required for `mdtero mcp serve`. Run `mdtero doctor --json` first; "
-            "reinstall the public client with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git`. "
-            "The PyPI package name is still being replaced during alpha, so avoid `uv tool install mdtero` until the public package is republished."
+            "reinstall the public client with `uv tool install --force --reinstall mdtero==0.3.1` "
+            "or use the China mirror index from `https://mdtero.com/install/manifest.json`."
         ) from exc
 
     root = project_root or Path.cwd()

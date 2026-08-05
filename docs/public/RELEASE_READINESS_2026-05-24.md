@@ -6,7 +6,7 @@ This matrix records what is proven by the current worktree and what still needs 
 
 | Area | Evidence |
 | --- | --- |
-| Public Python/uv CLI as the main runtime | `pyproject.toml` exposes `mdtero`; public release gate passed with `202 passed`; install docs use `uv tool install git+https://github.com/JonbinC/doi2md.git` and exclude npm runtime commands. |
+| Public Python/uv CLI as the main runtime | `pyproject.toml` exposes `mdtero`; public release gate passed; install docs use the pinned PyPI package with domestic mirror fallback and exclude npm runtime commands. |
 | Setup, doctor, academic keys, and agent-safe diagnostics | CLI contract tests cover setup/doctor/config flows; docs require `mdtero doctor --json`; redaction tests cover Mdtero keys, bearer headers, signed URLs, and token query params. |
 | DOI/URL parse, raw upload, status, download, project mode | Public CLI contract tests cover parse/status/download/project flows; live production smoke completed arXiv parse, project refresh, and artifact download. |
 | PDF upload through backend document parsing | Production smoke completed PDF upload, backend file fetch, and Markdown download. |

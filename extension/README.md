@@ -34,7 +34,7 @@ npm run package:webstore
 ## CLI
 
 ```bash
-uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall mdtero==0.3.1
 mdtero setup
 ```
 

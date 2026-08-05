@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import time
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,8 @@ from .projects import (
     load_project,
     paper_to_document,
     paper_from_submission,
+    paper_ingest_quality,
+    paper_is_ready_for_ingest,
     project_path,
     project_pending_papers,
     project_rag_local_coverage,
@@ -134,6 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     smoke.add_argument("--skip-download", action="store_true")
     smoke.add_argument("--skip-translate", action="store_true")
     smoke.add_argument("--skip-rag", action="store_true")
+    smoke.add_argument("--rag", action="store_true", help="Explicitly run server-side RAG build/query; default smoke skips RAG.")
     smoke.add_argument("--wait", action="store_true", help="Accepted for copy-paste consistency; smoke already waits for parse, translation, and RAG steps.")
     _add_wait_options(smoke)
     smoke.add_argument("--json", action="store_true")
@@ -337,8 +341,9 @@ def build_parser() -> argparse.ArgumentParser:
     project_download.add_argument("--artifact", default="paper_md")
     project_download.add_argument("--output-dir", type=Path, default=Path("mdtero-output"))
     project_download.add_argument("--json", action="store_true")
-    project_ingest = _cmd(project_sub, "ingest", "Import succeeded parse tasks into the linked server project for RAG.", cmd_project_ingest)
+    project_ingest = _cmd(project_sub, "ingest", "Import verified full-text tasks into the linked server project for RAG.", cmd_project_ingest)
     project_ingest.add_argument("--json", action="store_true")
+    project_ingest.add_argument("--include-low-confidence", action="store_true", help="Explicitly import partial, citation-only, or unverified results; blocked by default.")
     project_list = _cmd(project_sub, "list", "List papers in the current project.", cmd_project_status)
     project_list.add_argument("--json", action="store_true")
     project_status = _cmd(project_sub, "status", "Show current project status.", cmd_project_status)
@@ -606,6 +611,10 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     client = MdteroClient(config=cfg, timeout=max(float(args.timeout or DEFAULT_WAIT_TIMEOUT_SECONDS), 1.0))
     terminal_failures = 0
     parse_task: dict[str, Any] | None = None
+    # Hand-built namespaces from older integrations do not have --rag; retain
+    # their legacy behavior while the public parser defaults to a safe smoke.
+    rag_enabled = bool(getattr(args, "rag", not hasattr(args, "rag"))) and not bool(getattr(args, "skip_rag", False))
+    payload["rag_requested"] = rag_enabled
 
     if args.skip_discovery:
         _smoke_add_step(payload, "discover", "skipped", reason_code="skipped")
@@ -704,9 +713,10 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     else:
         _smoke_add_step(payload, "translate", "skipped", reason_code="parse_not_succeeded")
 
-    if args.skip_rag:
-        _smoke_add_step(payload, "rag", "skipped", reason_code="skipped")
-        _smoke_add_step(payload, "content", "skipped", reason_code="rag_skipped")
+    if not rag_enabled:
+        rag_skip_reason = "skipped" if bool(getattr(args, "skip_rag", False)) and not hasattr(args, "rag") else "not_requested"
+        _smoke_add_step(payload, "rag", "skipped", reason_code=rag_skip_reason)
+        _smoke_add_step(payload, "content", "skipped", reason_code="rag_skipped" if rag_skip_reason == "skipped" else "rag_not_requested")
     elif parse_task and parse_task.get("status") == "succeeded":
         try:
             state = load_project(workdir)
@@ -742,8 +752,8 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         _smoke_add_step(payload, "rag", "skipped", reason_code="parse_not_succeeded")
         _smoke_add_step(payload, "content", "skipped", reason_code="parse_not_succeeded")
 
-    if args.skip_rag:
-        _smoke_add_step(payload, "mcp_briefing", "skipped", reason_code="rag_skipped")
+    if not rag_enabled:
+        _smoke_add_step(payload, "mcp_briefing", "skipped", reason_code="rag_skipped" if rag_skip_reason == "skipped" else "rag_not_requested")
     elif parse_task and parse_task.get("status") == "succeeded":
         try:
             from .mcp import build_agent_briefing
@@ -972,11 +982,13 @@ def _local_dependency_summary() -> dict[str, Any]:
         "ready": not missing,
         "missing": missing,
         "checks": checks,
-        "install_command": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
+        "install_command": "uv tool install --force --reinstall mdtero==0.3.1",
         "installer_command": "curl -Ls https://mdtero.com/install.sh | sh",
-        "pipx_install_command": "pipx install --force git+https://github.com/JonbinC/doi2md.git",
-        "pip_user_install_command": "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git",
-        "pypi_install_command": "uv tool install mdtero",
+        "pipx_install_command": "pipx install --force mdtero==0.3.1",
+        "pip_user_install_command": "python3 -m pip install --user --force-reinstall mdtero==0.3.1",
+        "pypi_install_command": "uv tool install --force --reinstall mdtero==0.3.1",
+        "mirror_install_command": "uv tool install --force --reinstall --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero==0.3.1",
+        "github_fallback_command": "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
         "doctor_command": "mdtero doctor --json",
     }
 
@@ -993,7 +1005,7 @@ def _install_boundary_summary() -> dict[str, Any]:
     action_hint = "Public Mdtero CLI package is active."
     if service_origin:
         status = "mixed_environment"
-        action_hint = "A top-level backend `service` package is importable in this Python environment. Reinstall the public CLI with `uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git` or `curl -Ls https://mdtero.com/install.sh | sh`; avoid the old PyPI package until it is republished."
+        action_hint = "A top-level backend `service` package is importable in this Python environment. Reinstall the public CLI with `uv tool install --force --reinstall mdtero==0.3.1` or `curl -Ls https://mdtero.com/install.sh | sh`."
     return {
         "status": status,
         "package": "mdtero",
@@ -1003,7 +1015,8 @@ def _install_boundary_summary() -> dict[str, Any]:
         "backend_service_origin": str(service_origin) if service_origin else None,
         "action_hint": action_hint,
         "next_commands": [
-            "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git",
+            "uv tool install --force --reinstall mdtero==0.3.1",
+            "uv tool install --force --reinstall --index-url https://pypi.tuna.tsinghua.edu.cn/simple mdtero==0.3.1",
             "curl -Ls https://mdtero.com/install.sh | sh",
             "mdtero doctor --json",
         ],
@@ -1466,7 +1479,8 @@ def _doctor_project_payload(root: Path, *, server_rag_status: dict[str, Any] | N
     running = sum(1 for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"})
     succeeded = sum(1 for paper in state.papers if paper.status == "succeeded")
     failed = sum(1 for paper in state.papers if paper.status == "failed")
-    ready_for_ingest = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    coverage = project_rag_local_coverage(state)
+    ready_for_ingest = int(coverage.get("ready_for_ingest_count") or 0)
     if server_rag_status:
         readiness = server_rag_status.get("readiness") if isinstance(server_rag_status.get("readiness"), dict) else {}
         ready_for_query = bool(readiness.get("ready_for_query"))
@@ -1508,6 +1522,10 @@ def _doctor_project_payload(root: Path, *, server_rag_status: dict[str, Any] | N
         "succeeded_count": succeeded,
         "failed_count": failed,
         "ready_for_ingest_count": ready_for_ingest,
+        "full_text_ready_count": int(coverage.get("full_text_ready_count") or ready_for_ingest),
+        "partial_text_count": int(coverage.get("partial_text_count") or 0),
+        "citation_only_count": int(coverage.get("citation_only_count") or 0),
+        "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
         "rag_status": rag_status,
         "server_rag_status": server_rag_status,
         "next_commands": rag_next,
@@ -1535,7 +1553,8 @@ def _doctor_project_rows(root: Path, *, server_rag_status: dict[str, Any] | None
     running = sum(1 for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed"})
     succeeded = sum(1 for paper in state.papers if paper.status == "succeeded")
     failed = sum(1 for paper in state.papers if paper.status == "failed")
-    ready_for_ingest = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    coverage = project_rag_local_coverage(state)
+    ready_for_ingest = int(coverage.get("ready_for_ingest_count") or 0)
     rows = [
         (
             "Project papers",
@@ -1961,12 +1980,17 @@ def cmd_parse_batch(args: argparse.Namespace) -> int:
                 _merge_waited_task_into_submission(result, task)
                 item.update(_batch_item_summary(target, result, route_kind=item.get("route_kind")))
                 if args.download and task.get("status") == "succeeded":
+                    # The status endpoint may omit the DOI/title metadata that
+                    # was present in the original submission.  Use the merged
+                    # submission as the filename source so batch downloads do
+                    # not fall back to the server's ``unknown_*`` basename.
+                    result.setdefault("paper_input", target)
                     download = _download_task_artifact(
                         client,
                         str(result["task_id"]),
                         str(args.download),
                         args.output_dir,
-                        task=task,
+                        task=result,
                         filename_template=args.filename_template,
                     )
                     item["download"] = download
@@ -2667,6 +2691,8 @@ def _discovery_parse_target(item: dict[str, Any]) -> str | None:
 
 def _project_payload(state: Any) -> dict[str, Any]:
     succeeded = [paper for paper in state.papers if paper.status == "succeeded" and paper.task_id]
+    ready = [paper for paper in succeeded if paper_is_ready_for_ingest(paper)]
+    coverage = project_rag_local_coverage(state)
     pending = [paper for paper in state.papers if paper.status in {"pending", "created"} and not paper.task_id]
     failed = [paper for paper in state.papers if paper.status == "failed"]
     running = [paper for paper in state.papers if paper.task_id and paper.status not in {"succeeded", "failed", "cancelled"}]
@@ -2678,7 +2704,11 @@ def _project_payload(state: Any) -> dict[str, Any]:
         "running_count": len(running),
         "succeeded_count": len(succeeded),
         "failed_count": len(failed),
-        "ready_for_ingest_count": len(succeeded),
+        "ready_for_ingest_count": len(ready),
+        "full_text_ready_count": int(coverage.get("full_text_ready_count") or len(ready)),
+        "partial_text_count": int(coverage.get("partial_text_count") or 0),
+        "citation_only_count": int(coverage.get("citation_only_count") or 0),
+        "blocked_from_default_ingest_count": int(coverage.get("blocked_from_default_ingest_count") or 0),
         "papers": [paper_to_document(paper).to_dict() for paper in state.papers],
     }
 
@@ -2855,13 +2885,16 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
     if project_id is None:
         return 1
     client = MdteroClient()
-    ingest = _import_succeeded_tasks_to_server_project(client, state, project_id)
+    ingest = _import_succeeded_tasks_to_server_project(client, state, project_id, include_low_confidence=bool(getattr(args, "include_low_confidence", False)))
     results = ingest["items"]
     failures = ingest["failures"]
     payload = {
         "server_project_id": project_id,
         "imported_count": len(results),
         "failed_count": len(failures),
+        "blocked_count": int(ingest.get("blocked_count") or 0),
+        "blocked": ingest.get("blocked") or [],
+        "include_low_confidence": bool(getattr(args, "include_low_confidence", False)),
         "items": results,
         "failures": failures,
     }
@@ -2876,10 +2909,12 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
             table.add_row(item["input"], item["task_id"], "", f"failed: {item['error_code']}")
         Console().print(table)
         if not results:
-            Console().print("No succeeded project tasks are ready to import.")
+            Console().print("No verified full-text project tasks are ready to import.")
+        for item in ingest.get("blocked") or []:
+            Console().print(f"Blocked from default RAG: {item['task_id']} ({item['reason_code']}); use --include-low-confidence only after review.")
         for item in failures:
             Console().print(f"Hint for {item['task_id']}: {item['action_hint']}")
-    return 1 if failures else 0
+    return 1 if failures or (ingest.get("blocked_count") and not getattr(args, "include_low_confidence", False)) else 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -2992,6 +3027,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     try:
         task = client.task(args.task_id)
         _enrich_task_status(task)
+        _enrich_task_metadata_for_filename(task)
     except Exception:
         task = None
     filename_template = getattr(args, "filename_template", "{author}_{year}_{shorttitle}")
@@ -3433,16 +3469,16 @@ def cmd_rag_build(_args: argparse.Namespace) -> int:
         _print_rag_command_failure(payload, json_output=_args.json)
         return 1
     ingest = _import_succeeded_tasks_to_server_project(client, state, project_id)
-    if ingest["failures"]:
+    if ingest["failures"] or ingest.get("blocked_count"):
         payload = {
             "status": "failed",
             "command": "rag_build",
-            "reason_code": "server_project_import_failed",
+            "reason_code": "server_project_import_failed" if ingest["failures"] else "low_confidence_tasks_blocked",
             "error_code": "rag_precondition_failed",
             "server_project_id": project_id,
             "bootstrap": bootstrap,
             "ingest": ingest,
-            "action_hint": f"Some succeeded parse tasks could not be imported into the server project. Fix the import failures, rerun `{RAG_INGEST_COMMAND}`, then retry `{ONE_COMMAND_RAG_BOOTSTRAP}`.",
+            "action_hint": f"Only verified full-text tasks enter RAG by default. Review the blocked items, then rerun `{RAG_INGEST_COMMAND} --include-low-confidence` only when an explicit override is intended.",
             "next_commands": [RAG_INGEST_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND],
         }
         _print_rag_command_failure(payload, json_output=_args.json)
@@ -3520,8 +3556,11 @@ def cmd_rag_query(args: argparse.Namespace) -> int:
             console.print(f"[dim]Server project {project_id}: importing completed papers…[/dim]")
         ingest = _import_succeeded_tasks_to_server_project(client, load_project(root), project_id)
         bootstrap = {"bootstrap": bootstrap_meta, "ingest": ingest}
-        if ingest["failures"]:
+        if ingest["failures"] or ingest.get("blocked_count"):
             payload = _rag_query_bootstrap_not_ready(project_id, args.question, bootstrap, reason_code="server_project_import_failed")
+            if ingest.get("blocked_count") and not ingest["failures"]:
+                payload["reason_code"] = "low_confidence_tasks_blocked"
+                payload["action_hint"] = "Only verified full-text tasks enter RAG by default. Review blocked items and explicitly ingest them with `mdtero project ingest --include-low-confidence` if appropriate."
             _print_rag_command_failure(payload, json_output=json_output)
             return 1
         if not json_output:
@@ -3634,7 +3673,7 @@ def _rag_status_payload_is_ready(payload: dict[str, Any]) -> bool:
 
 
 def _local_ready_for_rag_count(state: Any) -> int:
-    return sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id)
+    return sum(1 for paper in state.papers if paper_is_ready_for_ingest(paper))
 
 
 def _rag_local_coverage_payload(state: Any) -> dict[str, Any]:
@@ -4098,7 +4137,7 @@ def cmd_content(args: argparse.Namespace) -> int:
 
 def cmd_rag_status(args: argparse.Namespace) -> int:
     state = load_project(Path.cwd())
-    indexed = sum(1 for paper in state.papers if paper.status == "succeeded" and paper.artifact)
+    indexed = sum(1 for paper in state.papers if paper_is_ready_for_ingest(paper))
     local_coverage = _rag_local_coverage_payload(state)
     console = Console()
     project_id = args.project_id or state.server_project_id
@@ -4713,11 +4752,24 @@ def _print_project_create_server_failure(payload: dict[str, Any], *, json_output
         console.print(f"  {command}")
 
 
-def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, project_id: str) -> dict[str, Any]:
+def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, project_id: str, *, include_low_confidence: bool = False) -> dict[str, Any]:
     results = []
     failures = []
+    blocked = []
     for paper in state.papers:
         if paper.status != "succeeded" or not paper.task_id:
+            continue
+        if not paper_is_ready_for_ingest(paper, include_low_confidence=include_low_confidence):
+            category, reason_code = paper_ingest_quality(paper)
+            blocked.append({
+                "input": paper.input,
+                "task_id": paper.task_id,
+                "status": "blocked",
+                "quality_label": paper.quality_label,
+                "quality_category": category,
+                "reason_code": reason_code or "quality_unverified",
+                "action_hint": "Review the artifact and rerun with `mdtero project ingest --include-low-confidence` only when citation-only or partial content is intentionally accepted.",
+            })
             continue
         try:
             result = client.import_task_to_project(project_id, paper.task_id)
@@ -4729,6 +4781,8 @@ def _import_succeeded_tasks_to_server_project(client: MdteroClient, state: Any, 
         "server_project_id": project_id,
         "imported_count": len(results),
         "failed_count": len(failures),
+        "blocked_count": len(blocked),
+        "blocked": blocked,
         "items": results,
         "failures": failures,
     }
@@ -5151,7 +5205,7 @@ def _unlinked_server_project_payload(command: str, state: Any) -> dict[str, Any]
         "error_code": "rag_precondition_failed",
         "server_project_id": None,
         "project": state.name,
-        "local_ready_for_ingest_count": sum(1 for paper in state.papers if paper.status == "succeeded" and paper.task_id),
+        "local_ready_for_ingest_count": _local_ready_for_rag_count(state),
         "local_paper_count": len(state.papers),
         "action_hint": f"Run `{ONE_COMMAND_RAG_BOOTSTRAP}` to create and bind a server project, import succeeded parse tasks, build server-side RAG, and query without copying a server project id.",
         "next_commands": [ONE_COMMAND_RAG_BOOTSTRAP, RAG_STATUS_COMMAND, RAG_BUILD_COMMAND, GENERIC_RAG_QUERY_COMMAND],
@@ -5400,6 +5454,8 @@ def _is_low_quality_label(label: str) -> bool:
 
 
 def _download_task_artifact(client: MdteroClient, task_id: str, artifact: str, output_dir: Path, *, task: dict[str, Any] | None, filename_template: str) -> dict[str, Any]:
+    if task is not None:
+        _enrich_task_metadata_for_filename(task)
     filename = _download_filename(task, artifact=artifact, filename_template=filename_template) if task else None
     try:
         result = client.download(task_id, artifact, output_dir, filename=filename)
@@ -5429,11 +5485,11 @@ def _download_filename(task: dict[str, Any], *, artifact: str, filename_template
     extension = ".md" if artifact.endswith("_md") or artifact == "paper_md" else ".zip" if "bundle" in artifact else ""
     label = _task_quality_label(task)
     values = {
-        "author": _first_author(task) or "unknown",
-        "year": _task_year(task) or "n.d.",
-        "shorttitle": _short_title(_task_title(task)) or artifact,
+        "author": _first_author(task) or "paper",
+        "year": _task_year(task) or "nd",
+        "shorttitle": _short_title(_task_title(task)) or _doi_slug(task) or artifact,
         "title": _slug(_task_title(task)) or artifact,
-        "doi": _slug(_task_doi(task)) or "no-doi",
+        "doi": _doi_slug(task) or "no-doi",
         "task_id": _slug(str(task.get("task_id") or task.get("id") or "")) or "task",
         "artifact": _slug(artifact) or artifact,
     }
@@ -5441,25 +5497,68 @@ def _download_filename(task: dict[str, Any], *, artifact: str, filename_template
         stem = template.format(**values)
     except (KeyError, ValueError):
         stem = "{author}_{year}_{shorttitle}".format(**values)
-    stem = _slug(stem) or values["task_id"]
-    if _is_low_information_download_stem(stem, artifact=artifact):
-        return None
+    stem = _slug(stem) or _default_download_stem(task, artifact=artifact)
+    if _is_default_download_template(template):
+        stem = _default_download_stem(task, artifact=artifact)
     if artifact.endswith("_md") and _is_low_quality_label(label):
         stem = f"{stem}.low_quality"
     return f"{stem}{extension}"
 
 
-def _is_low_information_download_stem(stem: str, *, artifact: str) -> bool:
-    normalized = _slug(stem)
-    artifact_slug = _slug(artifact) or artifact
-    low_information = {
-        artifact_slug,
-        f"unknown_n_d_{artifact_slug}",
-        f"unknown_nd_{artifact_slug}",
-        f"unknown_{artifact_slug}",
-        f"n_d_{artifact_slug}",
-    }
-    return normalized in low_information or normalized.startswith(f"unknown_n_d_{artifact_slug}.")
+def _is_default_download_template(template: str) -> bool:
+    return template == "{author}_{year}_{shorttitle}"
+
+
+def _default_download_stem(task: dict[str, Any], *, artifact: str) -> str:
+    """Build a readable name even when the server omitted parsed metadata.
+
+    Metadata is preferred, but DOI-only tasks must still produce a stable name
+    rather than inheriting the server's generic ``unknown_*`` artifact name.
+    """
+    author = _first_author(task)
+    year = _task_year(task)
+    short_title = _short_title(_task_title(task))
+    parts = [part for part in (author, year, short_title) if part]
+    if parts:
+        return _slug("_".join(parts))
+    doi_slug = _doi_slug(task)
+    if doi_slug:
+        return f"doi_{doi_slug}"
+    original = _task_original_filename(task, artifact=artifact)
+    if original:
+        original_stem = _slug(Path(original).stem)
+        if original_stem and original_stem not in {_slug(artifact), "unknown_n_d", "unknown"}:
+            return original_stem
+    return f"task_{_slug(str(task.get('task_id') or task.get('id') or '')) or 'result'}"
+
+
+def _doi_slug(task: dict[str, Any]) -> str:
+    return _slug(_task_doi(task).replace("10.", "10_", 1))
+
+
+def _task_original_filename(task: dict[str, Any], *, artifact: str) -> str:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    candidates = [result.get("download_artifacts"), result.get("artifacts"), task.get("download_artifacts")]
+    for collection in candidates:
+        if isinstance(collection, dict):
+            item = collection.get(artifact)
+            if isinstance(item, dict):
+                value = item.get("filename") or item.get("name")
+                if value:
+                    return str(value)
+            elif isinstance(item, str) and item:
+                return item
+        elif isinstance(collection, list):
+            for item in collection:
+                if not isinstance(item, dict):
+                    continue
+                key = str(item.get("artifact") or item.get("key") or "").strip()
+                if key and key != artifact:
+                    continue
+                value = item.get("filename") or item.get("name")
+                if value:
+                    return str(value)
+    return ""
 
 
 def _append_download_manifest(output_dir: Path, row: dict[str, Any]) -> dict[str, str]:
@@ -6293,9 +6392,7 @@ def _append_csv_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[st
 
 
 def _task_title(task: dict[str, Any]) -> str:
-    result = task.get("result") if isinstance(task.get("result"), dict) else {}
-    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
-    for value in (task.get("title"), result.get("title"), metadata.get("title"), task.get("paper_title")):
+    for value in _metadata_values(task, "title", "paper_title", "article_title", "document_title", "articleTitle"):
         cleaned = str(value or "").strip()
         if cleaned:
             return cleaned
@@ -6303,9 +6400,7 @@ def _task_title(task: dict[str, Any]) -> str:
 
 
 def _task_doi(task: dict[str, Any]) -> str:
-    result = task.get("result") if isinstance(task.get("result"), dict) else {}
-    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
-    for value in (task.get("doi"), result.get("doi"), metadata.get("doi"), task.get("paper_input"), task.get("input_summary")):
+    for value in _metadata_values(task, "doi", "source_doi", "paper_input", "input_summary", "source_input"):
         doi = _doi_from_input(str(value or ""))
         if doi:
             return doi
@@ -6320,9 +6415,17 @@ def _doi_from_input(value: str) -> str:
 
 
 def _task_year(task: dict[str, Any]) -> str:
-    result = task.get("result") if isinstance(task.get("result"), dict) else {}
-    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
-    for value in (task.get("year"), result.get("year"), metadata.get("year"), metadata.get("published_year"), metadata.get("publication_year")):
+    for value in _metadata_values(
+        task,
+        "year",
+        "published_year",
+        "publication_year",
+        "coverDate",
+        "publicationDate",
+        "date",
+        "published",
+        "published_date",
+    ):
         match = re.search(r"(19|20)\d{2}", str(value or ""))
         if match:
             return match.group(0)
@@ -6330,16 +6433,32 @@ def _task_year(task: dict[str, Any]) -> str:
 
 
 def _first_author(task: dict[str, Any]) -> str:
-    result = task.get("result") if isinstance(task.get("result"), dict) else {}
-    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
-    authors = task.get("authors") or result.get("authors") or metadata.get("authors")
+    authors = next(
+        (
+            value
+            for value in _metadata_values(
+                task,
+                "authors",
+                "author",
+                "creators",
+                "first_author",
+                "firstAuthor",
+                "author_name",
+                "authorName",
+            )
+            if value
+        ),
+        None,
+    )
     first: Any = None
     if isinstance(authors, list) and authors:
         first = authors[0]
+    elif isinstance(authors, dict):
+        first = authors.get("family") or authors.get("surname") or authors.get("last") or authors.get("name")
     elif isinstance(authors, str):
         first = authors.split(",", 1)[0].split(";", 1)[0]
     if isinstance(first, dict):
-        first = first.get("family") or first.get("last") or first.get("name")
+        first = first.get("family") or first.get("surname") or first.get("last") or first.get("name")
     cleaned = str(first or "").strip()
     if not cleaned:
         return ""
@@ -6354,6 +6473,79 @@ def _short_title(title: str, *, words: int = 6) -> str:
 def _slug(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", str(value or "").strip().lower())
     return cleaned.strip("_")
+
+
+def _metadata_values(task: dict[str, Any], *keys: str) -> list[Any]:
+    """Read task metadata across the response shapes used by old/new APIs."""
+    values: list[Any] = []
+    wanted = set(keys)
+    seen: set[int] = set()
+    queue: list[Any] = [task]
+    while queue and len(seen) < 64:
+        current = queue.pop(0)
+        if not isinstance(current, dict) or id(current) in seen:
+            continue
+        seen.add(id(current))
+        for key in keys:
+            if key in current and current.get(key) not in (None, "", [], {}):
+                values.append(current.get(key))
+        for key, value in current.items():
+            if key in wanted:
+                continue
+            if isinstance(value, dict):
+                queue.append(value)
+            elif isinstance(value, list):
+                queue.extend(item for item in value if isinstance(item, dict))
+    return values
+
+
+def _enrich_task_metadata_for_filename(task: dict[str, Any]) -> None:
+    """Best-effort DOI metadata repair for tasks whose parser omitted metadata.
+
+    This only runs for downloads and never changes the server task state. A
+    failed metadata lookup simply falls through to a DOI-derived filename.
+    """
+    if _task_title(task) and _task_year(task) and _first_author(task):
+        return
+    doi = _task_doi(task)
+    if not doi or doi.lower().startswith("10.48550/arxiv."):
+        return
+    try:
+        response = httpx.get(
+            f"https://api.crossref.org/works/{quote(doi, safe='')}",
+            headers={"Accept": "application/json", "User-Agent": "mdtero-cli/0.3 (+https://mdtero.com)"},
+            timeout=5.0,
+        )
+        if response.status_code != 200:
+            return
+        payload = response.json()
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if not isinstance(message, dict):
+            return
+    except (httpx.HTTPError, ValueError, TypeError):
+        return
+
+    result = task.setdefault("result", {})
+    if not isinstance(result, dict):
+        result = {}
+        task["result"] = result
+    metadata = result.setdefault("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+        result["metadata"] = metadata
+    titles = message.get("title") if isinstance(message.get("title"), list) else []
+    if not _task_title(task) and titles and str(titles[0]).strip():
+        metadata["title"] = str(titles[0]).strip()
+    if not _task_year(task):
+        issued = message.get("issued") if isinstance(message.get("issued"), dict) else {}
+        date_parts = issued.get("date-parts") if isinstance(issued.get("date-parts"), list) else []
+        if date_parts and isinstance(date_parts[0], list) and date_parts[0]:
+            metadata["year"] = date_parts[0][0]
+    if not _first_author(task):
+        authors = message.get("author") if isinstance(message.get("author"), list) else []
+        if authors:
+            metadata["authors"] = authors
+    metadata["doi"] = doi
 
 
 def _print_parse_batch_summary(payload: dict[str, Any]) -> None:

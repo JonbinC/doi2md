@@ -15,12 +15,12 @@ Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as 
 ## Install
 
 ```bash
-uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall mdtero==0.3.1
 mdtero setup
 mdtero doctor --json
 ```
 
-During alpha, install from this GitHub repository. If `uv` is unavailable, use the installer:
+The package is published on PyPI, so the default install does not depend on GitHub. In mainland China the installer automatically tries a Tsinghua/Alibaba PyPI mirror before the official index. If `uv` is unavailable, use the installer:
 
 ```bash
 curl -Ls https://mdtero.com/install.sh | sh
