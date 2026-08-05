@@ -1213,7 +1213,7 @@ def _doctor_pdf_fallback_row_detail(*, server_pdf_fallback: dict[str, Any] | Non
     elif local_mineru:
         base = "MinerU precision is configured locally"
     else:
-        base = "Configure MINERU_API_TOKEN for local uploaded PDF parsing"
+        base = "Server MinerU is checked after Mdtero login; no local parser key is required"
     if server_pdf_fallback and server_pdf_fallback.get("status") == "ok":
         if server_grobid == "disabled":
             return f"{base}; server GROBID PDF is retired unless opted in"
