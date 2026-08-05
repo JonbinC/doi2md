@@ -13,12 +13,12 @@ Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译
 ## 安装
 
 ```bash
-uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git
+uv tool install --force --reinstall mdtero==0.3.1
 mdtero setup
 mdtero doctor --json
 ```
 
-alpha 阶段请从本 GitHub 仓库安装。没有 `uv` 时使用安装脚本：
+安装包已发布到 PyPI，默认安装不依赖 GitHub。中国大陆用户使用安装脚本时会自动先尝试清华/阿里 PyPI 镜像，再回退官方源；没有 `uv` 时直接使用安装脚本：
 
 ```bash
 curl -Ls https://mdtero.com/install.sh | sh

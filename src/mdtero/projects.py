@@ -13,6 +13,9 @@ PROJECT_DIR_NAME = ".mdtero"
 PROJECT_FILE_NAME = "project.json"
 BIB_DOI_FIELD_PATTERN = re.compile(r'\bdoi\s*=\s*[{"]?\s*(10\.\d{4,9}/[^\s}",]+)', re.I)
 BIB_URL_FIELD_PATTERN = re.compile(r'\burl\s*=\s*[{"]?\s*(https?://[^\s}",]+)', re.I)
+_LOW_QUALITY_LABELS = {"metadata_only", "abstract_only", "section_only_fulltext", "low_confidence_parse", "unavailable"}
+_CITATION_ONLY_CODES = {"ris_cite_export_only", "citation_only", "citation_export_only", "bibtex_only", "endnote_only"}
+_PARTIAL_CODES = {"content_incomplete", "partial_fulltext", "short_sparse_markdown", "abstract_only", "section_only_fulltext"}
 
 
 @dataclass
@@ -28,6 +31,9 @@ class PaperRecord:
     artifact: str | None = None
     provider: str | None = None
     parser_strategy: str | None = None
+    quality_label: str | None = None
+    parse_outcome: str | None = None
+    parse_reason_codes: list[str] = field(default_factory=list)
     translation_attempts: list[dict[str, Any]] = field(default_factory=list)
     zotero_key: str | None = None
     zotero_synced_task_id: str | None = None
@@ -111,6 +117,9 @@ def update_paper_submission(root: Path, input_value: str, result: dict) -> Proje
             paper.artifact = _preferred_artifact(result) or paper.artifact
             paper.provider = _selected_provider(result) or paper.provider
             paper.parser_strategy = _parser_strategy(result) or paper.parser_strategy
+            paper.quality_label = _quality_label(result) or paper.quality_label
+            paper.parse_outcome = _parse_outcome_code(result) or paper.parse_outcome
+            paper.parse_reason_codes = _parse_reason_codes(result) or paper.parse_reason_codes
             paper.translation_attempts = _translation_attempts(result) or paper.translation_attempts
             break
     save_project(root, state)
@@ -130,6 +139,9 @@ def paper_from_submission(input_value: str, result: dict, *, source: str | None 
         artifact=_preferred_artifact(result),
         provider=_selected_provider(result),
         parser_strategy=_parser_strategy(result),
+        quality_label=_quality_label(result),
+        parse_outcome=_parse_outcome_code(result),
+        parse_reason_codes=_parse_reason_codes(result),
         translation_attempts=_translation_attempts(result),
     )
 
@@ -150,9 +162,15 @@ def project_rag_local_coverage(state: ProjectState) -> dict[str, Any]:
     blocked: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
+    partial_count = 0
+    citation_only_count = 0
 
     for paper in state.papers:
         item = _paper_rag_coverage_item(paper)
+        if item["quality_category"] == "partial":
+            partial_count += 1
+        elif item["quality_category"] == "citation_only":
+            citation_only_count += 1
         if item["ready_for_ingest"]:
             ready.append(item)
         elif paper.status == "failed":
@@ -167,6 +185,10 @@ def project_rag_local_coverage(state: ProjectState) -> dict[str, Any]:
     return {
         "paper_count": len(state.papers),
         "ready_for_ingest_count": len(ready),
+        "full_text_ready_count": len(ready),
+        "partial_text_count": partial_count,
+        "citation_only_count": citation_only_count,
+        "blocked_from_default_ingest_count": len(blocked),
         "blocked_count": len(blocked),
         "pending_count": len(pending),
         "failed_count": len(failed),
@@ -233,6 +255,9 @@ def update_task(root: Path, task: dict) -> ProjectState:
             paper.artifact = _preferred_artifact(task) or paper.artifact
             paper.provider = _selected_provider(task) or paper.provider
             paper.parser_strategy = _parser_strategy(task) or paper.parser_strategy
+            paper.quality_label = _quality_label(task) or paper.quality_label
+            paper.parse_outcome = _parse_outcome_code(task) or paper.parse_outcome
+            paper.parse_reason_codes = _parse_reason_codes(task) or paper.parse_reason_codes
             paper.translation_attempts = _translation_attempts(task) or paper.translation_attempts
     save_project(root, state)
     return state
@@ -258,17 +283,26 @@ def paper_to_document(paper: PaperRecord) -> PaperDocument:
             strategy=paper.parser_strategy,
             reason_code=paper.reason_code,
             action_hint=paper.action_hint,
-            diagnostics={"translation_attempts": paper.translation_attempts} if paper.translation_attempts else {},
+            diagnostics={
+                **({"translation_attempts": paper.translation_attempts} if paper.translation_attempts else {}),
+                "quality_label": paper.quality_label,
+                "parse_outcome": paper.parse_outcome,
+                "parse_reason_codes": list(paper.parse_reason_codes),
+            },
         ),
         artifacts=artifacts,
     )
 
 
 def _paper_rag_coverage_item(paper: PaperRecord) -> dict[str, Any]:
-    ready = paper.status == "succeeded" and bool(paper.task_id) and bool(paper.artifact)
+    quality_category, quality_reason = paper_ingest_quality(paper)
+    ready = paper.status == "succeeded" and bool(paper.task_id) and bool(paper.artifact) and quality_category == "full_text"
     if ready:
         reason_code = "ready_for_ingest"
         action_hint = None
+    elif paper.status == "succeeded" and quality_category in {"partial", "citation_only"}:
+        reason_code = quality_reason or f"{quality_category}_blocked"
+        action_hint = "This result is blocked from default RAG ingestion because it is not verified full text. Reparse from a valid PDF/XML/HTML source, or explicitly override with `mdtero project ingest --include-low-confidence`."
     elif paper.status == "succeeded" and paper.task_id and not paper.artifact:
         reason_code = "missing_downloadable_artifact"
         action_hint = "Refresh the task, then download or ingest a Markdown artifact before RAG."
@@ -290,12 +324,40 @@ def _paper_rag_coverage_item(paper: PaperRecord) -> dict[str, Any]:
         "artifact": paper.artifact,
         "provider": paper.provider,
         "parser_strategy": paper.parser_strategy,
+        "quality_label": paper.quality_label,
+        "parse_outcome": paper.parse_outcome,
+        "parse_reason_codes": list(paper.parse_reason_codes),
+        "quality_category": quality_category,
         "source": paper.source,
         "zotero_key": paper.zotero_key,
         "ready_for_ingest": ready,
         "reason_code": reason_code,
         "action_hint": action_hint,
     }
+
+
+def paper_ingest_quality(paper: PaperRecord) -> tuple[str, str | None]:
+    """Return the default RAG quality bucket and a stable blocking reason."""
+    label = str(paper.quality_label or "").strip().lower()
+    codes = {str(code).strip().lower() for code in paper.parse_reason_codes if str(code).strip()}
+    outcome = str(paper.parse_outcome or "").strip().lower()
+    if codes & _CITATION_ONLY_CODES or "ris" in " ".join(codes) or "citation" in " ".join(codes):
+        return "citation_only", "citation_only_blocked"
+    if label in _LOW_QUALITY_LABELS or outcome in _PARTIAL_CODES or codes & _PARTIAL_CODES:
+        return "partial", "partial_fulltext_blocked"
+    if label in {"full_text_good", "full_text_with_warnings"} or outcome == "fulltext_accepted":
+        return "full_text", None
+    if paper.status == "succeeded" and paper.task_id and paper.artifact and not label and not outcome and not codes:
+        # Projects created before quality fields existed remain compatible.
+        return "full_text", None
+    return "unknown", "quality_unverified"
+
+
+def paper_is_ready_for_ingest(paper: PaperRecord, *, include_low_confidence: bool = False) -> bool:
+    if paper.status != "succeeded" or not paper.task_id or not paper.artifact:
+        return False
+    category, _reason = paper_ingest_quality(paper)
+    return category == "full_text" or (include_low_confidence and category in {"partial", "citation_only", "unknown"})
 
 
 def _paper_record_from_payload(payload: dict[str, Any]) -> PaperRecord:
@@ -310,6 +372,30 @@ def _reason_code(task: dict) -> str | None:
     result = task.get("result") if isinstance(task.get("result"), dict) else {}
     quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
     return task.get("reason_code") or result.get("reason_code") or quality.get("reason_code") or task.get("error_code")
+
+
+def _quality_label(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    parse_outcome = task.get("parse_outcome") if isinstance(task.get("parse_outcome"), dict) else result.get("parse_outcome") if isinstance(result.get("parse_outcome"), dict) else {}
+    value = task.get("quality_label") or result.get("quality_label") or quality.get("quality_label") or quality.get("label") or parse_outcome.get("quality_label")
+    return str(value).strip() if value else None
+
+
+def _parse_outcome_code(task: dict) -> str | None:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    parse_outcome = task.get("parse_outcome") if isinstance(task.get("parse_outcome"), dict) else result.get("parse_outcome") if isinstance(result.get("parse_outcome"), dict) else {}
+    value = parse_outcome.get("outcome_code")
+    return str(value).strip() if value else None
+
+
+def _parse_reason_codes(task: dict) -> list[str]:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    parse_outcome = task.get("parse_outcome") if isinstance(task.get("parse_outcome"), dict) else result.get("parse_outcome") if isinstance(result.get("parse_outcome"), dict) else {}
+    values = parse_outcome.get("reason_codes") or task.get("parse_reason_codes") or result.get("parse_reason_codes") or []
+    if isinstance(values, str):
+        values = [part.strip() for part in values.split(",")]
+    return [str(value).strip() for value in values if str(value).strip()]
 
 
 def _action_hint(task: dict) -> str | None:

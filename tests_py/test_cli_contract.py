@@ -1317,7 +1317,8 @@ def test_doctor_json_reports_public_install_boundary(monkeypatch, tmp_path: Path
     assert payload["install_boundary"]["version"]
     assert payload["install_boundary"]["status"] in {"ok", "mixed_environment"}
     assert payload["install_boundary"]["backend_service_importable"] in {True, False}
-    assert "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git" in payload["install_boundary"]["next_commands"]
+    assert "uv tool install --force --reinstall mdtero==0.3.1" in payload["install_boundary"]["next_commands"]
+    assert any("pypi.tuna.tsinghua.edu.cn" in command for command in payload["install_boundary"]["next_commands"])
 
 
 def test_doctor_json_detects_invalid_remote_api_key(monkeypatch, tmp_path: Path, capsys):
@@ -3013,7 +3014,7 @@ def test_download_json_includes_download_response_quality_headers(monkeypatch, t
     assert "abstract_only" in manifest
 
 
-def test_download_uses_server_filename_when_metadata_template_is_low_information(monkeypatch, tmp_path: Path, capsys):
+def test_download_uses_doi_filename_when_metadata_is_missing(monkeypatch, tmp_path: Path, capsys):
     from mdtero import cli
 
     downloaded = tmp_path / "vaswani2017attention.md"
@@ -3030,7 +3031,7 @@ def test_download_uses_server_filename_when_metadata_template_is_low_information
     def fake_download(self, task_id, artifact, output_dir, *, filename=None):
         assert task_id == "task-metadata-light"
         assert artifact == "paper_md"
-        assert filename is None
+        assert filename == "doi_10_48550_arxiv_1706_03762.md"
         return DownloadResult(path=downloaded, filename="vaswani2017attention.md", content_type="text/markdown", content_length=1024)
 
     monkeypatch.setattr(MdteroClient, "task", fake_task)
@@ -3041,6 +3042,49 @@ def test_download_uses_server_filename_when_metadata_template_is_low_information
 
     assert payload["path"] == str(downloaded)
     assert payload["original_filename"] == "vaswani2017attention.md"
+
+
+def test_download_repairs_doi_only_metadata_for_readable_filename(monkeypatch, tmp_path: Path, capsys):
+    from mdtero import cli
+
+    downloaded = tmp_path / "spietz_2025_thermochemical_energy_storage_based_on_salt.md"
+
+    def fake_task(self, task_id):
+        return {
+            "task_id": task_id,
+            "status": "succeeded",
+            "paper_input": "10.3390/en18102643",
+            "result": {"parse_outcome": {"outcome_code": "fulltext_accepted"}},
+        }
+
+    class CrossrefResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "message": {
+                    "title": ["Thermochemical Energy Storage Based on Salt Hydrates"],
+                    "issued": {"date-parts": [[2025]]},
+                    "author": [{"family": "Spietz", "given": "N."}],
+                }
+            }
+
+    def fake_get(*args, **kwargs):
+        assert "api.crossref.org/works/10.3390%2Fen18102643" in args[0]
+        return CrossrefResponse()
+
+    def fake_download(self, task_id, artifact, output_dir, *, filename=None):
+        assert filename == downloaded.name
+        return DownloadResult(path=downloaded, filename=downloaded.name, content_type="text/markdown", content_length=1024)
+
+    monkeypatch.setattr(MdteroClient, "task", fake_task)
+    monkeypatch.setattr(MdteroClient, "download", fake_download)
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    assert cli.cmd_download(type("Args", (), {"task_id": "task-doi-only", "artifact": "paper_md", "output_dir": tmp_path, "json": True})()) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["path"] == str(downloaded)
+    assert payload["task"]["title"] == "Thermochemical Energy Storage Based on Salt Hydrates"
 
 
 def test_client_download_captures_quality_headers(monkeypatch, tmp_path: Path):
@@ -4329,11 +4373,11 @@ def test_setup_json_headless_api_key_saves_without_echoing_secret(monkeypatch, t
     assert payload["dependencies"]["checks"]["curl_cffi"]["capability"] == "local publisher route acquisition"
     assert payload["dependencies"]["checks"]["fastmcp"]["capability"] == "local MCP server for agents"
     assert payload["dependencies"]["checks"]["pyzotero"]["capability"] == "Zotero import and sync"
-    assert payload["dependencies"]["install_command"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git"
+    assert payload["dependencies"]["install_command"] == "uv tool install --force --reinstall mdtero==0.3.1"
     assert payload["dependencies"]["installer_command"] == "curl -Ls https://mdtero.com/install.sh | sh"
-    assert payload["dependencies"]["pipx_install_command"] == "pipx install --force git+https://github.com/JonbinC/doi2md.git"
-    assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git"
-    assert payload["dependencies"]["pypi_install_command"] == "uv tool install mdtero"
+    assert payload["dependencies"]["pipx_install_command"] == "pipx install --force mdtero==0.3.1"
+    assert payload["dependencies"]["pip_user_install_command"] == "python3 -m pip install --user --force-reinstall mdtero==0.3.1"
+    assert payload["dependencies"]["pypi_install_command"] == "uv tool install --force --reinstall mdtero==0.3.1"
     assert payload["academic"]["discover_source"] == "auto_openalex"
     assert payload["input_routes"]["goal"] == "choose_shortest_markdown_path"
     assert payload["input_routes"]["server_apis"] == {
@@ -4959,6 +5003,10 @@ def test_mcp_agent_briefing_summarizes_project_work_for_agents(monkeypatch, tmp_
         "succeeded_count": 1,
         "failed_count": 1,
         "ready_for_ingest_count": 1,
+        "full_text_ready_count": 1,
+        "partial_text_count": 0,
+        "citation_only_count": 0,
+        "blocked_from_default_ingest_count": 2,
         "rag_status": "ready",
         "rag_reason_code": "indexed",
     }
@@ -5793,8 +5841,8 @@ def test_mcp_serve_missing_fastmcp_points_to_alpha_reinstall(monkeypatch, tmp_pa
         raise AssertionError("serve_project_context should fail when FastMCP is unavailable")
 
     assert "mdtero doctor --json" in message
-    assert "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git" in message
-    assert "avoid `uv tool install mdtero`" in message
+    assert "uv tool install --force --reinstall mdtero==0.3.1" in message
+    assert "China mirror" in message
     assert "npm" not in message.lower()
 
 
@@ -8286,8 +8334,8 @@ def test_python_agent_installer_writes_packaged_skill_without_npm(tmp_path: Path
     assert results[0].action == "installed"
     assert skill_path.exists()
     skill_text = skill_path.read_text(encoding="utf-8")
-    assert "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git" in skill_text
-    assert "use PyPI only after the public client is republished" in skill_text
+    assert "uv tool install --force --reinstall mdtero==0.3.1" in skill_text
+    assert "mirror" in skill_text.lower()
 
 
 def test_python_agent_installer_detects_and_uninstalls_targets(tmp_path: Path):
@@ -8373,18 +8421,18 @@ def test_public_install_manifest_is_python_runtime_only_and_mirrored_with_site()
     from mdtero import __version__
 
     assert __version__ == package_version
-    assert manifest["quickInstallCommand"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git && mdtero setup"
+    assert manifest["quickInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1 && mdtero setup"
     assert manifest["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
-    assert manifest["pypiInstallCommand"] == "uv tool install mdtero"
+    assert manifest["pypiInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1"
     assert manifest["cli"]["packageName"] == "mdtero"
     assert manifest["cli"]["packageVersion"] == package_version
     assert manifest["releaseTruth"]["current"]["cli"]["version"] == package_version
     assert manifest["cli"]["packageManager"] == "uv"
-    assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install --force --reinstall git+https://github.com/JonbinC/doi2md.git"
+    assert manifest["cli"]["runtimeInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1"
     assert manifest["cli"]["scriptInstallCommand"] == "curl -Ls https://mdtero.com/install.sh | sh"
-    assert manifest["cli"]["pipxInstallCommand"] == "pipx install --force git+https://github.com/JonbinC/doi2md.git"
-    assert manifest["cli"]["pipUserInstallCommand"] == "python3 -m pip install --user --force-reinstall git+https://github.com/JonbinC/doi2md.git"
-    assert manifest["cli"]["pypiInstallCommand"] == "uv tool install mdtero"
+    assert manifest["cli"]["pipxInstallCommand"] == "pipx install --force mdtero==0.3.1"
+    assert manifest["cli"]["pipUserInstallCommand"] == "python3 -m pip install --user --force-reinstall mdtero==0.3.1"
+    assert manifest["cli"]["pypiInstallCommand"] == "uv tool install --force --reinstall mdtero==0.3.1"
     assert manifest["cli"]["skillInstallCommand"] == "mdtero agent install --target <target>"
     assert manifest["cliCommand"] == "mdtero"
     assert "helperCommand" not in manifest
@@ -8424,7 +8472,7 @@ def test_public_repo_has_no_root_npm_or_per_agent_install_runtime():
     assert "uv tool install --force --reinstall \"$GITHUB_SPEC\"" in install_script
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in install_script
     assert "pipx install --force" in install_script
-    assert "-m pip install --user --force-reinstall \"$GITHUB_SPEC\"" in install_script
+    assert "-m pip install --user --force-reinstall \"mdtero==$PACKAGE_VERSION\"" in install_script
     assert "install.sh [--agent" in install_script
     assert "Installing Mdtero CLI" in install_script
     assert "mdtero agent install --target" in install_script

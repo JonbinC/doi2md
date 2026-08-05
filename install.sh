@@ -3,6 +3,7 @@ set -eu
 
 TARGET=""
 DRY_RUN="0"
+PACKAGE_VERSION="0.3.1"
 
 usage() {
   cat <<'EOF'
@@ -10,9 +11,10 @@ Usage:
   install.sh [--agent <claude_code|codex|gemini_cli|hermes|opencode>] [--dry-run]
 
 Installs the Python Mdtero runtime, then installs the matching agent skill
-bundle through `mdtero agent install`. During the alpha, the script installs
-the known-good public GitHub client because the old PyPI package name is still
-being replaced. It prefers uv, then pipx, then Python's user-site pip fallback.
+bundle through `mdtero agent install`. PyPI is the primary source; the script
+tries a China-friendly mirror before the official index and keeps the public
+GitHub repository only as a last-resort fallback. Set MDTERO_PYPI_INDEX to use
+an internal mirror explicitly.
 
 Examples:
   curl -Ls https://mdtero.com/install.sh | sh
@@ -93,13 +95,37 @@ try_install_uv() {
 install_mdtero_runtime() {
   GITHUB_SPEC="git+https://github.com/JonbinC/doi2md.git"
   if command_exists uv || try_install_uv; then
-    run uv tool install --force --reinstall "$GITHUB_SPEC"
+    installed="0"
+    if [ -n "${MDTERO_PYPI_INDEX:-}" ]; then
+      INDEXES="$MDTERO_PYPI_INDEX"
+    else
+      INDEXES="https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple https://pypi.org/simple"
+    fi
+    for index in $INDEXES; do
+      printf '%s\n' "Trying Mdtero package index: $index"
+      if run uv tool install --force --reinstall --index-url "$index" "mdtero==$PACKAGE_VERSION"; then
+        installed="1"
+        break
+      fi
+    done
+    if [ "$installed" = "0" ]; then
+      printf '%s\n' "Package indexes unavailable; trying the public GitHub source as a last resort."
+      run uv tool install --force --reinstall "$GITHUB_SPEC"
+    fi
   elif command_exists pipx; then
-    run pipx install --force "$GITHUB_SPEC"
+    if [ -n "${MDTERO_PYPI_INDEX:-}" ]; then
+      run env PIP_INDEX_URL="$MDTERO_PYPI_INDEX" pipx install --force "mdtero==$PACKAGE_VERSION"
+    else
+      run pipx install --force "mdtero==$PACKAGE_VERSION"
+    fi
   else
     PYTHON="$(python_cmd)"
     printf '%s\n' "uv and pipx are unavailable; falling back to Python user-site install."
-    run "$PYTHON" -m pip install --user --force-reinstall "$GITHUB_SPEC"
+    if [ -n "${MDTERO_PYPI_INDEX:-}" ]; then
+      run "$PYTHON" -m pip install --user --force-reinstall --index-url "$MDTERO_PYPI_INDEX" "mdtero==$PACKAGE_VERSION"
+    else
+      run "$PYTHON" -m pip install --user --force-reinstall "mdtero==$PACKAGE_VERSION"
+    fi
     refresh_user_path
   fi
 
