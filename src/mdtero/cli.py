@@ -1306,6 +1306,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     root = Path.cwd()
     server_rag_status = _doctor_server_rag_status(cfg, root, remote_auth=remote_auth)
     server_pdf_fallback = _doctor_server_pdf_fallback(cfg, remote_auth=remote_auth)
+    install_boundary = _install_boundary_summary()
     rows = _doctor_rows(
         cfg,
         root,
@@ -1313,6 +1314,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         server_rag_status=server_rag_status,
         relay_status=relay_status,
         server_pdf_fallback=server_pdf_fallback,
+        install_boundary=install_boundary,
     )
     payload = _doctor_payload(
         cfg,
@@ -1322,6 +1324,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         server_rag_status=server_rag_status,
         relay_status=relay_status,
         server_pdf_fallback=server_pdf_fallback,
+        install_boundary=install_boundary,
     )
     if getattr(_args, "json", False):
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -1352,10 +1355,19 @@ def _print_doctor_human_footer(console: Console, payload: dict[str, Any]) -> Non
         console.print(f"\nUpgrade when needed: {upgrade_command}")
 
 
-def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None, server_pdf_fallback: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
+def _doctor_rows(
+    cfg: MdteroConfig,
+    root: Path,
+    *,
+    remote_auth: dict[str, Any] | None = None,
+    server_rag_status: dict[str, Any] | None = None,
+    relay_status: dict[str, Any] | None = None,
+    server_pdf_fallback: dict[str, Any] | None = None,
+    install_boundary: dict[str, Any] | None = None,
+) -> list[tuple[str, str, str]]:
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
     relay_status = relay_status if relay_status is not None else _doctor_relay_status(cfg, remote_auth=remote_auth)
-    install_boundary = _install_boundary_summary()
+    install_boundary = install_boundary if install_boundary is not None else _install_boundary_summary()
     api_key_status = "ok" if cfg.is_authenticated else "missing"
     api_key_detail = cfg.api_key_source
     if remote_auth.get("status") == "failed":
@@ -1392,10 +1404,21 @@ def _local_access_row() -> tuple[str, str, str]:
     return ("Local access", mapped, str(payload.get("action_hint") or ""))
 
 
-def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, str]], *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None, server_pdf_fallback: dict[str, Any] | None = None) -> dict[str, Any]:
+def _doctor_payload(
+    cfg: MdteroConfig,
+    root: Path,
+    rows: list[tuple[str, str, str]],
+    *,
+    remote_auth: dict[str, Any] | None = None,
+    server_rag_status: dict[str, Any] | None = None,
+    relay_status: dict[str, Any] | None = None,
+    server_pdf_fallback: dict[str, Any] | None = None,
+    install_boundary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     row_payload = [{"check": check, "status": status, "detail": detail} for check, status, detail in rows]
     remote_auth = remote_auth or _doctor_remote_auth(cfg)
     relay_status = relay_status if relay_status is not None else _doctor_relay_status(cfg, remote_auth=remote_auth)
+    install_boundary = install_boundary if install_boundary is not None else _install_boundary_summary()
     status = "ok" if cfg.is_authenticated else "missing_auth"
     if remote_auth.get("status") == "failed":
         status = "invalid_auth"
@@ -1410,7 +1433,7 @@ def _doctor_payload(cfg: MdteroConfig, root: Path, rows: list[tuple[str, str, st
         "local_access": local_access_status(),
         "relay": relay_status,
         "access": access_status(cfg, relay_connected=bool(relay_status.get("connected"))),
-        "install_boundary": _install_boundary_summary(),
+        "install_boundary": install_boundary,
         "checks": row_payload,
         "dependencies": {
             "curl_cffi": _doctor_row_status(rows, "curl_cffi"),
