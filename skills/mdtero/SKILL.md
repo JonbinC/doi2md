@@ -1,10 +1,11 @@
 ---
 name: mdtero
-description: Use when Mdtero should be available inside an agent workspace for scientific paper parsing, translation, task-status checks, Zotero/BibTeX project import, RAG, MCP, and backend-run Markdown workflows.
+description: Use when the user needs DOI/URL/file papers turned into structured Markdown for reading, optional translation, project research, RAG, or agent workflows.
 ---
 
 # Mdtero
 
+DOI/URL/file → structured Markdown package → optional `translate` / RAG. Prefer full-text Markdown; inspect `quality_label` before citing.
 ## Quick Start
 
 1. Install the Python runtime with `uv tool install --upgrade mdtero`; for an existing installation, upgrade with `uv tool upgrade mdtero`; in China use the mirror command from `https://mdtero.com/install/manifest.json` if the official index is slow
@@ -108,8 +109,8 @@ Preserve `literature_review_playbook` and `citation_contract.locator_fields` fro
 
 ## Output Rule
 
-- prefer Markdown first
-- treat PDF as input, not as the normal output
+- prefer full-text Markdown first; treat PDF as input, not as the normal output
+- inspect `quality_label` / `.low_quality.md` before citing; prefer `xml`/`html`/`epub` sources over `abstract_only`
 - use fallback bundles only when the workflow truly needs image or asset files
 - keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, RAG `answer` / `citations` / `source_nodes` / `evidence_pack` / `citation_contract`, `next_commands`, and download artifact names visible in handoffs
 

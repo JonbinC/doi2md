@@ -1,7 +1,7 @@
 [project]
 name = "mdtero"
 version = "0.3.2"
-description = "Python TUI and CLI client for Mdtero / doi2md."
+description = "Turn research papers into structured Markdown for reading, translation, and local agents."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

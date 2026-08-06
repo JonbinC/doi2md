@@ -81,6 +81,22 @@ DEFAULT_WAIT_INTERVAL_SECONDS = 3.0
 SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
 SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
 API_KEY_PROMPT_SENTINEL = "__mdtero_prompt_for_api_key__"
+AUTH_MISSING_ACTION_HINT = (
+    "Use `mdtero login` or `mdtero setup` on a workstation. "
+    "For headless/API-key auth use `mdtero setup --api-key --json` or set MDTERO_API_KEY."
+)
+AUTH_MISSING_NEXT_COMMANDS = [
+    "mdtero login",
+    "mdtero setup",
+    "mdtero setup --api-key --json",
+    "mdtero doctor --json",
+]
+AUTH_REPAIR_NEXT_COMMANDS = [
+    "mdtero setup --api-key --json",
+    "mdtero login",
+    "mdtero doctor --json",
+]
+DEFAULT_DOWNLOAD_OUTPUT_DIR = Path("mdtero-output")
 RAG_STATUS_COMMAND = "mdtero rag status --json"
 RAG_BUILD_COMMAND = "mdtero rag build --wait --json"
 RAG_INGEST_COMMAND = "mdtero project ingest --json"
@@ -123,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     login.add_argument("--api-key", nargs="?", const=API_KEY_PROMPT_SENTINEL, default=None, help="Save an API key for headless login; omit the value to paste it securely.")
     login.add_argument("--no-browser", action="store_true", help="Print the loopback web-login URL instead of opening a browser.")
     login.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the browser login callback.")
+    login.add_argument("--json", action="store_true", help="Print a secret-safe machine-readable login summary.")
 
     smoke = _cmd(sub, "smoke", "Run a deploy-ready CLI smoke test against Mdtero APIs.", cmd_smoke)
     smoke.add_argument("--api-base", help="Override the Mdtero API base URL for this smoke run.")
@@ -351,6 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parse_bib = _cmd(sub, "parse-bib", "Import BibTeX DOI/URL entries into the current project.", cmd_project_import_bib)
     parse_bib.add_argument("paths", nargs="+", type=Path)
+    parse_bib.add_argument("--json", action="store_true", help="Print a machine-readable import summary.")
 
     zotero = sub.add_parser("zotero")
     zotero.set_defaults(func=_print_nested_help(zotero))
@@ -527,7 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
     download = _cmd(sub, "download", "Download one task artifact.", cmd_download)
     download.add_argument("task_id")
     download.add_argument("artifact", nargs="?", default="paper_md")
-    download.add_argument("--output-dir", type=Path, default=Path.cwd())
+    download.add_argument("--output-dir", type=Path, default=DEFAULT_DOWNLOAD_OUTPUT_DIR)
     download.add_argument("--filename-template", default="{author}_{year}_{shorttitle}", help="Prefer a metadata-based filename for Markdown artifacts. Use an empty string to keep the server filename.")
     download.add_argument("--manifest", action=argparse.BooleanOptionalAction, default=True, help="Write/update manifest.csv in the output directory.")
     download.add_argument("--json", action="store_true")
@@ -600,8 +618,8 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             {
                 "status": "not_ready",
                 "reason_code": "auth_missing",
-                "action_hint": "Configure Mdtero auth before running production smoke. Use browser OAuth with `mdtero login` or headless API-key login with `mdtero login --api-key`.",
-                "next_commands": ["mdtero login", "mdtero login --api-key", "mdtero doctor --json"],
+                "action_hint": AUTH_MISSING_ACTION_HINT,
+                "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
             }
         )
         _print_smoke_result(payload, json_output=args.json)
@@ -806,22 +824,32 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         cfg.api_key = _api_key_from_arg_or_prompt(api_key_arg, console=console)
         if not cfg.api_key:
             return 2
-        save_config(cfg)
-        console.print("Step 1: saved API-key login for this machine.")
+        if _save_verified_api_key(cfg, console=console, json_output=False, prefix=None, announce=False) != 0:
+            return 1
+        console.print("Step 1: saved verified API-key login for this machine.")
     elif cfg.is_authenticated:
         console.print(f"Step 1: using existing API-key login from {cfg.api_key_source}.")
         headless_auth = cfg.api_key_source == "MDTERO_API_KEY"
     else:
         console.print("Step 1: authenticate.")
         if Confirm.ask("Open browser OAuth login for this machine?", default=True):
-            _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False)
+            result = _login_with_browser(cfg, console, timeout_seconds=180.0, no_browser=False, save=False)
+            cfg.api_key = result.api_key
+            if _save_verified_api_key(cfg, console=console, json_output=False, prefix=result.prefix, announce=False) != 0:
+                return 1
+            if result.prefix:
+                console.print(f"Saved verified web login API key ({result.prefix}).")
+            else:
+                console.print("Saved verified web login API key.")
         else:
             console.print("Use API-key login for headless servers or remote shells where browser OAuth cannot call back to this machine.")
             cfg.api_key = _normalize_api_key_arg(Prompt.ask("Paste Mdtero API key", password=True), console=console)
             if not cfg.api_key:
                 return 2
-            save_config(cfg)
+            if _save_verified_api_key(cfg, console=console, json_output=False, prefix=None, announce=False) != 0:
+                return 1
             headless_auth = True
+            console.print("Step 1: saved verified API-key login for this machine.")
     _configure_academic(cfg, console)
     _configure_detected_agent_skills(console, skip_prompt=headless_auth)
     local_access = ensure_local_access(cfg)
@@ -843,6 +871,18 @@ def _cmd_setup_json(_args: argparse.Namespace) -> int:
         prompt_console = Console(stderr=True)
         raw_key = api_key_arg
         if api_key_arg == API_KEY_PROMPT_SENTINEL:
+            if not sys.stdin.isatty():
+                payload = _setup_summary_payload(cfg, auth_mode="api_key", headless=True, saved_config=False)
+                payload.update(
+                    {
+                        "status": "failed",
+                        "reason_code": "api_key_prompt_requires_tty",
+                        "action_hint": AUTH_MISSING_ACTION_HINT,
+                        "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
+                    }
+                )
+                print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
+                return 2
             raw_key = Prompt.ask("Paste Mdtero API key", password=True, console=prompt_console)
         key = _normalize_api_key_arg(str(raw_key or ""), console=prompt_console)
         if not key:
@@ -851,6 +891,21 @@ def _cmd_setup_json(_args: argparse.Namespace) -> int:
             print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
             return 2
         cfg.api_key = key
+        remote = _doctor_remote_auth(cfg)
+        if remote.get("status") != "ok":
+            cfg.api_key = None
+            payload = _setup_summary_payload(cfg, auth_mode="api_key", headless=True, saved_config=False)
+            payload.update(
+                {
+                    "status": "failed",
+                    "reason_code": str(remote.get("reason_code") or remote.get("error_code") or "authentication_failed"),
+                    "action_hint": str(remote.get("action_hint") or AUTH_MISSING_ACTION_HINT),
+                    "remote_auth": remote,
+                    "next_commands": list(AUTH_REPAIR_NEXT_COMMANDS),
+                }
+            )
+            print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
+            return 1
         save_config(cfg)
         auth_mode = "api_key"
         saved_config = True
@@ -859,7 +914,7 @@ def _cmd_setup_json(_args: argparse.Namespace) -> int:
         payload.update({
             "status": "missing_auth",
             "reason_code": "auth_missing",
-            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for a headless/API-key setup.",
+            "action_hint": AUTH_MISSING_ACTION_HINT,
         })
         print(json.dumps(redact_sensitive_payload(payload), indent=2, ensure_ascii=False))
         return 1
@@ -1031,19 +1086,44 @@ def _install_boundary_summary() -> dict[str, Any]:
 def cmd_login(args: argparse.Namespace) -> int:
     cfg = load_config()
     console = Console()
+    json_output = bool(getattr(args, "json", False))
+    if args.api_key is None and cfg.is_authenticated:
+        remote = _doctor_remote_auth(cfg)
+        if remote.get("status") in {"ok", "unverified"}:
+            payload = _login_result_payload(
+                cfg,
+                status="already_authenticated" if remote.get("status") == "ok" else "already_authenticated_unverified",
+                remote_auth=remote,
+                saved_config=False,
+            )
+            return _emit_login_result(payload, console=console, json_output=json_output)
     if args.api_key is not None:
         cfg.api_key = _api_key_from_arg_or_prompt(args.api_key, console=console)
         if not cfg.api_key:
-            return 2
-        path = save_config(cfg)
-        console.print(f"Saved API key to {path}")
-        return 0
-    _login_with_browser(cfg, console, timeout_seconds=args.timeout, no_browser=args.no_browser)
-    return 0
+            payload = {
+                "status": "failed",
+                "reason_code": "api_key_empty",
+                "authenticated": False,
+                "action_hint": AUTH_MISSING_ACTION_HINT,
+                "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
+            }
+            return _emit_login_result(payload, console=console, json_output=json_output, exit_code=2)
+        return _save_verified_api_key(cfg, console=console, json_output=json_output, prefix=None)
+    result = _login_with_browser(cfg, console, timeout_seconds=args.timeout, no_browser=args.no_browser, save=False)
+    if result is None:
+        return 1
+    cfg.api_key = result.api_key
+    return _save_verified_api_key(cfg, console=console, json_output=json_output, prefix=result.prefix)
 
 
 def _api_key_from_arg_or_prompt(value: str | None, *, console: Console) -> str | None:
     if value == API_KEY_PROMPT_SENTINEL:
+        if not sys.stdin.isatty():
+            console.print(
+                "[red]No TTY for API key prompt. Pass `--api-key <key>`, set MDTERO_API_KEY, "
+                "or run `mdtero login` on a workstation.[/red]"
+            )
+            return None
         value = Prompt.ask("Paste Mdtero API key", password=True, console=console)
     return _normalize_api_key_arg(str(value or ""), console=console)
 
@@ -1056,22 +1136,167 @@ def _normalize_api_key_arg(value: str, *, console: Console) -> str | None:
     return key
 
 
-def _login_with_browser(cfg: MdteroConfig, console: Console, *, timeout_seconds: float, no_browser: bool) -> None:
+def _save_verified_api_key(
+    cfg: MdteroConfig,
+    *,
+    console: Console,
+    json_output: bool,
+    prefix: str | None,
+    announce: bool = True,
+) -> int:
+    remote = _doctor_remote_auth(cfg)
+    if remote.get("status") == "failed":
+        cfg.api_key = None
+        payload = _login_result_payload(
+            cfg,
+            status="failed",
+            remote_auth=remote,
+            saved_config=False,
+            reason_code=str(remote.get("reason_code") or remote.get("error_code") or "authentication_failed"),
+            action_hint=str(remote.get("action_hint") or "API key was rejected. Create a fresh key in the dashboard and rerun login."),
+            next_commands=list(AUTH_REPAIR_NEXT_COMMANDS),
+        )
+        return _emit_login_result(payload, console=console, json_output=json_output, exit_code=1)
+    if remote.get("status") == "unverified":
+        cfg.api_key = None
+        payload = _login_result_payload(
+            cfg,
+            status="failed",
+            remote_auth=remote,
+            saved_config=False,
+            reason_code=str(remote.get("reason_code") or "api_connectivity_failed"),
+            action_hint=str(remote.get("action_hint") or "Could not verify the API key against the server. Check connectivity and retry."),
+            next_commands=list(AUTH_REPAIR_NEXT_COMMANDS),
+        )
+        return _emit_login_result(payload, console=console, json_output=json_output, exit_code=1)
+    path = save_config(cfg)
+    if not announce and not json_output:
+        return 0
+    payload = _login_result_payload(
+        cfg,
+        status="authenticated",
+        remote_auth=remote,
+        saved_config=True,
+        saved_path=str(path),
+        prefix=prefix,
+    )
+    return _emit_login_result(payload, console=console, json_output=json_output)
+
+
+def _login_result_payload(
+    cfg: MdteroConfig,
+    *,
+    status: str,
+    remote_auth: dict[str, Any] | None = None,
+    saved_config: bool,
+    saved_path: str | None = None,
+    prefix: str | None = None,
+    reason_code: str | None = None,
+    action_hint: str | None = None,
+    next_commands: list[str] | None = None,
+) -> dict[str, Any]:
+    remote_auth = remote_auth or {}
+    authenticated = status.startswith("already_authenticated") or status == "authenticated"
+    payload: dict[str, Any] = {
+        "status": status,
+        "authenticated": authenticated and remote_auth.get("status") != "failed",
+        "auth_source": cfg.api_key_source if authenticated else None,
+        "saved_config": saved_config,
+        "config_path": saved_path or str(config_path()),
+        "remote_auth": {
+            "status": remote_auth.get("status"),
+            "email": remote_auth.get("email"),
+            "wallet_balance_display": remote_auth.get("wallet_balance_display"),
+            "reason_code": remote_auth.get("reason_code") or remote_auth.get("error_code"),
+        },
+        "next_commands": next_commands
+        or (
+            ["mdtero doctor --json", "mdtero parse <doi-or-url> --wait --timeout 300 --json"]
+            if authenticated
+            else list(AUTH_MISSING_NEXT_COMMANDS)
+        ),
+    }
+    if reason_code:
+        payload["reason_code"] = reason_code
+    if action_hint:
+        payload["action_hint"] = action_hint
+    if prefix:
+        payload["api_key_prefix"] = prefix
+    if authenticated and remote_auth.get("status") == "ok":
+        payload["action_hint"] = action_hint or "Auth is ready. Run `mdtero doctor --json` before parse/translate work."
+    return payload
+
+
+def _emit_login_result(
+    payload: dict[str, Any],
+    *,
+    console: Console,
+    json_output: bool,
+    exit_code: int = 0,
+) -> int:
+    safe = redact_sensitive_payload(payload)
+    if json_output:
+        print(json.dumps(safe, indent=2, ensure_ascii=False))
+        return exit_code
+    status = str(payload.get("status") or "")
+    if status == "already_authenticated":
+        email = ((payload.get("remote_auth") or {}).get("email") or "").strip()
+        detail = f" ({email})" if email else ""
+        console.print(f"Already authenticated{detail}. Skipping browser login.")
+    elif status == "already_authenticated_unverified":
+        console.print("An API key is already configured, but the server could not be reached to verify it.")
+        console.print(str(payload.get("action_hint") or "Check connectivity and rerun `mdtero doctor --json`."))
+    elif status == "authenticated":
+        prefix = str(payload.get("api_key_prefix") or "").strip()
+        path = str(payload.get("config_path") or "")
+        if prefix:
+            console.print(f"Saved verified API key ({prefix}) to {path}")
+        else:
+            console.print(f"Saved verified API key to {path}")
+    else:
+        console.print(f"[red]Login failed:[/red] {payload.get('reason_code') or payload.get('status')}")
+        if payload.get("action_hint"):
+            console.print(str(payload["action_hint"]))
+    next_commands = [str(command) for command in payload.get("next_commands") or [] if str(command).strip()]
+    if next_commands:
+        console.print("Next:")
+        for command in next_commands[:4]:
+            console.print(f"  {command}")
+    return exit_code
+
+
+def _login_with_browser(
+    cfg: MdteroConfig,
+    console: Console,
+    *,
+    timeout_seconds: float,
+    no_browser: bool,
+    save: bool = True,
+):
     if no_browser:
         console.print("Printing a loopback web-login URL instead of opening a browser.")
-        console.print("Use `mdtero setup --api-key --json` for remote/headless servers where 127.0.0.1 cannot receive the browser callback.")
+        console.print(
+            "Use `mdtero setup --api-key --json` for remote/headless servers where 127.0.0.1 cannot receive the browser callback."
+        )
         console.print("Open the URL below from a browser that can reach this machine's loopback callback. Waiting for the callback...")
         opener = lambda url: console.print(f"  {url}")
     else:
         console.print(f"Opening {cfg.site_base_url}/auth for Mdtero web login...")
         opener = None
-    result = run_web_login(cfg.site_base_url, timeout_seconds=timeout_seconds, open_browser=opener) if opener else run_web_login(cfg.site_base_url, timeout_seconds=timeout_seconds)
+    result = (
+        run_web_login(cfg.site_base_url, timeout_seconds=timeout_seconds, open_browser=opener)
+        if opener
+        else run_web_login(cfg.site_base_url, timeout_seconds=timeout_seconds)
+    )
+    if not save:
+        return result
     cfg.api_key = result.api_key
     path = save_config(cfg)
     if result.prefix:
         console.print(f"Saved web login API key ({result.prefix}) to {path}")
     else:
         console.print(f"Saved web login API key to {path}")
+    return result
 
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
@@ -1089,16 +1314,16 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         relay_status=relay_status,
         server_pdf_fallback=server_pdf_fallback,
     )
+    payload = _doctor_payload(
+        cfg,
+        root,
+        rows,
+        remote_auth=remote_auth,
+        server_rag_status=server_rag_status,
+        relay_status=relay_status,
+        server_pdf_fallback=server_pdf_fallback,
+    )
     if getattr(_args, "json", False):
-        payload = _doctor_payload(
-            cfg,
-            root,
-            rows,
-            remote_auth=remote_auth,
-            server_rag_status=server_rag_status,
-            relay_status=relay_status,
-            server_pdf_fallback=server_pdf_fallback,
-        )
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0 if payload["status"] == "ok" else 1
     console = Console()
@@ -1106,7 +1331,25 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     for row in rows:
         table.add_row(*row)
     console.print(table)
+    _print_doctor_human_footer(console, payload)
     return 0 if cfg.is_authenticated and remote_auth.get("status") != "failed" else 1
+
+
+def _print_doctor_human_footer(console: Console, payload: dict[str, Any]) -> None:
+    next_commands = [str(command).strip() for command in payload.get("next_commands") or [] if str(command).strip()]
+    install_boundary = payload.get("install_boundary") if isinstance(payload.get("install_boundary"), dict) else {}
+    upgrade_command = ""
+    for command in install_boundary.get("next_commands") or []:
+        text = str(command).strip()
+        if text.startswith("uv tool upgrade"):
+            upgrade_command = text
+            break
+    if next_commands:
+        console.print("\nNext:")
+        for command in next_commands[:5]:
+            console.print(f"  {command}")
+    if upgrade_command:
+        console.print(f"\nUpgrade when needed: {upgrade_command}")
 
 
 def _doctor_rows(cfg: MdteroConfig, root: Path, *, remote_auth: dict[str, Any] | None = None, server_rag_status: dict[str, Any] | None = None, relay_status: dict[str, Any] | None = None, server_pdf_fallback: dict[str, Any] | None = None) -> list[tuple[str, str, str]]:
@@ -1322,8 +1565,8 @@ def _doctor_remote_auth(cfg: MdteroConfig) -> dict[str, Any]:
     if not cfg.is_authenticated:
         return {
             "status": "missing",
-            "action_hint": "Run `mdtero setup` for browser OAuth, or `mdtero setup --api-key --json` for headless environments.",
-            "next_commands": ["mdtero setup", "mdtero setup --api-key --json"],
+            "action_hint": AUTH_MISSING_ACTION_HINT,
+            "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
         }
     try:
         usage = MdteroClient(config=cfg, timeout=10.0).usage()
@@ -1364,7 +1607,7 @@ def _doctor_relay_status(cfg: MdteroConfig, *, remote_auth: dict[str, Any]) -> d
             "status": "skipped",
             "connected": False,
             "action_hint": "Configure Mdtero auth before checking campus relay status.",
-            "next_commands": ["mdtero login", "mdtero relay serve"],
+            "next_commands": [*AUTH_MISSING_NEXT_COMMANDS, "mdtero relay serve"],
         }
     try:
         payload = MdteroClient(config=cfg, timeout=10.0)._request("GET", "/api/v1/relay/status")
@@ -1425,9 +1668,9 @@ def _doctor_server_rag_status(cfg: MdteroConfig, root: Path, *, remote_auth: dic
 
 def _doctor_auth_next_commands(cfg: MdteroConfig, remote_auth: dict[str, Any]) -> list[str]:
     if not cfg.is_authenticated:
-        return ["mdtero setup"]
+        return list(AUTH_MISSING_NEXT_COMMANDS)
     if remote_auth.get("status") == "failed":
-        return [str(command) for command in remote_auth.get("next_commands") or ["mdtero setup --api-key --json", "mdtero doctor --json"]]
+        return [str(command) for command in remote_auth.get("next_commands") or AUTH_REPAIR_NEXT_COMMANDS]
     return ["mdtero doctor --json"]
 
 
@@ -3058,6 +3301,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         Console().print(f"Downloaded {args.artifact} to {download['path']}")
+        Console().print(f"Output directory: {Path(args.output_dir).expanduser().resolve()}")
         warning = download.get("quality_warning") or _quality_warning(str(download.get("quality_label") or ""))
         if warning or download.get("parse_billable") is False:
             Console().print(f"Warning: {warning or 'downloaded artifact is not marked billable full text; verify before citing it.'}")
@@ -4290,13 +4534,15 @@ def cmd_relay_serve(args: argparse.Namespace) -> int:
         payload = {
             "status": "failed",
             "reason_code": "auth_missing",
-            "action_hint": "Run `mdtero login` or `mdtero login --api-key` before starting the campus relay.",
-            "next_commands": ["mdtero login", "mdtero login --api-key"],
+            "action_hint": AUTH_MISSING_ACTION_HINT,
+            "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
         }
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             Console().print(payload["action_hint"])
+            for command in payload["next_commands"][:4]:
+                Console().print(f"  {command}")
         return 1
 
     console = Console()
@@ -4474,8 +4720,8 @@ def cmd_relay_status(args: argparse.Namespace) -> int:
         payload = {
             "status": "failed",
             "reason_code": "auth_missing",
-            "action_hint": "Run `mdtero login` or `mdtero login --api-key` before checking relay status.",
-            "next_commands": ["mdtero login", "mdtero relay serve"],
+            "action_hint": AUTH_MISSING_ACTION_HINT,
+            "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
         }
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))

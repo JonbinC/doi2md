@@ -8,6 +8,8 @@
 
 Mdtero turns papers into reusable Markdown packages for reading, translation, project research, and local agents.
 
+Parse a DOI or URL in one command, download structured Markdown (with a `quality_label` so you know when not to cite thin results), then optionally `translate` for bilingual reading.
+
 Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as the public client surfaces.
 
 **Languages:** English | [简体中文](./README_CN.md)
@@ -30,6 +32,8 @@ curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 The installer supports `uv`, `pipx`, and Python fallbacks. `--agent <target>` installs a local agent skill.
 
 ## Use Mdtero
+
+Primary path: `mdtero parse <doi-or-url>` → download Markdown → optional `translate`. After download, check `quality_label`; low-confidence files use a `.low_quality.md` suffix.
 
 ```bash
 mdtero discover "thermal energy storage" --limit 5 --interactive
