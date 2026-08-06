@@ -1,6 +1,6 @@
 # Mdtero Extension
 
-Mdtero Extension lets you sign in, parse the paper in your current tab or a DOI, upload a PDF or EPUB, monitor a task, translate Markdown, and download the result.
+Mdtero Extension lets you sign in, parse the paper in your current tab or a DOI into structured Markdown, upload a PDF or EPUB, monitor a task, translate, and download the result.
 
 ## Use
 

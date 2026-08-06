@@ -8,6 +8,8 @@
 
 Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译、项目研究和本地 agent。
 
+一条命令解析 DOI 或 URL，下载结构化 Markdown（带 `quality_label`，低质量结果会用 `.low_quality.md` 后缀提示），再按需 `translate` 做双语阅读。
+
 **语言：** [English](./README.md) | 简体中文
 
 ## 安装
@@ -28,6 +30,8 @@ curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 安装脚本支持 `uv`、`pipx` 和 Python 回退。`--agent <target>` 会安装本地 agent skill。
 
 ## 使用 Mdtero
+
+主路径：`mdtero parse <doi-or-url>` → 下载 Markdown → 可选 `translate`。下载后查看 `quality_label`；低置信文件会带 `.low_quality.md` 后缀。
 
 ```bash
 mdtero discover "thermal energy storage" --limit 5 --interactive

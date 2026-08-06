@@ -56,7 +56,7 @@ import {
 const COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Paper parsing connected to Mdtero Account",
+    subtitle: "Current page or DOI → structured Markdown you can download or translate",
     guest: "Guest mode",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
@@ -124,7 +124,7 @@ const COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "连接 Mdtero 账户的本地论文解析",
+    subtitle: "当前页或 DOI → 结构化 Markdown，可下载或翻译",
     guest: "游客模式",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
