@@ -1,3 +1,11 @@
+"""Compatibility Python campus Relay client.
+
+Desktop installs should use the Go ``mdtero-relay`` binary (install via
+``mdtero setup`` / ``curl https://mdtero.com/relay | bash``). This module remains
+for tests, MCP helpers, and older Python-only environments. Keep its ticket /
+allowlist behavior aligned with the Go client and the Cloudflare gateway.
+"""
+
 from __future__ import annotations
 
 import asyncio

@@ -4,43 +4,7 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
-RELAY_ALLOWED_HOST_SUFFIXES = (
-    "academic.oup.com",
-    "acm.org",
-    "api.crossref.org",
-    "api.elsevier.com",
-    "api.openalex.org",
-    "api.wiley.com",
-    "arxiv.org",
-    "cambridge.org",
-    "cell.com",
-    "crossref.org",
-    "dl.acm.org",
-    "doi.org",
-    "elsevier.com",
-    "frontiersin.org",
-    "ieeexplore.ieee.org",
-    "ieee.org",
-    "journals.aps.org",
-    "link.springer.com",
-    "mdpi.com",
-    "mdpi-res.com",
-    "nature.com",
-    "ncbi.nlm.nih.gov",
-    "onlinelibrary.wiley.com",
-    "openalex.org",
-    "oup.com",
-    "plos.org",
-    "pnas.org",
-    "pubs.acs.org",
-    "pubmed.ncbi.nlm.nih.gov",
-    "sagepub.com",
-    "science.org",
-    "sciencedirect.com",
-    "springer.com",
-    "tandfonline.com",
-    "wiley.com",
-)
+from .relay_allowed_hosts_generated import RELAY_ALLOWED_HOST_SUFFIXES
 
 _LOCAL_HOSTS = {"localhost", "localhost.localdomain", "127.0.0.1", "::1"}
 
