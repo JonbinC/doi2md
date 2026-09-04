@@ -122,19 +122,16 @@ git push github relay/v0.1.6
 # GitHub: run "Release Campus Relay" with the desired version
 ```
 
-Local publish to nextmdtero static assets:
+Relay binaries are published through GitHub Releases (`relay/v*`). Do not commit
+`relay/dist/` archives into this repository.
+
+Optional local copy into a website static-assets tree:
 
 ```bash
-cd public/relay
+cd relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/nextmdtero bash scripts/publish-site-assets.sh 0.1.6
+MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.6
 ```
-
-Required GitHub Actions secrets/vars for automatic site publish:
-
-- `NEXTMDTERO_REPO_TOKEN` — push access to site repo
-- `NEXTMDTERO_REPO` — e.g. `mdtero/nextmdtero`
-- optional `GITHUB_TOKEN` — attach binaries to the GitHub release (provided by Actions)
 
 ## Build from source
 

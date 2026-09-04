@@ -8587,9 +8587,6 @@ def test_public_script_surface_is_ci_only():
     repo_root = Path(__file__).resolve().parents[1]
     expected = {
         "scripts/ci/extension_dist_smoke.py",
-        "scripts/ci/forgejo-remote-doctor.sh",
-        "scripts/ci/forgejo_workflow_policy.py",
-        "scripts/ci/private_platform_preflight.sh",
         "scripts/ci/release_gate.sh",
         "scripts/ci/secret_guard.py",
     }
@@ -8628,160 +8625,49 @@ def test_public_github_ci_matches_release_gate_for_extension_quality():
     assert "python3 scripts/ci/extension_dist_smoke.py" in workflow
 
 
-def test_forgejo_phase_one_workflow_is_manual_lightweight_and_private():
+def test_public_repo_keeps_ops_internals_out_of_tree():
     repo_root = Path(__file__).resolve().parents[1]
-    workflow = (repo_root / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    production_smoke = (repo_root / ".forgejo" / "workflows" / "production-smoke.yml").read_text(encoding="utf-8")
-    runbook = (repo_root / "PRIVATE_PLATFORM_PHASE_1.md").read_text(encoding="utf-8")
-
-    assert "workflow_dispatch:" in workflow
-    assert "check_scope:" in workflow
-    assert "platform_preflight:" in workflow
-    assert 'default: "smoke"' in workflow
-    assert "Public smoke gate" in workflow
-    assert "Optional private platform preflight" in workflow
-    assert "List required secret names" in workflow
-    assert "Forgejo secrets used by this workflow: none." in workflow
-    assert "scripts/ci/private_platform_preflight.sh" in workflow
-    assert "runs-on: linux-small" in workflow
-    assert "timeout-minutes: 10" in workflow
-    assert "timeout-minutes: 20" in workflow
-    assert "test_forgejo_phase_one_workflow_is_manual_lightweight_and_private" in workflow
-    assert "if: ${{ inputs.check_scope == 'full' }}" in workflow
-    assert "\n  push:" not in workflow
-    assert "\n  pull_request:" not in workflow
-    assert "INFISICAL_TOKEN=" not in workflow
-    assert "PAT=" not in workflow
-    assert "PERSONAL_ACCESS_TOKEN" not in workflow
-
-    assert "name: Public Production Smoke" in production_smoke
-    assert "workflow_dispatch:" in production_smoke
-    assert "auth_smoke:" in production_smoke
-    assert "smoke_scope:" in production_smoke
-    assert "auth_smoke=skip" in production_smoke
-    assert "List required secret names" in production_smoke
-    assert "MDTERO_API_KEY: optional; required only when auth_smoke=check." in production_smoke
-    assert "Secret values are never printed by this workflow." in production_smoke
-    assert "secrets.MDTERO_API_KEY" in production_smoke
-    assert "auth_smoke=check requires Forgejo secret MDTERO_API_KEY" in production_smoke
-    assert "uv run --project" in production_smoke
-    assert "mdtero smoke" in production_smoke
-    assert "--skip-translate" in production_smoke
-    assert "mktemp -d" in production_smoke
-    assert "rm -rf \"$smoke_root\"" in production_smoke
-    assert "runs-on: linux-small" in production_smoke
-    assert "timeout-minutes: 20" in production_smoke
-    assert "\n  push:" not in production_smoke
-    assert "\n  pull_request:" not in production_smoke
-    assert "INFISICAL_TOKEN=" not in production_smoke
-    assert "PAT=" not in production_smoke
-    assert "PERSONAL_ACCESS_TOKEN" not in production_smoke
-
-    assert "forgejo`: `http://REDACTED_INTERNAL_HOST:3020/jianbin/doi2md.git`" in runbook
-    assert "Do not embed PATs, service tokens, or passwords" in runbook
-    assert "platform_preflight=check" in runbook
-    assert "Each workflow lists the Forgejo secret names it may use, but must not print secret values." in runbook
-    assert "scripts/ci/private_platform_preflight.sh" in runbook
-    assert "does not read provider secrets, deploy, publish, or print credentials" in runbook
-    assert "Actions API endpoint may return `404 page not found`" in runbook
-    assert "Trigger `workflow_dispatch` from Forgejo Web" in runbook
-    assert "Manual smoke evidence" in runbook
-    assert "Workflow: `Public CLI and Extension CI`" in runbook
-    assert "Inputs: `check_scope=smoke`, `platform_preflight=check`" in runbook
-    assert "public_private_platform_preflight: status=ok" in runbook
-    assert "public_private_platform_preflight: status=ok remote=forgejo extension_tests=ok extension_dist=ok" in runbook
-    assert "run the same workflow with `check_scope=full` after the smoke run passes" in runbook
-    assert "Workflow: `Public Production Smoke`" in runbook
-    assert "auth_smoke=check" in runbook
-    assert "Required secret name for authenticated smoke: `MDTERO_API_KEY`" in runbook
-    assert "smoke_scope=core" in runbook
-    assert "smoke_scope=full" in runbook
-    assert "Missing `MDTERO_API_KEY` exits with code `78`" in runbook
-    assert "read them from Infisical at runtime through a service token or machine identity" in runbook
-    assert "Do not remove GitHub or PyPI/public release paths" in runbook
-
-
-def test_public_private_platform_preflight_is_non_secret_and_non_deploying():
-    repo_root = Path(__file__).resolve().parents[1]
-    preflight = (repo_root / "scripts" / "ci" / "private_platform_preflight.sh").read_text(encoding="utf-8")
-
-    assert "MDTERO_FORGEJO_REMOTE:-forgejo" in preflight
-    assert "http://REDACTED_INTERNAL_HOST:3020/*" in preflight
-    assert "scripts/ci/forgejo-remote-doctor.sh" in preflight
-    assert '"$python_bin" scripts/ci/secret_guard.py' in preflight
-    assert '"$python_bin" scripts/ci/forgejo_workflow_policy.py' in preflight
-    assert "npm --prefix extension test -- --run" in preflight
-    assert '"$python_bin" scripts/ci/extension_dist_smoke.py >/dev/null' in preflight
-    assert "status=ok" in preflight
-    assert "forgejo_policy=ok" in preflight
-    assert "INFISICAL_TOKEN" not in preflight
-    assert "docker" not in preflight
-    assert "uv build" not in preflight
-    assert "twine" not in preflight
-    assert "set -x" not in preflight
-
-
-def test_public_forgejo_workflow_policy_enforces_manual_linux_small_secret_listing(tmp_path: Path):
-    repo_root = Path(__file__).resolve().parents[1]
-    policy = load_python_script(repo_root / "scripts" / "ci" / "forgejo_workflow_policy.py")
-
-    workflow_dir = tmp_path / ".forgejo" / "workflows"
-    workflow_dir.mkdir(parents=True)
-    (workflow_dir / "ok.yml").write_text(
-        """
-name: OK
-on:
-  workflow_dispatch:
-jobs:
-  smoke:
-    runs-on: linux-small
-    steps:
-      - name: List required secret names
-        run: |
-          echo "Forgejo secrets used by this workflow: none."
-""".strip(),
-        encoding="utf-8",
-    )
-    assert policy.check_all(tmp_path) == {}
-
-    (workflow_dir / "bad.yml").write_text(
-        """
-name: Bad
-on:
-  push:
-  schedule:
-    - cron: "0 0 * * *"
-jobs:
-  smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo ADMIN_PASSWORD: demo
-""".strip(),
-        encoding="utf-8",
-    )
-    failures = policy.check_all(tmp_path)
-    assert failures[".forgejo/workflows/bad.yml"] == [
-        "missing workflow_dispatch",
-        "not workflow_dispatch-only",
-        "missing linux-small runner",
-        "missing secret-name listing step",
-        "missing Forgejo secret-name summary",
-        "push-trigger",
-        "schedule-trigger",
-        "cron-trigger",
-        "admin-credential",
+    forbidden_paths = [
+        repo_root / ".forgejo",
+        repo_root / "PRIVATE_PLATFORM_PHASE_1.md",
+        repo_root / "docs" / "public" / "PRODUCTION_SMOKE_2026-05-24.md",
+        repo_root / "docs" / "public" / "RELEASE_READINESS_2026-05-24.md",
+        repo_root / "scripts" / "ci" / "forgejo-remote-doctor.sh",
+        repo_root / "scripts" / "ci" / "forgejo_workflow_policy.py",
+        repo_root / "scripts" / "ci" / "private_platform_preflight.sh",
+        repo_root / "extension" / "scripts" / "chrome-oauth-refresh.mjs",
+        repo_root / "extension" / "scripts" / "store-draft-from-infisical.sh",
     ]
+    for path in forbidden_paths:
+        assert not path.exists(), path
+
+    tracked = subprocess.run(
+        ["git", "ls-files"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    for marker in (
+        ".forgejo/",
+        "PRIVATE_PLATFORM_PHASE_1.md",
+        "REDACTED_INTERNAL_HOST",
+        "store-draft-from-infisical.sh",
+        "chrome-oauth-refresh.mjs",
+        "relay/dist/",
+    ):
+        assert marker not in tracked
 
 
 def test_public_generated_dependency_and_package_artifacts_are_not_source():
     repo_root = Path(__file__).resolve().parents[1]
 
     ignored = (repo_root / ".gitignore").read_text(encoding="utf-8")
-    for marker in ["dist/", "extension/node_modules/", "extension/.vite/", "extension/.vitest/"]:
+    for marker in ["dist/", "extension/node_modules/", "extension/.vite/", "extension/.vitest/", "relay/dist/", ".forgejo/"]:
         assert marker in ignored
 
     tracked = subprocess.run(
-        ["git", "ls-files", "dist", "node_modules", "extension/node_modules", "extension/.vite", "extension/.vitest"],
+        ["git", "ls-files", "dist", "node_modules", "extension/node_modules", "extension/.vite", "extension/.vitest", "relay/dist"],
         cwd=repo_root,
         check=True,
         capture_output=True,
@@ -9027,71 +8913,23 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
     assert "readiness" in combined_skills
 
 
-def test_production_smoke_documents_latest_arxiv_voyage_rag_path():
+def test_public_docs_index_stays_product_facing():
     repo_root = Path(__file__).resolve().parents[1]
-    report = (repo_root / "docs" / "public" / "PRODUCTION_SMOKE_2026-05-24.md").read_text(encoding="utf-8")
+    docs_index = (repo_root / "docs" / "public" / "README.md").read_text(encoding="utf-8")
+    tracked_docs = subprocess.run(
+        ["git", "ls-files", "docs"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
 
-    assert "Latest ArXiv + RAG Re-Smoke" in report
-    assert "route_kind=source_first" in report
-    assert "provider_id=arxiv" in report
-    assert "server project `13`" in report
-    assert "backend RAG build" in report
-    assert "chunk_count=39" in report
-    assert "embedded_count=39" in report
-    assert "reason_code=rag_query_succeeded" in report
-    assert "citation_count=5" in report
-    assert "match_count=5" in report
-    assert "202 passed" in report
-    assert "138 passed" in report
-    assert "248 passed" in report
-    assert "101 passed" in report
-    assert "npm run smoke:routes -- --base-url <production-url> --json" in report
-    assert "Production Read-Only Recheck - 2026-05-26 UTC" in report
-    assert "backend_production_smoke_succeeded" in report
-    assert "deployment_state=current" in report
-    assert "returned `401`, which is the expected unauthenticated response" in report
-    assert "stale build that returned `404`" in report
-    assert "/docs/zh/install.html" in report
-    assert "forgejo_policy=ok" in report
-
-
-def test_release_readiness_matrix_separates_proven_and_post_deploy_smoke():
-    repo_root = Path(__file__).resolve().parents[1]
-    readiness = (repo_root / "docs" / "public" / "RELEASE_READINESS_2026-05-24.md").read_text(encoding="utf-8")
-    proven_section = readiness.split("## Requires Post-Deploy Smoke", 1)[0]
-    post_deploy_section = readiness.split("## Requires Post-Deploy Smoke", 1)[1].split("## Not Public Product Scope", 1)[0]
-    retired_scope_section = readiness.split("## Not Public Product Scope", 1)[1]
-
-    assert "## Proven Ready" in readiness
-    assert "## Requires Post-Deploy Smoke" in readiness
-    assert "## Not Public Product Scope" in readiness
-    assert "Public Python/uv CLI as the main runtime" in proven_section
-    assert "PDF upload through backend document parsing" in proven_section
-    assert "Server-side RAG" in proven_section
-    assert "Browser extension scoped to v1 product" in proven_section
-    assert "extension dist smoke passed" in proven_section
-    assert "Backend read-only production freshness" in proven_section
-    assert "Forgejo manual CI smoke policy" in proven_section
-    assert "unauthenticated `/diagnostics/translation/providers` returned the expected 401 instead of stale 404" in proven_section
-    assert "workflow_dispatch" in proven_section
-    assert "Translation provider health" in post_deploy_section
-    assert "Browser extension interactive flow" in post_deploy_section
-    assert "/docs/zh/install.html" in post_deploy_section
-    assert "The backend diagnostics route is now deployed" in post_deploy_section
-    assert "returns 401" in post_deploy_section
-    assert "authenticated diagnostics check or successful translation task" in post_deploy_section
-    assert "Current production `GET /diagnostics/translation/providers` returns `404`" not in post_deploy_section
-    assert "npm run smoke:routes -- --base-url <production-url> --json" in post_deploy_section
-
-    for retired_marker in [
-        "npm runtime CLI",
-        "Native browser bridge",
-        "Public parser engine selection",
-        "Backend-local copies of the public CLI/TUI/Zotero/RAG/MCP client runtime",
-    ]:
-        assert retired_marker in retired_scope_section
-        assert retired_marker not in proven_section
-        assert retired_marker not in post_deploy_section
+    assert tracked_docs == ["docs/public/README.md"]
+    assert "mdtero smoke --json" in docs_index
+    assert "JonbinC/doi2md" in docs_index
+    assert "forgejo" not in docs_index.lower()
+    assert "infisical" not in docs_index.lower()
+    assert "100.97." not in docs_index
 
 
 def test_public_docs_describe_agent_safe_redaction_boundary():

@@ -954,7 +954,7 @@ def _dashboard_setup_handoff_payload(payload: Any) -> dict[str, Any]:
             "primary_command": str(rag.get("primary_command") or ONE_COMMAND_RAG_BOOTSTRAP),
             "fallback_commands": [str(command) for command in rag.get("fallback_commands") or [] if str(command).strip()],
         },
-        "redaction_policy": str(payload.get("redaction_policy") or "Do not print Mdtero API keys, provider keys, bearer tokens, signed URLs, storage tokens, or Infisical tokens."),
+        "redaction_policy": str(payload.get("redaction_policy") or "Do not print Mdtero API keys, provider keys, bearer tokens, signed URLs, or storage tokens."),
         "agent_instruction": str(payload.get("agent_instruction") or "Run doctor first, preserve reason_code/action_hint, and paste the API key only into the secure setup prompt."),
     }
 

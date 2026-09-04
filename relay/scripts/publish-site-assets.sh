@@ -4,11 +4,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RELAY_ROOT="$ROOT/relay"
 VERSION="${1:-}"
-SITE_ROOT="${MDTERO_SITE_ROOT:-$(cd "$ROOT/../nextmdtero" && pwd)}"
+SITE_ROOT="${MDTERO_SITE_ROOT:-}"
 
 if [[ -z "$VERSION" ]]; then
-  echo "Usage: publish-site-assets.sh <version>" >&2
-  echo "Example: publish-site-assets.sh 0.1.0" >&2
+  echo "Usage: MDTERO_SITE_ROOT=/path/to/website-repo publish-site-assets.sh <version>" >&2
+  echo "Example: MDTERO_SITE_ROOT=/path/to/website-repo publish-site-assets.sh 0.1.0" >&2
+  exit 2
+fi
+
+if [[ -z "$SITE_ROOT" ]]; then
+  echo "MDTERO_SITE_ROOT is required (path to the website repo that owns public/releases)." >&2
   exit 2
 fi
 

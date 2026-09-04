@@ -2434,7 +2434,7 @@ def _dashboard_setup_handoff_json_payload(commands: dict[str, Any]) -> dict[str,
             "primary_command": ONE_COMMAND_RAG_BOOTSTRAP,
             "fallback_commands": [str(commands.get("rag_status") or "mdtero rag status --json"), str(commands.get("rag_build") or "mdtero rag build --wait --json"), GENERIC_RAG_QUERY_COMMAND],
         },
-        "redaction_policy": "Do not print or store Mdtero API key secrets, provider API keys, bearer tokens, signed URLs, storage tokens, or Infisical tokens in prompts, logs, MCP output, or CI.",
+        "redaction_policy": "Do not print or store Mdtero API key secrets, provider API keys, bearer tokens, signed URLs, or storage tokens in prompts, logs, MCP output, or CI.",
         "agent_instruction": "Run doctor first, follow next_commands, preserve reason_code/action_hint fields, and ask the user to paste the one-time API key only into the secure mdtero setup prompt if authentication is missing.",
     }
 

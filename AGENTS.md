@@ -34,9 +34,11 @@ mdtero-public/
 ## ANTI-PATTERNS
 
 - Do not put private backend implementation, dashboard product code, or secret-bearing ops scripts here.
+- Do not commit private CI mirrors, internal hostnames, secret-manager operator scripts, or dated production smoke ledgers.
 - Do not let archive/MCP legacy content or retired helper-bundle probes become active behavior.
 - Do not let public shared contracts drift from frontend/backend truth.
 - Do not treat GitHub Releases or public mirror repo as independent release truth.
+- Do not commit `relay/dist/` binaries; publish them through GitHub Releases.
 
 ## COMMANDS
 

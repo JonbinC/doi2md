@@ -27,6 +27,7 @@ This is the intended SSOT for:
 - private backend implementation
 - dashboard or site product code as the primary home
 - secret-bearing operational scripts
+- private CI/Forgejo migration runbooks, internal hostnames, or secret-manager operator scripts
 
 ## Boundary Rule
 

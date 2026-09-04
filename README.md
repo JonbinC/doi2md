@@ -108,7 +108,7 @@ The CLI, extension, dashboard, and MCP briefing expose this contract: `/api/v1/r
 
 ## Repo Map
 
-The Python package owns the CLI and local workflow; the `extension/` package is the lightweight browser fallback and `nextmdtero/` is the website/dashboard workspace.
+This public repository owns the Python CLI/TUI package, browser extension, campus Relay client, and public install/skill surfaces. The website/dashboard and private backend live in separate repositories.
 
 ## Documentation
 
