@@ -23,5 +23,8 @@
     "store:edge-release": "node scripts/store-draft.mjs edge-release",
     "store:draft-all": "node scripts/store-draft.mjs draft-all",
     "test": "vitest run"
+  },
+  "overrides": {
+    "nanoid": "3.3.18"
   }
 }
