@@ -22,6 +22,11 @@ import (
 
 const reconnectDelay = 5 * time.Second
 const relayKeepaliveInterval = 20 * time.Second
+// Campus/lossy paths regularly exceed a 10s write deadline (seen as
+// "write tcp ... i/o timeout" toward Cloudflare). Keep these above the
+// keepalive interval so one slow ping does not tear the socket down.
+const relayWriteTimeout = 45 * time.Second
+const relayReadTimeout = 70 * time.Second
 
 type Logger func(format string, args ...any)
 
@@ -141,12 +146,29 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 	}
 	defer conn.Close()
 	var writeMu sync.Mutex
+	refreshReadDeadline := func() {
+		_ = conn.SetReadDeadline(time.Now().Add(relayReadTimeout))
+	}
 	writeJSON := func(payload any) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		_ = conn.SetWriteDeadline(time.Now().Add(relayWriteTimeout))
 		return conn.WriteJSON(payload)
 	}
+	// Protocol-level pings help intermediaries that ignore JSON app pings.
+	// Closing the socket on failure wakes the ReadJSON loop so Run reconnects
+	// instead of sitting half-open while /relay/status reports offline.
+	forceReconnect := func(reason error) {
+		if reason != nil {
+			logger("Relay keepalive failed (%v); reconnecting ...", reason)
+		}
+		_ = conn.Close()
+	}
+	conn.SetPongHandler(func(string) error {
+		refreshReadDeadline()
+		return nil
+	})
+	refreshReadDeadline()
 
 	logger("Connecting campus relay ...")
 
@@ -154,6 +176,7 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 	if err := conn.ReadJSON(&hello); err != nil {
 		return err
 	}
+	refreshReadDeadline()
 	if fmt.Sprint(hello["type"]) != "hello" {
 		return fmt.Errorf("relay handshake failed: expected hello")
 	}
@@ -176,6 +199,7 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 	if err := conn.ReadJSON(&registered); err != nil {
 		return err
 	}
+	refreshReadDeadline()
 	if fmt.Sprint(registered["type"]) != "registered" {
 		return fmt.Errorf("%s", firstNonEmpty(
 			fmt.Sprint(registered["action_hint"]),
@@ -199,7 +223,16 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 			case <-done:
 				return
 			case <-ticker.C:
+				writeMu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(relayWriteTimeout))
+				pingErr := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(relayWriteTimeout))
+				writeMu.Unlock()
+				if pingErr != nil {
+					forceReconnect(pingErr)
+					return
+				}
 				if err := writeJSON(map[string]string{"type": "ping"}); err != nil {
+					forceReconnect(err)
 					return
 				}
 			}
@@ -215,6 +248,7 @@ func runOnce(wsURL string, headers http.Header, label string, outlet campus.Outl
 		if err := conn.ReadJSON(&message); err != nil {
 			return err
 		}
+		refreshReadDeadline()
 		switch fmt.Sprint(message["type"]) {
 		case "ping":
 			_ = writeJSON(map[string]string{"type": "pong"})
