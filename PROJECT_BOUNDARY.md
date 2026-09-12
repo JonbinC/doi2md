@@ -32,3 +32,14 @@ This is the intended SSOT for:
 ## Boundary Rule
 
 If a user is expected to download it, install it, or run it locally, default to this repo.
+
+## Workflow SSOT
+
+| Workflow | Role |
+| --- | --- |
+| `.github/workflows/ci.yml` | Public CLI + extension CI |
+| `.github/workflows/publish-mdtero-pypi.yml` | PyPI publish |
+| `.github/workflows/release-github.yml` | GitHub release assets |
+| `.github/workflows/release-relay.yml` | Campus Relay binaries → GitHub Releases |
+
+Backend topology and host inventory are **not** owned here; see `mdtero-backend` `docs/ops/runtime-status-2026-09.md`. Website deploy is owned by `Nextmdtero`.
