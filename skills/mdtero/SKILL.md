@@ -11,16 +11,19 @@ DOI/URL/file → structured Markdown package → optional `translate` / RAG. Pre
 1. Install the Python runtime with `uv tool install --upgrade mdtero`; for an existing installation, upgrade with `uv tool upgrade mdtero`; in China use the mirror command from `https://mdtero.com/install/manifest.json` if the official index is slow
 2. Run `mdtero setup`
 3. Use `mdtero setup --api-key --json` when the environment is headless; ask the user to create a fresh API key in Mdtero Account/Dashboard and paste the secret only into the secure CLI prompt, never into a shell command or chat transcript
-4. Run `mdtero doctor --json` before parse, translate, status, download, Zotero, RAG, or MCP work; do not treat setup as complete until it reports `authenticated: true`
+4. Run `mdtero doctor --json-compact` (or `--json`) before parse, translate, status, download, Zotero, RAG, or MCP work; do not treat setup as complete until it reports `authenticated: true`
 5. Ask whether the user can provide an Elsevier API key. For publisher-heavy English literature reviews, configure it first with `mdtero config academic` or `mdtero config academic --elsevier-key <key> --json`; this improves ScienceDirect/Elsevier routing but does not bypass licensed access
-6. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime; for human setup, use `mdtero agent install --interactive`
+6. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime (`codex`, `claude_code`, `cursor`, `gemini_cli`, `hermes`, `opencode`); for human setup, use `mdtero agent install --interactive`
 
 ## Setup Rules
 
 - `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
 - for headless servers, the user should create a fresh dashboard API key, run `mdtero setup --api-key --json`, paste the secret only at the password prompt, then verify with `mdtero doctor --json`
 - Elsevier is the first academic key to ask about for most publisher-heavy literature-review workflows; keep academic source keys local with `mdtero config academic`; OpenAlex discovery has a server-managed fallback, so its local key is optional
-- `mdtero doctor --json` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
+- `mdtero doctor --json-compact` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
+- prefer `--json-compact` on `parse` / `status` / `discover` when feeding results into an LLM context window; use full `--json` only when debugging
+- after downloading Markdown, use `mdtero paper summary <path.md> --range 35:67` (or MCP `paper_summary`) for a section index + excerpt before citing
+- MCP `discover` searches literature; MCP `paper_summary` inspects a local Markdown package
 - CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
 - normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
 - when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --timeout 300 --json` to inspect `client_acquisition` and final task state

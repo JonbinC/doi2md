@@ -39,6 +39,7 @@ class AgentDetectionResult:
 TARGETS: dict[str, AgentTarget] = {
     "codex": AgentTarget("codex", "Codex", ".codex/skills/mdtero"),
     "claude_code": AgentTarget("claude_code", "Claude Code", ".claude/skills/mdtero"),
+    "cursor": AgentTarget("cursor", "Cursor", ".cursor/skills/mdtero"),
     "gemini_cli": AgentTarget("gemini_cli", "Gemini CLI", ".gemini/skills/mdtero"),
     "hermes": AgentTarget("hermes", "Hermes Agent", ".hermes/skills/mdtero"),
     "opencode": AgentTarget("opencode", "OpenCode", ".opencode/skills/mdtero"),
@@ -161,7 +162,7 @@ def _select_targets(names: Iterable[str] | None, *, root: Path | None, install_a
     detected = detect_targets(root)
     if detected:
         return detected
-    raise ValueError("No agent workspace detected. Pass --target codex, --target claude_code, --target gemini_cli, --target hermes, or --target opencode.")
+    raise ValueError("No agent workspace detected. Pass --target codex, --target claude_code, --target cursor, --target gemini_cli, --target hermes, or --target opencode.")
 
 
 def _targets_from_names(names: Iterable[str]) -> list[AgentTarget]:

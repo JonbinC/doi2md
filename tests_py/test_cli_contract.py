@@ -4735,7 +4735,7 @@ def test_setup_interactive_installs_detected_agent_skills(monkeypatch, tmp_path:
     monkeypatch.setattr(cli, "run_web_login", lambda *args, **kwargs: WebLoginResult(api_key="mdt_live_web", prefix="mdt_live"))
 
     confirms = iter([True, True])
-    prompts = iter(["1 4"])
+    prompts = iter(["1 5"])
     monkeypatch.setattr(cli.Confirm, "ask", lambda *args, **kwargs: next(confirms))
     monkeypatch.setattr(cli.Prompt, "ask", lambda *args, **kwargs: next(prompts))
 
@@ -6447,9 +6447,11 @@ def test_mcp_server_rag_status_treats_needs_build_as_needs_build(tmp_path: Path)
         "project_status",
         "project_add",
         "paper_context",
+        "discover",
         "submit_parse",
         "task_status",
         "download_artifact",
+        "paper_summary",
         "request_translation",
         "rag_context",
         "project_ingest",
@@ -8488,9 +8490,9 @@ def test_agent_interactive_selection_defaults_to_detected_pending_targets(tmp_pa
 
     assert default_interactive_targets(statuses) == ["hermes"]
     assert parse_agent_selection("", statuses) == ["hermes"]
-    assert parse_agent_selection("1 4", statuses) == ["codex", "hermes"]
+    assert parse_agent_selection("1 5", statuses) == ["codex", "hermes"]
     assert parse_agent_selection("codex,opencode", statuses) == ["codex", "opencode"]
-    assert parse_agent_selection("all", statuses) == ["codex", "claude_code", "gemini_cli", "hermes", "opencode"]
+    assert parse_agent_selection("all", statuses) == ["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode"]
 
 
 def test_agent_install_interactive_uses_prompted_multi_select(monkeypatch, tmp_path: Path, capsys):
@@ -8498,7 +8500,7 @@ def test_agent_install_interactive_uses_prompted_multi_select(monkeypatch, tmp_p
 
     (tmp_path / ".codex").mkdir()
     (tmp_path / ".hermes").mkdir()
-    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "1 4")
+    monkeypatch.setattr("mdtero.cli.Prompt.ask", lambda *args, **kwargs: "1 5")
 
     args = type("Args", (), {"target": None, "root": tmp_path, "all": False, "dry_run": True, "json": True, "interactive": True})()
 
@@ -9032,9 +9034,11 @@ def test_public_docs_and_skills_prefer_doctor_json_for_agents():
     assert "mdtero doctor --json" in readme
     assert "safe auth/dependency/academic/Zotero/project/RAG summaries" in readme
     for skill in [skill_source, packaged_skill]:
-        assert "Run `mdtero doctor --json` before parse" in skill
+        assert "Run `mdtero doctor --json-compact`" in skill or "Run `mdtero doctor --json`" in skill
         assert "safe `next_commands` without echoing secrets" in skill
         assert "authenticated: true" in skill
+        assert "--json-compact" in skill
+        assert "cursor" in skill
 
 
 def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():

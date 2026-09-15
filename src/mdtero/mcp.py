@@ -5,8 +5,10 @@ import time
 from typing import Any
 
 from .agent import detect_target_status
-from .client import MdteroClient
+from .agent_output import compact_agent_payload, summarize_markdown_file
+from .client import DiscoveryError, MdteroClient
 from .config import MdteroConfig, config_path, load_config
+from .network import ProxyValidationError
 from .onboarding import GENERIC_RAG_QUERY_COMMAND, ONE_COMMAND_RAG_BOOTSTRAP, build_academic_onboarding_summary, build_input_route_contract, build_onboarding_checklist
 from .projects import PaperRecord, add_paper, bind_server_project, init_project, load_project, paper_from_submission, paper_ingest_quality, paper_is_ready_for_ingest, paper_to_document, project_documents, project_path, project_rag_local_coverage, update_task
 from .rag_contract import ensure_rag_contract
@@ -18,9 +20,11 @@ MCP_TOOLS = [
     "project_status",
     "project_add",
     "paper_context",
+    "discover",
     "submit_parse",
     "task_status",
     "download_artifact",
+    "paper_summary",
     "request_translation",
     "rag_context",
     "project_ingest",
@@ -741,6 +745,95 @@ def query_server_rag(
     if bootstrap is not None:
         result.setdefault("bootstrap", bootstrap)
     return redact_sensitive_payload(result)
+
+
+def discover_for_agent(
+    query: str,
+    project_root: Path | None = None,
+    *,
+    client: Any | None = None,
+    limit: int = 5,
+    sources: str = "openalex",
+    compact: bool = True,
+) -> dict[str, Any]:
+    cleaned = str(query or "").strip()
+    if not cleaned:
+        return {
+            "status": "failed",
+            "reason_code": "discover_query_required",
+            "action_hint": "Provide a literature search query before calling discover.",
+            "next_commands": ['mdtero discover "your topic" --json-compact'],
+        }
+    active_client = client or MdteroClient()
+    try:
+        result = active_client.discover(
+            cleaned,
+            limit=max(1, int(limit or 5)),
+            page=1,
+            source="auto",
+            providers=str(sources or "openalex"),
+            enrich="semantic_scholar",
+            entity_type="publication",
+            relevance="baseline",
+            relax=False,
+        )
+    except (ProxyValidationError, DiscoveryError) as exc:
+        payload = getattr(exc, "payload", None) or {
+            "status": "failed",
+            "reason_code": "discover_failed",
+            "message": str(exc),
+        }
+        return redact_sensitive_payload(compact_agent_payload(payload) if compact else payload)
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "reason_code": "discover_failed",
+            "action_hint": "Retry with `mdtero discover \"...\" --json-compact` after `mdtero doctor --json`.",
+            "message": str(exc),
+        }
+    result = dict(result)
+    result.setdefault("query", cleaned)
+    result.setdefault("status", "ok")
+    payload = compact_agent_payload(result) if compact else result
+    return redact_sensitive_payload(payload)
+
+
+def paper_summary_for_agent(
+    path: str,
+    project_root: Path | None = None,
+    *,
+    line_range: str | None = None,
+    compact: bool = True,
+) -> dict[str, Any]:
+    root = project_root or Path.cwd()
+    cleaned = str(path or "").strip()
+    if not cleaned:
+        return {
+            "status": "failed",
+            "reason_code": "paper_path_required",
+            "action_hint": "Pass a Markdown path from download_artifact / `mdtero download`.",
+        }
+    candidate = Path(cleaned).expanduser()
+    if not candidate.is_absolute():
+        candidate = (root / candidate).resolve()
+    if not candidate.exists() or not candidate.is_file():
+        return {
+            "status": "failed",
+            "reason_code": "paper_markdown_missing",
+            "path": str(candidate),
+            "action_hint": "Download paper_md first, then call paper_summary on that file.",
+        }
+    try:
+        summary = summarize_markdown_file(candidate, range_spec=line_range)
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "reason_code": "paper_summary_failed",
+            "message": str(exc),
+            "path": str(candidate),
+        }
+    summary["status"] = "ok"
+    return redact_sensitive_payload(compact_agent_payload(summary) if compact else summary)
 
 
 def submit_parse_for_agent(
@@ -2662,6 +2755,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
         return build_paper_context(input_or_task_id, root)
 
     @mcp.tool
+    def discover(query: str, limit: int = 5, sources: str = "openalex", compact: bool = True) -> dict:
+        return discover_for_agent(query, root, limit=limit, sources=sources, compact=compact)
+
+    @mcp.tool
     def rag_context() -> dict:
         return build_rag_context(root)
 
@@ -2680,6 +2777,10 @@ def serve_project_context(project_root: Path | None = None) -> None:
     @mcp.tool
     def download_artifact(task_id: str, artifact: str | None = None, output_dir: str = "./mdtero-output") -> dict:
         return download_artifact_for_agent(task_id, root, artifact=artifact, output_dir=output_dir)
+
+    @mcp.tool
+    def paper_summary(path: str, line_range: str | None = None, compact: bool = True) -> dict:
+        return paper_summary_for_agent(path, root, line_range=line_range, compact=compact)
 
     @mcp.tool
     def request_translation(task_id_or_markdown_path: str, target_language: str = "zh-CN", wait: bool = True, timeout: float = 600.0, interval: float = 2.0) -> dict:

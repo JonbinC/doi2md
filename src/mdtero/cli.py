@@ -21,6 +21,12 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from . import __version__
+from .agent_output import (
+    compact_agent_payload,
+    summarize_markdown_file,
+    wants_json_compact,
+    wants_json_output,
+)
 from .access_outlets import (
     access_status,
     clear_carsi_cookies,
@@ -135,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--json", action="store_true", help="Print a non-interactive, secret-safe setup summary for agents/headless environments.")
     doctor = _cmd(sub, "doctor", "Check local Mdtero configuration.", cmd_doctor)
     doctor.add_argument("--json", action="store_true", help="Print a machine-readable safe diagnostic summary without echoing secrets.")
+    doctor.add_argument("--json-compact", action="store_true", help="Print a token-light agent diagnostic summary.")
     login = _cmd(sub, "login", "Configure OAuth or API-key login.", cmd_login)
     login.add_argument("--api-key", nargs="?", const=API_KEY_PROMPT_SENTINEL, default=None, help="Save an API key for headless login; omit the value to paste it securely.")
     login.add_argument("--no-browser", action="store_true", help="Print the loopback web-login URL instead of opening a browser.")
@@ -261,6 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
     parse.add_argument("--file", type=Path)
     parse.add_argument("--batch", type=Path)
     parse.add_argument("--json", action="store_true")
+    parse.add_argument("--json-compact", action="store_true", help="Print a token-light agent task summary instead of full JSON.")
     parse.add_argument("--wait", action="store_true")
     _add_wait_options(parse)
     parse.add_argument("--trace", action="store_true")
@@ -277,6 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     parse_batch.add_argument("--filename-template", default="{author}_{year}_{shorttitle}", help="Download filename template using {author}, {year}, {shorttitle}, {title}, {doi}, {task_id}, and {artifact}.")
     parse_batch.add_argument("--manifest", action=argparse.BooleanOptionalAction, default=True, help="Write manifest.csv and failed.csv in the output directory.")
     parse_batch.add_argument("--json", action="store_true")
+    parse_batch.add_argument("--json-compact", action="store_true", help="Print a token-light agent batch/task summary.")
     parse_batch.add_argument("--wait", action="store_true")
     _add_wait_options(parse_batch)
 
@@ -321,6 +330,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--select", default="", help="Result numbers to add, for example `1 3`, `1,3`, or `all`. Defaults to all with --add.")
     discover.add_argument("--interactive", action="store_true", help="Open a discovery session with paging, refinement, and project-add prompts.")
     discover.add_argument("--json", action="store_true")
+    discover.add_argument("--json-compact", action="store_true", help="Print a token-light discovery summary for agents.")
 
     project = sub.add_parser("project")
     project.set_defaults(func=_print_nested_help(project))
@@ -489,6 +499,20 @@ def build_parser() -> argparse.ArgumentParser:
     content.add_argument("--line-end", type=int, default=None, help="Optional line-based locator end.")
     content.add_argument("--json", action="store_true")
 
+    paper = sub.add_parser("paper", help="Inspect local Markdown paper packages for agents.")
+    paper.set_defaults(func=_print_nested_help(paper))
+    paper_sub = paper.add_subparsers(dest="paper_command")
+    paper_summary = _cmd(
+        paper_sub,
+        "summary",
+        "Build a compact paper summary (front matter + section index + optional line range) from a Markdown file.",
+        cmd_paper_summary,
+    )
+    paper_summary.add_argument("path", type=Path, help="Path to a paper Markdown file (usually from mdtero download).")
+    paper_summary.add_argument("--range", dest="line_range", help="Optional line range like 35:67 for an excerpt.")
+    paper_summary.add_argument("--json", action="store_true", help="Print machine-readable summary (default for agents).")
+    paper_summary.add_argument("--json-compact", action="store_true", help="Same as --json for paper summary.")
+
     mcp = sub.add_parser("mcp")
     mcp.set_defaults(func=_print_nested_help(mcp))
     mcp_sub = mcp.add_subparsers(dest="mcp_command")
@@ -540,6 +564,7 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--wait", action="store_true")
     _add_wait_options(status)
     status.add_argument("--json", action="store_true")
+    status.add_argument("--json-compact", action="store_true", help="Print a token-light agent task summary.")
     status.add_argument("--trace", action="store_true")
 
     download = _cmd(sub, "download", "Download one task artifact.", cmd_download)
@@ -557,14 +582,14 @@ def build_parser() -> argparse.ArgumentParser:
     agent_detect.add_argument("--root", type=Path)
     agent_detect.add_argument("--json", action="store_true")
     agent_install = _cmd(agent_sub, "install", "Detect local agents and install Mdtero skills.", cmd_agent_install)
-    agent_install.add_argument("--target", action="append", choices=["codex", "claude_code", "gemini_cli", "hermes", "opencode"])
+    agent_install.add_argument("--target", action="append", choices=["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode"])
     agent_install.add_argument("--root", type=Path)
     agent_install.add_argument("--all", action="store_true")
     agent_install.add_argument("--dry-run", action="store_true")
     agent_install.add_argument("--json", action="store_true")
     agent_install.add_argument("--interactive", action="store_true", help="Interactively select detected agent workspaces to configure.")
     agent_uninstall = _cmd(agent_sub, "uninstall", "Remove Mdtero skills from selected agents.", cmd_agent_uninstall)
-    agent_uninstall.add_argument("--target", action="append", required=True, choices=["codex", "claude_code", "gemini_cli", "hermes", "opencode"])
+    agent_uninstall.add_argument("--target", action="append", required=True, choices=["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode"])
     agent_uninstall.add_argument("--root", type=Path)
     agent_uninstall.add_argument("--dry-run", action="store_true")
     agent_uninstall.add_argument("--json", action="store_true")
@@ -1326,8 +1351,9 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         server_pdf_fallback=server_pdf_fallback,
         install_boundary=install_boundary,
     )
-    if getattr(_args, "json", False):
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    if getattr(_args, "json", False) or getattr(_args, "json_compact", False):
+        payload_out = compact_agent_payload(payload) if getattr(_args, "json_compact", False) else payload
+        print(json.dumps(payload_out, indent=2, ensure_ascii=False))
         return 0 if payload["status"] == "ok" else 1
     console = Console()
     table = Table("Check", "Status", "Detail")
@@ -2127,7 +2153,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
     if args.batch:
         batch_files, failure = _validated_parse_batch_files(args.batch)
         if failure:
-            _print_result(failure, json_output=args.json or args.trace)
+            _print_result(failure, json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         for path in batch_files:
             result = client.upload(path)
@@ -2136,7 +2162,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
     elif args.file:
         failure = _validated_parse_file_failure(args.file)
         if failure:
-            _print_result(failure, json_output=args.json or args.trace)
+            _print_result(failure, json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         result = client.upload(args.file, source_input=args.input)
         submissions.append((result, args.input or str(args.file), f"file:{args.file.suffix.lower().lstrip('.')}"))
@@ -2147,7 +2173,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
                 "parse_input_missing",
                 action_hint="Provide one DOI/URL, one local PDF/EPUB/XML/HTML file, or a directory of supported files.",
             )
-            _print_result(failure, json_output=args.json or args.trace)
+            _print_result(failure, json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         try:
             route, result, acquisition = client.parse_with_route(args.input)
@@ -2177,10 +2203,10 @@ def cmd_parse(args: argparse.Namespace) -> int:
                         )
                         _enrich_task_status(task)
                         task["native_capture"] = capture_payload
-                        _print_result(task, json_output=args.json or args.trace)
+                        _print_result(task, json_output=wants_json_output(args), compact=wants_json_compact(args))
                         return 0 if str(task.get("status") or "") in {"succeeded", "completed"} else 2
                     result["native_capture"] = capture_payload
-                    _print_result(result, json_output=args.json or args.trace)
+                    _print_result(result, json_output=wants_json_output(args), compact=wants_json_compact(args))
                     return 0
                 failure = _acquisition_failure_payload(
                     args.input,
@@ -2188,23 +2214,23 @@ def cmd_parse(args: argparse.Namespace) -> int:
                     open_browser=bool(getattr(args, "open_extension_handoff", False)),
                 )
                 failure["native_capture"] = capture_payload
-                _print_result(failure, json_output=args.json or args.trace)
+                _print_result(failure, json_output=wants_json_output(args), compact=wants_json_compact(args))
                 return 2
             failure = _acquisition_failure_payload(
                 args.input,
                 exc,
                 open_browser=bool(getattr(args, "open_extension_handoff", False)),
             )
-            _print_result(failure, json_output=args.json or args.trace)
+            _print_result(failure, json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         except ProxyValidationError as exc:
-            _print_result(exc.payload, json_output=args.json or args.trace)
+            _print_result(exc.payload, json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         except MdteroApiError as exc:
-            _print_result(exc.payload, json_output=args.json or args.trace)
+            _print_result(exc.payload, json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         except httpx.HTTPStatusError as exc:
-            _print_result(api_failure_payload(exc, method=exc.request.method, path=exc.request.url.path), json_output=args.json or args.trace)
+            _print_result(api_failure_payload(exc, method=exc.request.method, path=exc.request.url.path), json_output=wants_json_output(args), compact=wants_json_compact(args))
             return 2
         submissions.append((result, args.input, "manual"))
         traces.append(parse_trace_from_route(args.input, route, result).to_dict())
@@ -2222,7 +2248,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
     payload = results[0] if len(results) == 1 else {"items": results}
     if args.trace:
         payload = {"result": payload, "workflow": traces[0] if len(traces) == 1 else traces}
-    _print_result(payload, json_output=args.json or args.trace)
+    _print_result(payload, json_output=wants_json_output(args), compact=wants_json_compact(args))
     return 2 if any((result.get("final_task") or {}).get("status") == "timeout" for result in results) else 0
 
 
@@ -2579,15 +2605,17 @@ def cmd_discover(args: argparse.Namespace) -> int:
             relax=relax,
         )
     except ProxyValidationError as exc:
-        if args.json:
-            print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
+        if wants_json_output(args):
+            payload = compact_agent_payload(exc.payload) if wants_json_compact(args) else exc.payload
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             Console().print(f"Discovery failed: {exc.payload.get('reason_code')}")
             Console().print(str(exc.payload.get("action_hint") or ""))
         return 2
     except DiscoveryError as exc:
-        if args.json:
-            print(json.dumps(exc.payload, indent=2, ensure_ascii=False))
+        if wants_json_output(args):
+            payload = compact_agent_payload(exc.payload) if wants_json_compact(args) else exc.payload
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             Console().print(f"Discovery failed: {exc.payload.get('error_code')}")
             Console().print(str(exc.payload.get("action_hint") or ""))
@@ -2610,8 +2638,9 @@ def cmd_discover(args: argparse.Namespace) -> int:
             selection = str(result.get("interactive_selection") or "")
             project_add = _add_discovery_results_to_project(result, selection=selection)
         except ValueError as exc:
-            if args.json:
-                print(json.dumps({"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}, indent=2, ensure_ascii=False))
+            if wants_json_output(args):
+                payload = {"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}
+                print(json.dumps(compact_agent_payload(payload) if wants_json_compact(args) else payload, indent=2, ensure_ascii=False))
             else:
                 Console().print(f"Invalid selection: {exc}")
             return 2
@@ -2628,8 +2657,9 @@ def cmd_discover(args: argparse.Namespace) -> int:
         try:
             project_add = _add_discovery_results_to_project(result, selection=args.select or "all")
         except ValueError as exc:
-            if args.json:
-                print(json.dumps({"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}, indent=2, ensure_ascii=False))
+            if wants_json_output(args):
+                payload = {"status": "failed", "error_code": "invalid_discovery_selection", "message": str(exc)}
+                print(json.dumps(compact_agent_payload(payload) if wants_json_compact(args) else payload, indent=2, ensure_ascii=False))
             else:
                 Console().print(f"Invalid selection: {exc}")
             return 2
@@ -2642,8 +2672,9 @@ def cmd_discover(args: argparse.Namespace) -> int:
             page_size=max(int(args.limit or 1), 1),
             loaded_limit=max(int(args.limit or 1), 1),
         )
-    if args.json:
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+    if wants_json_output(args):
+        payload = compact_agent_payload(result) if wants_json_compact(args) else result
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
     _print_discovery_table(result)
     if project_add is not None:
@@ -3188,6 +3219,34 @@ def cmd_project_ingest(args: argparse.Namespace) -> int:
     return 1 if failures or (ingest.get("blocked_count") and not getattr(args, "include_low_confidence", False)) else 0
 
 
+def cmd_paper_summary(args: argparse.Namespace) -> int:
+    path = Path(args.path).expanduser()
+    if not path.exists() or not path.is_file():
+        payload = {
+            "status": "failed",
+            "reason_code": "paper_markdown_missing",
+            "action_hint": "Pass a local Markdown path from `mdtero download <task> paper_md`.",
+            "path": str(path),
+        }
+        _print_result(payload, json_output=True, compact=wants_json_compact(args))
+        return 2
+    try:
+        summary = summarize_markdown_file(path, range_spec=getattr(args, "line_range", None))
+    except Exception as exc:
+        payload = {
+            "status": "failed",
+            "reason_code": "paper_summary_failed",
+            "action_hint": "Ensure the file is UTF-8 Markdown produced by Mdtero.",
+            "message": str(exc),
+            "path": str(path),
+        }
+        _print_result(payload, json_output=True, compact=wants_json_compact(args))
+        return 2
+    summary["status"] = "ok"
+    print(json.dumps(compact_agent_payload(summary) if wants_json_compact(args) else summary, indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     client = MdteroClient()
     task = _wait_for_task(client, args.task_id, args=args) if args.wait else client.task(args.task_id)
@@ -3195,7 +3254,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if task.get("status") != "timeout":
         update_task(Path.cwd(), task)
     payload = {"task": task, "workflow": status_trace(task).to_dict()} if args.trace else task
-    _print_result(payload, json_output=args.json or args.trace)
+    _print_result(payload, json_output=wants_json_output(args), compact=wants_json_compact(args))
     return 2 if task.get("status") == "timeout" else 0
 
 
@@ -6840,9 +6899,11 @@ def _print_parse_batch_summary(payload: dict[str, Any]) -> None:
     console.print(table)
 
 
-def _print_result(payload: dict[str, Any], *, json_output: bool) -> None:
+def _print_result(payload: dict[str, Any], *, json_output: bool, compact: bool = False) -> None:
     payload = redact_sensitive_payload(payload)
     if json_output:
+        if compact:
+            payload = compact_agent_payload(payload)
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
     console = Console()
