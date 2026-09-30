@@ -36,7 +36,7 @@
   },
   "cli": {
     "packageName": "mdtero",
-    "packageVersion": "0.3.2",
+    "packageVersion": "0.3.3",
     "packageManager": "uv",
     "runtimeInstallCommand": "uv tool install --upgrade mdtero",
     "scriptInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh",
@@ -151,7 +151,7 @@
     },
     "current": {
       "cli": {
-        "version": "0.3.2",
+        "version": "0.3.3",
         "packageName": "mdtero",
         "packageManager": "uv",
         "installCommand": "uv tool install --upgrade mdtero",

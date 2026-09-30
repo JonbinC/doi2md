@@ -1,6 +1,6 @@
 {
   "name": "mdtero",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "displayName": { "zh": "Mdtero 文献解析", "en": "Mdtero Paper Parser" },
   "description": {
     "zh": "把 DOI、URL 或 PDF 解析成结构化 Markdown，并支持翻译与项目 RAG。",
