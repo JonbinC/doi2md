@@ -67,6 +67,19 @@ def test_cursor_agent_target_installs(tmp_path: Path):
     assert (tmp_path / ".cursor" / "skills" / "mdtero" / "SKILL.md").exists()
 
 
+def test_trae_and_workbuddy_agent_targets_install(tmp_path: Path):
+    assert "trae" in TARGETS
+    assert "workbuddy" in TARGETS
+    (tmp_path / ".agents").mkdir()
+    (tmp_path / ".workbuddy").mkdir()
+    results = install_targets(["trae", "workbuddy"], root=tmp_path, dry_run=False)
+    assert [item.target for item in results] == ["trae", "workbuddy"]
+    assert (tmp_path / ".agents" / "skills" / "mdtero" / "SKILL.md").exists()
+    assert (tmp_path / ".workbuddy" / "skills" / "mdtero" / "SKILL.md").exists()
+    assert (tmp_path / ".agents" / "skills" / "mdtero" / "references" / "setup.md").exists()
+    assert (tmp_path / ".workbuddy" / "skills" / "mdtero" / "references" / "mcp-workflow.md").exists()
+
+
 def test_mcp_tool_catalog_includes_discover_and_paper_summary():
     assert "discover" in MCP_TOOLS
     assert "paper_summary" in MCP_TOOLS

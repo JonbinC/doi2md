@@ -1,124 +1,71 @@
 ---
 name: mdtero
 description: Use when the user needs DOI/URL/file papers turned into structured Markdown for reading, optional translation, project research, RAG, or agent workflows.
+license: MIT
+compatibility: Requires network access to api.mdtero.com, the Python mdtero CLI (uv/pip), and a Mdtero API key from https://mdtero.com/dashboard. Optional Elsevier/OpenAlex/Semantic Scholar keys stay in local mdtero config.
+metadata:
+  homepage: https://mdtero.com
+  repository: https://github.com/JonbinC/doi2md
+  install: npx skills add JonbinC/doi2md
+  discovery: https://mdtero.com/.well-known/agent-skills/index.json
 ---
 
 # Mdtero
 
 DOI/URL/file → structured Markdown package → optional `translate` / RAG. Prefer full-text Markdown; inspect `quality_label` before citing.
-## Quick Start
 
-1. Install the Python runtime with `uv tool install --upgrade mdtero`; for an existing installation, upgrade with `uv tool upgrade mdtero`; in China use the mirror command from `https://mdtero.com/install/manifest.json` if the official index is slow
-2. Run `mdtero setup`
-3. Use `mdtero setup --api-key --json` when the environment is headless; ask the user to create a fresh API key in Mdtero Account/Dashboard and paste the secret only into the secure CLI prompt, never into a shell command or chat transcript
-4. Run `mdtero doctor --json-compact` (or `--json`) before parse, translate, status, download, Zotero, RAG, or MCP work; do not treat setup as complete until it reports `authenticated: true`
-5. Ask whether the user can provide an Elsevier API key. For publisher-heavy English literature reviews, configure it first with `mdtero config academic` or `mdtero config academic --elsevier-key <key> --json`; this improves ScienceDirect/Elsevier routing but does not bypass licensed access
-6. To refresh this agent skill, run `mdtero agent install --target <target>` from the same Python runtime (`codex`, `claude_code`, `cursor`, `gemini_cli`, `hermes`, `opencode`); for human setup, use `mdtero agent install --interactive`
+## Activate before cloud parse
 
-## Setup Rules
+Unauthenticated cloud parse is rejected. The guest path is a **free Mdtero account** (monthly free-plan parse quota — currently **10**). Guide the user through this before inventing anonymous API calls:
 
-- `MDTERO_API_KEY` or a saved Mdtero API key is required before cloud parse, translation, discovery fallback, and RAG work
-- for headless servers, the user should create a fresh dashboard API key, run `mdtero setup --api-key --json`, paste the secret only at the password prompt, then verify with `mdtero doctor --json`
-- Elsevier is the first academic key to ask about for most publisher-heavy literature-review workflows; keep academic source keys local with `mdtero config academic`; OpenAlex discovery has a server-managed fallback, so its local key is optional
-- `mdtero doctor --json-compact` is the preferred first diagnostic for agents because it reports auth, dependencies, academic key presence, Zotero config, project queue counts, server project binding, RAG readiness, and safe `next_commands` without echoing secrets
-- prefer `--json-compact` on `parse` / `status` / `discover` when feeding results into an LLM context window; use full `--json` only when debugging
-- after downloading Markdown, use `mdtero paper summary <path.md> --range 35:67` (or MCP `paper_summary`) for a section index + excerpt before citing
-- MCP `discover` searches literature; MCP `paper_summary` inspects a local Markdown package
-- CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to agents; do not ask users to paste long-lived secrets into prompts when a dashboard-created key or saved config can be used
-- normal DOI/URL parsing should use the installed `mdtero` CLI and Mdtero backend parser
-- when the backend route plan includes a fetchable HTML/XML/EPUB/PDF source, the CLI may acquire it locally with `curl_cffi` and upload the raw artifact automatically; use `mdtero parse <input> --trace --wait --timeout 300 --json` to inspect `client_acquisition` and final task state
-- local PDF/EPUB/XML/HTML files should be uploaded with `mdtero parse --file <path> --trace --wait --timeout 600 --json`
-- keep user-provided files and licensed browser-context capture on the user's own machine when required
-- use the browser extension only for browser-context capture and user-triggered upload/download flows
-- if extension capture is blocked by a publisher challenge, campus-network/session-bound access, or a user-saved file workflow, continue with `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`; after a successful parse, continue with `mdtero rag query "What are the strongest findings?" --build-if-needed --json`, `mdtero mcp briefing --json`, and `mdtero mcp serve`; preserve `client_acquisition`, raw upload status, `reason_code`, `action_hint`, `next_commands`, and the MCP server startup contract in the handoff back to the user
-- if the dashboard provides copied task handoff JSON, treat it as a starting state rather than live truth: preserve task ids, route diagnostics, parse diagnostics, preferred artifacts, download artifacts, reason codes, action hints, and next commands; call `task_status(task_id)` or `mdtero status <task-id> --json` first, then continue with `download_artifact`, `request_translation`, `server_rag_status`, or `rag_query` according to the returned state
+1. Open https://mdtero.com/auth?from=skill (email or OAuth; invite code optional)
+2. In https://mdtero.com/dashboard create an API key (one-time secret)
+3. Install the Python runtime if `mdtero` is missing: `uv tool install --upgrade mdtero`
+4. Run `mdtero setup` (workstation) or `mdtero setup --api-key --json` (headless); paste the key only at the secure prompt — never into chat or shell history
+5. Confirm with `mdtero doctor --json-compact` until `authenticated: true`
+6. Run the first parse below (arXiv DOI is a safe smoke input)
 
-## CLI Workflow
+In China, if PyPI is slow use the mirror command from `https://mdtero.com/install/manifest.json`.
 
-- initialize a project: `mdtero project init`
-- inspect project state for agents: `mdtero project status --json` or `mdtero project list --json`
-- add or remove project entries for agents: `mdtero project add <doi-or-url> --json`, `mdtero project remove <doi-or-url-or-task-id> --json`
-- import a BibTeX file: `mdtero project import-bib references.bib --json`
-- import Zotero items: `mdtero config zotero`, then `mdtero zotero import --json`
-- sync succeeded Zotero-origin parse task notes/tags back to Zotero: `mdtero zotero sync`
-- submit a project queue: `mdtero project parse --wait --timeout 300 --json`
-- refresh project tasks: `mdtero project refresh --wait --timeout 300 --json`
-- download project Markdown: `mdtero project download --output-dir ./mdtero-output --json`
-- bootstrap server-side RAG and query from one command: `mdtero rag query "What are the strongest findings?" --build-if-needed --json`
-- use a reusable project question when automating: `mdtero rag query "<question>" --build-if-needed --json`
-- explicit recovery/debug commands remain available: `mdtero rag build --wait --json`, `mdtero project ingest --json`, `mdtero project create-server --json`, or `mdtero project link --server-project-id <id> --json`
-- parse a DOI/URL: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json`
-- quote DOI/URL values containing shell metacharacters, for example `mdtero parse '10.1016/S0260-8774(02)00304-7' --trace --wait --timeout 300 --json`
-- parse a local paper file: `mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json`
-- continue from an extension handoff: `mdtero parse <doi-or-url> --trace --wait --timeout 300 --json` or `mdtero parse --file <paper.pdf|paper.epub|paper.html|paper.xml> --trace --wait --timeout 600 --json`
-- parse a directory of files: `mdtero parse --batch ./papers --wait --timeout 300 --json`
-- parse a text file of DOI/URL targets and download Markdown: `mdtero parse-batch dois.txt --wait --download paper_md --output-dir ./mdtero-output --json`
-- search discovery: `mdtero discover "<query>" --json`; unquoted multi-word queries are also accepted by the CLI
-- add discovery results to the local parse queue interactively: `mdtero discover "<query>" --limit 5 --interactive` (tries local OpenAlex + Semantic Scholar first, then falls back to server OpenAlex; `n`/`p` page, `r <query>` refines, numbers add selections, `a` adds the current page; use `--source local` or `--source server` to force one path)
-- non-interactive paging: `mdtero discover "<query>" --limit 5 --page 2 --json`
-- add discovery results to the local parse queue from a script: `mdtero discover "<query>" --limit 5 --add --select 1,3 --json`
-- poll status: `mdtero status <task-id> --wait --timeout 300 --json`
-- download Markdown: `mdtero download <task-id> paper_md --output-dir <dir> --json`; downloads use metadata-based filenames, append `.low_quality.md` for low-confidence Markdown, and update `manifest.csv`
-- translate a parse task or local Markdown file: `mdtero translate <parse-task-id> --to zh-CN --wait --timeout 600 --json` or `mdtero translate <paper.md> --to zh-CN --wait --timeout 600 --json`
-- query server project RAG, automatically creating/binding/importing/building when needed: `mdtero rag query "<question>" --build-if-needed --json`
-- print local agent context without starting a server: `mdtero mcp briefing --json`
-- serve project MCP context: `mdtero mcp serve`
-- detect or install agent skills: `mdtero agent detect --json`, `mdtero agent install --interactive`, or `mdtero agent install --target <target>`
-- inspect install/project/RAG readiness for agents: `mdtero doctor --json`
-- `mdtero parse`, `mdtero project parse`, `mdtero status`, and `mdtero project refresh` JSON responses include `next_commands`, `quality_label`, and sometimes `quality_warning`; follow those returned commands before inventing a new continuation. For succeeded tasks, prefer the returned `preferred_artifact` and download command. For failed or low-quality tasks, report `reason_code` / `action_hint` / `quality_label` and use the returned retry or status command.
+## Install (preferred)
 
-## MCP Workflow
+```bash
+npx skills add JonbinC/doi2md
+# or: npx skills add https://mdtero.com/agent-skills
+uv tool install --upgrade mdtero
+mdtero setup
+mdtero doctor --json-compact
+```
 
-Before starting a long agent workflow, run `mdtero mcp briefing --json` for a one-shot account/project/RAG handoff. This command is safe even before `mdtero project init`; if it returns `project_not_initialized`, follow its `next_commands` before parsing or querying RAG. If the payload includes `mcp_tool_plan`, follow that structured playbook first: each entry tells you the `tool`, `when` to use it, example `arguments`, `success_signal`, and `failure_fields` to preserve in the user handoff. When `mdtero mcp serve` is available, use these tools before guessing project state:
+Refresh this skill into a detected agent workspace with `mdtero agent install --interactive` (targets: `codex`, `claude_code`, `cursor`, `gemini_cli`, `hermes`, `opencode`, `trae`, `workbuddy`).
 
-- `agent_briefing`: one-call account status, project health, ready downloads, blocked items, RAG status, and recommended next commands
-- Agent-facing recommended commands include `--json` where supported. Prefer those exact commands over human-readable variants when automating workflows.
-- `project_init(name=None)`: create the local `.mdtero/project.json` project state from MCP so an agent can start project mode without dropping back to shell commands
-- `project_status`: current project name, server project id, paper statuses, and next actions
-- `project_add(input_value, title=None, doi=None, source="mcp")`: add a DOI, URL, or local file target to the project queue before calling `submit_parse` or `mdtero project parse`
-- `paper_context(input_or_task_id)`: one paper/task record plus recommended CLI commands
-- `submit_parse(input_value, wait=False)`: submit a DOI/URL/file handoff through the same route-aware CLI path and update the local project record; use this when the agent should start work without asking the user to copy a terminal command
-- `task_status(task_id, wait=False)`: poll a parse or translation task, sync the local project state, and return `preferred_artifact`, `download_artifacts`, `reason_code`, `action_hint`, and `next_commands`
-- `download_artifact(task_id, artifact=None, output_dir="./mdtero-output")`: download the preferred task artifact, or an explicit `paper_md`, `paper_bundle`, or `translated_md`, and return the local path plus next commands for translation/RAG/MCP
-- `request_translation(task_id_or_markdown_path, target_language="zh-CN", wait=False)`: request backend translation for a completed parse task or local Markdown file and return provider-attempt diagnostics when translation fails
-- `rag_context`: whether server RAG is ready, why not, and the exact ingest/build/query commands
-- `server_rag_status`: live backend RAG readiness, embedding counts, failure reason, and next commands
-- `project_ingest(project_id=None)`: import succeeded parse tasks into the bound or newly created backend project before building the RAG index; preserve per-task `failures` with `reason_code` and `action_hint`
-- `server_rag_build(wait=true)`: build backend RAG for the bound project and wait until `status_after_build.ready_for_query` is true before querying
-- `rag_query(question)`: ask server-side RAG from MCP; it can create/bind a server project, import succeeded parse tasks, build, and query before returning. When ready, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary, then inspect `matches` for deeper evidence. Preserve `citation_contract.required_for_final_answer` and keep its required `citations` plus `source_nodes` in the final answer. If it is not ready, report the returned `reason_code`, `action_hint`, and `next_commands`
-- `agent_commands`: canonical command map for parse, refresh, ingest, RAG, download, and MCP
+## First parse
 
-Use the `mcp_tool_plan` steps to choose between `project_init`, `project_add`, `submit_parse`, `task_status`, `download_artifact`, `request_translation`, `project_ingest`, `server_rag_status`, `server_rag_build`, and `rag_query`. When the plan says `ingest_project_documents`, call `project_ingest(project_id=None)` first; when it says `build_rag_index`, call `server_rag_build(wait=true)` before `rag_query(question)`. On failures, report the step's `failure_fields` such as `reason_code`, `action_hint`, `next_commands`, `translation_attempts`, `client_acquisition`, `failures`, or `readiness` before retrying.
+```bash
+mdtero parse 10.48550/arXiv.1706.03762 --trace --wait --timeout 300 --json
+mdtero parse --file paper.pdf --trace --wait --timeout 600 --json
+mdtero parse --batch ./papers --wait --timeout 300 --json
+```
 
-If `agent_briefing` includes `dashboard_handoff_json`, use its `expected_fields`, `validation_step`, and `tool_sequence` as the contract for dashboard-to-agent continuation. The copied JSON should already redact signed URLs, bearer/API keys, storage tokens, and Mdtero secrets; do not request unredacted credentials in chat.
+After download, inspect `quality_label` / `.low_quality.md` before citing. Prefer `xml`/`html`/`epub` sources over `abstract_only`.
 
-If `agent_briefing` or the dashboard API key dialog provides `dashboard_setup_handoff_json`, treat it as the setup contract for a newly created one-time key. Preserve `auth_boundary`, `first_cli_command`, `next_commands`, `mcp`, `rag`, and `redaction_policy`; verify `api_key.full_secret_included` is false. Ask the user to paste the one-time secret only into the secure `mdtero setup --api-key --json` prompt, then rerun `mdtero doctor --json` and `mdtero mcp briefing --json`. Do not paste the secret into shell commands, MCP output, logs, or this chat.
+## Agent rules
 
-Prefer MCP tools for multi-step agent work when `mdtero mcp serve` is already running. Prefer CLI commands when the user is reading along in a terminal, when a file path must be selected manually, or when browser-extension handoff copy should remain visible to the user.
+- Run `mdtero doctor --json-compact` (or `--json`) before parse/translate/RAG/MCP work; do not treat setup as complete until it reports `authenticated: true` and returns safe `next_commands` without echoing secrets
+- Prefer `--json-compact` on `parse` / `status` / `discover` when feeding LLM context; use full `--json` only when debugging
+- Follow returned `next_commands`, `reason_code`, `action_hint`, and `preferred_artifact`
+- For RAG answers, use `evidence_pack.context_markdown`, `source_nodes`, and `citations` as the grounded evidence surface; treat `answer` as an extractive summary
+- Paste one-time API secrets only into secure CLI prompts, never into shell commands, MCP output, logs, or chat
 
-The CLI talks to `https://api.mdtero.com` by default. Use `MDTERO_API_URL` only for staging or local verification.
+## Deeper guides
 
-## Literature Review Agent
+- Setup, auth, and academic keys: `references/setup.md`
+- CLI / project / discover / translate commands: `references/cli-workflow.md`
+- MCP tools and dashboard handoff: `references/mcp-workflow.md`
+- Literature-review playbook: `references/literature-review.md`
 
-For a research-question → cited review workflow, follow the cookbook skill at `https://api.mdtero.com/skills/mdtero-literature-review.md`:
+## Verification
 
-1. `mdtero discover "<question>" --limit 20 --json` and add selected DOIs to a project
-2. `mdtero project parse --wait --timeout 600 --json` (prefer `source_format_family` in `xml`/`html`/`epub`; reject `abstract_only`/`partial_fulltext` as full-text evidence)
-3. `mdtero rag query "<question>" --build-if-needed --json`
-4. Expand high-scoring citations with `mdtero content mdtero-doc-<id>@<offset> --json` (or the documents content API)
-5. Write the review citing every claim as `[doc_id@offset]`; do not invent references outside `citations` / content slices
-
-Preserve `literature_review_playbook` and `citation_contract.locator_fields` from RAG responses when handing off to another agent.
-
-## Output Rule
-
-- prefer full-text Markdown first; treat PDF as input, not as the normal output
-- inspect `quality_label` / `.low_quality.md` before citing; prefer `xml`/`html`/`epub` sources over `abstract_only`
-- use fallback bundles only when the workflow truly needs image or asset files
-- keep task ids, `reason_code`, `action_hint`, `preferred_artifact`, RAG `answer` / `citations` / `source_nodes` / `evidence_pack` / `citation_contract`, `next_commands`, and download artifact names visible in handoffs
-
-## Verification Rule
-
-- do not treat installation as complete until `mdtero doctor --json` reports `authenticated: true` and an API key source
-- if `mdtero` is missing or imports a top-level `service` package, repair the public runtime with `uv tool install --force --reinstall mdtero`; use `curl -Ls https://mdtero.com/install.sh | sh` for automatic mirror fallback
-- if a task fails, report `reason_code` and the server action hint before retrying
+- Installation is incomplete until `mdtero doctor --json` reports `authenticated: true`
+- If `mdtero` is missing or imports a top-level `service` package, repair with `uv tool install --force --reinstall mdtero` or `curl -Ls https://mdtero.com/install.sh | sh`
+- On task failure, report `reason_code` and the server action hint before retrying

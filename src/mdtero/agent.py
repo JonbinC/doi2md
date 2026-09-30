@@ -43,6 +43,8 @@ TARGETS: dict[str, AgentTarget] = {
     "gemini_cli": AgentTarget("gemini_cli", "Gemini CLI", ".gemini/skills/mdtero"),
     "hermes": AgentTarget("hermes", "Hermes Agent", ".hermes/skills/mdtero"),
     "opencode": AgentTarget("opencode", "OpenCode", ".opencode/skills/mdtero"),
+    "trae": AgentTarget("trae", "Trae", ".agents/skills/mdtero"),
+    "workbuddy": AgentTarget("workbuddy", "WorkBuddy", ".workbuddy/skills/mdtero"),
 }
 
 
@@ -162,7 +164,10 @@ def _select_targets(names: Iterable[str] | None, *, root: Path | None, install_a
     detected = detect_targets(root)
     if detected:
         return detected
-    raise ValueError("No agent workspace detected. Pass --target codex, --target claude_code, --target cursor, --target gemini_cli, --target hermes, or --target opencode.")
+    raise ValueError(
+        "No agent workspace detected. Pass --target codex, --target claude_code, --target cursor, "
+        "--target gemini_cli, --target hermes, --target opencode, --target trae, or --target workbuddy."
+    )
 
 
 def _targets_from_names(names: Iterable[str]) -> list[AgentTarget]:
@@ -179,8 +184,7 @@ def _install_one(target: AgentTarget, *, root: Path | None, dry_run: bool) -> Ag
     path = _safe_skill_path(target, root)
     detected = path.parent.parent.exists()
     if not dry_run:
-        path.mkdir(parents=True, exist_ok=True)
-        (path / "SKILL.md").write_text(_skill_template(), encoding="utf-8")
+        _copy_skill_package(path)
     return AgentInstallResult(
         target=target.name,
         label=target.label,
@@ -190,8 +194,23 @@ def _install_one(target: AgentTarget, *, root: Path | None, dry_run: bool) -> Ag
     )
 
 
+def _skill_root() -> Path:
+    return Path(str(resources.files("mdtero.skills.mdtero")))
+
+
+def _copy_skill_package(destination: Path) -> None:
+    source = _skill_root()
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(
+        source,
+        destination,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "__init__.py"),
+    )
+
+
 def _skill_template() -> str:
-    return resources.files("mdtero.skills.mdtero").joinpath("SKILL.md").read_text(encoding="utf-8")
+    return (_skill_root() / "SKILL.md").read_text(encoding="utf-8")
 
 
 def _safe_skill_path(target: AgentTarget, root: Path | None) -> Path:

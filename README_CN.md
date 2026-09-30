@@ -14,6 +14,17 @@ Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译
 
 ## 安装
 
+先接入 Agent（Cursor / Claude Code / Codex / Trae / WorkBuddy 等通用）：
+
+```bash
+npx skills add JonbinC/doi2md
+# 或: npx skills add https://mdtero.com/agent-skills
+```
+
+[![skills.sh](https://skills.sh/b/JonbinC/doi2md)](https://skills.sh/JonbinC/doi2md)
+
+再安装 Python 运行时：
+
 ```bash
 uv tool install --upgrade mdtero
 mdtero setup
@@ -27,7 +38,7 @@ curl -Ls https://mdtero.com/install.sh | sh
 curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 ```
 
-安装脚本支持 `uv`、`pipx` 和 Python 回退。`--agent <target>` 会安装本地 agent skill。
+安装脚本支持 `uv`、`pipx` 和 Python 回退。`--agent <target>` 会安装本地 agent skill。发现索引：https://mdtero.com/.well-known/agent-skills/index.json
 
 ## 使用 Mdtero
 

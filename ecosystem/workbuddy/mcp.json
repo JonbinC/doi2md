@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mdtero": {
+      "command": "mdtero",
+      "args": ["mcp", "serve"],
+      "env": {
+        "MDTERO_API_KEY": "${MDTERO_API_KEY}"
+      }
+    }
+  }
+}

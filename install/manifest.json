@@ -21,7 +21,19 @@
     "serverBehavior": "skipped on headless/server environments",
     "browserFallback": "Mdtero browser extension remains available for current-tab or existing-session capture"
   },
-  "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package.",
+  "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package. Portable Agent Skills installs also work via `npx skills add JonbinC/doi2md` and https://mdtero.com/.well-known/agent-skills/index.json.",
+  "agentSkills": {
+    "npxInstallCommand": "npx skills add JonbinC/doi2md",
+    "discoveryInstallCommand": "npx skills add https://mdtero.com/agent-skills",
+    "discoveryIndexUrl": "https://mdtero.com/.well-known/agent-skills/index.json",
+    "skillPageUrl": "https://mdtero.com/agent-skills",
+    "archiveUrl": "https://mdtero.com/agent-skills/mdtero.tar.gz",
+    "githubSkillPath": "skills/mdtero",
+    "activationUrl": "https://mdtero.com/auth?from=skill",
+    "dashboardUrl": "https://mdtero.com/dashboard",
+    "freePlanParseQuota": 10,
+    "activationNote": "Unauthenticated cloud parse is rejected. Free signup is the guest path and includes monthly free-plan parse quota."
+  },
   "cli": {
     "packageName": "mdtero",
     "packageVersion": "0.3.2",
@@ -71,6 +83,15 @@
       "skillInstallCommand": "mdtero agent install --target codex"
     },
     {
+      "target": "cursor",
+      "label": "Cursor",
+      "description": "Best for Cursor workspaces that keep Mdtero in .cursor/skills.",
+      "descriptionZh": "\u9002\u5408\u628a Mdtero \u653e\u8fdb .cursor/skills \u7684 Cursor \u5de5\u4f5c\u533a\u3002",
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent cursor",
+      "skillDirectory": ".cursor/skills/mdtero",
+      "skillInstallCommand": "mdtero agent install --target cursor"
+    },
+    {
       "target": "gemini_cli",
       "label": "Gemini CLI",
       "description": "Best for Gemini CLI setups that keep the workflow in .gemini/skills.",
@@ -97,6 +118,26 @@
       "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent opencode",
       "skillDirectory": ".opencode/skills/mdtero",
       "skillInstallCommand": "mdtero agent install --target opencode"
+    },
+    {
+      "target": "trae",
+      "label": "Trae",
+      "description": "Best for Trae / Agent Skills workspaces that load Mdtero from .agents/skills.",
+      "descriptionZh": "\u9002\u5408\u4ece .agents/skills \u52a0\u8f7d Mdtero \u7684 Trae / Agent Skills \u5de5\u4f5c\u533a\u3002",
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent trae",
+      "skillDirectory": ".agents/skills/mdtero",
+      "skillInstallCommand": "mdtero agent install --target trae",
+      "mcpNote": "Optional project MCP config can live in .trae/mcp.json with `mdtero mcp serve`."
+    },
+    {
+      "target": "workbuddy",
+      "label": "WorkBuddy",
+      "description": "Best for WorkBuddy setups that keep Mdtero in .workbuddy/skills and MCP in ~/.workbuddy/mcp.json.",
+      "descriptionZh": "\u9002\u5408\u628a Mdtero \u653e\u8fdb .workbuddy/skills\uff0c\u5e76\u5728 ~/.workbuddy/mcp.json \u914d\u7f6e MCP \u7684 WorkBuddy \u73af\u5883\u3002",
+      "installCommand": "curl -Ls https://mdtero.com/install.sh | sh -s -- --agent workbuddy",
+      "skillDirectory": ".workbuddy/skills/mdtero",
+      "skillInstallCommand": "mdtero agent install --target workbuddy",
+      "mcpNote": "User-level MCP config path: ~/.workbuddy/mcp.json"
     }
   ],
   "releaseTruth": {
@@ -131,9 +172,12 @@
         "installTargets": [
           "claude_code",
           "codex",
+          "cursor",
           "gemini_cli",
           "hermes",
-          "opencode"
+          "opencode",
+          "trae",
+          "workbuddy"
         ]
       }
     }

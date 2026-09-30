@@ -6,7 +6,7 @@ DRY_RUN="0"
 usage() {
   cat <<'EOF'
 Usage:
-  install.sh [--agent <claude_code|codex|gemini_cli|hermes|opencode>] [--dry-run]
+  install.sh [--agent <claude_code|codex|cursor|gemini_cli|hermes|opencode|trae|workbuddy>] [--dry-run]
 
 Installs the Python Mdtero runtime, then installs the matching agent skill
 bundle through `mdtero agent install`. PyPI is the primary source; the script
@@ -43,10 +43,10 @@ python_cmd() {
 
 validate_target() {
   case "$1" in
-    claude_code|codex|gemini_cli|hermes|opencode) return 0 ;;
+    claude_code|codex|cursor|gemini_cli|hermes|opencode|trae|workbuddy) return 0 ;;
     openclaw) fail "OpenClaw uses the dedicated ClawHub route: clawhub install mdtero" ;;
     "") return 0 ;;
-    *) fail "Unsupported agent '$1'. Use claude_code, codex, gemini_cli, hermes, or opencode." ;;
+    *) fail "Unsupported agent '$1'. Use claude_code, codex, cursor, gemini_cli, hermes, opencode, trae, or workbuddy." ;;
   esac
 }
 

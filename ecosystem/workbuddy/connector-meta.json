@@ -1,0 +1,13 @@
+{
+  "name": "mdtero",
+  "version": "0.3.2",
+  "displayName": { "zh": "Mdtero 文献解析", "en": "Mdtero Paper Parser" },
+  "description": {
+    "zh": "把 DOI、URL 或 PDF 解析成结构化 Markdown，并支持翻译与项目 RAG。",
+    "en": "Parse DOI, URL, or PDF papers into structured Markdown with optional translation and project RAG."
+  },
+  "homepage": "https://mdtero.com",
+  "repository": "https://github.com/JonbinC/doi2md",
+  "transport": "mcp",
+  "skill": "./skills/mdtero"
+}

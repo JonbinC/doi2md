@@ -83,7 +83,8 @@ def mock_doctor_remote_auth_ok(monkeypatch):
         else {
             "status": "missing",
             "action_hint": (
-                "Use `mdtero login` or `mdtero setup` on a workstation. "
+                "Open https://mdtero.com/auth?from=skill for a free account (includes monthly free-plan parse quota), "
+                "create a Dashboard API key, then use `mdtero login` / `mdtero setup` on a workstation. "
                 "For headless/API-key auth use `mdtero setup --api-key --json` or set MDTERO_API_KEY."
             ),
             "next_commands": ["mdtero login", "mdtero setup", "mdtero setup --api-key --json", "mdtero doctor --json"],
@@ -169,6 +170,17 @@ def assert_onboarding_payload_commands_parse(payload: dict) -> None:
             continue
         assert_command_list_parses([str(route.get("primary_command") or "")])
         assert_command_list_parses([str(command) for command in route.get("next_commands") or []])
+
+
+
+def _skill_package_text(skill_dir: Path) -> str:
+    parts = [(skill_dir / "SKILL.md").read_text(encoding="utf-8")]
+    references = skill_dir / "references"
+    if references.is_dir():
+        for path in sorted(references.glob("*.md")):
+            parts.append(path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
 
 
 def test_parser_exposes_next_gen_command_contract():
@@ -4551,8 +4563,11 @@ def test_setup_json_onboarding_reports_local_discovery(monkeypatch, tmp_path: Pa
     from mdtero import cli
 
     monkeypatch.setenv("MDTERO_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
+    monkeypatch.delenv("MDTERO_OPENALEX_API_KEY", raising=False)
     cfg = load_config()
     cfg.api_key = "mdt_live_saved"
+    cfg.academic.openalex_api_key = None
     cfg.academic.wiley_tdm_token = "wiley-secret"
     save_config(cfg)
     monkeypatch.setattr(
@@ -8492,7 +8507,16 @@ def test_agent_interactive_selection_defaults_to_detected_pending_targets(tmp_pa
     assert parse_agent_selection("", statuses) == ["hermes"]
     assert parse_agent_selection("1 5", statuses) == ["codex", "hermes"]
     assert parse_agent_selection("codex,opencode", statuses) == ["codex", "opencode"]
-    assert parse_agent_selection("all", statuses) == ["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode"]
+    assert parse_agent_selection("all", statuses) == [
+        "codex",
+        "claude_code",
+        "cursor",
+        "gemini_cli",
+        "hermes",
+        "opencode",
+        "trae",
+        "workbuddy",
+    ]
 
 
 def test_agent_install_interactive_uses_prompted_multi_select(monkeypatch, tmp_path: Path, capsys):
@@ -8885,8 +8909,8 @@ def test_public_docs_and_skills_describe_mcp_tool_plan_contract():
         for path in [repo_root / "README.md", repo_root / "install" / "README.md", repo_root / "docs" / "public" / "README.md"]
     )
     combined_skills = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]
+        _skill_package_text(skill_dir)
+        for skill_dir in [repo_root / "skills" / "mdtero", repo_root / "src" / "mdtero" / "skills" / "mdtero"]
     )
 
     for content in [combined_docs, combined_skills]:
@@ -8943,10 +8967,8 @@ def test_public_docs_describe_agent_safe_redaction_boundary():
             repo_root / "README_CN.md",
             repo_root / "install" / "README.md",
             repo_root / "docs" / "public" / "README.md",
-            repo_root / "skills" / "mdtero" / "SKILL.md",
-            repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
         ]
-    )
+    ) + "\n" + _skill_package_text(repo_root / "skills" / "mdtero") + "\n" + _skill_package_text(repo_root / "src" / "mdtero" / "skills" / "mdtero")
 
     assert "agent-facing CLI JSON and MCP payloads sanitize signed artifact URLs" in combined
     assert "bearer/API-key headers" in combined
@@ -8970,10 +8992,8 @@ def test_public_docs_and_skill_describe_extension_cli_handoff_contract():
             repo_root / "README_CN.md",
             repo_root / "install" / "README.md",
             repo_root / "docs" / "public" / "README.md",
-            repo_root / "skills" / "mdtero" / "SKILL.md",
-            repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
         ]
-    )
+    ) + "\n" + _skill_package_text(repo_root / "skills" / "mdtero") + "\n" + _skill_package_text(repo_root / "src" / "mdtero" / "skills" / "mdtero")
 
     assert "Extension-to-CLI handoff" in combined
     assert "扩展到 CLI 的交接" in combined
@@ -9003,10 +9023,8 @@ def test_public_docs_and_skills_use_agent_safe_discovery_add_json():
             repo_root / "README.md",
             repo_root / "README_CN.md",
             repo_root / "install" / "README.md",
-            repo_root / "skills" / "mdtero" / "SKILL.md",
-            repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
         ]
-    )
+    ) + "\n" + _skill_package_text(repo_root / "skills" / "mdtero") + "\n" + _skill_package_text(repo_root / "src" / "mdtero" / "skills" / "mdtero")
 
     assert "mdtero discover \"<query>\" --limit 5 --add --select 1,3 --json" in combined
     assert "mdtero discover \"thermochemical energy storage\" --limit 5 --add --select 1,3 --json" in combined
@@ -9017,8 +9035,8 @@ def test_public_docs_and_skills_use_agent_safe_discovery_add_json():
 
 def test_packaged_skill_guides_agents_to_structured_rag_evidence():
     repo_root = Path(__file__).resolve().parents[1]
-    for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
-        content = path.read_text(encoding="utf-8")
+    for skill_dir in [repo_root / "skills" / "mdtero", repo_root / "src" / "mdtero" / "skills" / "mdtero"]:
+        content = _skill_package_text(skill_dir)
         assert "evidence_pack.context_markdown" in content
         assert "source_nodes" in content
         assert "extractive summary" in content
@@ -9028,17 +9046,18 @@ def test_packaged_skill_guides_agents_to_structured_rag_evidence():
 def test_public_docs_and_skills_prefer_doctor_json_for_agents():
     repo_root = Path(__file__).resolve().parents[1]
     readme = (repo_root / "README.md").read_text(encoding="utf-8")
-    skill_source = (repo_root / "skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
-    packaged_skill = (repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
+    skill_source = _skill_package_text(repo_root / "skills" / "mdtero")
+    packaged_skill = _skill_package_text(repo_root / "src" / "mdtero" / "skills" / "mdtero")
 
     assert "mdtero doctor --json" in readme
     assert "safe auth/dependency/academic/Zotero/project/RAG summaries" in readme
     for skill in [skill_source, packaged_skill]:
-        assert "Run `mdtero doctor --json-compact`" in skill or "Run `mdtero doctor --json`" in skill
+        assert "mdtero doctor --json-compact" in skill or "mdtero doctor --json" in skill
         assert "safe `next_commands` without echoing secrets" in skill
         assert "authenticated: true" in skill
         assert "--json-compact" in skill
         assert "cursor" in skill
+        assert "npx skills add JonbinC/doi2md" in skill
 
 
 def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():
@@ -9046,15 +9065,18 @@ def test_public_docs_and_skills_prefer_waiting_file_parse_for_agents():
     docs = [
         repo_root / "README.md",
         repo_root / "install" / "README.md",
-        repo_root / "skills" / "mdtero" / "SKILL.md",
-        repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md",
+    ]
+    skill_packages = [
+        repo_root / "skills" / "mdtero",
+        repo_root / "src" / "mdtero" / "skills" / "mdtero",
     ]
 
     for path in docs:
         content = path.read_text(encoding="utf-8")
-        assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json" in content or "mdtero parse --file <path> --trace --wait --timeout 600 --json" in content
-    for path in [repo_root / "skills" / "mdtero" / "SKILL.md", repo_root / "src" / "mdtero" / "skills" / "mdtero" / "SKILL.md"]:
-        content = path.read_text(encoding="utf-8")
+        assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json" in content or "mdtero parse --file <path> --trace --wait --timeout 600 --json" in content or "mdtero parse --file paper.pdf --wait --timeout 600 --json" in content
+    for skill_dir in skill_packages:
+        content = _skill_package_text(skill_dir)
+        assert "mdtero parse --file paper.pdf --trace --wait --timeout 600 --json" in content or "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --trace --wait --timeout 600 --json" in content
         assert "mdtero parse --batch ./papers --wait --timeout 300 --json" in content
         assert "mdtero parse --file <path> --json" not in content
         assert "mdtero parse --file <paper.pdf|paper.html|paper.xml|paper.epub> --json" not in content
@@ -9069,7 +9091,7 @@ def test_public_docs_describe_setup_agent_detection_and_headless_skip():
     )
 
     assert "`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection" in combined
-    assert "detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces" in combined
+    assert "detects local Codex/Claude/Cursor/Gemini/Hermes/OpenCode/Trae/WorkBuddy workspaces" in combined
     assert "Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY`" in combined
     assert "mdtero setup --api-key --json" in combined
     assert "Do not put the API key value directly in shell history" in combined
@@ -9092,10 +9114,13 @@ def test_packaged_skill_template_is_available_to_python_installer():
     from importlib import resources
 
     skill = resources.files("mdtero.skills.mdtero").joinpath("SKILL.md").read_text(encoding="utf-8")
+    package_text = _skill_package_text(Path(str(resources.files("mdtero.skills.mdtero"))))
 
     assert "mdtero agent install" in skill
-    assert "mdtero parse <doi-or-url>" in skill
-    assert "mdtero doctor --json" in skill
+    assert "npx skills add JonbinC/doi2md" in skill
+    assert "mdtero doctor --json" in skill or "mdtero doctor --json-compact" in skill
+    assert "mdtero mcp briefing --json" in package_text
+    assert "references/mcp-workflow.md" in skill or "MCP workflow" in package_text
 
 
 def test_retired_per_agent_install_docs_are_removed():
@@ -9110,18 +9135,27 @@ def test_retired_per_agent_install_docs_are_removed():
         assert not path.exists(), str(path)
 
     skills_readme = (repo_root / "skills" / "README.md").read_text(encoding="utf-8")
-    assert "Per-agent `INSTALL.md` copies are retired" in skills_readme
+    assert "npx skills add JonbinC/doi2md" in skills_readme
     assert "mdtero agent install --target <target>" in skills_readme
+    assert "scripts/sync-agent-skill.sh" in skills_readme
 
 
 def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     from importlib import resources
 
     repo_root = Path(__file__).resolve().parents[1]
-    source_skill = (repo_root / "skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
-    packaged_skill = resources.files("mdtero.skills.mdtero").joinpath("SKILL.md").read_text(encoding="utf-8")
+    source_dir = repo_root / "skills" / "mdtero"
+    packaged_dir = repo_root / "src" / "mdtero" / "skills" / "mdtero"
+    source_skill = _skill_package_text(source_dir)
+    packaged_skill = _skill_package_text(packaged_dir)
+    resource_skill = resources.files("mdtero.skills.mdtero").joinpath("SKILL.md").read_text(encoding="utf-8")
 
+    assert (source_dir / "SKILL.md").read_text(encoding="utf-8") == resource_skill
     assert source_skill == packaged_skill
+    assert (packaged_dir / "references" / "mcp-workflow.md").exists()
+    assert "license: MIT" in resource_skill
+    assert "compatibility:" in resource_skill
+    assert "npx skills add JonbinC/doi2md" in source_skill
     assert "mdtero rag build --project-id" not in source_skill
     assert "mdtero mcp briefing --json" in source_skill
     assert "one-shot account/project/RAG handoff" in source_skill
@@ -9135,8 +9169,40 @@ def test_source_and_packaged_agent_skill_templates_stay_in_sync():
     assert "request_translation(task_id_or_markdown_path" in source_skill
     assert "provider-attempt diagnostics" in source_skill
     assert "Prefer MCP tools for multi-step agent work" in source_skill
-    assert "JSON responses include `next_commands`" in source_skill
     assert "preferred_artifact" in source_skill
     assert "evidence_pack.context_markdown" in source_skill
     assert "source_nodes" in source_skill
     assert "grounded evidence" in source_skill
+    assert "auth?from=skill" in source_skill
+    assert "currently **10**" in source_skill or "free-plan parse quota" in source_skill
+
+
+def test_auth_missing_hint_points_skill_users_to_free_signup():
+    from mdtero.cli import AUTH_MISSING_ACTION_HINT
+
+    assert "https://mdtero.com/auth?from=skill" in AUTH_MISSING_ACTION_HINT
+    assert "free-plan parse quota" in AUTH_MISSING_ACTION_HINT
+
+
+def test_website_agent_skills_discovery_assets_are_synced():
+    repo_root = Path(__file__).resolve().parents[1]
+    site_root = repo_root.parent / "nextmdtero" / "public"
+    index = json.loads((site_root / ".well-known" / "agent-skills" / "index.json").read_text(encoding="utf-8"))
+    skill = (site_root / "agent-skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
+    archive = site_root / "agent-skills" / "mdtero.tar.gz"
+
+    assert index["skills"][0]["name"] == "mdtero"
+    assert index["skills"][0]["url"] == "https://mdtero.com/agent-skills/mdtero.tar.gz"
+    assert str(index["skills"][0]["digest"]).startswith("sha256:")
+    assert archive.exists() and archive.stat().st_size > 0
+    assert "npx skills add JonbinC/doi2md" in skill
+    assert "auth?from=skill" in skill
+    assert "free-plan parse quota" in skill or "monthly free-plan parse quota" in skill or "currently **10**" in skill
+    assert (repo_root / "ecosystem" / "workbuddy" / "connector-meta.json").exists()
+    assert (repo_root / "ecosystem" / "trae" / "mcp.json").exists()
+    page = (site_root / "agent-skills" / "index.html").read_text(encoding="utf-8")
+    assert "Activate (free quota)" in page
+    assert "/auth?from=skill" in page
+    manifest = json.loads((site_root / "install" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["agentSkills"]["activationUrl"] == "https://mdtero.com/auth?from=skill"
+    assert manifest["agentSkills"]["freePlanParseQuota"] == 10

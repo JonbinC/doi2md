@@ -6,6 +6,19 @@ Mdtero Account is the control plane for API keys, quota, billing, history, diagn
 
 ## Recommended Quick Start
 
+Agent-first (Cursor / Claude / Codex / Trae / WorkBuddy and other Agent Skills clients):
+
+```bash
+npx skills add JonbinC/doi2md
+# or: npx skills add https://mdtero.com/agent-skills
+uv tool install --upgrade mdtero
+mdtero setup
+```
+
+Discovery index: https://mdtero.com/.well-known/agent-skills/index.json
+
+Runtime-only:
+
 ```bash
 uv tool install --upgrade mdtero
 mdtero setup
@@ -13,7 +26,7 @@ mdtero setup
 
 The public client is now published on PyPI. The installer tries the Tsinghua and Alibaba mirrors before the official PyPI index, then keeps GitHub only as a last-resort fallback. Set `MDTERO_PYPI_INDEX` when an institution provides its own mirror.
 
-`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection. It authenticates, offers optional academic-key setup, detects local Codex/Claude/Gemini/Hermes/OpenCode workspaces, and can install selected agent skills before showing next commands. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` intentionally skips agent detection; run `mdtero agent install --interactive` later on the machine that owns the agent workspace. Do not put the API key value directly in shell history.
+`mdtero setup` handles login, optional academic-key configuration, and local agent workspace detection. It authenticates, offers optional academic-key setup, detects local Codex/Claude/Cursor/Gemini/Hermes/OpenCode/Trae/WorkBuddy workspaces, and can install selected agent skills before showing next commands. Headless setup with `mdtero setup --api-key --json` or `MDTERO_API_KEY` intentionally skips agent detection; run `mdtero agent install --interactive` later on the machine that owns the agent workspace. Do not put the API key value directly in shell history.
 
 For an agent-first path, create a fresh API key in Mdtero Account/Dashboard, ask the trusted agent to run `mdtero setup --api-key --json`, paste the secret only at the secure prompt, verify with `mdtero doctor --json`, then ask whether the user has an Elsevier key. Configure Elsevier first for ScienceDirect-heavy literature reviews when the user has valid access; it improves routing but does not bypass licensed-access requirements.
 
@@ -35,13 +48,22 @@ The install script installs the pinned PyPI runtime. It prefers `uv`, tries dome
 
 ## Connect An Agent Workspace
 
+Preferred open-ecosystem install:
+
+```bash
+npx skills add JonbinC/doi2md
+```
+
 | Agent | Command |
 |---|---|
 | Claude Code | `mdtero agent install --target claude_code` |
 | Codex | `mdtero agent install --target codex` |
+| Cursor | `mdtero agent install --target cursor` |
 | Gemini CLI | `mdtero agent install --target gemini_cli` |
 | Hermes Agent | `mdtero agent install --target hermes` |
 | OpenCode | `mdtero agent install --target opencode` |
+| Trae | `mdtero agent install --target trae` |
+| WorkBuddy | `mdtero agent install --target workbuddy` |
 | OpenClaw | `clawhub install mdtero` |
 
 Useful variants:
@@ -100,7 +122,7 @@ What is validated in the current alpha:
 - deploy smoke through `mdtero smoke --json`, which uses an isolated project directory and exercises discovery, DOI parse, task wait, artifact download, server-side RAG build/status/query, and agent-readable failure summaries.
 - TUI command palette with copyable setup, discovery, parse, Zotero, RAG, MCP, and agent-install commands; current next commands are highlighted for workstation or local-agent handoff.
 - agent-facing CLI JSON and MCP payloads sanitize signed artifact URLs, bearer/API-key headers, Mdtero API keys, and common token query parameters before returning data to local agents. They keep `reason_code`, `action_hint`, `next_commands`, and evidence fields visible so agents can continue without receiving raw secrets.
-- agent skill installation without npm for Codex, Claude Code, Gemini CLI, Hermes, and OpenCode, with TUI/MCP status showing detected, installed, and pending skill targets.
+- agent skill installation without npm for Codex, Claude Code, Cursor, Gemini CLI, Hermes, OpenCode, Trae, and WorkBuddy, with TUI/MCP status showing detected, installed, and pending skill targets.
 
 Current boundaries:
 

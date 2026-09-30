@@ -88,7 +88,8 @@ SUPPORTED_PARSE_FILE_SUFFIXES = {".pdf", ".epub", ".html", ".htm", ".xml"}
 SUPPORTED_PARSE_FILE_EXTENSIONS = ["pdf", "epub", "html", "xml"]
 API_KEY_PROMPT_SENTINEL = "__mdtero_prompt_for_api_key__"
 AUTH_MISSING_ACTION_HINT = (
-    "Use `mdtero login` or `mdtero setup` on a workstation. "
+    "Open https://mdtero.com/auth?from=skill for a free account (includes monthly free-plan parse quota), "
+    "create a Dashboard API key, then use `mdtero login` / `mdtero setup` on a workstation. "
     "For headless/API-key auth use `mdtero setup --api-key --json` or set MDTERO_API_KEY."
 )
 AUTH_MISSING_NEXT_COMMANDS = [
@@ -582,14 +583,23 @@ def build_parser() -> argparse.ArgumentParser:
     agent_detect.add_argument("--root", type=Path)
     agent_detect.add_argument("--json", action="store_true")
     agent_install = _cmd(agent_sub, "install", "Detect local agents and install Mdtero skills.", cmd_agent_install)
-    agent_install.add_argument("--target", action="append", choices=["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode"])
+    agent_install.add_argument(
+        "--target",
+        action="append",
+        choices=["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode", "trae", "workbuddy"],
+    )
     agent_install.add_argument("--root", type=Path)
     agent_install.add_argument("--all", action="store_true")
     agent_install.add_argument("--dry-run", action="store_true")
     agent_install.add_argument("--json", action="store_true")
     agent_install.add_argument("--interactive", action="store_true", help="Interactively select detected agent workspaces to configure.")
     agent_uninstall = _cmd(agent_sub, "uninstall", "Remove Mdtero skills from selected agents.", cmd_agent_uninstall)
-    agent_uninstall.add_argument("--target", action="append", required=True, choices=["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode"])
+    agent_uninstall.add_argument(
+        "--target",
+        action="append",
+        required=True,
+        choices=["codex", "claude_code", "cursor", "gemini_cli", "hermes", "opencode", "trae", "workbuddy"],
+    )
     agent_uninstall.add_argument("--root", type=Path)
     agent_uninstall.add_argument("--dry-run", action="store_true")
     agent_uninstall.add_argument("--json", action="store_true")

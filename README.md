@@ -16,6 +16,17 @@ Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as 
 
 ## Install
 
+Connect an agent first (works in Cursor, Claude Code, Codex, Trae, WorkBuddy, and more):
+
+```bash
+npx skills add JonbinC/doi2md
+# or: npx skills add https://mdtero.com/agent-skills
+```
+
+[![skills.sh](https://skills.sh/b/JonbinC/doi2md)](https://skills.sh/JonbinC/doi2md)
+
+Then install the Python runtime:
+
 ```bash
 uv tool install --upgrade mdtero
 mdtero setup
@@ -29,7 +40,7 @@ curl -Ls https://mdtero.com/install.sh | sh
 curl -Ls https://mdtero.com/install.sh | sh -s -- --agent codex
 ```
 
-The installer supports `uv`, `pipx`, and Python fallbacks. `--agent <target>` installs a local agent skill.
+The installer supports `uv`, `pipx`, and Python fallbacks. `--agent <target>` installs a local agent skill. Discovery index: https://mdtero.com/.well-known/agent-skills/index.json
 
 ## Use Mdtero
 

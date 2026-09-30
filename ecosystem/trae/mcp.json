@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mdtero": {
+      "command": "mdtero",
+      "args": ["mcp", "serve"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
