@@ -9187,6 +9187,8 @@ def test_auth_missing_hint_points_skill_users_to_free_signup():
 def test_website_agent_skills_discovery_assets_are_synced():
     repo_root = Path(__file__).resolve().parents[1]
     site_root = repo_root.parent / "nextmdtero" / "public"
+    if not site_root.is_dir():
+        pytest.skip("website checkout (../nextmdtero) is not available")
     index = json.loads((site_root / ".well-known" / "agent-skills" / "index.json").read_text(encoding="utf-8"))
     skill = (site_root / "agent-skills" / "mdtero" / "SKILL.md").read_text(encoding="utf-8")
     archive = site_root / "agent-skills" / "mdtero.tar.gz"
