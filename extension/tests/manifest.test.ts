@@ -35,7 +35,22 @@ describe("extension manifest", () => {
       "*://*.springer.com/*",
       "*://*.springernature.com/*",
       "*://*.onlinelibrary.wiley.com/*",
-      "*://*.tandfonline.com/*"
+      "*://*.tandfonline.com/*",
+      "*://*.iopscience.iop.org/*",
+      "*://*.academic.oup.com/*",
+      "*://*.science.org/*",
+      "*://*.cell.com/*",
+      "*://*.pnas.org/*",
+      "*://*.frontiersin.org/*",
+      "*://*.journals.plos.org/*",
+      "*://*.journals.sagepub.com/*",
+      "*://*.cambridge.org/*",
+      "*://*.pubs.aip.org/*",
+      "*://*.journals.aps.org/*",
+      "*://*.biorxiv.org/*",
+      "*://*.medrxiv.org/*",
+      "*://*.chemrxiv.org/*",
+      "*://*.pmc.ncbi.nlm.nih.gov/*"
     ]);
     expect(manifest.content_scripts?.[0]?.matches).toEqual([
       "https://mdtero.com/*",
@@ -58,7 +73,22 @@ describe("extension manifest", () => {
       "*://*.springer.com/*",
       "*://*.springernature.com/*",
       "*://*.onlinelibrary.wiley.com/*",
-      "*://*.tandfonline.com/*"
+      "*://*.tandfonline.com/*",
+      "*://*.iopscience.iop.org/*",
+      "*://*.academic.oup.com/*",
+      "*://*.science.org/*",
+      "*://*.cell.com/*",
+      "*://*.pnas.org/*",
+      "*://*.frontiersin.org/*",
+      "*://*.journals.plos.org/*",
+      "*://*.journals.sagepub.com/*",
+      "*://*.cambridge.org/*",
+      "*://*.pubs.aip.org/*",
+      "*://*.journals.aps.org/*",
+      "*://*.biorxiv.org/*",
+      "*://*.medrxiv.org/*",
+      "*://*.chemrxiv.org/*",
+      "*://*.pmc.ncbi.nlm.nih.gov/*"
     ]);
     expect(manifest.content_scripts?.[1]?.js).toEqual(["dist/content.js"]);
     expect(manifest.content_scripts?.[1]?.run_at).toBe("document_idle");
@@ -107,12 +137,12 @@ describe("extension manifest", () => {
     expect(zh.extDescription?.message).toContain("解析当前论文页");
     expect(zh.extDescription?.message).toContain("上传本地 PDF 或 EPUB");
     expect(zh.extDescription?.message).not.toContain("publisher API / TDM");
-    expect(popupSource).toContain("Local file intake");
-    expect(popupSource).toContain("Use PDF");
-    expect(popupSource).toContain("Use EPUB");
+    expect(popupSource).toContain("Already have the file?");
+    expect(popupSource).toContain('pickPdfButton: "PDF"');
+    expect(popupSource).toContain('pickEpubButton: "EPUB"');
     expect(popupSource).toContain("mdtero.com/auth");
     expect(popupSource).not.toContain("mdtero.com/account");
-    expect(popupSource).toContain("Open website OAuth");
+    expect(popupSource).toContain("Sign in with mdtero.com");
     expect(popupSource).toContain("Copy handoff");
     expect(optionsSource).toContain("Website sign-in");
     expect(optionsSource).toContain("mdtero.com/auth");

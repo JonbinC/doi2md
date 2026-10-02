@@ -56,14 +56,14 @@ import {
 const COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Current page or DOI → structured Markdown you can download or translate",
+    subtitle: "Papers to clean Markdown",
     guest: "Guest mode",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `Balance ${wallet} · Parse ${parse} · Translation ${translation}`,
-    signInHint: "Sign in through website OAuth at mdtero.com/auth, then return here to parse, translate, and download.",
-    signInButton: "Open website OAuth",
-    connectionPillSignedOut: "Website OAuth",
+    signInHint: "Sign in at mdtero.com/auth to parse, translate, and download.",
+    signInButton: "Sign in with mdtero.com",
+    connectionPillSignedOut: "Not signed in",
     connectionPillSignedIn: "Connected",
     paperInputEyebrow: "Paper input",
     fileIntakeEyebrow: "Local files",
@@ -76,14 +76,14 @@ const COPY = {
     workflowPending: "next",
     workflowActive: "active",
     workflowDone: "done",
-    inputLabel: "DOI or live page",
+    inputLabel: "DOI or current page",
     inputPlaceholder: "10.1016/...",
-    fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.",
-    pickPdfButton: "Use PDF",
-    pickEpubButton: "Use EPUB",
-    pickHtmlButton: "Use HTML",
-    fileNameEmpty: "No local file selected.",
+    fileIntakeTitle: "Already have the file?",
+    fileIntakeNote: "Upload a PDF, EPUB, or saved HTML page to parse it.",
+    pickPdfButton: "PDF",
+    pickEpubButton: "EPUB",
+    pickHtmlButton: "HTML",
+    fileNameEmpty: "No file selected.",
     localFileParsing: (filename: string) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
@@ -124,14 +124,14 @@ const COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "当前页或 DOI → 结构化 Markdown，可下载或翻译",
+    subtitle: "把当前论文转成干净的 Markdown",
     guest: "游客模式",
     signedIn: (email: string) => email,
     usageSummary: (wallet: string, parse: number, translation: number) =>
       `余额 ${wallet} · 解析 ${parse} · 翻译 ${translation}`,
-    signInHint: "请通过 mdtero.com/auth 的网页登录授权扩展，然后回到这里解析、翻译和下载。",
-    signInButton: "打开网页登录",
-    connectionPillSignedOut: "网页登录",
+    signInHint: "在 mdtero.com/auth 登录后，即可解析、翻译和下载。",
+    signInButton: "前往 mdtero.com 登录",
+    connectionPillSignedOut: "未登录",
     connectionPillSignedIn: "已连接",
     paperInputEyebrow: "论文输入",
     fileIntakeEyebrow: "本地文件",
@@ -144,14 +144,14 @@ const COPY = {
     workflowPending: "下一步",
     workflowActive: "进行中",
     workflowDone: "完成",
-    inputLabel: "DOI 或实时页面",
+    inputLabel: "DOI 或当前页面",
     inputPlaceholder: "10.1016/...",
-    fileIntakeTitle: "本地文件入口",
-    fileIntakeNote: "如果你手里已经有 PDF、EPUB 或保存的 HTML 页面，也可以继续走同一条 Markdown 解析链。上传后由后端自动解析。",
-    pickPdfButton: "选择 PDF",
-    pickEpubButton: "选择 EPUB",
-    pickHtmlButton: "选择 HTML",
-    fileNameEmpty: "尚未选择本地文件。",
+    fileIntakeTitle: "已经有文件了？",
+    fileIntakeNote: "上传 PDF、EPUB 或保存的 HTML 页面进行解析。",
+    pickPdfButton: "PDF",
+    pickEpubButton: "EPUB",
+    pickHtmlButton: "HTML",
+    fileNameEmpty: "尚未选择文件。",
     localFileParsing: (filename: string) => `正在上传 ${filename}，后端会创建解析任务并在这里轮询...`,
     localFileParseFailed: "本地文件解析失败，请重试。",
     parseButton: "解析论文",
@@ -514,7 +514,10 @@ function applyLanguage() {
       }
     }
   }
-  if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
+  if (openSettingsButton) {
+    openSettingsButton.setAttribute("aria-label", copy.settingsButton);
+    openSettingsButton.title = copy.settingsButton;
+  }
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
   if (connectionPillEl) {
@@ -549,6 +552,7 @@ function renderActionButtons() {
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
     translateButton.disabled = isTranslating || !hasParsedMarkdownSource(lastParsedMarkdownSource);
+    translateButton.title = translateButton.disabled && !isTranslating ? copy.translateFirst : "";
   }
 }
 

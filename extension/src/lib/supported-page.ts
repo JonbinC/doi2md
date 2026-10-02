@@ -13,7 +13,22 @@ const SUPPORTED_PAPER_URL_PATTERNS = [
   "springer.com",
   "springernature.com",
   "onlinelibrary.wiley.com",
-  "tandfonline.com"
+  "tandfonline.com",
+  "iopscience.iop.org",
+  "academic.oup.com",
+  "science.org",
+  "cell.com",
+  "pnas.org",
+  "frontiersin.org",
+  "journals.plos.org",
+  "journals.sagepub.com",
+  "cambridge.org",
+  "pubs.aip.org",
+  "journals.aps.org",
+  "biorxiv.org",
+  "medrxiv.org",
+  "chemrxiv.org",
+  "pmc.ncbi.nlm.nih.gov"
 ];
 
 export function isSupportedPaperPage(url: string) {

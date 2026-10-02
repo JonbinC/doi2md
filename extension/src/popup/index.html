@@ -8,7 +8,7 @@
   </head>
   <body class="panel panel-popup">
     <main class="shell">
-      <section class="hero">
+      <header class="hero">
         <div class="brand-row">
           <div class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
@@ -27,10 +27,18 @@
             <h1 id="app-title">Mdtero</h1>
             <p id="app-subtitle">Parse papers from this computer</p>
           </div>
-          <button id="language-toggle" type="button" class="ghost-chip">中文</button>
+          <div class="header-actions">
+            <button id="language-toggle" type="button" class="ghost-chip">中文</button>
+            <button id="open-settings" type="button" class="ghost-chip icon-button" aria-label="Settings" title="Settings">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.26.6.86 1 1.51 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="account-bar">
-          <div>
+          <div class="account-copy">
             <p id="account-email" class="meta-label">Guest mode</p>
             <p id="usage-status" class="meta-value">Checking account...</p>
           </div>
@@ -38,68 +46,47 @@
         </div>
         <div class="button-row hero-cta-row" id="hero-cta-row">
           <button id="open-settings-login" type="button" class="primary-button">Website OAuth</button>
-          <button id="open-settings" type="button" class="secondary-button">Settings</button>
         </div>
-        <div class="workflow-strip" aria-label="Mdtero extension workflow">
-          <span id="workflow-auth">Login</span>
-          <span id="workflow-parse">Parse / Upload</span>
-          <span id="workflow-translate">Translate</span>
-          <span id="workflow-download">Download</span>
-        </div>
-      </section>
+        <ol class="workflow-strip" aria-label="Mdtero extension workflow">
+          <li><span id="workflow-auth">Login</span></li>
+          <li><span id="workflow-parse">Parse / Upload</span></li>
+          <li><span id="workflow-translate">Translate</span></li>
+          <li><span id="workflow-download">Download</span></li>
+        </ol>
+      </header>
 
-      <section class="card">
-        <div class="card-head">
-          <div class="section-eyebrow" id="paper-input-eyebrow">Paper input</div>
-          <label id="paper-input-label" for="paper-input">DOI or live page</label>
-        </div>
-        <input id="paper-input" type="text" placeholder="10.1016/..." />
-        <p id="status" class="status-line">Detecting paper input...</p>
+      <section class="card main-card action-card" aria-labelledby="paper-input-label">
+        <div class="section-eyebrow visually-hidden" id="paper-input-eyebrow">Paper input</div>
+        <div class="section-eyebrow visually-hidden" id="actions-eyebrow">Actions</div>
+        <label id="paper-input-label" class="field-title" for="paper-input">DOI or live page</label>
+        <input id="paper-input" type="text" placeholder="10.1016/..." autocomplete="off" spellcheck="false" />
+        <p id="status" class="status-line" role="status" aria-live="polite">Detecting paper input...</p>
         <p id="preflight-hint" class="meta-label campus-hint"></p>
-      </section>
-
-      <section class="card" id="file-intake-card">
-        <div class="card-head">
-          <div class="section-eyebrow" id="file-intake-eyebrow">Local files</div>
-          <p id="file-intake-title" class="meta-value">Local file intake</p>
-        </div>
-        <p id="file-intake-note" class="meta-label">Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.</p>
-        <div class="button-row">
-          <button id="pick-pdf-button" type="button" class="secondary-button">Use PDF</button>
-          <button id="pick-epub-button" type="button" class="secondary-button">Use EPUB</button>
-          <button id="pick-html-button" type="button" class="secondary-button">Use HTML</button>
-        </div>
-        <input id="local-file-input" type="file" hidden />
-        <p id="local-file-name" class="meta-label">No local file selected.</p>
-      </section>
-
-      <section class="card action-card">
-        <div class="card-head">
-          <div class="section-eyebrow" id="actions-eyebrow">Actions</div>
-        </div>
         <div class="button-row action-buttons-row">
           <button id="parse-button" type="button" class="primary-button">Parse Paper</button>
           <button id="capture-html-button" type="button" class="secondary-button">Capture HTML</button>
         </div>
-        <label id="translate-language-label" for="translate-language">Translate to</label>
-        <div class="inline-row">
-          <select id="translate-language">
-            <option value="zh">Chinese</option>
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="ja">Japanese</option>
-            <option value="ko">Korean</option>
-            <option value="ru">Russian</option>
-            <option value="tr">Turkish</option>
-            <option value="ar">Arabic</option>
-          </select>
-          <button id="translate-button" type="button" class="secondary-button" disabled>
-            Translate
-          </button>
+        <div class="translate-block">
+          <label id="translate-language-label" for="translate-language">Translate to</label>
+          <div class="inline-row">
+            <select id="translate-language">
+              <option value="zh">Chinese</option>
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="ru">Russian</option>
+              <option value="tr">Turkish</option>
+              <option value="ar">Arabic</option>
+            </select>
+            <button id="translate-button" type="button" class="secondary-button" disabled>
+              Translate
+            </button>
+          </div>
         </div>
-        <p id="result" class="result-line"></p>
+        <p id="result" class="result-line" role="status" aria-live="polite"></p>
         <div id="task-summary" class="task-summary" hidden>
           <ul id="task-summary-list"></ul>
         </div>
@@ -111,7 +98,7 @@
         </div>
       </section>
 
-      <section id="artifact-actions" class="card" hidden>
+      <section id="artifact-actions" class="card artifact-card" hidden>
         <div class="artifact-main">
           <button id="download-link" type="button" class="primary-button" hidden>
             Download ZIP
@@ -122,6 +109,19 @@
           <summary id="source-files-summary">Source files</summary>
           <div id="source-downloads" class="stack-list"></div>
         </details>
+      </section>
+
+      <section class="card file-card" id="file-intake-card" aria-labelledby="file-intake-title">
+        <div class="section-eyebrow visually-hidden" id="file-intake-eyebrow">Local files</div>
+        <p id="file-intake-title" class="field-title">Local file intake</p>
+        <p id="file-intake-note" class="meta-label">Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.</p>
+        <div class="chip-row">
+          <button id="pick-pdf-button" type="button" class="secondary-button compact-button">Use PDF</button>
+          <button id="pick-epub-button" type="button" class="secondary-button compact-button">Use EPUB</button>
+          <button id="pick-html-button" type="button" class="secondary-button compact-button">Use HTML</button>
+        </div>
+        <input id="local-file-input" type="file" hidden />
+        <p id="local-file-name" class="meta-label file-name">No local file selected.</p>
       </section>
 
       <details id="recent-tasks" class="card">

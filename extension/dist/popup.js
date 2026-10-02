@@ -486,7 +486,22 @@ var SUPPORTED_PAPER_URL_PATTERNS = [
   "springer.com",
   "springernature.com",
   "onlinelibrary.wiley.com",
-  "tandfonline.com"
+  "tandfonline.com",
+  "iopscience.iop.org",
+  "academic.oup.com",
+  "science.org",
+  "cell.com",
+  "pnas.org",
+  "frontiersin.org",
+  "journals.plos.org",
+  "journals.sagepub.com",
+  "cambridge.org",
+  "pubs.aip.org",
+  "journals.aps.org",
+  "biorxiv.org",
+  "medrxiv.org",
+  "chemrxiv.org",
+  "pmc.ncbi.nlm.nih.gov"
 ];
 function isSupportedPaperPage(url) {
   const normalized = String(url || "").trim().toLowerCase();
@@ -844,13 +859,13 @@ function normalizeCommandList(commands) {
 var COPY = {
   en: {
     title: "Mdtero",
-    subtitle: "Paper parsing connected to Mdtero Account",
+    subtitle: "Papers to clean Markdown",
     guest: "Guest mode",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `Balance ${wallet} \xB7 Parse ${parse} \xB7 Translation ${translation}`,
-    signInHint: "Sign in through website OAuth at mdtero.com/auth, then return here to parse, translate, and download.",
-    signInButton: "Open website OAuth",
-    connectionPillSignedOut: "Website OAuth",
+    signInHint: "Sign in at mdtero.com/auth to parse, translate, and download.",
+    signInButton: "Sign in with mdtero.com",
+    connectionPillSignedOut: "Not signed in",
     connectionPillSignedIn: "Connected",
     paperInputEyebrow: "Paper input",
     fileIntakeEyebrow: "Local files",
@@ -863,14 +878,14 @@ var COPY = {
     workflowPending: "next",
     workflowActive: "active",
     workflowDone: "done",
-    inputLabel: "DOI or live page",
+    inputLabel: "DOI or current page",
     inputPlaceholder: "10.1016/...",
-    fileIntakeTitle: "Local file intake",
-    fileIntakeNote: "Use this when you already have a local PDF, EPUB, or saved HTML page. Uploads are parsed by the Mdtero backend automatically.",
-    pickPdfButton: "Use PDF",
-    pickEpubButton: "Use EPUB",
-    pickHtmlButton: "Use HTML",
-    fileNameEmpty: "No local file selected.",
+    fileIntakeTitle: "Already have the file?",
+    fileIntakeNote: "Upload a PDF, EPUB, or saved HTML page to parse it.",
+    pickPdfButton: "PDF",
+    pickEpubButton: "EPUB",
+    pickHtmlButton: "HTML",
+    fileNameEmpty: "No file selected.",
     localFileParsing: (filename) => `Uploading ${filename}; Mdtero will create a parse task and poll it here...`,
     localFileParseFailed: "Local file parse failed. Please try again.",
     parseButton: "Parse Paper",
@@ -911,13 +926,13 @@ var COPY = {
   },
   zh: {
     title: "Mdtero",
-    subtitle: "\u8FDE\u63A5 Mdtero \u8D26\u6237\u7684\u672C\u5730\u8BBA\u6587\u89E3\u6790",
+    subtitle: "\u628A\u5F53\u524D\u8BBA\u6587\u8F6C\u6210\u5E72\u51C0\u7684 Markdown",
     guest: "\u6E38\u5BA2\u6A21\u5F0F",
     signedIn: (email) => email,
     usageSummary: (wallet, parse, translation) => `\u4F59\u989D ${wallet} \xB7 \u89E3\u6790 ${parse} \xB7 \u7FFB\u8BD1 ${translation}`,
-    signInHint: "\u8BF7\u901A\u8FC7 mdtero.com/auth \u7684\u7F51\u9875\u767B\u5F55\u6388\u6743\u6269\u5C55\uFF0C\u7136\u540E\u56DE\u5230\u8FD9\u91CC\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
-    signInButton: "\u6253\u5F00\u7F51\u9875\u767B\u5F55",
-    connectionPillSignedOut: "\u7F51\u9875\u767B\u5F55",
+    signInHint: "\u5728 mdtero.com/auth \u767B\u5F55\u540E\uFF0C\u5373\u53EF\u89E3\u6790\u3001\u7FFB\u8BD1\u548C\u4E0B\u8F7D\u3002",
+    signInButton: "\u524D\u5F80 mdtero.com \u767B\u5F55",
+    connectionPillSignedOut: "\u672A\u767B\u5F55",
     connectionPillSignedIn: "\u5DF2\u8FDE\u63A5",
     paperInputEyebrow: "\u8BBA\u6587\u8F93\u5165",
     fileIntakeEyebrow: "\u672C\u5730\u6587\u4EF6",
@@ -930,14 +945,14 @@ var COPY = {
     workflowPending: "\u4E0B\u4E00\u6B65",
     workflowActive: "\u8FDB\u884C\u4E2D",
     workflowDone: "\u5B8C\u6210",
-    inputLabel: "DOI \u6216\u5B9E\u65F6\u9875\u9762",
+    inputLabel: "DOI \u6216\u5F53\u524D\u9875\u9762",
     inputPlaceholder: "10.1016/...",
-    fileIntakeTitle: "\u672C\u5730\u6587\u4EF6\u5165\u53E3",
-    fileIntakeNote: "\u5982\u679C\u4F60\u624B\u91CC\u5DF2\u7ECF\u6709 PDF\u3001EPUB \u6216\u4FDD\u5B58\u7684 HTML \u9875\u9762\uFF0C\u4E5F\u53EF\u4EE5\u7EE7\u7EED\u8D70\u540C\u4E00\u6761 Markdown \u89E3\u6790\u94FE\u3002\u4E0A\u4F20\u540E\u7531\u540E\u7AEF\u81EA\u52A8\u89E3\u6790\u3002",
-    pickPdfButton: "\u9009\u62E9 PDF",
-    pickEpubButton: "\u9009\u62E9 EPUB",
-    pickHtmlButton: "\u9009\u62E9 HTML",
-    fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u672C\u5730\u6587\u4EF6\u3002",
+    fileIntakeTitle: "\u5DF2\u7ECF\u6709\u6587\u4EF6\u4E86\uFF1F",
+    fileIntakeNote: "\u4E0A\u4F20 PDF\u3001EPUB \u6216\u4FDD\u5B58\u7684 HTML \u9875\u9762\u8FDB\u884C\u89E3\u6790\u3002",
+    pickPdfButton: "PDF",
+    pickEpubButton: "EPUB",
+    pickHtmlButton: "HTML",
+    fileNameEmpty: "\u5C1A\u672A\u9009\u62E9\u6587\u4EF6\u3002",
     localFileParsing: (filename) => `\u6B63\u5728\u4E0A\u4F20 ${filename}\uFF0C\u540E\u7AEF\u4F1A\u521B\u5EFA\u89E3\u6790\u4EFB\u52A1\u5E76\u5728\u8FD9\u91CC\u8F6E\u8BE2...`,
     localFileParseFailed: "\u672C\u5730\u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002",
     parseButton: "\u89E3\u6790\u8BBA\u6587",
@@ -1275,7 +1290,10 @@ function applyLanguage() {
       }
     }
   }
-  if (openSettingsButton) openSettingsButton.textContent = copy.settingsButton;
+  if (openSettingsButton) {
+    openSettingsButton.setAttribute("aria-label", copy.settingsButton);
+    openSettingsButton.title = copy.settingsButton;
+  }
   if (openSettingsLoginButton) openSettingsLoginButton.textContent = copy.signInButton;
   if (copyCliHandoffButton) copyCliHandoffButton.textContent = copy.copyCliCommand;
   if (connectionPillEl) {
@@ -1307,6 +1325,7 @@ function renderActionButtons() {
   if (translateButton) {
     translateButton.textContent = isTranslating ? copy.translatingButton : copy.translateButton;
     translateButton.disabled = isTranslating || !hasParsedMarkdownSource(lastParsedMarkdownSource);
+    translateButton.title = translateButton.disabled && !isTranslating ? copy.translateFirst : "";
   }
 }
 function hasParsedMarkdownSource(source) {

@@ -8,9 +8,18 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/lib/native-bridge.empty.ts
-var native_bridge_empty_exports = {};
-__export(native_bridge_empty_exports, {
+// src/lib/features.ts
+var NATIVE_MESSAGING_ENABLED;
+var init_features = __esm({
+  "src/lib/features.ts"() {
+    "use strict";
+    NATIVE_MESSAGING_ENABLED = true;
+  }
+});
+
+// src/lib/native-bridge.ts
+var native_bridge_exports = {};
+__export(native_bridge_exports, {
   HOST_BRIDGE_NAME: () => HOST_BRIDGE_NAME,
   completeHostBridgeJob: () => completeHostBridgeJob,
   dequeueHostBridgeJobs: () => dequeueHostBridgeJobs,
@@ -18,25 +27,58 @@ __export(native_bridge_empty_exports, {
   pingHostBridge: () => pingHostBridge,
   sendHostBridgeMessage: () => sendHostBridgeMessage
 });
-function isHostBridgeAvailable() {
-  return false;
+function runtimeSendHostMessage(application, message, responseCallback) {
+  const runtime = chrome.runtime;
+  const send = runtime[SEND_HOST_MSG];
+  if (typeof send !== "function") {
+    throw new Error("Host bridge API is unavailable in this browser.");
+  }
+  send(application, message, responseCallback);
 }
-async function sendHostBridgeMessage(_message) {
-  throw new Error("Host bridge is disabled in this build.");
+function isHostBridgeAvailable() {
+  return NATIVE_MESSAGING_ENABLED && typeof chrome !== "undefined" && typeof chrome.runtime?.[SEND_HOST_MSG] === "function";
+}
+function sendHostBridgeMessage(message) {
+  if (!isHostBridgeAvailable()) {
+    return Promise.reject(new Error("Host bridge is unavailable in this extension build."));
+  }
+  return new Promise((resolve, reject) => {
+    runtimeSendHostMessage(HOST_BRIDGE_NAME, message, (response) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message || "Host bridge error"));
+        return;
+      }
+      resolve(response || {});
+    });
+  });
 }
 async function pingHostBridge() {
-  throw new Error("Host bridge is disabled in this build.");
+  return sendHostBridgeMessage({ type: "ping" });
 }
-async function dequeueHostBridgeJobs(_limit = 1) {
-  return [];
+async function dequeueHostBridgeJobs(limit = 1) {
+  const response = await sendHostBridgeMessage({ type: "dequeue", limit });
+  if (!response.ok) {
+    throw new Error(response.error || "Failed to dequeue host bridge jobs");
+  }
+  return Array.isArray(response.jobs) ? response.jobs : [];
 }
-async function completeHostBridgeJob(_params) {
-  throw new Error("Host bridge is disabled in this build.");
+async function completeHostBridgeJob(params) {
+  return sendHostBridgeMessage({
+    type: "complete",
+    job_id: params.jobId,
+    task_id: params.taskId,
+    error: params.error,
+    result: params.result
+  });
 }
-var HOST_BRIDGE_NAME;
-var init_native_bridge_empty = __esm({
-  "src/lib/native-bridge.empty.ts"() {
-    HOST_BRIDGE_NAME = "";
+var HOST_BRIDGE_NAME, SEND_HOST_MSG;
+var init_native_bridge = __esm({
+  "src/lib/native-bridge.ts"() {
+    "use strict";
+    init_features();
+    HOST_BRIDGE_NAME = "com.mdtero.cli";
+    SEND_HOST_MSG = "sendNativeMessage";
   }
 });
 
@@ -433,8 +475,8 @@ function shellQuoteRouteInput(value) {
   return `'${normalized.replace(/'/g, `'"'"'`)}'`;
 }
 
-// src/lib/features.ts
-var NATIVE_MESSAGING_ENABLED = false;
+// src/background.ts
+init_features();
 
 // src/lib/file-upload.ts
 async function runBrowserFileParseRequest(client2, message) {
@@ -1204,7 +1246,7 @@ var nativePollInFlight = false;
 var client = createApiClient(readSettings);
 var routerSSOT = createRouterSSOTClient(readSettings);
 if (NATIVE_MESSAGING_ENABLED) {
-  void Promise.resolve().then(() => (init_native_bridge_empty(), native_bridge_empty_exports)).then(({ isHostBridgeAvailable: isHostBridgeAvailable2 }) => {
+  void Promise.resolve().then(() => (init_native_bridge(), native_bridge_exports)).then(({ isHostBridgeAvailable: isHostBridgeAvailable2 }) => {
     if (!isHostBridgeAvailable2()) {
       return;
     }
@@ -1390,7 +1432,7 @@ async function pollNativeCaptureJobs() {
   if (!NATIVE_MESSAGING_ENABLED || nativePollInFlight) {
     return;
   }
-  const bridge = await Promise.resolve().then(() => (init_native_bridge_empty(), native_bridge_empty_exports));
+  const bridge = await Promise.resolve().then(() => (init_native_bridge(), native_bridge_exports));
   if (!bridge.isHostBridgeAvailable()) {
     return;
   }
@@ -1406,7 +1448,7 @@ async function pollNativeCaptureJobs() {
   }
 }
 async function runNativeCaptureJob(job) {
-  const bridge = await Promise.resolve().then(() => (init_native_bridge_empty(), native_bridge_empty_exports));
+  const bridge = await Promise.resolve().then(() => (init_native_bridge(), native_bridge_exports));
   const jobId = String(job.job_id || "").trim();
   const input = String(job.input || job.open_url || "").trim();
   if (!jobId || !input) {
