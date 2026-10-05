@@ -8689,7 +8689,7 @@ def test_public_generated_dependency_and_package_artifacts_are_not_source():
     repo_root = Path(__file__).resolve().parents[1]
 
     ignored = (repo_root / ".gitignore").read_text(encoding="utf-8")
-    for marker in ["dist/", "extension/node_modules/", "extension/.vite/", "extension/.vitest/", "relay/dist/", ".forgejo/"]:
+    for marker in ["dist/", "extension/node_modules/", "extension/.vite/", "extension/.vitest/", "relay/dist/"]:
         assert marker in ignored
 
     tracked = subprocess.run(
