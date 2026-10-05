@@ -13,4 +13,3 @@ extension/.vite/
 extension/.vitest/
 extension/releases/*.zip
 relay/dist/
-.forgejo/
