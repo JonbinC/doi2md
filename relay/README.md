@@ -130,9 +130,9 @@ Cloud agent / backend
 GitHub Actions workflow: `.github/workflows/release-relay.yml`
 
 ```bash
-# Tag-driven release
-git tag relay/v0.1.6
-git push github relay/v0.1.6
+# Tag-driven release. Pushing relay/v* runs Release Campus Relay.
+git tag relay/v0.1.8
+git push origin relay/v0.1.8
 
 # Manual release
 # GitHub: run "Release Campus Relay" with the desired version
@@ -146,7 +146,7 @@ Optional local copy into a website static-assets tree:
 ```bash
 cd relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.6
+MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.8
 ```
 
 ## Build from source
