@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.7}"
+MDTERO_RELAY_VERSION="${MDTERO_RELAY_VERSION:-0.1.8}"
 MDTERO_RELAY_BASE_URL="${MDTERO_RELAY_BASE_URL:-https://mdtero.com/releases/relay}"
 INSTALL_DIR="${MDTERO_RELAY_INSTALL_DIR:-${HOME}/.local/bin}"
 
@@ -12,16 +12,19 @@ Mdtero campus relay installer
 Usage:
   curl -fsSL https://mdtero.com/relay | bash
   curl -fsSL https://mdtero.com/relay | bash -s -- --api-key <key>
+  curl -fsSL https://mdtero.com/relay | bash -s -- --api-key <key> --local-browser headless
 
 Options:
-  --api-key <key>   Use an Mdtero API key without opening browser login
-  --label <name>    Optional relay label
-  --dir <path>      Install directory (default: ~/.local/bin)
+  --api-key <key>              Use an Mdtero API key without opening browser login
+  --label <name>               Optional relay label
+  --local-browser <mode>       auto (default), headless, or off
+  --dir <path>                 Install directory (default: ~/.local/bin)
 EOF
 }
 
 API_KEY=""
 LABEL=""
+LOCAL_BROWSER=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,6 +34,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --label)
       LABEL="${2:-}"
+      shift 2
+      ;;
+    --local-browser)
+      LOCAL_BROWSER="${2:-}"
       shift 2
       ;;
     --dir)
@@ -54,8 +61,14 @@ ARCH="$(uname -m)"
 case "$ARCH" in
   x86_64|amd64) ARCH="amd64" ;;
   arm64|aarch64) ARCH="arm64" ;;
+  armv7l|armv7|armhf|arm)
+    # Official Linux ARMv7 (GOARM=7) artifact for campus SBCs such as
+    # Raspberry Pi 2/3 in 32-bit userspace and similar boards.
+    ARCH="armv7"
+    ;;
   *)
     echo "Unsupported architecture: $ARCH" >&2
+    echo "Supported: amd64, arm64, and linux armv7 (armv7l/armhf)." >&2
     exit 1
     ;;
 esac
@@ -115,6 +128,9 @@ fi
 if [[ -n "$LABEL" ]]; then
   INSTALL_ARGS+=(--label "$LABEL")
 fi
+if [[ -n "$LOCAL_BROWSER" ]]; then
+  INSTALL_ARGS+=(--local-browser "$LOCAL_BROWSER")
+fi
 
 echo "Signing in to Mdtero and setting up the background service ..."
 if [[ -n "$API_KEY" ]]; then
@@ -122,8 +138,8 @@ if [[ -n "$API_KEY" ]]; then
 else
   # Desktop installs have a visible browser available in the normal case.  Use
   # the same account login as the Relay command so users do not have to place
-  # a long-lived API key in shell history.  Headless/server installs should
-  # pass --api-key explicitly or run `mdtero-relay login --browser=false`.
+  # a long-lived API key in shell history.  Headless campus boards should
+  # pass --api-key and, when wanted, --local-browser headless.
   "$TARGET" login
   "$TARGET" install "${INSTALL_ARGS[@]}"
 fi
@@ -131,6 +147,10 @@ fi
 echo
 echo "Done. Campus relay is installed."
 echo "Check status: mdtero-relay status"
+if [[ "$ARCH" == "armv7" ]]; then
+  echo "ARMv7 note: browser capture needs a system Chromium (Playwright has no armv7 browser)."
+  echo "Example: sudo apt-get install -y chromium && mdtero-relay install --local-browser headless --browser=false"
+fi
 if [[ "$PLATFORM" == "darwin" ]]; then
   echo "Logs: ~/Library/Logs/mdtero-relay.log"
 else

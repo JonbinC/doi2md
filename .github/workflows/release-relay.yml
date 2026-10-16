@@ -4,15 +4,47 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Relay semver to release, for example 0.1.0"
+        description: "Relay semver to release, for example 0.1.8"
         required: true
-        default: "0.1.0"
+        default: "0.1.8"
+  push:
+    tags:
+      - "relay/v*"
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-relay-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  resolve:
+    name: Resolve relay version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="$INPUT_VERSION"
+          else
+            version="${REF_NAME#relay/v}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid relay version: ${version}" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: resolve
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -24,7 +56,7 @@ jobs:
         run: go test ./...
 
   build:
-    needs: test
+    needs: [resolve, test]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,6 +74,10 @@ jobs:
           - goos: linux
             goarch: amd64
             artifact: mdtero-relay-linux-amd64
+          - goos: linux
+            goarch: arm
+            goarm: "7"
+            artifact: mdtero-relay-linux-armv7
           - goos: windows
             goarch: amd64
             artifact: mdtero-relay-windows-amd64
@@ -59,40 +95,78 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          RELAY_VERSION: ${{ inputs.version }}
+          GOARM: ${{ matrix.goarm }}
+          RELAY_VERSION: ${{ needs.resolve.outputs.version }}
+          ARTIFACT: ${{ matrix.artifact }}
         run: |
           set -euo pipefail
-          mkdir -p "dist/v${RELAY_VERSION}"
+          if [[ -z "${GOARM}" ]]; then
+            unset GOARM
+          fi
+          mkdir -p "dist/v${RELAY_VERSION}/browser_worker"
+          cp browser_worker/mdtero_browser_worker.py "dist/v${RELAY_VERSION}/browser_worker/"
+          cp browser_worker/requirements.txt "dist/v${RELAY_VERSION}/browser_worker/"
           output="dist/v${RELAY_VERSION}/mdtero-relay"
+          archive_members=(mdtero-relay browser_worker)
           if [[ "$GOOS" == "windows" ]]; then
             output="${output}.exe"
+            archive_members=(mdtero-relay.exe browser_worker)
           fi
-          go build -trimpath -ldflags "-s -w" -o "$output" ./cmd/mdtero-relay
-          if [[ "$GOOS" == "windows" ]]; then
-            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay.exe
-          else
-            tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${{ matrix.artifact }}.tgz" mdtero-relay
+          go build -trimpath -ldflags "-s -w -X main.version=${RELAY_VERSION}" -o "$output" ./cmd/mdtero-relay
+          if [[ "$GOOS" == "linux" && "$GOARCH" == "amd64" ]]; then
+            got="$("$output" version)"
+            echo "$got"
+            [[ "$got" == "mdtero-relay ${RELAY_VERSION}" ]]
           fi
+          if [[ "$GOOS" == "linux" && "$GOARCH" == "arm" ]]; then
+            file "$output" | grep -q 'ARM'
+          fi
+          tar -C "dist/v${RELAY_VERSION}" -czf "dist/v${RELAY_VERSION}/${ARTIFACT}.tgz" "${archive_members[@]}"
+          listing="$(tar -tzf "dist/v${RELAY_VERSION}/${ARTIFACT}.tgz")"
+          printf '%s\n' "$listing" | grep -qx "${archive_members[0]}"
+          printf '%s\n' "$listing" | grep -qx 'browser_worker/mdtero_browser_worker.py'
+          printf '%s\n' "$listing" | grep -qx 'browser_worker/requirements.txt'
+          rm -rf "dist/v${RELAY_VERSION}/browser_worker" "$output"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: relay/dist/v${{ inputs.version }}/${{ matrix.artifact }}.tgz
+          path: relay/dist/v${{ needs.resolve.outputs.version }}/${{ matrix.artifact }}.tgz
 
   github-release:
-    needs: build
+    needs: [resolve, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
-          path: relay/dist/v${{ inputs.version }}
-      - run: |
+          path: relay/dist/v${{ needs.resolve.outputs.version }}
+          merge-multiple: true
+      - name: Require every platform archive
+        env:
+          RELAY_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
           set -euo pipefail
-          target="relay/dist/v${{ inputs.version }}"
-          mkdir -p "$target"
-          find relay/dist -name '*.tgz' -exec cp {} "$target/" \;
+          target="relay/dist/v${RELAY_VERSION}"
+          expected=(
+            mdtero-relay-darwin-amd64.tgz
+            mdtero-relay-darwin-arm64.tgz
+            mdtero-relay-linux-amd64.tgz
+            mdtero-relay-linux-arm64.tgz
+            mdtero-relay-linux-armv7.tgz
+            mdtero-relay-windows-amd64.tgz
+            mdtero-relay-windows-arm64.tgz
+          )
+          missing=0
+          for name in "${expected[@]}"; do
+            if [[ ! -f "$target/$name" ]]; then
+              echo "missing release archive: $name" >&2
+              missing=1
+            fi
+          done
+          find "$target" -name '*.tgz' -printf '%f\n' | sort
+          [[ "$missing" -eq 0 ]]
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: relay/v${{ inputs.version }}
-          name: mdtero-relay v${{ inputs.version }}
-          files: relay/dist/v${{ inputs.version }}/*.tgz
+          tag_name: relay/v${{ needs.resolve.outputs.version }}
+          name: mdtero-relay v${{ needs.resolve.outputs.version }}
+          files: relay/dist/v${{ needs.resolve.outputs.version }}/*.tgz

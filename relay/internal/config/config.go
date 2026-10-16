@@ -12,12 +12,21 @@ const (
 	DefaultAPIBase = "https://api.mdtero.com"
 	EnvAPIKey      = "MDTERO_API_KEY"
 	EnvAPIBase     = "MDTERO_API_URL"
+	EnvLocalBrowser = "MDTERO_LOCAL_BROWSER"
+)
+
+// Local browser modes for the optional Playwright/CDP sidecar.
+const (
+	LocalBrowserAuto     = "auto"
+	LocalBrowserHeadless = "headless"
+	LocalBrowserOff      = "off"
 )
 
 type Config struct {
-	APIKey     string `json:"api_key"`
-	APIBaseURL string `json:"api_base_url"`
-	Label      string `json:"label,omitempty"`
+	APIKey       string `json:"api_key"`
+	APIBaseURL   string `json:"api_base_url"`
+	Label        string `json:"label,omitempty"`
+	LocalBrowser string `json:"local_browser,omitempty"`
 }
 
 func Dir() (string, error) {
@@ -80,7 +89,25 @@ func Load() (Config, error) {
 		cfg.APIBaseURL = strings.TrimRight(strings.TrimSpace(file.APIBaseURL), "/")
 	}
 	cfg.Label = strings.TrimSpace(file.Label)
+	if mode := strings.TrimSpace(os.Getenv(EnvLocalBrowser)); mode != "" {
+		cfg.LocalBrowser = NormalizeLocalBrowser(mode)
+	} else if mode := strings.TrimSpace(file.LocalBrowser); mode != "" {
+		cfg.LocalBrowser = NormalizeLocalBrowser(mode)
+	} else {
+		cfg.LocalBrowser = LocalBrowserAuto
+	}
 	return cfg, nil
+}
+
+func NormalizeLocalBrowser(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case LocalBrowserHeadless, "headless-browser", "server":
+		return LocalBrowserHeadless
+	case LocalBrowserOff, "false", "0", "disabled", "none":
+		return LocalBrowserOff
+	default:
+		return LocalBrowserAuto
+	}
 }
 
 func Save(cfg Config) error {
@@ -91,6 +118,7 @@ func Save(cfg Config) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+	cfg.LocalBrowser = NormalizeLocalBrowser(cfg.LocalBrowser)
 	payload, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -100,6 +128,14 @@ func Save(cfg Config) error {
 		return err
 	}
 	return nil
+}
+
+func ApplyLocalBrowserEnv(cfg Config) {
+	mode := NormalizeLocalBrowser(cfg.LocalBrowser)
+	_ = os.Setenv(EnvLocalBrowser, mode)
+	if mode == LocalBrowserHeadless {
+		_ = os.Setenv("MDTERO_BROWSER_HEADLESS", "true")
+	}
 }
 
 func (c Config) Authenticated() bool {

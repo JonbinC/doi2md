@@ -41,6 +41,9 @@ def _platform_key() -> str | None:
         arch = "amd64"
     elif machine in {"arm64", "aarch64"}:
         arch = "arm64"
+    elif machine in {"armv7l", "armv7", "armhf", "arm"} and system == "linux":
+        # Match the official GOARM=7 linux-armv7 release artifact.
+        arch = "armv7"
     else:
         return None
     if system == "darwin":

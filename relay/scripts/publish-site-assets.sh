@@ -45,6 +45,7 @@ SHA_DARWIN_AMD64="$(sha256_for "$DIST/mdtero-relay-darwin-amd64.tgz")"
 SHA_DARWIN_ARM64="$(sha256_for "$DIST/mdtero-relay-darwin-arm64.tgz")"
 SHA_LINUX_AMD64="$(sha256_for "$DIST/mdtero-relay-linux-amd64.tgz")"
 SHA_LINUX_ARM64="$(sha256_for "$DIST/mdtero-relay-linux-arm64.tgz")"
+SHA_LINUX_ARMV7="$(sha256_for "$DIST/mdtero-relay-linux-armv7.tgz")"
 SHA_WINDOWS_AMD64="$(sha256_for "$DIST/mdtero-relay-windows-amd64.tgz")"
 SHA_WINDOWS_ARM64="$(sha256_for "$DIST/mdtero-relay-windows-arm64.tgz")"
 cat > "$MANIFEST" <<EOF
@@ -61,6 +62,7 @@ cat > "$MANIFEST" <<EOF
     "darwin-amd64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-darwin-amd64.tgz",
     "linux-arm64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-linux-arm64.tgz",
     "linux-amd64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-linux-amd64.tgz",
+    "linux-armv7": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-linux-armv7.tgz",
     "windows-amd64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-windows-amd64.tgz",
     "windows-arm64": "https://mdtero.com/releases/relay/v$VERSION/mdtero-relay-windows-arm64.tgz"
   },
@@ -69,11 +71,14 @@ cat > "$MANIFEST" <<EOF
     "darwin-arm64": "$SHA_DARWIN_ARM64",
     "linux-amd64": "$SHA_LINUX_AMD64",
     "linux-arm64": "$SHA_LINUX_ARM64",
+    "linux-armv7": "$SHA_LINUX_ARMV7",
     "windows-amd64": "$SHA_WINDOWS_AMD64",
     "windows-arm64": "$SHA_WINDOWS_ARM64"
   },
   "one_line_install": {
     "macos": "curl -fsSL https://mdtero.com/relay | bash",
+    "linux": "curl -fsSL https://mdtero.com/relay | bash",
+    "linux_armv7_headless": "curl -fsSL https://mdtero.com/relay | bash -s -- --api-key <key> --local-browser headless",
     "windows": "irm https://mdtero.com/relay.ps1 | iex"
   }
 }

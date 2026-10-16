@@ -109,12 +109,47 @@ func venvPython() (string, error) {
 	return filepath.Join(venv, "bin", "python"), nil
 }
 
-func desktop() bool {
-	if truthy(os.Getenv("MDTERO_HEADLESS")) || truthy(os.Getenv("CI")) || truthy(os.Getenv("MDTERO_DISABLE_LOCAL_ACCESS")) {
+// Mode returns the configured local-browser policy.
+//
+//   - auto: prepare the worker on desktop sessions with a display
+//   - headless: prepare the worker even on campus SBCs without a display
+//   - off: never prepare or start the worker
+func Mode() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MDTERO_LOCAL_BROWSER"))) {
+	case "headless", "headless-browser", "server":
+		return "headless"
+	case "off", "false", "0", "disabled", "none":
+		return "off"
+	default:
+		return "auto"
+	}
+}
+
+func HeadlessPreferred() bool {
+	if Mode() == "headless" {
+		return true
+	}
+	override := strings.TrimSpace(os.Getenv("MDTERO_BROWSER_HEADLESS"))
+	if override != "" {
+		return truthy(override)
+	}
+	if runtime.GOOS != "linux" {
 		return false
 	}
-	if truthy(os.Getenv("MDTERO_FORCE_LOCAL_ACCESS")) {
+	return strings.TrimSpace(os.Getenv("DISPLAY")) == "" && strings.TrimSpace(os.Getenv("WAYLAND_DISPLAY")) == ""
+}
+
+func Enabled() bool {
+	if Mode() == "off" || truthy(os.Getenv("MDTERO_DISABLE_LOCAL_ACCESS")) {
+		return false
+	}
+	if Mode() == "headless" || truthy(os.Getenv("MDTERO_FORCE_LOCAL_ACCESS")) {
 		return true
+	}
+	// auto: keep the historical desktop-only default so ordinary headless
+	// API servers do not pull Playwright unless an operator opts in.
+	if truthy(os.Getenv("MDTERO_HEADLESS")) || truthy(os.Getenv("CI")) {
+		return false
 	}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		return true
@@ -129,6 +164,11 @@ func truthy(value string) bool {
 	default:
 		return false
 	}
+}
+
+func playwrightManagedBrowserSupported() bool {
+	// Playwright ships Chromium for amd64/arm64 hosts, not 32-bit ARMv7.
+	return runtime.GOARCH != "arm"
 }
 
 func sourcePresent() bool {
@@ -223,7 +263,7 @@ func run(command string, args ...string) error {
 }
 
 func Ensure() (Status, error) {
-	if !desktop() {
+	if !Enabled() {
 		return Status{Status: "not_applicable"}, nil
 	}
 	if !sourcePresent() {
@@ -261,8 +301,12 @@ func Ensure() (Status, error) {
 			return Status{Status: "unavailable"}, err
 		}
 		// A managed browser is needed only when no ordinary Chrome/Edge binary is
-		// available. Playwright's own browser is kept inside its cache.
+		// available. Playwright's own browser is kept inside its cache and is
+		// unavailable on linux/arm (ARMv7); those hosts must install Chromium.
 		if !systemBrowserPresent() {
+			if !playwrightManagedBrowserSupported() {
+				return Status{Status: "unavailable"}, errors.New("install a system Chromium package on ARMv7 (Playwright has no armv7 browser)")
+			}
 			if err := run(venvPy, "-m", "playwright", "install", "chromium"); err != nil {
 				return Status{Status: "unavailable"}, err
 			}
@@ -312,7 +356,7 @@ func health(ctx context.Context) bool {
 }
 
 func Start() (*Handle, error) {
-	if !desktop() || !sourcePresent() {
+	if !Enabled() || !sourcePresent() {
 		return nil, nil
 	}
 	if health(context.Background()) {
@@ -335,6 +379,9 @@ func Start() (*Handle, error) {
 	}
 	cmd := exec.Command(python, filepath.Join(bundle, "mdtero_browser_worker.py"))
 	cmd.Env = append(os.Environ(), "MDTERO_BROWSER_WORKER_CONFIG="+mustConfigPath(cfg))
+	if HeadlessPreferred() {
+		cmd.Env = append(cmd.Env, "MDTERO_BROWSER_HEADLESS=true")
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ Standalone campus-network relay for Mdtero. Install this on a school/office mach
 | Campus desktop | Mdtero CLI (Relay is prepared automatically) | Campus HTTP and an isolated authorized browser profile are available to cloud Agents. The extension remains a lightweight current-tab fallback. |
 | Server only | Mdtero CLI/API key | OA, publisher APIs, normal HTTP, and uploads. There is no browser session on the server. |
 | Server plus campus desktop | CLI on the server, Relay on the campus computer | Recommended for user-authorized closed or bot-protected publisher content. The Agent stays in the cloud; the desktop performs acquisition. |
+| Server plus campus lightweight board (ARMv7/ARM64, no display) | `mdtero-relay` with `--local-browser headless` on the campus board | Campus HTTP plus optional headless Chromium for IP-authorized / open pages. Interactive institution login still needs a desktop browser or the extension. |
 | Server plus campus VPN | CLI/API key and VPN/proxy | IP-authorized machine-readable sources. A VPN alone does not supply browser cookies or a user login. |
 
 For the third setup, install Relay on the computer that already has the
@@ -31,9 +32,16 @@ The native Relay always provides campus-network HTTP fetch. On a supported
 desktop install, the CLI packages and starts the browser worker automatically
 (using an installed Chrome/Edge or a managed Playwright Chromium). Browser
 capture is advertised to the backend as `browser_fetch` / `browser_fulltext`.
-`mdtero-relay status` reports
-whether the worker is configured and reachable without showing its token,
-profile path, or CDP endpoint. Headless/server installs skip the worker.
+`mdtero-relay status` reports whether the worker is configured and reachable
+without showing its token, profile path, or CDP endpoint.
+
+Ordinary headless API servers still skip the worker by default. Campus boards
+without a display can opt in with `--local-browser headless` so Relay starts a
+loopback Chromium worker. That mode covers IP-authorized and open pages; it
+cannot invent an institution login or pass a visible challenge. Official
+release artifacts include `linux-armv7` (GOARM=7). Playwright does not ship an
+ARMv7 browser, so those boards need a system Chromium package such as
+`chromium` / `chromium-browser`.
 
 When a publisher needs a manual institution login or browser challenge, open
 the article URL locally with `mdtero-relay browser-open <publisher-url>`,
@@ -55,6 +63,13 @@ With API key:
 
 ```bash
 curl -fsSL https://mdtero.com/relay | bash -s -- --api-key mdt_xxx
+```
+
+Campus ARMv7 / headless board with Chromium:
+
+```bash
+sudo apt-get install -y chromium   # or chromium-browser
+curl -fsSL https://mdtero.com/relay | bash -s -- --api-key mdt_xxx --local-browser headless
 ```
 
 **Windows (PowerShell)**
@@ -82,12 +97,13 @@ sign-in. Linux desktops and servers use a per-user systemd service when
 available; on minimal images without systemd, keep `mdtero-relay serve` under
 the host's process supervisor. For a headless install, pass `--api-key` from a secret manager or run
 `mdtero-relay login --browser=false` interactively; do not put the key in a
-shell history or a checked-in script.
+shell history or a checked-in script. Add `--local-browser headless` only when
+the campus board should also run the Chromium capture worker.
 
 ## Commands
 
 ```bash
-mdtero-relay install [--api-key <key>] [--browser=false] [--label <name>]
+mdtero-relay install [--api-key <key>] [--browser=false] [--local-browser auto|headless|off] [--label <name>]
 mdtero-relay serve [--label <name>]
 mdtero-relay status [--json]
 mdtero-relay login [--browser] [--api-key <key>]
@@ -114,9 +130,9 @@ Cloud agent / backend
 GitHub Actions workflow: `.github/workflows/release-relay.yml`
 
 ```bash
-# Tag-driven release
-git tag relay/v0.1.6
-git push github relay/v0.1.6
+# Tag-driven release. Pushing relay/v* runs Release Campus Relay.
+git tag relay/v0.1.8
+git push origin relay/v0.1.8
 
 # Manual release
 # GitHub: run "Release Campus Relay" with the desired version
@@ -130,7 +146,7 @@ Optional local copy into a website static-assets tree:
 ```bash
 cd relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.6
+MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.8
 ```
 
 ## Build from source
@@ -147,6 +163,7 @@ Cross-compile examples:
 ```bash
 GOOS=darwin GOARCH=arm64 go build -o dist/mdtero-relay-darwin-arm64 ./cmd/mdtero-relay
 GOOS=darwin GOARCH=amd64 go build -o dist/mdtero-relay-darwin-amd64 ./cmd/mdtero-relay
+GOOS=linux GOARCH=arm GOARM=7 go build -o dist/mdtero-relay-linux-armv7 ./cmd/mdtero-relay
 GOOS=windows GOARCH=amd64 go build -o dist/mdtero-relay-windows-amd64.exe ./cmd/mdtero-relay
 ```
 
