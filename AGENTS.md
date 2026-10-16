@@ -49,6 +49,12 @@ npm --prefix extension run build
 uv run --with pytest python -m pytest tests_py
 ```
 
+## Cursor Cloud
+
+- Node 22 and Go 1.22 are on the base image. `uv` is installed onto `/usr/local/bin` by the Cloud Agent install script, then `uv sync --frozen`, `npm ci` in `extension/`, and `go mod download` in `relay/`.
+- `python3-venv` is required for the wheel smoke check (`python3 -m venv`). `uv sync` itself does not need it.
+- There is no long-running dev server. Check the CLI with `uv run mdtero --version` and a local `mdtero project init`. Extension and Relay checks are `npm --prefix extension test`, `npm --prefix extension run build`, and `go test ./...` from `relay/`.
+
 ## CHILD GUIDANCE
 
 - `extension/AGENTS.md`: extension source/build/test surface.
