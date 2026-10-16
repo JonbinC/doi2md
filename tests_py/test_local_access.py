@@ -3,7 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from mdtero.config import MdteroConfig
+from mdtero import local_access
 from mdtero.local_access import ensure_local_access, local_access_status
+
+
+def test_platform_key_supports_linux_armv7(monkeypatch):
+    monkeypatch.setattr(local_access.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(local_access.platform, "machine", lambda: "armv7l")
+    assert local_access._platform_key() == "linux-armv7"
 
 
 def test_local_access_skips_headless_environment(monkeypatch):

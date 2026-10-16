@@ -79,10 +79,23 @@ parsing a publisher error page as an article.
 On Linux, the worker automatically uses an installed Chrome/Chromium binary
 when one is available. With no `DISPLAY` or `WAYLAND_DISPLAY` it defaults to
 headless mode, which is suitable for open-access pages and non-interactive
-server workers; set `MDTERO_BROWSER_HEADLESS=false` when a desktop user needs
+campus boards; set `MDTERO_BROWSER_HEADLESS=false` when a desktop user needs
 to see and complete a login or challenge. If no system browser is installed,
 install Playwright's managed Chromium with `playwright install chromium` or set
 `MDTERO_BROWSER_EXECUTABLE` explicitly.
+
+Campus lightweight boards (including official `linux-armv7` Relay builds) should
+install with:
+
+```bash
+mdtero-relay install --api-key <key> --browser=false --local-browser headless
+```
+
+Playwright does **not** ship an ARMv7 Chromium. On 32-bit ARM hosts, install a
+distro Chromium first (`chromium` / `chromium-browser`) so the worker can bind
+to a real executable. Headless mode still cannot complete interactive
+institution logins or visible challenges; use a desktop Relay, `browser-open`,
+or the browser extension for those cases.
 
 Never point it at a regular Chrome profile. The worker can either launch the
 dedicated profile itself or attach through a loopback-only CDP endpoint to the

@@ -20,7 +20,7 @@ import (
 
 // version is overridden by the release build with -ldflags -X main.version=...
 // so the binary and the published install manifest always agree.
-var version = "0.1.7"
+var version = "0.1.8"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -56,7 +56,7 @@ func printUsage() {
 	fmt.Print(`Mdtero campus relay — keep one command running on a campus-network machine.
 
 Usage:
-  mdtero-relay install [--api-key <key>] [--browser=false] [--label <name>]
+  mdtero-relay install [--api-key <key>] [--browser=false] [--local-browser auto|headless|off] [--label <name>]
   mdtero-relay serve [--label <name>]
   mdtero-relay status [--json]
   mdtero-relay login [--browser] [--api-key <key>] [--label <name>]
@@ -65,7 +65,9 @@ Usage:
   mdtero-relay version
 
 One-line install:
-  macOS:   curl -fsSL https://mdtero.com/relay | bash
+  macOS/Linux: curl -fsSL https://mdtero.com/relay | bash
+  Linux ARMv7 campus board (headless browser):
+    curl -fsSL https://mdtero.com/relay | bash -s -- --api-key <key> --local-browser headless
   Windows: irm https://mdtero.com/relay.ps1 | iex
 `)
 }
@@ -106,12 +108,15 @@ func runServe(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	config.ApplyLocalBrowserEnv(cfg)
 	worker, workerErr := browserworker.Start()
 	if workerErr != nil {
 		// Browser capture is an optional local enhancement. Campus HTTP relay
 		// remains usable when Python/Playwright is unavailable or a profile is
 		// temporarily busy.
 		fmt.Printf("Browser capture is unavailable; continuing with campus HTTP relay (%s).\n", workerErr)
+	} else if worker != nil && browserworker.HeadlessPreferred() {
+		fmt.Println("Browser capture: headless Chromium worker started for this campus relay.")
 	}
 	defer worker.Stop()
 	if err := client.Run(cfg, client.Options{
@@ -143,6 +148,7 @@ func runStatus(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	config.ApplyLocalBrowserEnv(cfg)
 	browser := browserfetch.FromEnv()
 	browserStatus := localBrowserStatus(browser)
 	if !cfg.Authenticated() {
@@ -212,31 +218,56 @@ func localBrowserStatus(browser *browserfetch.Client) map[string]any {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	health := browser.Health(ctx)
-	return map[string]any{
+	mode := browserworker.Mode()
+	payload := map[string]any{
+		"mode":           mode,
+		"headless":       browserworker.HeadlessPreferred(),
+		"enabled":        browserworker.Enabled(),
 		"configured":     health.Configured,
 		"reachable":      health.Reachable,
 		"session_active": health.SessionActive,
 		"status":         health.Status,
 	}
+	if mode == "headless" {
+		payload["action_hint"] = "Headless capture covers IP-authorized and open pages; use a desktop Relay or the extension for interactive institution login/challenges."
+	}
+	return payload
 }
 
 func printLocalBrowserStatus(payload map[string]any) {
+	mode, _ := payload["mode"].(string)
+	if mode == "" {
+		mode = browserworker.Mode()
+	}
 	configured, _ := payload["configured"].(bool)
 	if !configured {
+		if mode == "off" {
+			fmt.Println("Browser capture: off")
+			return
+		}
+		if mode == "headless" {
+			fmt.Println("Browser capture: headless requested but not configured")
+			return
+		}
 		fmt.Println("Browser capture: not configured")
 		return
 	}
 	reachable, _ := payload["reachable"].(bool)
+	headless, _ := payload["headless"].(bool)
+	label := "Browser capture"
+	if headless {
+		label = "Browser capture (headless)"
+	}
 	if !reachable {
-		fmt.Println("Browser capture: configured, worker offline")
+		fmt.Printf("%s: configured, worker offline\n", label)
 		return
 	}
 	active, _ := payload["session_active"].(bool)
 	if active {
-		fmt.Println("Browser capture: ready (session active)")
+		fmt.Printf("%s: ready (session active)\n", label)
 		return
 	}
-	fmt.Println("Browser capture: ready (no active session)")
+	fmt.Printf("%s: ready (no active session)\n", label)
 }
 
 func printJSON(payload map[string]any) {
@@ -300,7 +331,8 @@ func runInstall(args []string) int {
 	apiKey := fs.String("api-key", "", "Mdtero API key")
 	apiBase := fs.String("api-base", config.DefaultAPIBase, "Mdtero API base URL")
 	label := fs.String("label", "", "Optional relay label")
-	browser := fs.Bool("browser", true, "Use browser login when no API key is configured")
+	localBrowser := fs.String("local-browser", "", "Local capture mode: auto, headless, or off")
+	browser := fs.Bool("browser", true, "Use browser OAuth login when no API key is configured")
 	timeout := fs.Duration("timeout", 3*time.Minute, "How long to wait for browser login")
 	_ = fs.Parse(args)
 
@@ -318,6 +350,9 @@ func runInstall(args []string) int {
 	if strings.TrimSpace(*label) != "" {
 		cfg.Label = strings.TrimSpace(*label)
 	}
+	if strings.TrimSpace(*localBrowser) != "" {
+		cfg.LocalBrowser = config.NormalizeLocalBrowser(*localBrowser)
+	}
 	if !cfg.Authenticated() && *browser {
 		result, loginErr := auth.WebLogin(*timeout)
 		if loginErr != nil {
@@ -330,16 +365,23 @@ func runInstall(args []string) int {
 		fmt.Println("Mdtero API key required for a headless install.")
 		fmt.Println("Get one at https://mdtero.com/settings/api-keys")
 		fmt.Println("Then rerun: mdtero-relay install --api-key <key> --browser=false")
+		fmt.Println("Campus SBC with headless Chromium: add --local-browser headless")
 		return 1
 	}
 	if err := config.Save(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	config.ApplyLocalBrowserEnv(cfg)
 	if browserStatus, browserErr := browserworker.Ensure(); browserErr != nil {
 		fmt.Printf("Browser capture: skipped (%s). Campus HTTP relay remains available.\n", browserErr)
 	} else if browserStatus.Status == "ready" {
-		fmt.Println("Browser capture: prepared for this desktop and will start with the Relay.")
+		if cfg.LocalBrowser == config.LocalBrowserHeadless {
+			fmt.Println("Browser capture: prepared in headless mode and will start with the Relay.")
+			fmt.Println("Interactive institution login still needs a desktop Relay, browser-open, or the extension.")
+		} else {
+			fmt.Println("Browser capture: prepared for this desktop and will start with the Relay.")
+		}
 	}
 
 	binaryPath, err := os.Executable()
@@ -362,7 +404,7 @@ func runInstall(args []string) int {
 	fmt.Printf("Campus relay installed (%s).\n", status)
 	fmt.Println("It will start automatically on login and reconnect in the background.")
 	fmt.Println("Check status anytime with: mdtero-relay status")
-	fmt.Println("Browser capture starts automatically on supported desktop installs; the extension remains a lightweight fallback.")
+	fmt.Println("Browser capture starts automatically on supported desktop installs; use --local-browser headless on campus boards without a display.")
 	return 0
 }
 
