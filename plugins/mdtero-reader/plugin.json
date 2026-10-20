@@ -1,34 +1,42 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mdtero-reader",
-  "version": "0.1.0",
-  "description": "Read, parse, and translate papers through the Mdtero account. The plugin connects to the public Mdtero MCP service and does not include the parser.",
+  "version": "0.1.1",
+  "description": "Read, parse, and translate papers through your Mdtero account. Connects to the public Mdtero MCP service; this package does not include the parser.",
   "author": {
     "name": "Mdtero",
+    "email": "hello@mdtero.com",
     "url": "https://mdtero.com"
   },
-  "homepage": "https://mdtero.com/docs/install.html#chatgpt",
+  "homepage": "https://mdtero.com/docs/install.html#cloud-mcp-chatgpt-claude-cursor",
   "repository": "https://github.com/JonbinC/doi2md",
   "license": "MIT",
-  "keywords": ["research", "papers", "mcp"],
+  "keywords": ["research", "papers", "mcp", "literature", "pdf"],
   "extensions": {
     "com.openai": {
       "onboardingSkill": "./skills/setup/SKILL.md",
       "interface": {
-        "displayName": "Mdtero Reader",
-        "shortDescription": "Papers in ChatGPT, Claude, and Cursor, through your Mdtero account.",
-        "longDescription": "Connects to https://api.mdtero.com/mcp. Sign in with a Mdtero account. Elsevier keys stay on the settings page. Campus full text still needs the Relay helper on an authorized campus device.",
+        "displayName": "Mdtero",
+        "shortDescription": "Papers in ChatGPT through your Mdtero account — library, reader, parse, and translate.",
+        "longDescription": "Connects to https://api.mdtero.com/mcp. Sign in with a Mdtero account. Save Elsevier keys only at https://api.mdtero.com/mcp/settings (never in chat). Campus full text still needs the Relay helper on an authorized campus device. Docs: https://mdtero.com/docs/install.html",
         "developerName": "Mdtero",
         "category": "Research",
         "capabilities": ["Read", "Write"],
         "websiteURL": "https://mdtero.com",
+        "supportURL": "https://mdtero.com/docs/install.html#cloud-mcp-chatgpt-claude-cursor",
         "privacyPolicyURL": "https://mdtero.com/privacy",
         "termsOfServiceURL": "https://mdtero.com/terms",
         "defaultPrompt": [
           "Use Mdtero to find papers on this question, then open one in the reader.",
-          "Check my Mdtero setup, then parse this DOI once."
+          "Check my Mdtero Elsevier key and campus Relay setup.",
+          "Parse this DOI once with Mdtero, then open the reader."
         ],
-        "brandColor": "#995939"
+        "brandColor": "#995939",
+        "brandColorDark": "#dca983",
+        "composerIcon": "./assets/icon.png",
+        "composerIconDark": "./assets/icon-dark.png",
+        "logo": "./assets/logo.png",
+        "logoDark": "./assets/logo-dark.png"
       }
     }
   }

@@ -1,7 +1,9 @@
 {
   "name": "mdtero",
   "interface": {
-    "displayName": "Mdtero"
+    "displayName": "Mdtero",
+    "websiteURL": "https://mdtero.com",
+    "logo": "./plugins/mdtero-reader/assets/logo.png"
   },
   "plugins": [
     {
