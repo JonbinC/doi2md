@@ -14,13 +14,13 @@ Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as 
 
 **Languages:** English | [简体中文](./README_CN.md)
 
-## ChatGPT
+## Cloud MCP (ChatGPT / Claude / Cursor)
 
-Add a custom MCP server in ChatGPT Plugins:
+Add this remote MCP URL in ChatGPT Plugins, Claude custom connectors, or Cursor `mcp.json`:
 
 `https://api.mdtero.com/mcp`
 
-Sign in with a Mdtero account when asked. Elsevier keys are saved at `https://api.mdtero.com/mcp/settings`, not in the chat. There is no one-click install from the website.
+Sign in with a Mdtero account when asked. Elsevier keys are saved at `https://api.mdtero.com/mcp/settings`, not in the chat. There is no one-click install from the website. Campus full text still needs Relay on an authorized device.
 
 Codex and the ChatGPT desktop app can add this repo as a plugin source:
 
