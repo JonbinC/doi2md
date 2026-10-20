@@ -16,7 +16,7 @@
       "onboardingSkill": "./skills/setup/SKILL.md",
       "interface": {
         "displayName": "Mdtero Reader",
-        "shortDescription": "Papers inside ChatGPT, through your Mdtero account.",
+        "shortDescription": "Papers in ChatGPT, Claude, and Cursor, through your Mdtero account.",
         "longDescription": "Connects to https://api.mdtero.com/mcp. Sign in with a Mdtero account. Elsevier keys stay on the settings page. Campus full text still needs the Relay helper on an authorized campus device.",
         "developerName": "Mdtero",
         "category": "Research",

@@ -1,6 +1,6 @@
 ---
 name: mdtero-setup
-description: Set up Mdtero Reader after the plugin is installed. Use when the user just installed Mdtero or asks how to connect ChatGPT, Codex, the campus relay, or an Elsevier key.
+description: Set up Mdtero Reader after the plugin is installed. Use when the user just installed Mdtero or asks how to connect ChatGPT, Claude, Cursor, Codex, the campus relay, or an Elsevier key.
 ---
 
 # Mdtero Reader setup
