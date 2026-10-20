@@ -592,6 +592,30 @@ class MdteroClient:
     def list_projects(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/projects")
 
+    def cloud_library_status(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/library/cloud")
+
+    def project_sync(self, project_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/projects/{project_id}/sync")
+
+    def read_library_document(self, document_id: int | str) -> str:
+        parts: list[str] = []
+        offset = 0
+        while True:
+            page = self._request(
+                "GET",
+                f"/api/v1/documents/{document_id}/content",
+                params={"offset": offset, "limit": 8000},
+            )
+            parts.append(str(page.get("text") or ""))
+            if not page.get("more"):
+                break
+            next_offset = page.get("next_offset")
+            if not isinstance(next_offset, int) or next_offset <= offset:
+                break
+            offset = next_offset
+        return "".join(parts)
+
     def import_task_to_project(self, project_id: str, task_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/projects/{project_id}/tasks/{task_id}/import")
 
