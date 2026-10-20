@@ -14,6 +14,22 @@ Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as 
 
 **Languages:** English | [简体中文](./README_CN.md)
 
+## ChatGPT
+
+Add a custom MCP server in ChatGPT Plugins:
+
+`https://api.mdtero.com/mcp`
+
+Sign in with a Mdtero account when asked. Elsevier keys are saved at `https://api.mdtero.com/mcp/settings`, not in the chat. There is no one-click install from the website.
+
+Codex and the ChatGPT desktop app can add this repo as a plugin source:
+
+```bash
+codex plugin marketplace add JonbinC/doi2md
+```
+
+The installable plugin is `plugins/mdtero-reader`. It points at the same public MCP service and does not include the parser.
+
 ## Install
 
 Connect an agent first (works in Cursor, Claude Code, Codex, Trae, WorkBuddy, and more):

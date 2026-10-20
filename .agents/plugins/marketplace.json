@@ -1,0 +1,20 @@
+{
+  "name": "mdtero",
+  "interface": {
+    "displayName": "Mdtero"
+  },
+  "plugins": [
+    {
+      "name": "mdtero-reader",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mdtero-reader"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    }
+  ]
+}
