@@ -12,6 +12,22 @@ Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译
 
 **语言：** [English](./README.md) | 简体中文
 
+## ChatGPT
+
+在 ChatGPT 的 Plugins 里添加自定义 MCP 服务器：
+
+`https://api.mdtero.com/mcp`
+
+用 Mdtero 账号登录。Elsevier key 只放在 `https://api.mdtero.com/mcp/settings`，不要发进对话。官网没有一键安装按钮。
+
+Codex 和 ChatGPT 桌面版可以把这个仓库加为插件源：
+
+```bash
+codex plugin marketplace add JonbinC/doi2md
+```
+
+安装的是 `plugins/mdtero-reader`。它指向同一个公开 MCP，不含解析服务。
+
 ## 安装
 
 先接入 Agent（Cursor / Claude Code / Codex / Trae / WorkBuddy 等通用）：
