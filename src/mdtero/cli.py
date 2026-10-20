@@ -38,6 +38,7 @@ from .access_outlets import (
 from .acquisition import AcquisitionError
 from .auth import run_web_login
 from .client import DiscoveryError, MdteroApiError, MdteroClient, api_failure_payload
+from .cloud_sync import pull_project_documents
 from .config import AccessOutletConfig, MdteroConfig, config_path, load_config, save_config
 from .discovery_providers import provider_capability_matrix
 from .extension_handoff import (
@@ -369,6 +370,8 @@ def build_parser() -> argparse.ArgumentParser:
     project_download.add_argument("--artifact", default="paper_md")
     project_download.add_argument("--output-dir", type=Path, default=Path("mdtero-output"))
     project_download.add_argument("--json", action="store_true")
+    project_pull = _cmd(project_sub, "pull", "Copy the linked cloud project Markdown into this local folder.", cmd_project_pull)
+    project_pull.add_argument("--json", action="store_true")
     project_ingest = _cmd(project_sub, "ingest", "Import verified full-text tasks into the linked server project for RAG.", cmd_project_ingest)
     project_ingest.add_argument("--json", action="store_true")
     project_ingest.add_argument("--include-low-confidence", action="store_true", help="Explicitly import partial, citation-only, or unverified results; blocked by default.")
@@ -3057,6 +3060,29 @@ def cmd_project_add(args: argparse.Namespace) -> int:
         print(json.dumps({"status": "added", "input": args.input, "project": _project_payload(state)}, indent=2, ensure_ascii=False))
     else:
         Console().print(f"Added {args.input} to project {state.name}")
+    return 0
+
+
+def cmd_project_pull(args: argparse.Namespace) -> int:
+    state = load_project(Path.cwd())
+    if not state.server_project_id:
+        payload = {"status": "failed", "reason_code": "server_project_not_linked", "action_hint": "mdtero project link --server-project-id <id>"}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print("Link a server project before pulling cloud papers.")
+        return 1
+    client = MdteroClient()
+    manifest = client.project_sync(state.server_project_id)
+    result = pull_project_documents(
+        Path.cwd(),
+        manifest=manifest,
+        read_text=lambda document_id: client.read_library_document(document_id),
+    )
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        Console().print(f"Pulled {sum(1 for item in result['items'] if item['status'] == 'pulled')} papers from project {state.server_project_id}")
     return 0
 
 
