@@ -537,6 +537,19 @@ def build_parser() -> argparse.ArgumentParser:
     relay_serve.add_argument("--json", action="store_true", help="Print machine-readable relay lifecycle events.")
     relay_status = _cmd(relay_sub, "status", "Show whether your campus relay is connected.", cmd_relay_status)
     relay_status.add_argument("--json", action="store_true")
+    relay_check = _cmd(
+        relay_sub,
+        "check",
+        "Verify the relay can fetch closed Elsevier full text (key valid + campus egress entitled).",
+        cmd_relay_check,
+    )
+    relay_check.add_argument("--json", action="store_true", help="Print the raw entitlement-check response.")
+    relay_check.add_argument(
+        "--no-confirm-fulltext",
+        dest="confirm_fulltext",
+        action="store_false",
+        help="Skip the final closed-article full-text fetch (entitlement endpoint only).",
+    )
 
     access = sub.add_parser("access", help="Local access outlets: campus relay, CARSI cookies, proxy.")
     access.set_defaults(func=_print_nested_help(access))
@@ -4884,6 +4897,61 @@ def cmd_relay_status(args: argparse.Namespace) -> int:
         for command in payload.get("next_commands") or []:
             console.print(f"  {command}")
     return 0 if payload.get("connected") else 1
+
+
+RELAY_CHECK_SUCCESS_VERDICTS = {"full_text_ok", "entitled"}
+
+
+def cmd_relay_check(args: argparse.Namespace) -> int:
+    """Layered relay validity check via POST /api/v1/relay/entitlement-check."""
+    cfg = load_config()
+    if not cfg.is_authenticated:
+        payload = {
+            "status": "failed",
+            "reason_code": "auth_missing",
+            "action_hint": AUTH_MISSING_ACTION_HINT,
+            "next_commands": list(AUTH_MISSING_NEXT_COMMANDS),
+        }
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            Console().print(payload["action_hint"])
+        return 1
+
+    body: dict[str, Any] = {}
+    if not getattr(args, "confirm_fulltext", True):
+        body["confirm_fulltext"] = False
+    try:
+        payload = MdteroClient(config=cfg, timeout=120.0)._request(
+            "POST", "/api/v1/relay/entitlement-check", json=body
+        )
+    except (MdteroApiError, httpx.HTTPError) as exc:
+        failure = _relay_failure_payload(exc)
+        failure["reason_code"] = "relay_check_unavailable"
+        failure["action_hint"] = "Could not run the relay entitlement check; check `mdtero relay status`."
+        if args.json:
+            print(json.dumps(failure, indent=2, ensure_ascii=False))
+        else:
+            Console().print(str(failure["action_hint"]))
+        return 1
+
+    ok = bool(payload.get("effective")) or str(payload.get("verdict") or "") in RELAY_CHECK_SUCCESS_VERDICTS
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0 if ok else 1
+
+    console = Console()
+    cli_block = payload.get("cli") if isinstance(payload.get("cli"), dict) else {}
+    lines = [str(line) for line in (cli_block.get("human_lines") or []) if str(line).strip()]
+    if lines:
+        for line in lines:
+            console.print(line, markup=False)
+    else:
+        console.print(f"Relay check: {payload.get('verdict') or 'unknown'}", markup=False)
+        hints = payload.get("action_hints") or ([payload["action_hint"]] if payload.get("action_hint") else [])
+        for hint in hints:
+            console.print(f"  hint: {hint}", markup=False)
+    return 0 if ok else 1
 
 
 def cmd_mcp_briefing(args: argparse.Namespace) -> int:

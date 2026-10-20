@@ -13,7 +13,7 @@ import base64
 import json
 import signal
 from typing import Any, Callable
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 import websockets
@@ -27,6 +27,28 @@ MAX_RELAY_BODY_BYTES = 32 * 1024 * 1024
 DEFAULT_RECONNECT_SECONDS = 5.0
 MAX_RELAY_REDIRECTS = 10
 _REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+ELSEVIER_API_HOST = "api.elsevier.com"
+ELSEVIER_CREDENTIAL_HEADERS = frozenset({"x-els-apikey", "x-els-insttoken"})
+
+
+def _is_elsevier_api_url(url: str) -> bool:
+    try:
+        parts = urlsplit(str(url or ""))
+    except ValueError:
+        return False
+    return parts.scheme == "https" and (parts.hostname or "").lower() == ELSEVIER_API_HOST and parts.port in (None, 443)
+
+
+def headers_for_url(url: str, headers: dict[str, str]) -> dict[str, str]:
+    """Return headers safe to send to ``url``.
+
+    Elsevier credentials (X-ELS-APIKey / X-ELS-Insttoken) are only ever sent to
+    https://api.elsevier.com; they are dropped for any other host, including
+    cross-host redirect targets. Never log the returned values.
+    """
+    if _is_elsevier_api_url(url):
+        return dict(headers)
+    return {key: value for key, value in headers.items() if key.lower() not in ELSEVIER_CREDENTIAL_HEADERS}
 
 
 def relay_ws_url(api_base_url: str) -> str:
@@ -44,6 +66,9 @@ async def check_campus_outlet(*, timeout: float = 20.0) -> dict[str, Any]:
         response.raise_for_status()
         payload = response.json()
     summary = _proxy_public_summary(payload)
+    if isinstance(summary, dict) and summary.get("ip"):
+        # Backend entitlement checks read outlet.egress_ip to name the relay egress.
+        summary["egress_ip"] = summary["ip"]
     return {
         "summary": summary,
         "campus_ok": _is_expected_campus_outlet(payload),
@@ -68,7 +93,7 @@ async def execute_relay_fetch(
                         "error": "Relay fetch is limited to approved research publisher domains over HTTP/HTTPS.",
                         "reason_code": reason_code,
                     }
-                response = await client.request(current_method, current_url, headers=headers)
+                response = await client.request(current_method, current_url, headers=headers_for_url(current_url, headers))
                 if response.status_code not in _REDIRECT_STATUS_CODES:
                     break
                 location = response.headers.get("location")
