@@ -148,6 +148,27 @@ def test_smoke_checks_real_local_page_anonymous_session_and_shutdown(fake_bridge
                       'parent_shutdown': True, 'pi_dependencies': edition == 'full'}
 
 
+def test_windows_directory_cleanup_retries_a_released_lock(tmp_path, monkeypatch):
+    monkeypatch.setattr(prepare.sys, 'platform', 'win32')
+    remove = Mock(side_effect=[PermissionError('synthetic-private-error'), None])
+    monkeypatch.setattr(prepare.shutil, 'rmtree', remove)
+    monkeypatch.setattr(prepare.time, 'sleep', lambda _: None)
+    prepare.remove_smoke_directory(str(tmp_path), 'anonymous session and dependencies')
+    assert remove.call_count == 2
+
+
+@pytest.mark.parametrize('platform_name', ['linux', 'win32'])
+def test_directory_cleanup_preserves_safe_failure_phase(tmp_path, monkeypatch, platform_name):
+    monkeypatch.setattr(prepare.sys, 'platform', platform_name)
+    remove = Mock(side_effect=PermissionError('synthetic-private-error'))
+    monkeypatch.setattr(prepare.shutil, 'rmtree', remove)
+    with pytest.raises(RuntimeError) as caught:
+        prepare.remove_smoke_directory(str(tmp_path), 'anonymous session and dependencies', timeout=0)
+    assert 'anonymous session and dependencies' in str(caught.value)
+    assert 'synthetic-private-error' not in str(caught.value)
+    remove.assert_called_once()
+
+
 def test_smoke_child_failure_does_not_echo_its_private_output(tmp_path):
     script = tmp_path / 'bad_bridge.py'
     script.write_text("import sys\nprint('synthetic-sensitive-child-output', flush=True)\nsys.stdin.read()\n")

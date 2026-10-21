@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: connect-native-debug-${{ github.ref }}
+  group: connect-native-debug-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -99,7 +99,9 @@ jobs:
           uv run pytest tests_py/test_connect_*.py -q
           npm --prefix connect/agent test
       - name: Freeze bridge and bundle local Relay, Node and Pi
-        run: uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target ${{ matrix.target }} --edition full
+        run: |
+          uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target ${{ matrix.target }} --edition full
+          uv run --extra connect-full pytest tests_py/test_connect_relay_runtime.py -k actual_bundled_go_relay_without_key_cannot_start_browser -q
       - name: Build native debugging payload
         run: |
           cargo test --locked --manifest-path connect/native/src-tauri/Cargo.toml --lib --target ${{ matrix.target }}

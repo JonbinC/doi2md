@@ -261,6 +261,22 @@ class SmokeJob:
         self.close()
 
 
+def remove_smoke_directory(directory: str, phase: str, *, timeout: float = 5) -> None:
+    # Even after a Job is empty, Windows filesystem/antivirus handles may take
+    # a short time to release. Retry only after process containment succeeded.
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            shutil.rmtree(directory)
+            return
+        except OSError:
+            if not Path(directory).exists():
+                return
+            if sys.platform != 'win32' or time.monotonic() >= deadline:
+                raise RuntimeError(f'Frozen bridge smoke failed during {phase}; temporary directory cleanup could not complete.') from None
+            time.sleep(0.1)
+
+
 def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: float = 60) -> dict:
     """Check the actual frozen executable, packaged UI, dependencies and shutdown.
 
@@ -365,7 +381,7 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
                     # Reap even when poll already observed an exit.
                     process.wait(timeout=10)
                 except (OSError, subprocess.SubprocessError):
-                    raise RuntimeError('Frozen bridge smoke cleanup could not reap its parent process.') from None
+                    raise RuntimeError(f'Frozen bridge smoke failed during {phase}; parent process cleanup could not complete.') from None
                 finally:
                     for pipe in (process.stdin, process.stdout):
                         if pipe is not None and not pipe.closed:
@@ -373,10 +389,7 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
         # If containment or reaping failed, leave the isolated directory alone:
         # rmtree must not race descendants that may still hold it as their cwd.
         if temporary is not None:
-            try:
-                shutil.rmtree(temporary)
-            except OSError:
-                raise RuntimeError('Frozen bridge smoke cleanup could not release its temporary directory.') from None
+            remove_smoke_directory(temporary, phase)
 
 
 def prepare(target: str, edition: str) -> dict:

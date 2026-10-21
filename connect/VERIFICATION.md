@@ -120,7 +120,7 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 | Command/check | Result | Exit code |
 |---|---|---|
 | `uv sync --frozen --extra connect-full` | Completed | 0 |
-| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 255 passed, 2 Windows kernel integration tests skipped on Linux | 0 |
+| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 258 passed, 2 Windows kernel integration tests skipped on Linux | 0 |
 | `uv run --extra connect-full pytest tests_py/test_cli_contract.py -k login -q` | 14 passed | 0 |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 33 passed, including mobile navigation and Relay permission/lifecycle UI | 0 |
 | `npm --prefix connect/agent test` | 14 passed, pinned SDK with synthetic transport | 0 |
@@ -135,9 +135,9 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 | `cargo fmt --manifest-path connect/native/src-tauri/Cargo.toml -- --check` | Passed | 0 |
 | `uv run --extra connect-full python scripts/ci/secret_guard.py` after adding new sources to Git index | Passed | 0 |
 | `git diff --check` | Passed | 0 |
-| Isolated full `python -m pytest tests_py -q` with source overlay and Git index | 605 passed, 2 skipped (adjacent website absent; Windows-only kernel test) | 0 |
+| Isolated full `python -m pytest tests_py -q` with source overlay and Git index | 658 passed, 4 skipped (adjacent website absent; two Windows kernel tests; ignored native Go binary absent) | 0 |
 
-The isolated full-suite snapshot preceded the final prepare-script cleanup regression, login-help text and Windows no-console flags. Those changes were checked by the final focused Connect suite above. The pre-existing adjacent-site manifest mismatch remains as recorded below; no install manifest was changed.
+The isolated full-suite snapshot preceded the final three directory-lock retry tests. Those were included in the final focused Connect suite above; the bundled Go probe ran locally with prepared resources. The pre-existing adjacent-site manifest mismatch remains as recorded below; no install manifest was changed.
 
 These are Linux build and synthetic-service results. No current real paid AI, MinerU or Voyage request was made. They do not establish Mac/Windows installation, OS credential prompts, real account browser login, Zotero/CARSI depth or signed distribution. The native workflow must produce artifacts for the exact reviewed commit; every platform's human acceptance remains pending.
 
@@ -148,6 +148,8 @@ The next client slice adds explicit HTTP-only Relay supervision (28 runtime test
 Authorized real-account checks through the live bridge passed document listing, tags, explicit tag dry-run and nonempty BibTeX/CSL/Markdown/ZIP responses. The Markdown formats retained `markdown-text-only`. No tags were applied or removed in this check, no Relay was started, and no provider/model request was made. This HTTP evidence does not replace native WebView download or account-login acceptance.
 
 Windows `f0d617b3` passed Python/Pi source tests but its frozen dependency probe failed. Rebuilds now sanitize the external-program DLL search path following [PyInstaller's Windows guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#launching-external-programs-from-the-frozen-application), emit only allowlisted dependency failure codes and wait for all Windows Job descendants before deleting temporary files. The prior failure's root cause remains unconfirmed until the frozen Windows rebuild succeeds.
+
+Windows `05abe13d` caught a transient directory-lock failure in the diagnostic test before freezing. Cleanup now retries briefly after confirmed process exit and preserves the safe original phase if deletion still fails. Focused preparation checks: `uv run --extra connect-full pytest tests_py/test_connect_native_prepare.py -q` — 45 passed, 1 Windows-only skip, exit 0. The latest local full frozen preparation and actual WebKit download/parent-crash smoke both passed again, exit 0.
 
 The repository Extension CI also encountered newly published Vitest advisories. Its test dependencies were patched from 4.1.11 to 4.1.12 without changing extension runtime sources. `npm --prefix extension audit --audit-level=moderate`, extension tests (210 passed) and build all exited 0.
 
