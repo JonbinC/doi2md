@@ -3,12 +3,16 @@ on:
   pull_request:
     paths:
       - 'connect/**'
+      - 'src/mdtero/connect/**'
+      - 'tests_py/test_connect_*.py'
       - '.github/workflows/connect-handoff.yml'
   push:
     branches:
       - handoff/connect-research-client-20261021
     paths:
       - 'connect/**'
+      - 'src/mdtero/connect/**'
+      - 'tests_py/test_connect_*.py'
       - '.github/workflows/connect-handoff.yml'
 permissions:
   contents: read
@@ -21,10 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: JS syntax
+      - name: Offline design JS syntax
         run: |
           node --check connect/design/policy.js
           node --check connect/design/app.js
+          node --check connect/app/api.js
+          node --check connect/app/app.js
       - name: Original 26 design-policy regressions
         run: node --test connect/design/policy.test.cjs
       - name: Static entry and safe mock-only checks
@@ -33,3 +39,17 @@ jobs:
           test -s connect/design/style.css
           grep -q "connect-src 'none'" connect/design/index.html
           ! grep -Eq 'https?://[^" ]+' connect/design/app.js
+          grep -q "connect-src 'self'" connect/app/index.html
+          test -s connect/app/api.js
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Connect bridge and security tests
+        run: |
+          uv sync --frozen
+          uv run pytest tests_py/test_connect_security.py tests_py/test_connect_bridge.py tests_py/test_connect_zotero_local.py -q

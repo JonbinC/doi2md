@@ -150,6 +150,10 @@ def build_parser() -> argparse.ArgumentParser:
     login.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the browser login callback.")
     login.add_argument("--json", action="store_true", help="Print a secret-safe machine-readable login summary.")
 
+    from .connect.cli import register_connect_parser
+
+    register_connect_parser(sub)
+
     smoke = _cmd(sub, "smoke", "Run a deploy-ready CLI smoke test against Mdtero APIs.", cmd_smoke)
     smoke.add_argument("--api-base", help="Override the Mdtero API base URL for this smoke run.")
     smoke.add_argument("--workdir", type=Path, help="Project directory for smoke state and downloads. Defaults to a temporary directory.")

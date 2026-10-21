@@ -37,6 +37,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mdtero"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"connect/app" = "mdtero/connect/static"
+
 [tool.pytest.ini_options]
 testpaths = ["tests_py"]
 pythonpath = ["src"]

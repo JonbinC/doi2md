@@ -19,7 +19,9 @@ node --test policy.test.cjs
 # open index.html in a normal browser
 ```
 
-When implementing, prefer replacing mock actions with typed backend integrations rather than adding a second unscoped proxy. The current backend already supports:
+The live loopback client now lives in [`../app/`](../app/) and is started with `mdtero connect`. Keep this `design/` tree offline (CSP forbids outbound calls) as the interaction reference and policy-test fixture.
+
+When extending further, prefer typed bridge adapters over a second unscoped proxy. The current backend already supports:
 
 - `GET /api/v1/documents` (account library)
 - `GET /api/v1/library/tags`, `GET /api/v1/library/tagged-documents`, `GET /api/v1/library/documents/{id}/tags`
