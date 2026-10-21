@@ -4,6 +4,7 @@ import copy
 import json
 import os
 import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from mdtero.connect.agent_runtime import AgentError, AgentRuntime, SDK_VERSION
+from mdtero.connect import agent_runtime
 
 
 class Keys:
@@ -268,3 +270,128 @@ def test_close_stops_runtime_and_clears_approvals(runtime):
     with pytest.raises(AgentError) as exc:
         runtime.start(preview["approval_id"])
     assert exc.value.reason_code == "agent_closed"
+
+
+@pytest.fixture
+def dependency_probe(tmp_path, monkeypatch):
+    (tmp_path / "worker.mjs").write_text("synthetic SDK probe")
+    node = tmp_path / "node"
+    node.write_text("synthetic Node path")
+    runtime = AgentRuntime(full_mode=True, providers=Keys(), library=MagicMock(), runtime_dir=tmp_path, node_executable=node)
+    temporary = MagicMock()
+    temporary.name = str(tmp_path / "probe-cwd")
+    monkeypatch.setattr(agent_runtime.tempfile, "TemporaryDirectory", lambda **kwargs: temporary)
+    command = MagicMock()
+    monkeypatch.setattr(agent_runtime._external_process, "run", command)
+    yield runtime, command, temporary
+    runtime.close()
+
+
+def node_version():
+    return subprocess.CompletedProcess(["node", "--version"], 0, "v22.19.0\n", "")
+
+
+def sdk_result(stdout, returncode=0):
+    return subprocess.CompletedProcess(["node", "worker.mjs", "--check"], returncode, stdout, "synthetic-sdk-stderr-must-not-return")
+
+
+def assert_safe_probe(info):
+    text = json.dumps(info)
+    assert "synthetic-sdk-secret-must-not-return" not in text
+    assert "synthetic-sdk-stderr-must-not-return" not in text
+    assert not any(key in info for key in ("stdout", "stderr", "error", "message", "path", "traceback"))
+
+
+@pytest.mark.parametrize("stage", ["node_version", "sdk_execution"])
+def test_dependency_timeouts_preserve_phase_without_exception_output(dependency_probe, stage):
+    runtime, command, temporary = dependency_probe
+    timeout = subprocess.TimeoutExpired(["synthetic-sdk-secret-must-not-return"], 15,
+                                         output="synthetic-sdk-secret-must-not-return", stderr="synthetic-sdk-secret-must-not-return")
+    command.side_effect = [timeout] if stage == "node_version" else [node_version(), timeout]
+    info = runtime._dependency_info()
+    assert info["probe_stage"] == stage and info["probe_code"] == "timeout"
+    assert info["reason_code"] == "agent_sdk_missing"
+    if stage == "sdk_execution":
+        assert info["node_probe_exit_code"] == 0
+        temporary.cleanup.assert_called_once()
+    assert_safe_probe(info)
+
+
+def test_dependency_setup_os_error_has_only_safe_numeric_code(dependency_probe, monkeypatch):
+    runtime, command, _ = dependency_probe
+    command.return_value = node_version()
+    error = PermissionError(13, "synthetic-sdk-secret-must-not-return")
+    monkeypatch.setattr(agent_runtime.tempfile, "TemporaryDirectory", MagicMock(side_effect=error))
+    info = runtime._dependency_info()
+    assert info["probe_stage"] == "sdk_setup" and info["probe_code"] == "os_error"
+    assert info["probe_os_error"] == 13 and info["node_probe_exit_code"] == 0
+    assert_safe_probe(info)
+
+
+def test_dependency_cleanup_winerror_is_distinct_from_sdk_execution(dependency_probe):
+    runtime, command, temporary = dependency_probe
+    command.side_effect = [node_version(), sdk_result(json.dumps({"available": True, "sdk_version": SDK_VERSION, "models": {}}))]
+    error = OSError(13, "synthetic-sdk-secret-must-not-return")
+    error.winerror = 32
+    temporary.cleanup.side_effect = error
+    info = runtime._dependency_info()
+    assert info["probe_stage"] == "sdk_cleanup" and info["probe_code"] == "os_error"
+    assert info["probe_os_error"] == 32 and info["sdk_probe_exit_code"] == 0
+    assert info["probe_stdout_bytes"] > 0 and info["probe_empty_output"] is False
+    assert_safe_probe(info)
+
+
+def test_dependency_cleanup_cannot_mask_the_original_execution_timeout(dependency_probe):
+    runtime, command, temporary = dependency_probe
+    command.side_effect = [node_version(), subprocess.TimeoutExpired(["node"], 15, output="synthetic-sdk-secret-must-not-return")]
+    temporary.cleanup.side_effect = OSError(13, "synthetic-sdk-secret-must-not-return")
+    info = runtime._dependency_info()
+    assert info["probe_stage"] == "sdk_execution" and info["probe_code"] == "timeout"
+    assert "probe_os_error" not in info
+    assert_safe_probe(info)
+
+
+@pytest.mark.parametrize("stdout,code", [("", "invalid_json"), ("synthetic-sdk-secret-must-not-return", "invalid_json"), ("[]", "invalid_schema")])
+def test_dependency_json_failures_reveal_only_size_and_empty_state(dependency_probe, stdout, code):
+    runtime, command, _ = dependency_probe
+    command.side_effect = [node_version(), sdk_result(stdout)]
+    info = runtime._dependency_info()
+    assert info["probe_stage"] == "sdk_json" and info["probe_code"] == code
+    assert info["sdk_probe_exit_code"] == info["probe_exit_code"] == 0
+    assert info["probe_stdout_bytes"] == len(stdout.encode())
+    assert info["probe_empty_output"] is (stdout == "")
+    assert_safe_probe(info)
+
+
+@pytest.mark.parametrize("controlled", [False, True])
+def test_nonzero_worker_output_accepts_only_fixed_stage_and_code(dependency_probe, controlled):
+    runtime, command, _ = dependency_probe
+    payload = {"probe_stage": "sdk_import" if controlled else "synthetic-sdk-secret-must-not-return",
+               "probe_code": "ERR_DLOPEN_FAILED" if controlled else "synthetic-sdk-secret-must-not-return",
+               "error": {"message": "synthetic-sdk-secret-must-not-return"}}
+    command.side_effect = [node_version(), sdk_result(json.dumps(payload), 1)]
+    info = runtime._dependency_info()
+    assert info["probe_stage"] == ("sdk_import" if controlled else "sdk_json")
+    assert info["probe_code"] == ("ERR_DLOPEN_FAILED" if controlled else "process_exit")
+    assert info["node_probe_exit_code"] == 0 and info["sdk_probe_exit_code"] == info["probe_exit_code"] == 1
+    assert_safe_probe(info)
+
+
+def test_successful_dependency_probe_schema_and_timeouts_stay_unchanged(dependency_probe):
+    runtime, command, _ = dependency_probe
+    models = {"openai": [{"id": "synthetic-model"}]}
+    command.side_effect = [node_version(), sdk_result(json.dumps({"available": True, "sdk_version": SDK_VERSION, "models": models}))]
+    info = runtime._dependency_info()
+    assert info == {"available": True, "node_version": "22.19.0", "sdk_version": SDK_VERSION, "models": models}
+    assert [call.kwargs["timeout"] for call in command.call_args_list] == [5, 15]
+
+
+def test_invalid_node_version_never_returns_raw_version_stdout(dependency_probe):
+    runtime, command, temporary = dependency_probe
+    command.return_value = sdk_result("synthetic-sdk-secret-must-not-return", 0)
+    info = runtime._dependency_info()
+    assert info["reason_code"] == "agent_node_unavailable"
+    assert info["probe_stage"] == "node_version" and info["probe_code"] == "invalid_node_version"
+    assert info["node_probe_exit_code"] == info["probe_exit_code"] == 0
+    temporary.cleanup.assert_not_called()
+    assert_safe_probe(info)

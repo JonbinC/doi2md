@@ -97,13 +97,27 @@ class AgentRuntime:
         if not node:
             info["reason_code"] = "agent_node_missing"
             return info
+        diagnostics: dict[str, Any] = {}
+        stage = "node_version"
+
+        def failure(reason: str, code: str, error: BaseException | None = None) -> None:
+            info.update(diagnostics)
+            info.update({"reason_code": reason, "probe_stage": stage, "probe_code": code})
+            if isinstance(error, OSError):
+                number = getattr(error, "winerror", None)
+                if type(number) is not int:
+                    number = error.errno
+                if type(number) is int:
+                    info["probe_os_error"] = number
+
         try:
             version = _external_process.run([node, "--version"], capture_output=True, text=True, timeout=5, env=self._safe_env(), check=False,
-                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            diagnostics["node_probe_exit_code"] = version.returncode
             match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)\s*", version.stdout)
             if not match or version.returncode:
-                info["probe_exit_code"] = version.returncode
-                info["reason_code"] = "agent_node_unavailable"
+                diagnostics["probe_exit_code"] = version.returncode
+                failure("agent_node_unavailable", "process_exit" if version.returncode else "invalid_node_version")
                 return info
             info["node_version"] = ".".join(match.groups())
             if tuple(map(int, match.groups())) < (22, 19, 0):
@@ -112,32 +126,68 @@ class AgentRuntime:
             if not (self.runtime_dir / "worker.mjs").is_file():
                 info["reason_code"] = "agent_runtime_missing"
                 return info
-            with tempfile.TemporaryDirectory(prefix="mdtero-pi-probe-") as cwd:
+            temporary = None
+            primary: tuple[str, BaseException] | None = None
+            stage = "sdk_setup"
+            try:
+                temporary = tempfile.TemporaryDirectory(prefix="mdtero-pi-probe-")
+                stage = "sdk_execution"
                 checked = _external_process.run(
                     [node, str(self.runtime_dir / "worker.mjs"), "--check"],
-                    capture_output=True, text=True, timeout=15, cwd=cwd, env=self._safe_env(), check=False,
+                    capture_output=True, text=True, timeout=15, cwd=temporary.name, env=self._safe_env(), check=False,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
-            if checked.returncode or len(checked.stdout.encode("utf-8")) > 1024 * 1024:
-                info["probe_exit_code"] = checked.returncode
-                if len(checked.stdout.encode("utf-8")) <= 1024 * 1024:
+                diagnostics["sdk_probe_exit_code"] = checked.returncode
+                diagnostics["probe_exit_code"] = checked.returncode
+                if isinstance(checked.stdout, str):
+                    diagnostics["probe_stdout_bytes"] = len(checked.stdout.encode("utf-8"))
+                    diagnostics["probe_empty_output"] = checked.stdout == ""
+            except (OSError, subprocess.SubprocessError, ValueError, TypeError) as exc:
+                primary = (stage, exc)
+            finally:
+                if temporary is not None:
                     try:
-                        probe = json.loads(checked.stdout)
-                        if probe.get("probe_stage") in {"sdk_import", "catalog"}:
-                            info["probe_stage"] = probe["probe_stage"]
-                        if probe.get("probe_code") in {"ENOENT", "ERR_MODULE_NOT_FOUND", "ERR_DLOPEN_FAILED", "MODULE_NOT_FOUND", "EPERM", "EACCES", "dependency_error"}:
-                            info["probe_code"] = probe["probe_code"]
-                    except (ValueError, TypeError, AttributeError):
-                        pass
-                info["reason_code"] = "agent_sdk_missing"
+                        temporary.cleanup()
+                    except (OSError, ValueError, TypeError) as exc:
+                        # A cleanup failure must not hide the original timeout or
+                        # process-creation error that caused the probe to fail.
+                        if primary is None:
+                            primary = ("sdk_cleanup", exc)
+            if primary is not None:
+                stage, error = primary
+                raise error
+            stage = "sdk_json"
+            if not isinstance(checked.stdout, str):
+                failure("agent_sdk_missing", "invalid_json")
+                return info
+            if diagnostics["probe_stdout_bytes"] > 1024 * 1024:
+                failure("agent_sdk_missing", "oversized_output")
                 return info
             payload = json.loads(checked.stdout)
+            if not isinstance(payload, dict):
+                failure("agent_sdk_missing", "invalid_schema")
+                return info
+            if checked.returncode:
+                failure("agent_sdk_missing", "process_exit")
+                if payload.get("probe_stage") in {"sdk_import", "catalog"}:
+                    info["probe_stage"] = payload["probe_stage"]
+                if payload.get("probe_code") in {"ENOENT", "ERR_MODULE_NOT_FOUND", "ERR_DLOPEN_FAILED", "MODULE_NOT_FOUND", "EPERM", "EACCES", "dependency_error"}:
+                    info["probe_code"] = payload["probe_code"]
+                return info
             if payload.get("sdk_version") != SDK_VERSION or not payload.get("available"):
                 info["reason_code"] = "agent_dependency_version_mismatch"
                 return info
             info.update({"available": True, "sdk_version": SDK_VERSION, "models": payload.get("models", {})})
-        except (OSError, subprocess.SubprocessError, ValueError, TypeError):
-            info["reason_code"] = "agent_sdk_missing"
+        except subprocess.TimeoutExpired as exc:
+            failure("agent_sdk_missing", "timeout", exc)
+        except OSError as exc:
+            failure("agent_sdk_missing", "os_error", exc)
+        except json.JSONDecodeError:
+            failure("agent_sdk_missing", "invalid_json")
+        except subprocess.SubprocessError:
+            failure("agent_sdk_missing", "process_error")
+        except (ValueError, TypeError):
+            failure("agent_sdk_missing", "dependency_error")
         self._dependencies = info
         self._dependencies_checked_at = time.monotonic()
         return copy.deepcopy(info)

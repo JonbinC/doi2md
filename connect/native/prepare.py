@@ -43,10 +43,10 @@ SMOKE_DEPENDENCY_REASONS = frozenset({
     'agent_runtime_missing', 'agent_sdk_missing', 'agent_dependency_version_mismatch',
     'agent_dependencies_missing',
 })
-SMOKE_PROBE_STAGES = frozenset({'sdk_import', 'catalog'})
+SMOKE_PROBE_STAGES = frozenset({'sdk_import', 'catalog', 'node_version', 'sdk_setup', 'sdk_execution', 'sdk_cleanup', 'sdk_json', 'standalone_execution', 'standalone_output'})
 SMOKE_PROBE_CODES = frozenset({
     'ENOENT', 'ERR_MODULE_NOT_FOUND', 'ERR_DLOPEN_FAILED', 'MODULE_NOT_FOUND',
-    'EPERM', 'EACCES', 'dependency_error',
+    'EPERM', 'EACCES', 'dependency_error', 'timeout', 'os_error', 'invalid_json', 'invalid_schema', 'process_exit', 'oversized_output', 'invalid_node_version', 'process_error',
 })
 
 
@@ -152,10 +152,12 @@ def dependency_smoke_phase(dependencies: object) -> str:
         value = dependencies.get(field)
         if isinstance(value, str) and value in allowed:
             facts.append(field + '=' + value)
-    for field in ('probe_exit_code', 'node_probe_exit_code', 'sdk_probe_exit_code'):
+    for field in ('probe_exit_code', 'node_probe_exit_code', 'sdk_probe_exit_code', 'probe_os_error', 'probe_stdout_bytes'):
         value = dependencies.get(field)
         if type(value) is int:
             facts.append(field + '=' + str(value))
+    if type(dependencies.get('probe_empty_output')) is bool:
+        facts.append('probe_empty_output=' + str(dependencies['probe_empty_output']).lower())
     return phase + (' (' + ', '.join(facts) + ')' if facts else '')
 
 
@@ -275,6 +277,38 @@ def remove_smoke_directory(directory: str, phase: str, *, timeout: float = 5) ->
             if sys.platform != 'win32' or time.monotonic() >= deadline:
                 raise RuntimeError(f'Frozen bridge smoke failed during {phase}; temporary directory cleanup could not complete.') from None
             time.sleep(0.1)
+
+
+def probe_bundled_agent(runtime: Path, *, timeout: float = 15) -> dict:
+    """Compare the exact bundled SDK outside the freezer, with no account keys."""
+    from mdtero.connect.agent_runtime import AgentRuntime
+
+    node = runtime / 'node' / ('node.exe' if os.name == 'nt' else 'node')
+    worker = runtime / 'agent' / 'worker.mjs'
+    temporary = tempfile.mkdtemp(prefix='mdtero-bundled-pi-probe-')
+    phase = 'standalone_execution'
+    try:
+        result = subprocess.run([str(node.resolve()), str(worker.resolve()), '--check'],
+                                cwd=temporary, env=AgentRuntime._safe_env(),
+                                capture_output=True, text=True, encoding='utf-8', timeout=timeout,
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        phase = 'standalone_output'
+        if len(result.stdout.encode('utf-8')) > 1024 * 1024:
+            raise ValueError('oversized output')
+        payload = json.loads(result.stdout)
+        if not isinstance(payload, dict):
+            raise ValueError('invalid object')
+        if result.returncode or payload.get('available') is not True or payload.get('sdk_version') != PI_SDK_VERSION:
+            facts = {'reason_code': 'agent_sdk_missing', 'probe_exit_code': result.returncode,
+                     'probe_stage': payload.get('probe_stage'), 'probe_code': payload.get('probe_code')}
+            raise RuntimeError('Standalone bundled Pi check failed: ' + dependency_smoke_phase(facts))
+        return {'available': True, 'sdk_version': PI_SDK_VERSION}
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('Standalone bundled Pi check failed: timeout during ' + phase) from None
+    except (OSError, ValueError):
+        raise RuntimeError('Standalone bundled Pi check failed during ' + phase) from None
+    finally:
+        remove_smoke_directory(temporary, phase)
 
 
 def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: float = 60) -> dict:
@@ -438,6 +472,8 @@ def prepare(target: str, edition: str) -> dict:
         (runtime / 'node').mkdir()
         shutil.copy2(node, runtime / 'node' / ('node' + exe))
         bundle_node_license(node, node_version, runtime / 'node' / 'LICENSE')
+        probe_bundled_agent(runtime)
+        print(json.dumps({'bundled_pi_probe': 'passed', 'sdk_version': PI_SDK_VERSION}), flush=True)
     # Reuse the existing Relay binary. The shell never installs a background service.
     relay_dest = runtime / 'relay' / ('mdtero-relay' + exe)
     relay_dest.parent.mkdir()

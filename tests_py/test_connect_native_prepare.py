@@ -157,6 +157,28 @@ def test_windows_directory_cleanup_retries_a_released_lock(tmp_path, monkeypatch
     assert remove.call_count == 2
 
 
+def test_standalone_agent_probe_uses_no_ambient_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv('MDTERO_API_KEY', 'synthetic-private-account')
+    monkeypatch.setenv('OPENAI_API_KEY', 'synthetic-private-provider')
+    def execute(command, **kwargs):
+        assert command[-1] == '--check'
+        assert 'MDTERO_API_KEY' not in kwargs['env'] and 'OPENAI_API_KEY' not in kwargs['env']
+        assert Path(kwargs['cwd']).is_dir()
+        return subprocess.CompletedProcess(command, 0, '{"available":true,"sdk_version":"1.3.0"}', '')
+    monkeypatch.setattr(prepare.subprocess, 'run', execute)
+    assert prepare.probe_bundled_agent(tmp_path) == {'available': True, 'sdk_version': '1.3.0'}
+
+
+def test_standalone_agent_probe_never_exposes_dependency_error_bodies(tmp_path, monkeypatch):
+    payload = {'probe_stage': 'sdk_import', 'probe_code': 'ERR_DLOPEN_FAILED',
+               'error': {'message': 'synthetic-private-provider-response'}}
+    monkeypatch.setattr(prepare.subprocess, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, json.dumps(payload), 'synthetic-private-stderr'))
+    with pytest.raises(RuntimeError) as caught:
+        prepare.probe_bundled_agent(tmp_path)
+    assert 'probe_code=ERR_DLOPEN_FAILED' in str(caught.value)
+    assert 'synthetic-private' not in str(caught.value)
+
+
 @pytest.mark.parametrize('platform_name', ['linux', 'win32'])
 def test_directory_cleanup_preserves_safe_failure_phase(tmp_path, monkeypatch, platform_name):
     monkeypatch.setattr(prepare.sys, 'platform', platform_name)
