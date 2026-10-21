@@ -14,16 +14,16 @@ on:
         description: "Semver, for example 0.1.10 or 0.2.0a11"
         required: true
   push:
+    branches:
+      - main
+    paths:
+      - pyproject.toml
     tags:
       - "extension/v*"
       - "cli/v*"
 
 permissions:
   contents: write
-
-concurrency:
-  group: release-github-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -34,41 +34,65 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
       - id: meta
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            kind="${{ inputs.kind }}"
-            version="${{ inputs.version }}"
-          else
-            ref="${GITHUB_REF_NAME}"
-            kind="${ref%%/*}"
-            version="${ref#*/}"
-            version="${version#v}"
-          fi
-          printf 'kind=%s\n' "$kind" >> "$GITHUB_OUTPUT"
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-          printf 'tag=%s/v%s\n' "$kind" "$version" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_KIND: ${{ inputs.kind }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: python scripts/ci/release_policy.py resolve assets
 
   extension:
     needs: resolve
     if: needs.resolve.outputs.kind == 'extension'
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-github-extension-${{ needs.resolve.outputs.version }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Check existing extension release
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_KIND: extension
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: python scripts/ci/release_policy.py check-github
       - uses: actions/setup-node@v6
+        if: steps.gate.outputs.publish == 'true'
         with:
           node-version: 22
       - name: Build Web Store package
+        if: steps.gate.outputs.publish == 'true'
         working-directory: extension
         run: |
           npm ci
           npm test
           npm run package:webstore
+      - name: Recheck extension release before publishing
+        id: publish
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_KIND: extension
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: python scripts/ci/release_policy.py check-github
       - name: Create GitHub release
+        if: steps.publish.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          overwrite_files: false
           name: Mdtero Browser Extension v${{ needs.resolve.outputs.version }}
           body: |
             Browser extension v${{ needs.resolve.outputs.version }}.
@@ -83,22 +107,47 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.kind == 'cli'
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-github-cli-${{ needs.resolve.outputs.version }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Check existing CLI release
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_KIND: cli
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: python scripts/ci/release_policy.py check-github
+      - uses: astral-sh/setup-uv@v7
+        if: steps.gate.outputs.publish == 'true'
       - name: Build Python artifacts
+        if: steps.gate.outputs.publish == 'true'
         run: |
           python scripts/ci/secret_guard.py
-          uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py -q
+          uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py tests_py/test_release_policy.py -q
           uv build
+      - name: Recheck CLI release before publishing
+        id: publish
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_KIND: cli
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: python scripts/ci/release_policy.py check-github
       - name: Create GitHub release
+        if: steps.publish.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: mdtero CLI v${{ needs.resolve.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          overwrite_files: false
           body: |
             Public Python CLI/TUI v${{ needs.resolve.outputs.version }}.
 

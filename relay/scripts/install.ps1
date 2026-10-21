@@ -1,13 +1,14 @@
 #requires -Version 5.1
-$ErrorActionPreference = "Stop"
 
 param(
   [string]$ApiKey = $env:MDTERO_API_KEY,
   [string]$Label = "",
-  [string]$Version = $(if ($env:MDTERO_RELAY_VERSION) { $env:MDTERO_RELAY_VERSION } else { "0.1.8" }),
+  [string]$Version = $(if ($env:MDTERO_RELAY_VERSION) { $env:MDTERO_RELAY_VERSION } else { "0.1.9" }),
   [string]$BaseUrl = $(if ($env:MDTERO_RELAY_BASE_URL) { $env:MDTERO_RELAY_BASE_URL } else { "https://mdtero.com/releases/relay" }),
   [string]$InstallDir = $(Join-Path $env:LOCALAPPDATA "Mdtero\bin")
 )
+
+$ErrorActionPreference = "Stop"
 
 function Write-Info([string]$Message) {
   Write-Host $Message

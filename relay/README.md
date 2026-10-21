@@ -129,10 +129,18 @@ Cloud agent / backend
 
 GitHub Actions workflow: `.github/workflows/release-relay.yml`
 
+The normal release path is a reviewed version bump in
+`relay/cmd/mdtero-relay/main.go`, with the installer and local build defaults
+updated to match. After PR checks pass, merging that change to `main` runs the
+Relay tests and publishes all seven platform archives from that exact commit.
+An existing version tag is logged as a no-op; the workflow does not replace it.
+
+Tag-driven and manual releases remain available:
+
 ```bash
 # Tag-driven release. Pushing relay/v* runs Release Campus Relay.
-git tag relay/v0.1.8
-git push origin relay/v0.1.8
+git tag relay/v0.1.9
+git push origin relay/v0.1.9
 
 # Manual release
 # GitHub: run "Release Campus Relay" with the desired version
@@ -146,7 +154,7 @@ Optional local copy into a website static-assets tree:
 ```bash
 cd relay
 bash scripts/build-release.sh
-MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.8
+MDTERO_SITE_ROOT=/path/to/website-repo bash scripts/publish-site-assets.sh 0.1.9
 ```
 
 ## Build from source

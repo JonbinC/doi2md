@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Optional version override for manual smoke (defaults to pyproject.toml)."
+        description: "Expected package version (must match pyproject.toml; empty uses that version)."
         required: false
         default: ""
   push:
+    branches:
+      - main
+    paths:
+      - pyproject.toml
     tags:
       - "cli/v*"
 
@@ -15,45 +19,83 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: publish-mdtero-pypi-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
+  resolve:
+    name: Resolve package version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - id: meta
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: python scripts/ci/release_policy.py resolve pypi
+
   publish:
     name: Build and publish public mdtero client
+    needs: resolve
     runs-on: ubuntu-latest
+    concurrency:
+      group: publish-mdtero-pypi-${{ needs.resolve.outputs.version }}
+      cancel-in-progress: false
     # Must match the Trusted Publisher "Environment name" on https://pypi.org/manage/project/mdtero/settings/publishing/
     environment: pypi
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        with:
+          ref: ${{ github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
+      - name: Check official PyPI version
+        id: gate
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: python scripts/ci/release_policy.py check-pypi
+
+      - name: Install uv
+        if: steps.gate.outputs.publish == 'true'
+        uses: astral-sh/setup-uv@v7
+
       - name: Run secret guard
+        if: steps.gate.outputs.publish == 'true'
         run: python scripts/ci/secret_guard.py
 
       - name: Run Python contract tests
-        run: uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py -q
+        if: steps.gate.outputs.publish == 'true'
+        run: uv run pytest tests_py/test_cli_contract.py tests_py/test_relay.py tests_py/test_secret_guard.py tests_py/test_release_policy.py -q
 
       - name: Build wheel and sdist
+        if: steps.gate.outputs.publish == 'true'
         run: uv build
 
       - name: Smoke installed wheel
+        if: steps.gate.outputs.publish == 'true'
         run: |
           set -euo pipefail
           python -m venv /tmp/mdtero-wheel-smoke
           /tmp/mdtero-wheel-smoke/bin/pip install dist/mdtero-*.whl
           /tmp/mdtero-wheel-smoke/bin/mdtero --version
 
+      - name: Recheck official PyPI version before publishing
+        id: publish
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: python scripts/ci/release_policy.py check-pypi
+
       - name: Publish to PyPI
+        if: steps.publish.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist

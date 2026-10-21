@@ -192,3 +192,97 @@ def test_relay_status_command_requires_auth(monkeypatch, capsys):
     assert cmd_relay_status(args) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["reason_code"] == "auth_missing"
+
+
+def test_execute_relay_fetch_drops_elsevier_credentials_on_cross_host_redirect():
+    from mdtero.relay import headers_for_url
+
+    sent: list[tuple[str, dict]] = []
+
+    class Redirect:
+        status_code = 302
+        headers = {"location": "https://www.sciencedirect.com/science/article/pii/X"}
+        content = b""
+        url = "https://api.elsevier.com/content/article/doi/10.1/x"
+
+    class Final:
+        status_code = 200
+        headers = {}
+        content = b"ok"
+        url = "https://www.sciencedirect.com/science/article/pii/X"
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def request(self, method, url, headers):
+            sent.append((url, dict(headers)))
+            return Redirect() if len(sent) == 1 else Final()
+
+    creds = {"X-ELS-APIKey": "k", "X-ELS-Insttoken": "t", "Accept": "text/xml"}
+    with patch("mdtero.relay.httpx.AsyncClient", return_value=FakeClient()):
+        result = asyncio.run(
+            execute_relay_fetch(
+                url="https://api.elsevier.com/content/article/doi/10.1/x",
+                method="GET",
+                headers=creds,
+                timeout=10.0,
+            )
+        )
+    assert result["status_code"] == 200
+    assert sent[0][1]["X-ELS-APIKey"] == "k"
+    assert "X-ELS-APIKey" not in sent[1][1] and "X-ELS-Insttoken" not in sent[1][1]
+    assert sent[1][1]["Accept"] == "text/xml"
+    assert "X-ELS-APIKey" not in headers_for_url("http://api.elsevier.com/x", creds)
+    assert "x-els-apikey" not in {k.lower() for k in headers_for_url("https://api.elsevier.com.evil.test/", creds)}
+    for url in ("https://api.elsevier.com:8443/x", "https://api.elsevier.com:invalid/x", "https://u:p@api.elsevier.com/x"):
+        assert headers_for_url(url, creds) == {"Accept": "text/xml"}
+
+
+def test_relay_check_prints_human_lines(monkeypatch, capsys):
+    from mdtero.cli import cmd_relay_check
+
+    calls = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def _request(self, method, path, **kwargs):
+            calls.append((method, path, kwargs))
+            return {
+                "verdict": "not_entitled",
+                "effective": False,
+                "action_hint": "relay egress IP 1.2.3.4 is not in an institutional range",
+                "cli": {"human_lines": ["Relay check: not_entitled", "  hint: relay egress IP 1.2.3.4 ..."]},
+            }
+
+    monkeypatch.setattr("mdtero.cli.load_config", lambda: type("Cfg", (), {"is_authenticated": True})())
+    monkeypatch.setattr("mdtero.cli.MdteroClient", FakeClient)
+    args = build_parser().parse_args(["relay", "check", "--no-confirm-fulltext"])
+    assert cmd_relay_check(args) == 1
+    out = capsys.readouterr().out
+    assert "Relay check: not_entitled" in out and "1.2.3.4" in out
+    assert calls == [("POST", "/api/v1/relay/entitlement-check", {"json": {"confirm_fulltext": False}})]
+
+
+def test_relay_check_json_prints_raw_response(monkeypatch, capsys):
+    from mdtero.cli import cmd_relay_check
+
+    response = {"verdict": "full_text_ok", "effective": True, "cli": {"human_lines": ["ok"]}}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def _request(self, method, path, **kwargs):
+            return response
+
+    monkeypatch.setattr("mdtero.cli.load_config", lambda: type("Cfg", (), {"is_authenticated": True})())
+    monkeypatch.setattr("mdtero.cli.MdteroClient", FakeClient)
+    args = build_parser().parse_args(["relay", "check", "--json"])
+    assert cmd_relay_check(args) == 0
+    assert json.loads(capsys.readouterr().out) == response

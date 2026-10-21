@@ -1,34 +1,41 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mdtero-reader",
-  "version": "0.1.0",
-  "description": "Read, parse, and translate papers through the Mdtero account. The plugin connects to the public Mdtero MCP service and does not include the parser.",
+  "version": "0.1.1",
+  "description": "Read, parse, and translate papers through your Mdtero account. Connects to the public Mdtero MCP service; this package does not include the parser.",
   "author": {
     "name": "Mdtero",
     "url": "https://mdtero.com"
   },
-  "homepage": "https://mdtero.com/docs/install.html#chatgpt",
+  "homepage": "https://mdtero.com/docs/install#cloud-mcp-chatgpt-claude-cursor",
   "repository": "https://github.com/JonbinC/doi2md",
   "license": "MIT",
-  "keywords": ["research", "papers", "mcp"],
+  "keywords": ["research", "papers", "mcp", "literature", "pdf"],
   "extensions": {
     "com.openai": {
       "onboardingSkill": "./skills/setup/SKILL.md",
       "interface": {
-        "displayName": "Mdtero Reader",
-        "shortDescription": "Papers in ChatGPT, Claude, and Cursor, through your Mdtero account.",
-        "longDescription": "Connects to https://api.mdtero.com/mcp. Sign in with a Mdtero account. Elsevier keys stay on the settings page. Campus full text still needs the Relay helper on an authorized campus device.",
+        "displayName": "Mdtero",
+        "shortDescription": "Paper library and reader",
+        "longDescription": "Read, organize, parse, and translate papers in ChatGPT, Claude, and Cursor through https://api.mdtero.com/mcp. Sign in with your Mdtero account. Save Elsevier keys only at https://api.mdtero.com/mcp/settings. Institutional full text requires publisher authorization; Relay can use your authorized campus device. Setup guide: https://mdtero.com/docs/install",
         "developerName": "Mdtero",
-        "category": "Research",
+        "category": "Scientific Research",
         "capabilities": ["Read", "Write"],
         "websiteURL": "https://mdtero.com",
+        "supportURL": "https://github.com/JonbinC/doi2md/issues",
         "privacyPolicyURL": "https://mdtero.com/privacy",
         "termsOfServiceURL": "https://mdtero.com/terms",
         "defaultPrompt": [
           "Use Mdtero to find papers on this question, then open one in the reader.",
-          "Check my Mdtero setup, then parse this DOI once."
+          "Check my Mdtero setup, then parse this DOI once.",
+          "Check my Mdtero Elsevier key and campus Relay setup."
         ],
-        "brandColor": "#995939"
+        "brandColor": "#995939",
+        "brandColorDark": "#dca983",
+        "composerIcon": "./assets/brand-mark.svg",
+        "composerIconDark": "./assets/brand-mark.svg",
+        "logo": "./assets/brand-mark.svg",
+        "logoDark": "./assets/brand-mark.svg"
       }
     }
   }

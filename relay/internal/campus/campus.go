@@ -12,11 +12,13 @@ import (
 const checkURL = "https://ifconfig.co/json"
 
 type OutletSummary struct {
-	IP      string `json:"ip,omitempty"`
-	ASN     string `json:"asn,omitempty"`
-	ASNOrg  string `json:"asn_org,omitempty"`
-	City    string `json:"city,omitempty"`
-	Country string `json:"country,omitempty"`
+	IP string `json:"ip,omitempty"`
+	// EgressIP mirrors IP; the backend entitlement check reads outlet.egress_ip.
+	EgressIP string `json:"egress_ip,omitempty"`
+	ASN      string `json:"asn,omitempty"`
+	ASNOrg   string `json:"asn_org,omitempty"`
+	City     string `json:"city,omitempty"`
+	Country  string `json:"country,omitempty"`
 }
 
 type CheckResult struct {
@@ -50,6 +52,7 @@ func summarize(payload map[string]any) OutletSummary {
 	summary := OutletSummary{}
 	if v, ok := payload["ip"].(string); ok {
 		summary.IP = v
+		summary.EgressIP = v
 	}
 	if v, ok := payload["asn"].(string); ok {
 		summary.ASN = v
