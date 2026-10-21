@@ -154,3 +154,32 @@ def test_target_mismatch_skips(browser):
     r = zt.run_translator(page, "elsevier")
     page.close()
     assert "does not match" in r["error"]
+
+
+def test_real_browser_pdf_capture_after_handoff(browser, tmp_path):
+    """open_pdf_with_handoff in Chromium: challenge first, then the PDF once 'cleared'."""
+    from mdtero.connect import publisher_adapter as pa
+    pdf = b"%PDF-1.7\n" + b"1" * 30000 + b"\n%%EOF"
+    state = {"cleared": False}
+    challenge = (FX / "cloudflare_challenge.html").read_text()
+    ctx = browser.new_context(accept_downloads=True)
+    page = ctx.new_page()
+
+    def handler(route):
+        if route.request.url.endswith(".pdf") and state["cleared"]:
+            return route.fulfill(body=pdf, content_type="application/pdf")
+        return route.fulfill(status=403, body=challenge, content_type="text/html")
+    page.route("**/*", handler)
+    page.goto("https://pubs.acs.org/doi/10.1021/x")
+
+    def user_clears(kind):
+        state["cleared"] = True
+        try:
+            page.reload()  # headless Chromium turns a PDF navigation into a download
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+    url = "https://pubs.acs.org/joceah/article-pdf/90/37/12984/40754625/jo5c01432.pdf"
+    got = pa.open_pdf_with_handoff(page, url, user_clears, 10_000)
+    ctx.close()
+    assert got is not None and got[0] == pdf, got and got[2]

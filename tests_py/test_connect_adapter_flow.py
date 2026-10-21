@@ -29,10 +29,14 @@ class FakeRequest:
 
 
 class FakePage:
-    def __init__(self, pages, routes, final_url=None):
+    def __init__(self, pages, routes, final_url=None, inpage=None, nav=None):
         self.pages = list(pages)  # successive page.content() values
         self.url = ""
         self.final_url = final_url
+        self.inpage = inpage or {}  # url -> bytes returned by in-page fetch (or callable)
+        self.nav = nav or {}  # url -> list of (event, obj) emitted on goto
+        self.listeners = {}
+        self.evaluated = []
         self.context = type("C", (), {})()
         self.context.request = FakeRequest(routes)
         self.gotos, self.fronted = [], 0
@@ -40,7 +44,25 @@ class FakePage:
     def goto(self, url, **kw):
         self.gotos.append(url)
         self.url = self.final_url or url
+        for ev, obj in self.nav.get(url, []):
+            for fn in list(self.listeners.get(ev, [])):
+                fn(obj)
         return Resp(200)
+
+    def on(self, ev, fn):
+        self.listeners.setdefault(ev, []).append(fn)
+
+    def remove_listener(self, ev, fn):
+        self.listeners.get(ev, []).remove(fn)
+
+    def evaluate(self, js, arg=None):
+        import base64
+        if js == "document.contentType":
+            return "application/pdf" if pa.is_pdf_viewer(self.pages[0]) else "text/html"
+        self.evaluated.append(arg)
+        v = self.inpage.get(arg, b"")
+        v = v() if callable(v) else v
+        return {"status": 200, "b64": base64.b64encode(v).decode()}
 
     def wait_for_timeout(self, ms):
         pass
@@ -87,7 +109,7 @@ def test_aip_html_redirect_followed(tmp_path):
     }
     page = FakePage(["<html><body>abstract only</body></html>"], routes)
     r = pa.fetch_article(page, "10.1063/5.0275264", tmp_path, limiter(tmp_path), translator_runner=no_translator)
-    assert r.status == "pdf" and r.detail.endswith("1.pdf")
+    assert r.status == "pdf" and "1.pdf [request]" in r.detail
 
 
 def test_rsc_new_url_layout(tmp_path):
@@ -119,17 +141,97 @@ def test_challenge_timeout_reports_blocked(tmp_path):
     assert r.status == "challenge" and t[0] >= 10
 
 
-def test_pdf_challenge_shown_to_user_and_retried(tmp_path):
-    state = {"n": 0}
+VIEWER = '<html><body style="margin:0"><embed name="x" style="position:absolute" src="about:blank" type="application/pdf" internalid="x"></body></html>'
+ACS_PDF = "https://pubs.acs.org/joceah/article-pdf/90/37/12984/40754625/jo5c01432.pdf"
 
-    def pdf_route():
-        state["n"] += 1
-        return Resp(403, CHALLENGE.encode(), "text/html") if state["n"] == 1 else Resp(200, PDF, "application/pdf")
-    page = FakePage(["<html><body>abstract</body></html>"], {"https://www.tandfonline.com/doi/pdf/10.1080/x": pdf_route})
-    r = pa.fetch_article(page, "10.1080/x", tmp_path, limiter(tmp_path), translator_runner=no_translator,
-                         wait_for_user=lambda p, k: True)
-    assert r.status == "pdf" and r.handoffs == 1
-    assert "https://www.tandfonline.com/doi/pdf/10.1080/x" in page.gotos
+
+def test_pdf_viewer_is_not_a_challenge():
+    assert pa.is_pdf_viewer(VIEWER)
+    assert pa.detect_block(VIEWER, 200, ACS_PDF) is None
+    assert pa.detect_block(VIEWER + "<!-- cloudflare -->", 403, ACS_PDF) is None
+    modern = ('<!DOCTYPE html><html style="height:100%;width:100%"><!-- the placeholder in the body style is for an '
+              'optional background-color --><head></head><body style="background-color:rgb(40,40,40);"></body></html>')
+    assert pa.is_pdf_viewer(modern) and pa.detect_block(modern, 403) is None
+
+
+class PdfResp:
+    def __init__(self, url, body, ctype="application/pdf"):
+        self.url, self._b, self.headers = url, body, {"content-type": ctype}
+
+    def body(self):
+        return self._b
+
+
+def _acs_page(nav=None, inpage=None, after_clear=VIEWER):
+    # landing (abstract only), then PDF URL shows challenge, user clears -> viewer
+    page = FakePage(["<html><body>abstract</body></html>", "<html><body>abstract</body></html>", CHALLENGE, CHALLENGE, after_clear],
+                    {ACS_PDF: Resp(403, CHALLENGE.encode(), "text/html")}, nav=nav, inpage=inpage)
+    return page
+
+
+def _acs_item():
+    return {"items": [{"attachments": [{"url": ACS_PDF, "mimeType": "application/pdf", "title": "Full Text PDF"}]}]}
+
+
+def _clear(p, kind):
+    return pa.wait_for_clearance(p, kind, timeout_s=60, sleep=lambda s: None)
+
+
+def test_acs_pdf_captured_from_tab_response_after_user_clears(tmp_path):
+    page = _acs_page(nav={ACS_PDF: [("response", PdfResp(ACS_PDF, PDF))]})
+    page.pages = ["<html><body>abstract</body></html>", CHALLENGE, VIEWER]
+    calls = []
+    r = pa.fetch_article(page, "10.1021/acs.joc.5c01432", tmp_path, limiter(tmp_path),
+                         translator_runner=lambda p, k: _acs_item(), wait_for_user=lambda p, k: calls.append(k) or True)
+    assert r.status == "pdf" and r.size == len(PDF) and "tab response" in r.detail
+    assert Path(r.path).read_bytes()[:5] == b"%PDF-"
+
+
+def test_acs_pdf_viewer_then_in_page_fetch(tmp_path):
+    # The tab's PDF response body is unavailable (viewer load); fetch from inside the page.
+    state = {"cleared": False}
+
+    def inpage():
+        return PDF if state["cleared"] else CHALLENGE.encode()
+
+    def user(p, kind):
+        state["cleared"] = True
+        p.pages = [VIEWER]
+        return pa.wait_for_clearance(p, kind, timeout_s=60, sleep=lambda s: None)
+    page = _acs_page(inpage={ACS_PDF: inpage})
+    page.pages = ["<html><body>abstract</body></html>", CHALLENGE]
+    page.final_url = None
+    r = pa.fetch_article(page, "10.1021/acs.joc.5c01432", tmp_path, limiter(tmp_path),
+                         translator_runner=lambda p, k: _acs_item(), wait_for_user=user)
+    assert r.status == "pdf" and "in-page fetch" in r.detail and r.handoffs == 1
+
+
+def test_download_event_is_captured(tmp_path):
+    f = tmp_path / "dl.pdf"
+    f.write_bytes(PDF)
+    dl = type("D", (), {"url": ACS_PDF, "path": lambda self: str(f)})()
+    page = _acs_page(nav={ACS_PDF: [("download", dl)]})
+    r = pa.fetch_article(page, "10.1021/acs.joc.5c01432", tmp_path / "out", limiter(tmp_path),
+                         translator_runner=lambda p, k: _acs_item(), wait_for_user=lambda p, k: True)
+    assert r.status == "pdf" and "download" in r.detail
+
+
+def test_pdf_handoff_happens_at_most_once(tmp_path):
+    # User never clears; PDF stays challenged. Must not loop.
+    calls = []
+    page = FakePage(["<html><body>abstract</body></html>", CHALLENGE], {
+        ACS_PDF: Resp(403, CHALLENGE.encode(), "text/html"),
+        "https://pubs.acs.org/doi/pdf/10.1021/acs.joc.5c01432": Resp(403, CHALLENGE.encode(), "text/html")})
+    r = pa.fetch_article(page, "10.1021/acs.joc.5c01432", tmp_path, limiter(tmp_path),
+                         translator_runner=lambda p, k: _acs_item(), wait_for_user=lambda p, k: calls.append(k) or True)
+    assert r.status == "challenge" and len(calls) <= 2  # landing page (none here) + one PDF hand-off
+    assert page.gotos.count(ACS_PDF) == 1
+
+
+def test_in_page_fetch_skips_cross_origin(tmp_path):
+    page = FakePage(["<html></html>"], {}, inpage={"https://other.example/x.pdf": PDF})
+    page.url = "https://pubs.acs.org/doi/x"
+    assert pa.fetch_in_page(page, "https://other.example/x.pdf") == b""
 
 
 def test_no_handoff_when_disabled(tmp_path):

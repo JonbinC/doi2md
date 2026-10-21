@@ -321,8 +321,30 @@ LOGIN_MARKERS = (
 )
 
 
+def is_pdf_viewer(html: str, url: str = "") -> bool:
+    """True when the tab shows Chrome's built-in PDF viewer (i.e. a PDF loaded)."""
+    low = (html or "")[:20_000].lower()
+    if 'type="application/pdf"' in low and ("<embed" in low or "pdf-viewer" in low):
+        return True
+    if "the placeholder in the body style is for an optional background-color" in low:
+        return True  # Chrome >= ~120 PDF viewer (out-of-process, no <embed> in DOM)
+    return "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai" in low
+
+
+def page_shows_pdf(page) -> bool:
+    """True when the tab's current document is a PDF (built-in viewer)."""
+    try:
+        if page.evaluate("document.contentType") == "application/pdf":
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return is_pdf_viewer(safe_content(page, attempts=1), getattr(page, "url", ""))
+
+
 def detect_block(html: str, status: int = 200, url: str = "") -> Optional[str]:
     """'challenge' | 'login' | None. Detection only; never interacts."""
+    if is_pdf_viewer(html, url):
+        return None
     low = html.lower()
     if any(m in low for m in CHALLENGE_MARKERS) or ("cloudflare" in low and status in (403, 503)):
         return "challenge"
@@ -411,6 +433,8 @@ def wait_for_clearance(page, kind: str, *, timeout_s: float = 300.0, poll_s: flo
     deadline = clock() + timeout_s
     while clock() < deadline:
         sleep(poll_s)
+        if page_shows_pdf(page):
+            return True
         html = safe_content(page, attempts=1)
         if not html:
             continue
@@ -516,6 +540,14 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
     queue = pdf_candidates(doi, landing, html, tr_pdfs)
     seen: set[str] = set()
     followups = 0
+    pdf_handoffs = 0
+
+    def save(body: bytes, where: str, how: str) -> FetchResult:
+        p = out_dir / f"{stem}.pdf"
+        p.write_bytes(body)
+        res.status, res.path, res.size, res.detail = "pdf", str(p), len(body), f"{where} [{how}]"
+        return res
+
     while queue:
         cand = queue.pop(0)
         if cand in seen:
@@ -529,23 +561,25 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
             res.detail = f"{cand}: {type(exc).__name__}"
             continue
         if is_pdf(body):
-            p = out_dir / f"{stem}.pdf"
-            p.write_bytes(body)
-            res.status, res.path, res.size, res.detail = "pdf", str(p), len(body), final
-            return res
+            return save(body, final, "request")
         snippet = body[:400_000].decode("utf-8", "ignore")
         kind = detect_block(snippet, rstatus, final)
         res.detail = f"{cand}: http {rstatus} {ctype.split(';')[0]}"
         if kind == "challenge":
-            # Show the challenge in the visible window, let the user clear it, retry once.
-            try:
-                page.goto(cand, wait_until="domcontentloaded", timeout=goto_timeout_ms)
-            except Exception:  # noqa: BLE001 - a PDF navigation may "fail" as a download
-                pass
-            if handoff("challenge"):
-                seen.discard(cand)
-                queue.insert(0, cand)
-                continue
+            # The API request context does not share the browser's challenge
+            # clearance, so first try fetching from inside the page (same
+            # browser session the user cleared), then show the URL to the user.
+            body2 = fetch_in_page(page, cand)
+            if is_pdf(body2):
+                return save(body2, cand, "in-page fetch")
+            if pdf_handoffs >= 1:
+                res.status = "challenge"
+                res.detail += " (already handed off once for a PDF; not repeating)"
+                return res
+            pdf_handoffs += 1
+            got = open_pdf_with_handoff(page, cand, handoff, goto_timeout_ms)
+            if got is not None:
+                return save(got[0], got[1], got[2])
             res.status = "challenge"
             return res
         if "html" in ctype and followups < 4:
@@ -555,3 +589,100 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
     if block:
         res.status = block
     return res
+
+
+_FETCH_JS = """async (url) => {
+  const r = await fetch(url, {credentials: "include", redirect: "follow"});
+  const ct = r.headers.get("content-type") || "";
+  const buf = new Uint8Array(await r.arrayBuffer());
+  if (buf.length > 200 * 1024 * 1024) return {status: r.status, ct, b64: ""};
+  let s = ""; const n = 0x8000;
+  for (let i = 0; i < buf.length; i += n) s += String.fromCharCode.apply(null, buf.subarray(i, i + n));
+  return {status: r.status, ct, url: r.url, b64: btoa(s)};
+}"""
+
+
+def fetch_in_page(page, url: str) -> bytes:
+    """GET ``url`` with the page's own fetch (same cookies/session as the tab).
+
+    Only works same-origin (or CORS-permitted); failures return b"".
+    """
+    import base64  # noqa: PLC0415
+    try:
+        here, there = urlparse(page.url), urlparse(url)
+        if (here.scheme, here.hostname) != (there.scheme, there.hostname):
+            return b""
+        out = page.evaluate(_FETCH_JS, url)
+        return base64.b64decode(out.get("b64") or "")
+    except Exception:  # noqa: BLE001
+        return b""
+
+
+def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeout_ms: int):
+    """Navigate the visible tab to a PDF URL, hand a challenge to the user, capture the PDF.
+
+    Capture sources, in order: a PDF response seen on the tab (main-frame
+    navigation), a browser download, then an in-page fetch once the tab is on
+    the publisher origin with the cleared session. Returns (bytes, url, how)
+    or None. Hands off at most once.
+    """
+    seen_pdf: list = []
+    downloads: list = []
+
+    def on_response(resp):
+        try:
+            if "application/pdf" in (resp.headers.get("content-type") or "").lower():
+                seen_pdf.append(resp)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def captured():
+        for resp in reversed(seen_pdf):
+            try:
+                body = resp.body()
+            except Exception:  # noqa: BLE001 - body may be unavailable for viewer loads
+                continue
+            if is_pdf(body):
+                return body, resp.url, "tab response"
+        for dl in reversed(downloads):
+            try:
+                path = dl.path()
+                body = Path(path).read_bytes() if path else b""
+            except Exception:  # noqa: BLE001
+                continue
+            if is_pdf(body):
+                return body, dl.url, "download"
+        return None
+
+    def in_page():
+        target = page.url if ".pdf" in page.url.lower() or "pdf" in urlparse(page.url).path.lower() else url
+        target = re.sub(r"([?&])__cf_chl_[a-z_]+=[^&]*&?", r"\1", target).rstrip("?&")
+        body = fetch_in_page(page, target)
+        return (body, target, "in-page fetch") if is_pdf(body) else None
+
+    def on_download(dl):
+        downloads.append(dl)
+
+    page.on("response", on_response)
+    page.on("download", on_download)
+    try:
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        except Exception:  # noqa: BLE001 - PDF navigations may abort as downloads
+            pass
+        page.wait_for_timeout(1500)
+        got = captured()
+        if got:
+            return got
+        state = None if page_shows_pdf(page) else detect_block(safe_content(page), 200, page.url)
+        if state is not None and not handoff(state):
+            return captured()
+        # cleared (or never blocked): give the viewer a moment to finish loading
+        page.wait_for_timeout(2000)
+        return captured() or in_page()
+    finally:
+        for ev, fn in (("response", on_response), ("download", on_download)):
+            try:
+                page.remove_listener(ev, fn)
+            except Exception:  # noqa: BLE001
+                pass
