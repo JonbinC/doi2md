@@ -41,7 +41,7 @@ def cmd_connect(args: argparse.Namespace) -> int:
             "mode": "full" if args.full else "library",
             "action_hint": "Open the URL in a local browser. Stop with Ctrl+C.",
         }
-        print(json.dumps(payload, ensure_ascii=False))
+        print(json.dumps(payload, ensure_ascii=False), flush=True)
         try:
             import threading
 

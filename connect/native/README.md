@@ -1,6 +1,12 @@
 # Native Connect shell
 
-**Status: native packaging is not shipped.** This branch provides a Python loopback client, with an optional local Pi SDK runtime. No signed/notarized macOS, Windows or Linux Connect installer is available from this work.
+**Status: native debug builds, not a signed release.** The Tauri 2 shell starts the bundled Python loopback bridge, restricts its window to that bridge, and stops its managed processes on exit. macOS Apple Silicon, macOS Intel and Windows x64 target the full edition with bundled Node/Pi. Linux retains the basic CLI/browser client; a Linux native build is a development smoke target.
+
+See [debug downloads and per-computer acceptance](DEBUGGING.md), [build instructions](BUILDING.md) and the [build matrix](support-matrix.json). The workflow uploads expiring Actions artifacts, without publishing a GitHub Release or changing the website support matrix. Per-OS human acceptance remains pending.
+
+The native **Connect** menu opens account login in the system browser, cancels login, reconnects the bridge and opens the export folder (`Downloads/Mdtero Connect`). Successful login restarts the bridge; this clears session BYOK and cancels active Pi requests. Account login reuses the existing CLI callback/state and account-storage contract. Separate provider BYOK may use a supported OS credential service.
+
+Go Relay is included in the native runtime but is **not started by the shell** in this slice. Relay start/stop/restart supervision is still open. There is no remote Tauri IPC, runtime dependency installation or automatic updater.
 
 ## Run the current sources
 
@@ -26,11 +32,11 @@ The Pi child is supervised, cancellable and limited to one approved metadata-onl
 
 ## Native acceptance still required
 
-- Tauri 2 shell and loopback/WebView lifecycle integration.
+- macOS/Windows real-machine window, download, OAuth and lifecycle acceptance. Linux WebKit smoke does not certify them.
 - Reuse the Go Relay in `relay/` as a supervised sidecar, with start/stop/restart and upgrade evidence.
-- Node/Pi dependency delivery and update integrity; no runtime npm installation triggered by page loads.
+- Node/Pi delivery on clean machines and update integrity. Builds bundle locked dependencies; page loads never run npm.
 - Credential-store behavior on each supported OS, including locked/unavailable stores, key removal and uninstall policy.
 - Code signing/notarization, checksums and verified website release manifests.
 - Per-OS installation, upgrade, cancellation, shutdown and uninstall evidence.
 
-Nextmdtero website entry, CARSI school/publisher access, complete Zotero checkpoint sync, local MinerU/Voyage execution, full-text Pi evidence and financial hard caps also remain open. Do not advertise a downloadable desktop edition or native support matrix until its artifacts and acceptance evidence exist. Keep PR #10 Draft.
+Nextmdtero website entry, CARSI school/publisher access, complete Zotero checkpoint sync, local MinerU/Voyage execution, full-text Pi evidence and financial hard caps also remain open. Do not advertise a signed desktop edition or accepted native support matrix. Keep PR #10 Draft.

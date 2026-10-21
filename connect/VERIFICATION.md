@@ -104,7 +104,7 @@ The implementation uses pinned `@earendil-works/pi-coding-agent@1.3.0`. Pi is th
 | Area | Still required |
 |---|---|
 | Website/Dashboard | Connect entry, startup guidance/deep links and verified release manifest in Nextmdtero |
-| Native runtime | Tauri shell, supervised Relay sidecar, native dependency delivery, supported-OS credential acceptance, signing/notarization and installation/uninstall evidence |
+| Native runtime | Mac/Windows debug builds and human acceptance; supervised Relay controls, supported-OS credentials, signing/notarization and installation/uninstall evidence. Tauri shell and bundled dependency preparation now exist; Relay is not auto-started. |
 | Zotero | Pagination, stable source/account checkpoints, dedupe, deletion sync and desktop-version acceptance |
 | CARSI/access | Visible local login, passwords/Cookies kept on-device, school/publisher article evidence; online Relay is insufficient |
 | MinerU/Voyage BYOK | Actual local adapters or explicit backend per-user credentials/consumption contracts; saved local keys do not change cloud jobs |
@@ -113,7 +113,34 @@ The implementation uses pinned `@earendil-works/pi-coding-agent@1.3.0`. Pi is th
 | Product integration | Backend MCP Reader embedding and website/client/Reader workflows |
 | Release | Keep Draft; merge, publication and website support claims require explicit authorization and relevant acceptance evidence |
 
-## Current iteration results
+## Native debug iteration
+
+The native shell reuses the same loopback API and backend #43. Mac Apple Silicon, Mac Intel and Windows x64 target full debug artifacts; Linux remains basic first. See [native build instructions](native/BUILDING.md), [artifact/acceptance instructions](native/DEBUGGING.md) and [the machine-readable build matrix](native/support-matrix.json). No release, merge or website support claim is made.
+
+| Command/check | Result | Exit code |
+|---|---|---|
+| `uv sync --frozen --extra connect-full` | Completed | 0 |
+| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 202 passed, 1 Windows kernel integration test skipped on Linux | 0 |
+| `uv run --extra connect-full pytest tests_py/test_cli_contract.py -k login -q` | 14 passed | 0 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 28 passed, including mobile navigation title visibility | 0 |
+| `npm --prefix connect/agent test` | 14 passed, pinned SDK with synthetic transport | 0 |
+| `node --test connect/design/policy.test.cjs` | 26 passed, offline policy only | 0 |
+| `node --check connect/app/api.js` and `node --check connect/app/app.js` | Passed | 0 |
+| `uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target aarch64-unknown-linux-gnu --edition basic` | Real frozen UI/CSP/session and shutdown smoke | 0 |
+| Same preparation with `--edition full` | Also checked bundled Node 22.23.1 / Pi 1.3.0 dependencies | 0 |
+| `cargo test --locked --manifest-path connect/native/src-tauri/Cargo.toml --lib` | 4 navigation, handshake and export-path policy tests | 0 |
+| `npm --prefix connect/native run build -- --debug --no-bundle -- --locked` | Actual Linux aarch64 Tauri CLI build | 0 |
+| Native binary `--smoke-test` under Xvfb | Real WebKit loaded loopback UI; exit released bridge port | 0 |
+| `cargo fmt --manifest-path connect/native/src-tauri/Cargo.toml -- --check` | Passed | 0 |
+| `uv run --extra connect-full python scripts/ci/secret_guard.py` after adding new sources to Git index | Passed | 0 |
+| `git diff --check` | Passed | 0 |
+| Isolated full `python -m pytest tests_py -q` with source overlay and Git index | 605 passed, 2 skipped (adjacent website absent; Windows-only kernel test) | 0 |
+
+The isolated full-suite snapshot preceded the final prepare-script cleanup regression, login-help text and Windows no-console flags. Those changes were checked by the final focused Connect suite above. The pre-existing adjacent-site manifest mismatch remains as recorded below; no install manifest was changed.
+
+These are Linux build and synthetic-service results. No current real paid AI, MinerU or Voyage request was made. They do not establish Mac/Windows installation, OS credential prompts, real account browser login, Zotero/CARSI depth or signed distribution. The native workflow must produce artifacts for the exact reviewed commit; every platform's human acceptance remains pending.
+
+## Previous BYOK/Pi iteration: 77bd331
 
 | Command/check | Result | Exit code |
 |---|---|---|

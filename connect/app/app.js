@@ -28,7 +28,7 @@
     (state.notice ? '<div class="status ok" role="status">' + esc(state.notice) + "</div>" : "") +
     (state.busy ? '<p class="hint" role="status">正在核验，请稍候…</p>' : "");
   const accountStatus = () => state.libraryVerified ? "文献库已核验" : configured() ? "已检测到本机 Key，文献接口未核验" : "未检测到本机 API Key";
-  const setupHint = '<p class="hint">在终端运行 <code>mdtero login</code> 或 <code>mdtero setup</code>。配置后重启 <code>mdtero connect</code>，再打开新地址。Mdtero 账户 Key 仍由 CLI 保管，BYOK 服务 Key 单独设置。</p>';
+  const setupHint = '<p class="hint">桌面调试版：从窗口的 <strong>Connect → 登录 Mdtero 账户…</strong> 打开系统浏览器。登录成功后自动重新连接；会清除本次运行的 BYOK 并取消研究请求。</p><p class="hint">命令行启动：在终端运行 <code>mdtero login</code> 或 <code>mdtero setup</code>，再重启 <code>mdtero connect</code> 并打开新地址。账户使用本机 CLI 配置，BYOK 服务 Key 单独设置。</p>';
   const providerNames = { openalex: "OpenAlex · 学术检索", mineru: "MinerU · PDF 解析", voyage: "Voyage · 向量与重排", anthropic: "Anthropic · AI", openai: "OpenAI · AI", google: "Google · AI", openrouter: "OpenRouter · AI" };
   const agentActive = () => ["running", "starting", "pending"].includes(state.agentRun?.status);
   const agentLabel = () => !state.agent?.enabled ? "文献整理模式，Pi 未开启" : state.agent.ready ? "Pi 研究模式已就绪（模型凭据未远程核验）" : "完整版已开启，Pi 尚未就绪";
@@ -282,7 +282,8 @@
     state.error = "";
     state.notice = "";
     draw();
-    $("screen").focus();
+    $("screen").focus({ preventScroll: true });
+    window.scrollTo(0, 0);
     if (view === "connections") refreshConnections();
     if (["settings", "research"].includes(view)) withBusy(loadResearchSettings);
   }

@@ -1,6 +1,6 @@
 # Mdtero Connect — source handoff (2026-10-21)
 
-> **Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10) — not a signed desktop release.** Continue on `handoff/connect-research-client-20261021`. The runnable client is the loopback UI and Python bridge, with an optional local Pi runtime in full mode. Native packaging, website integration and institutional access acceptance remain separate work.
+> **Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10) — not a signed desktop release.** Continue on `handoff/connect-research-client-20261021`. The runnable client is the loopback UI and Python bridge, with an optional local Pi runtime in full mode. A Tauri debug shell and Mac/Windows artifact workflow now wrap this same client; see [native debugging](native/DEBUGGING.md). Website integration, native human acceptance and institutional access acceptance remain separate work.
 
 ## Repository boundaries
 
@@ -91,7 +91,7 @@ The browser fixture replaces upstream account/Relay/Zotero/provider services. No
 ## Remaining work
 
 1. Nextmdtero website/Dashboard Connect entry, launch guidance/deep links and an eventual verified release manifest.
-2. Tauri 2 shell, supervised Relay sidecar, reliable credential integration across supported operating systems, signed/notarized installers and install/upgrade/uninstall evidence.
+2. macOS/Windows Tauri debug artifacts and human acceptance; supervised Relay controls, reliable credential integration across supported operating systems, signed/notarized installers and install/upgrade/uninstall evidence. The shell and bundled Python/Node/Pi build inputs now exist; Relay is bundled but not started.
 3. Zotero pagination, stable source/account checkpoints, dedupe, deletion synchronization and real desktop/version acceptance.
 4. Visible local CARSI login, passwords/Cookies kept on-device, and school-by-publisher full-text acceptance.
 5. Pi full-text evidence/tools, production model-provider acceptance, financial hard caps, OS sandboxing and durable run history. Pi is the selected Agent implementation; no OpenCode runtime ships here.

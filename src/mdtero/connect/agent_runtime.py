@@ -55,6 +55,7 @@ class AgentRuntime:
         providers: Any,
         library: Any,
         runtime_dir: Path | None = None,
+        node_executable: Path | None = None,
         timeout_seconds: float = 90,
         approval_ttl_seconds: float = 300,
     ) -> None:
@@ -62,6 +63,9 @@ class AgentRuntime:
         self.providers = providers
         self.library = library
         self.runtime_dir = Path(runtime_dir or agent_runtime_dir()).resolve()
+        # Native bundles supply their own absolute Node path. A missing bundled
+        # runtime must never silently execute an unrelated program from PATH.
+        self.node_executable = Path(node_executable) if node_executable is not None else None
         self.timeout_seconds = min(max(float(timeout_seconds), 0.05), 90)
         self.approval_ttl_seconds = min(max(float(approval_ttl_seconds), 0.01), 300)
         self._lock = threading.RLock()
@@ -86,13 +90,14 @@ class AgentRuntime:
         """Read-only Node/SDK/catalog probe. Never runs in the basic edition."""
         if self._dependencies is not None and time.monotonic() - self._dependencies_checked_at < 10:
             return copy.deepcopy(self._dependencies)
-        node = shutil.which("node")
+        node = self._node_path()
         info: dict[str, Any] = {"available": False, "node_version": None, "sdk_version": None, "models": {}}
         if not node:
             info["reason_code"] = "agent_node_missing"
             return info
         try:
-            version = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=5, env=self._safe_env(), check=False)
+            version = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=5, env=self._safe_env(), check=False,
+                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)\s*", version.stdout)
             if not match or version.returncode:
                 info["reason_code"] = "agent_node_unavailable"
@@ -108,6 +113,7 @@ class AgentRuntime:
                 checked = subprocess.run(
                     [node, str(self.runtime_dir / "worker.mjs"), "--check"],
                     capture_output=True, text=True, timeout=15, cwd=cwd, env=self._safe_env(), check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
             if checked.returncode or len(checked.stdout.encode("utf-8")) > 1024 * 1024:
                 info["reason_code"] = "agent_sdk_missing"
@@ -122,6 +128,14 @@ class AgentRuntime:
         self._dependencies = info
         self._dependencies_checked_at = time.monotonic()
         return copy.deepcopy(info)
+
+    def _node_path(self) -> str | None:
+        if self.node_executable is None:
+            return shutil.which("node")
+        path = self.node_executable
+        if not path.is_absolute() or not path.is_file():
+            return None
+        return str(path.resolve())
 
     def _configured(self) -> list[dict[str, Any]]:
         result = []
@@ -294,19 +308,22 @@ class AgentRuntime:
                 self._active_run = None
 
     def _execute_worker(self, payload: dict[str, Any], cancel_event: threading.Event, run_id: str) -> dict[str, Any]:
-        node = shutil.which("node")
+        node = self._node_path()
         if not node:
             raise AgentError("agent_node_missing", "Pi needs Node.js 22.19 or newer.")
         with tempfile.TemporaryDirectory(prefix="mdtero-pi-run-") as cwd:
-            process = subprocess.Popen(
-                [node, str(self.runtime_dir / "worker.mjs")], stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-                cwd=cwd, env=self._safe_env(), encoding="utf-8",
-            )
             with self._lock:
+                # Serialize spawn/registration with close(): shutdown must see
+                # every child, and cannot permit a new child after its snapshot.
+                if self._closed or cancel_event.is_set():
+                    raise AgentError("agent_cancelled", "Research was cancelled.")
+                process = subprocess.Popen(
+                    [node, str(self.runtime_dir / "worker.mjs")], stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                    cwd=cwd, env=self._safe_env(), encoding="utf-8",
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
                 self._processes[run_id] = process
-                if cancel_event.is_set():
-                    process.terminate()
             try:
                 stdout, _ = process.communicate(json.dumps(payload, ensure_ascii=False), timeout=self.timeout_seconds)
             except subprocess.TimeoutExpired:
@@ -386,7 +403,21 @@ class AgentRuntime:
 
     def close(self) -> None:
         with self._lock:
+            processes = list(self._processes.values())
             if self._active_run and not self._closed:
                 self.cancel(self._active_run)
             self._approvals.clear()
             self._closed = True
+        # A native parent can exit immediately after bridge.stop(). Do not rely
+        # on a daemon timer surviving long enough to reap a stubborn Pi child.
+        for process in processes:
+            try:
+                process.wait(timeout=1.2)
+            except subprocess.TimeoutExpired:
+                self._kill_if_running(process)
+                try:
+                    process.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            except OSError:
+                pass

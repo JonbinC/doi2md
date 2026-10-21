@@ -574,3 +574,16 @@ test('reloading the page recovers a running Pi request and still allows cancella
   expect((await snapshot(request)).agent_calls).toHaveLength(1);
   await expect(page.locator('#agent-result')).not.toContainText('Synthetic metadata summary');
 });
+
+test('mobile navigation brings the research heading below the sticky navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await openLibrary(page);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.locator('[data-view="research"]').click();
+  await expect(page.locator('#screen')).toHaveAttribute('aria-busy', 'false');
+  const heading = await page.locator('#screen h1').boundingBox();
+  const navigation = await page.locator('.sidebar').boundingBox();
+  expect(heading.y).toBeGreaterThanOrEqual(navigation.y + navigation.height);
+  expect(heading.y + heading.height).toBeLessThanOrEqual(900);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
