@@ -91,7 +91,7 @@ The browser fixture replaces upstream account/Relay/Zotero/provider services. No
 ## Remaining work
 
 1. Nextmdtero website/Dashboard Connect entry, launch guidance/deep links and an eventual verified release manifest.
-2. macOS/Windows Tauri debug artifacts and human acceptance; supervised Relay controls, reliable credential integration across supported operating systems, signed/notarized installers and install/upgrade/uninstall evidence. The shell and bundled Python/Node/Pi build inputs now exist; Relay is bundled but not started.
+2. macOS/Windows Tauri debug artifacts and human acceptance; supported-OS Relay lifecycle/upgrade, credentials, signed/notarized installers and install/upgrade/uninstall evidence. Shell, bundled Python/Node/Pi and explicitly approved HTTP-only Relay controls now exist. The client Relay precheck is not an atomic cross-computer lease.
 3. Zotero pagination, stable source/account checkpoints, dedupe, deletion synchronization and real desktop/version acceptance.
 4. Visible local CARSI login, passwords/Cookies kept on-device, and school-by-publisher full-text acceptance.
 5. Pi full-text evidence/tools, production model-provider acceptance, financial hard caps, OS sandboxing and durable run history. Pi is the selected Agent implementation; no OpenCode runtime ships here.

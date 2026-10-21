@@ -368,7 +368,7 @@ test('BYOK rejects OS persistence when the operating system credential store is 
   expect((await snapshot(request)).calls).toEqual([]);
 });
 
-test('provider writes and research execution keep bridge CSRF and Origin protection', async ({ request }) => {
+test('provider, research and Relay writes keep bridge CSRF and Origin protection', async ({ request }) => {
   for (const [path, data] of [
     ['providers/key', { provider: 'openai', key: 'synthetic-rejected-key', storage: 'session' }],
     ['providers/clear', { provider: 'openai' }],
@@ -376,6 +376,9 @@ test('provider writes and research execution keep bridge CSRF and Origin protect
     ['agent/prepare', { document_ids: [11], prompt: 'Summarize', provider: 'openai', model: 'gpt-4.1-mini', max_output_tokens: 256 }],
     ['agent/runs', { approval_id: 'synthetic-unapproved' }],
     ['agent/runs/synthetic-run/cancel', {}],
+    ['relay/start', { allow_campus_transport: true }],
+    ['relay/stop', {}],
+    ['relay/restart', { allow_campus_transport: true }],
   ]) {
     const response = await request.post(`/connect/v1/${path}`, { headers: { Origin: ORIGIN }, data });
     expect(response.status(), path).toBe(403);
@@ -586,4 +589,95 @@ test('mobile navigation brings the research heading below the sticky navigation'
   expect(heading.y).toBeGreaterThanOrEqual(navigation.y + navigation.height);
   expect(heading.y + heading.height).toBeLessThanOrEqual(900);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('the basic client shows unavailable managed Relay controls without starting a transport', async ({ page, request }) => {
+  await page.goto('/');
+  await page.locator('[data-view="connections"]').click();
+  await expect(page.locator('#relay-runtime-panel')).toContainText('This synthetic basic client has no bundled Relay runtime.');
+  await expect(page.locator('#relay-consent')).toBeDisabled();
+  for (const operation of ['start', 'stop', 'restart']) await expect(action(page, `relay-${operation}`)).toBeDisabled();
+  const runtime = await (await request.get('/connect/v1/relay/runtime')).json();
+  expect(runtime).toMatchObject({ available: false, running: false, auto_start: false, browser_enabled: false });
+  expect((await snapshot(request)).relay_runtime_calls).toEqual([]);
+});
+
+test('managed Relay start and restart require explicit current-page campus transport permission', async ({ page, request }) => {
+  await reset(request, { relay_runtime_available: true });
+  await page.goto('/');
+  await page.locator('[data-view="connections"]').click();
+  await expect(page.locator('#relay-consent')).not.toBeChecked();
+  await expect(action(page, 'relay-start')).toBeDisabled();
+  await expect(action(page, 'relay-restart')).toBeDisabled();
+  expect((await snapshot(request)).relay_runtime_calls).toEqual([]);
+  await page.locator('#relay-consent').check();
+  await expect(action(page, 'relay-start')).toBeEnabled();
+  const start = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/start'));
+  await action(page, 'relay-start').click();
+  expect((await start).request().postDataJSON()).toEqual({ allow_campus_transport: true });
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：运行中');
+  await expect(action(page, 'relay-start')).toBeDisabled();
+  await expect(action(page, 'relay-stop')).toBeEnabled();
+  await page.locator('#relay-consent').uncheck();
+  await expect(action(page, 'relay-restart')).toBeDisabled();
+  await page.locator('#relay-consent').check();
+  await expect(action(page, 'relay-restart')).toBeEnabled();
+  const restart = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/restart'));
+  await action(page, 'relay-restart').click();
+  expect((await restart).request().postDataJSON()).toEqual({ allow_campus_transport: true });
+  await expect.poll(async () => (await snapshot(request)).relay_runtime_calls).toEqual([
+    { operation: 'start', allow_campus_transport: true }, { operation: 'restart', allow_campus_transport: true },
+  ]);
+  await expect(page.locator('#screen')).toContainText('Relay 在线 ≠ 全文可读');
+});
+
+test('refresh restores a managed Relay process while consent stays unchecked and stop remains available', async ({ page, request }) => {
+  await reset(request, { relay_runtime_available: true });
+  const start = await mutation(request, 'relay/start', { allow_campus_transport: true });
+  expect(start.ok()).toBeTruthy();
+  await page.goto('/');
+  await page.locator('[data-view="connections"]').click();
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：运行中');
+  await page.locator('#relay-consent').check();
+  await page.reload();
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：运行中');
+  await expect(page.locator('#relay-consent')).not.toBeChecked();
+  await expect(action(page, 'relay-start')).toBeDisabled();
+  await expect(action(page, 'relay-restart')).toBeDisabled();
+  await expect(action(page, 'relay-stop')).toBeEnabled();
+  const session = await (await request.get('/connect/v1/session')).json();
+  expect(session.relay_runtime).toMatchObject({ available: true, running: true });
+  expect(JSON.stringify(session.relay_runtime)).not.toContain('synthetic-browser-fixture-not-a-credential');
+  const stopped = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/stop'));
+  await action(page, 'relay-stop').click();
+  expect((await stopped).ok()).toBeTruthy();
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：未运行');
+  expect((await snapshot(request)).relay_runtime_calls).toEqual([
+    { operation: 'start', allow_campus_transport: true }, { operation: 'stop' },
+  ]);
+});
+
+test('Relay API rejects absent, false and string campus permission before reaching the process boundary', async ({ request }) => {
+  await reset(request, { relay_runtime_available: true });
+  for (const operation of ['start', 'restart']) {
+    for (const payload of [{}, { allow_campus_transport: false }, { allow_campus_transport: 'true' }]) {
+      const response = await mutation(request, `relay/${operation}`, payload);
+      expect(response.ok()).toBe(false);
+      expect(response.status()).toBe(400);
+    }
+  }
+  expect((await snapshot(request)).relay_runtime_calls).toEqual([]);
+  const stop = await mutation(request, 'relay/stop', {});
+  expect(stop.ok()).toBeTruthy();
+  expect(await stop.json()).toMatchObject({ available: true, running: false });
+});
+
+test('an available bundled Relay still requires a local Mdtero account before UI startup', async ({ page, request }) => {
+  await reset(request, { authenticated: false, relay_runtime_available: true });
+  await page.goto('/');
+  await page.locator('[data-view="connections"]').click();
+  await page.locator('#relay-consent').check();
+  await expect(action(page, 'relay-start')).toBeDisabled();
+  await expect(action(page, 'relay-restart')).toBeDisabled();
+  expect((await snapshot(request)).relay_runtime_calls).toEqual([]);
 });

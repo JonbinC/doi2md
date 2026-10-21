@@ -52,6 +52,7 @@
   ],
   "shared_capabilities": {
     "account_login": "existing-system-browser-flow-native-acceptance-pending",
+    "relay": "explicitly-approved-owned-http-child-with-cloud-precheck-no-atomic-lease",
     "library_tags_exports": "existing-backend-43",
     "openalex": "local-byok-search",
     "mineru": "credential-storage-only",

@@ -7,7 +7,7 @@
     view: views.includes(location.hash.slice(1)) ? location.hash.slice(1) : "start",
     step: 1, session: null, libraryVerified: false, libraryError: "",
     papers: [], tags: [], selected: [], query: "", tag: "", tagDraft: "", tagPreview: null,
-    busy: false, notice: "", error: "", relay: null, zotero: null, agent: null,
+    busy: false, notice: "", error: "", relay: null, relayRuntime: null, relayConsent: false, zotero: null, agent: null,
     collections: [], collectionKey: "", zoteroDetail: "", entitlement: null,
     providers: null, providerId: "openalex", providerStorage: "session",
     agentPrompt: "", agentProvider: "anthropic", agentModel: "", agentMaxTokens: 800,
@@ -28,7 +28,7 @@
     (state.notice ? '<div class="status ok" role="status">' + esc(state.notice) + "</div>" : "") +
     (state.busy ? '<p class="hint" role="status">正在核验，请稍候…</p>' : "");
   const accountStatus = () => state.libraryVerified ? "文献库已核验" : configured() ? "已检测到本机 Key，文献接口未核验" : "未检测到本机 API Key";
-  const setupHint = '<p class="hint">桌面调试版：从窗口的 <strong>Connect → 登录 Mdtero 账户…</strong> 打开系统浏览器。登录成功后自动重新连接；会清除本次运行的 BYOK 并取消研究请求。</p><p class="hint">命令行启动：在终端运行 <code>mdtero login</code> 或 <code>mdtero setup</code>，再重启 <code>mdtero connect</code> 并打开新地址。账户使用本机 CLI 配置，BYOK 服务 Key 单独设置。</p>';
+  const setupHint = '<p class="hint">桌面调试版：从窗口的 <strong>Connect → 登录 Mdtero 账户…</strong> 打开系统浏览器。登录成功后自动重新连接；会清除本次运行的 BYOK、取消研究请求并停止本客户端的 Relay。</p><p class="hint">命令行启动：在终端运行 <code>mdtero login</code> 或 <code>mdtero setup</code>，再重启 <code>mdtero connect</code> 并打开新地址。账户使用本机 CLI 配置，BYOK 服务 Key 单独设置。</p>';
   const providerNames = { openalex: "OpenAlex · 学术检索", mineru: "MinerU · PDF 解析", voyage: "Voyage · 向量与重排", anthropic: "Anthropic · AI", openai: "OpenAI · AI", google: "Google · AI", openrouter: "OpenRouter · AI" };
   const agentActive = () => ["running", "starting", "pending"].includes(state.agentRun?.status);
   const agentLabel = () => !state.agent?.enabled ? "文献整理模式，Pi 未开启" : state.agent.ready ? "Pi 研究模式已就绪（模型凭据未远程核验）" : "完整版已开启，Pi 尚未就绪";
@@ -109,8 +109,15 @@
 
   function connectionCards() {
     const relay = state.relay;
+    const runtime = state.relayRuntime || state.session?.relay_runtime;
     const zotero = state.zotero;
     return '<div class="grid"><article class="card"><h2>校园 Relay</h2>' +
+      '<div id="relay-runtime-panel">' + status(runtime?.running ? "本客户端管理的 Relay：运行中" : "本客户端管理的 Relay：未运行", !!runtime?.running) +
+      '<p class="hint">' + esc(runtime?.action_hint || "桌面调试版内置 Relay；命令行模式目前仅提供诊断。") + '</p>' +
+      '<label class="hint"><input id="relay-consent" type="checkbox"' + (state.relayConsent ? " checked" : "") + (state.busy || !runtime?.available ? " disabled" : "") + '> 允许通过这台电脑的网络出口传输 Mdtero 文献请求</label>' +
+      '<div class="actions">' + b("启动本机 Relay", "relay-start", "primary", !runtime?.available || !!runtime?.running || !state.relayConsent || !configured()) +
+      b("停止本机 Relay", "relay-stop", "tool", !runtime?.running) + b("重启本机 Relay", "relay-restart", "tool", !runtime?.available || !runtime?.running || !state.relayConsent || !configured()) + '</div>' +
+      '<p class="hint">只管理此客户端启动的进程，关闭客户端时停止；不安装后台服务，账户已有 Relay 在线时不会再启动。此模式不启动机构浏览器；进程运行不代表云端在线或全文可读。</p></div>' +
       status(relay ? (relay.transport_online ? "Relay 传输在线" : "Relay 传输离线") : "Relay 尚未检测", !!relay?.transport_online) +
       status(relay ? (relay.browser_ready ? "本机授权浏览器就绪" : "本机浏览器未就绪") : "浏览器状态尚未检测", !!relay?.browser_ready) +
       '<p class="hint">' + esc(relay?.cloud_status?.action_hint || relay?.notes?.[0] || "传输在线不代表全文可读。") + "</p>" +
@@ -267,9 +274,10 @@
       state.relay = null;
       state.zotero = null;
       state.entitlement = null;
-      const results = await Promise.allSettled([api.relayDiagnostics(), api.zoteroStatus()]);
+      const results = await Promise.allSettled([api.relayDiagnostics(), api.zoteroStatus(), api.relayRuntime()]);
       if (results[0].status === "fulfilled") state.relay = results[0].value;
       if (results[1].status === "fulfilled") state.zotero = results[1].value;
+      if (results[2].status === "fulfilled") state.relayRuntime = results[2].value;
       const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
       if (errors.length) throw new Error("部分连接未能核验：" + errors.join("；"));
     });
@@ -348,6 +356,15 @@
     if (/^step-[123]$/.test(action)) { state.step = Number(action.slice(5)); draw(); return; }
     if (action === "refresh") { refreshAll(); return; }
     if (action === "connections-refresh") { refreshConnections(); return; }
+    if (["relay-start", "relay-stop", "relay-restart"].includes(action)) {
+      withBusy(async () => {
+        const operation = action.slice(6);
+        state.relayRuntime = await api.controlRelay(operation, state.relayConsent);
+        if (operation === "stop") state.relayConsent = false;
+        state.notice = operation === "stop" ? "本客户端启动的 Relay 已停止。" : "已请求启动本机 Relay；请刷新诊断核验云端传输状态。";
+      });
+      return;
+    }
     if (action === "providers-refresh") { withBusy(loadResearchSettings); return; }
     if (action === "provider-save") {
       // Capture once, then remove the password from the DOM before any redraw.
@@ -416,7 +433,11 @@
     }
     if (action === "agent-run-refresh") { pollAgentRun(); return; }
     if (action === "relay-refresh") {
-      withBusy(async () => { state.relay = null; state.entitlement = null; state.relay = await api.relayDiagnostics(); });
+      withBusy(async () => {
+        state.relay = null; state.entitlement = null;
+        state.relayRuntime = await api.relayRuntime();
+        state.relay = await api.relayDiagnostics();
+      });
       return;
     }
     if (action === "relay-entitlement") {
@@ -491,6 +512,7 @@
   document.addEventListener("change", (ev) => {
     const el = ev.target;
     if (state.busy) return;
+    if (el.id === "relay-consent") { state.relayConsent = el.checked; draw(); return; }
     if (el.id === "zotero-collection") { state.collectionKey = el.value; state.zoteroDetail = ""; draw(); return; }
     if (el.id === "provider-id") { state.providerId = el.value; draw(); return; }
     if (el.id === "provider-storage") { state.providerStorage = el.value; return; }

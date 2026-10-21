@@ -104,7 +104,7 @@ The implementation uses pinned `@earendil-works/pi-coding-agent@1.3.0`. Pi is th
 | Area | Still required |
 |---|---|
 | Website/Dashboard | Connect entry, startup guidance/deep links and verified release manifest in Nextmdtero |
-| Native runtime | Mac/Windows debug builds and human acceptance; supervised Relay controls, supported-OS credentials, signing/notarization and installation/uninstall evidence. Tauri shell and bundled dependency preparation now exist; Relay is not auto-started. |
+| Native runtime | Mac/Windows debug builds and human acceptance; supported-OS Relay lifecycle, credentials, signing/notarization and installation/uninstall evidence. Tauri shell, bundled dependencies and explicit HTTP-only Relay controls now exist. |
 | Zotero | Pagination, stable source/account checkpoints, dedupe, deletion sync and desktop-version acceptance |
 | CARSI/access | Visible local login, passwords/Cookies kept on-device, school/publisher article evidence; online Relay is insufficient |
 | MinerU/Voyage BYOK | Actual local adapters or explicit backend per-user credentials/consumption contracts; saved local keys do not change cloud jobs |
@@ -120,9 +120,9 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 | Command/check | Result | Exit code |
 |---|---|---|
 | `uv sync --frozen --extra connect-full` | Completed | 0 |
-| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 210 passed, 1 Windows kernel integration test skipped on Linux | 0 |
+| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 255 passed, 2 Windows kernel integration tests skipped on Linux | 0 |
 | `uv run --extra connect-full pytest tests_py/test_cli_contract.py -k login -q` | 14 passed | 0 |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 28 passed, including mobile navigation title visibility | 0 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 33 passed, including mobile navigation and Relay permission/lifecycle UI | 0 |
 | `npm --prefix connect/agent test` | 14 passed, pinned SDK with synthetic transport | 0 |
 | `node --test connect/design/policy.test.cjs` | 26 passed, offline policy only | 0 |
 | `node --check connect/app/api.js` and `node --check connect/app/app.js` | Passed | 0 |
@@ -142,6 +142,14 @@ The isolated full-suite snapshot preceded the final prepare-script cleanup regre
 These are Linux build and synthetic-service results. No current real paid AI, MinerU or Voyage request was made. They do not establish Mac/Windows installation, OS credential prompts, real account browser login, Zotero/CARSI depth or signed distribution. The native workflow must produce artifacts for the exact reviewed commit; every platform's human acceptance remains pending.
 
 The first Mac ARM job on `280a3933` produced a full `.app` artifact. Windows exposed a test-only file-URL/path conversion error, fixed with `fileURLToPath`. Mac Intel exposed HTTP-listener startup timeouts. The shared loopback listener now skips stdlib reverse DNS, with fault-injection tests proving both bridge and OAuth callback start with DNS unavailable. Final per-platform rebuild results must be checked separately; the first ARM artifact does not certify a later commit. Artifact retention is limited to one day by the repository.
+
+The next client slice adds explicit HTTP-only Relay supervision (28 runtime tests) and frozen Windows external-process DLL-path handling (9 tests). Relay starts only after current-page permission and an explicit cloud-offline precheck. Its temporary browser-off policy contains no account key; only the owned Go child receives account credentials in its environment. The precheck is not an atomic lease across computers. Browser reload restores owned-process state without restoring permission. No real cloud Relay was started for these tests.
+
+Authorized real-account checks through the live bridge passed document listing, tags, explicit tag dry-run and nonempty BibTeX/CSL/Markdown/ZIP responses. The Markdown formats retained `markdown-text-only`. No tags were applied or removed in this check, no Relay was started, and no provider/model request was made. This HTTP evidence does not replace native WebView download or account-login acceptance.
+
+Windows `f0d617b3` passed Python/Pi source tests but its frozen dependency probe failed. Rebuilds now sanitize the external-program DLL search path following [PyInstaller's Windows guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#launching-external-programs-from-the-frozen-application), emit only allowlisted dependency failure codes and wait for all Windows Job descendants before deleting temporary files. The prior failure's root cause remains unconfirmed until the frozen Windows rebuild succeeds.
+
+The repository Extension CI also encountered newly published Vitest advisories. Its test dependencies were patched from 4.1.11 to 4.1.12 without changing extension runtime sources. `npm --prefix extension audit --audit-level=moderate`, extension tests (210 passed) and build all exited 0.
 
 ## Previous BYOK/Pi iteration: 77bd331
 

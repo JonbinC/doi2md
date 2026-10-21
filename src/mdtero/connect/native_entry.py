@@ -21,6 +21,7 @@ from mdtero.connect.bridge import ConnectBridge
 from mdtero.connect.library import LibraryClient
 from mdtero.connect.native_login import NativeLoginError, login_account
 from mdtero.connect.providers import ProviderStore
+from mdtero.connect.relay_runtime import RelayRuntime
 
 
 class NativeStartupError(ValueError):
@@ -175,7 +176,8 @@ def main(argv: list[str] | None = None) -> int:
         client = MdteroClient()
         providers = ProviderStore(config=client.config)
         runtime = AgentRuntime(full_mode=args.full, providers=providers, library=LibraryClient(client), **runtime_kwargs)
-        bridge = ConnectBridge(host="127.0.0.1", port=args.port, client=client, static_dir=_static_dir(), providers=providers, agent_runtime=runtime)
+        relay_runtime = RelayRuntime(config=client.config, runtime_dir=args.runtime_dir)
+        bridge = ConnectBridge(host="127.0.0.1", port=args.port, client=client, static_dir=_static_dir(), providers=providers, agent_runtime=runtime, relay_runtime=relay_runtime)
         if stopped.is_set():
             return 0
         url = bridge.start()

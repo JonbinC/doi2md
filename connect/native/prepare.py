@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from urllib.parse import urlparse
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
@@ -37,6 +38,16 @@ TARGETS = {
     'x86_64-unknown-linux-gnu': ('Linux', 'x86_64'),
 }
 PI_SDK_VERSION = '1.3.0'
+SMOKE_DEPENDENCY_REASONS = frozenset({
+    'agent_node_missing', 'agent_node_unavailable', 'agent_node_version',
+    'agent_runtime_missing', 'agent_sdk_missing', 'agent_dependency_version_mismatch',
+    'agent_dependencies_missing',
+})
+SMOKE_PROBE_STAGES = frozenset({'sdk_import', 'catalog'})
+SMOKE_PROBE_CODES = frozenset({
+    'ENOENT', 'ERR_MODULE_NOT_FOUND', 'ERR_DLOPEN_FAILED', 'MODULE_NOT_FOUND',
+    'EPERM', 'EACCES', 'dependency_error',
+})
 
 
 def run(args: list[str], *, cwd: Path = ROOT) -> None:
@@ -130,6 +141,23 @@ def validated_smoke_url(summary: object, edition: str) -> str:
     return f'http://127.0.0.1:{port}'
 
 
+def dependency_smoke_phase(dependencies: object) -> str:
+    """Expose fixed diagnostic enums and integer exits, never child payloads."""
+    phase = 'anonymous session and dependencies'
+    if not isinstance(dependencies, dict):
+        return phase
+    facts = []
+    for field, allowed in (('reason_code', SMOKE_DEPENDENCY_REASONS),
+                           ('probe_stage', SMOKE_PROBE_STAGES), ('probe_code', SMOKE_PROBE_CODES)):
+        value = dependencies.get(field)
+        if isinstance(value, str) and value in allowed:
+            facts.append(field + '=' + value)
+    for field in ('probe_exit_code', 'node_probe_exit_code', 'sdk_probe_exit_code'):
+        value = dependencies.get(field)
+        if type(value) is int:
+            facts.append(field + '=' + str(value))
+    return phase + (' (' + ', '.join(facts) + ')' if facts else '')
+
 
 class SmokeJob:
     """Own a kill-on-close Windows Job before the onefile bootloader starts.
@@ -176,6 +204,10 @@ class SmokeJob:
         api.SetInformationJobObject.restype = wintypes.BOOL
         api.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
         api.AssignProcessToJobObject.restype = wintypes.BOOL
+        api.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        api.TerminateJobObject.restype = wintypes.BOOL
+        api.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+        api.QueryInformationJobObject.restype = wintypes.BOOL
         api.CloseHandle.argtypes = [wintypes.HANDLE]
         api.CloseHandle.restype = wintypes.BOOL
         self.name = 'Local\\MdteroConnect-Smoke-' + uuid.uuid4().hex
@@ -195,8 +227,32 @@ class SmokeJob:
 
     def close(self) -> None:
         if self.handle is not None:
-            self.api.CloseHandle(self.handle)
-            self.handle = None
+            handle = self.handle
+            try:
+                if not self.api.TerminateJobObject(handle, 1):
+                    raise RuntimeError('Could not terminate the supervised Windows smoke Job.')
+                deadline = time.monotonic() + 10
+                while self._active_processes(handle):
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError('The supervised Windows smoke Job did not stop within its cleanup limit.')
+                    time.sleep(0.05)
+            finally:
+                self.api.CloseHandle(handle)
+                self.handle = None
+
+    def _active_processes(self, handle) -> int:
+        import ctypes
+
+        class BasicAccounting(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_int64) for name in (
+                'TotalUserTime', 'TotalKernelTime', 'ThisPeriodTotalUserTime', 'ThisPeriodTotalKernelTime')]
+            _fields_ += [(name, ctypes.c_uint32) for name in (
+                'TotalPageFaultCount', 'TotalProcesses', 'ActiveProcesses', 'TotalTerminatedProcesses')]
+
+        accounting = BasicAccounting()
+        if not self.api.QueryInformationJobObject(handle, 1, ctypes.byref(accounting), ctypes.sizeof(accounting), None):
+            raise RuntimeError('Could not verify Windows smoke Job process cleanup.')
+        return int(accounting.ActiveProcesses)
 
     def __enter__(self) -> 'SmokeJob':
         return self
@@ -213,87 +269,114 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
     """
     process = None
     completed = False
-    with tempfile.TemporaryDirectory(prefix='mdtero-native-smoke-') as temporary:
+    job = SmokeJob()
+    temporary = None
+    phase = 'temporary directory'
+    try:
+        temporary = tempfile.mkdtemp(prefix='mdtero-native-smoke-')
         args = [*command, '--port', '0', '--runtime-dir', str(runtime.resolve())]
         if edition == 'full':
             args.append('--full')
-        job = SmokeJob()
         if job.name is not None:
             args.extend(['--job-name', job.name])
         phase = 'process launch'
+        process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
+                                   cwd=temporary, env=smoke_environment(Path(temporary) / 'config'),
+                                   start_new_session=os.name != 'nt')
+        job.assign(process)
+        phase = 'startup protocol'
+        lines: queue.Queue[str] = queue.Queue()
+        threading.Thread(target=lambda: lines.put(process.stdout.readline(8193)), daemon=True).start()
+        line = lines.get(timeout=timeout)
+        if len(line) > 8192:
+            raise ValueError('Frozen bridge startup protocol exceeded its size limit.')
+        url = validated_smoke_url(json.loads(line), edition)
+        opener = build_opener(ProxyHandler({}))
+        phase = 'packaged UI'
+        with opener.open(url + '/', timeout=timeout) as response:
+            page = response.read(2 * 1024 * 1024 + 1)
+        if len(page) > 2 * 1024 * 1024 or b'Mdtero Connect' not in page or b"connect-src 'self'" not in page:
+            raise ValueError('Frozen bridge did not serve its packaged Connect UI.')
+        phase = 'anonymous session and dependencies'
+        with opener.open(url + '/connect/v1/session', timeout=timeout) as response:
+            raw = response.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ValueError('Frozen session exceeded its size limit.')
+        session = json.loads(raw)
+        if not isinstance(session, dict):
+            raise ValueError('Frozen session did not return an object.')
+        if session.get('authenticated') is not False or session.get('mode') != ('full' if edition == 'full' else 'library') or not isinstance(session.get('csrf'), str) or not session['csrf']:
+            raise ValueError('Frozen session did not preserve the isolated anonymous mode.')
+        agent = session.get('agent') or {}
+        if not isinstance(agent, dict):
+            raise ValueError('Frozen session did not return a valid agent status.')
+        if agent.get('enabled') is not (edition == 'full'):
+            raise ValueError('Frozen session did not expose the expected agent mode.')
+        if edition == 'full':
+            dependencies = agent.get('dependencies') or {}
+            phase = dependency_smoke_phase(dependencies)
+            if not isinstance(dependencies, dict):
+                raise ValueError('Frozen session did not return valid dependency status.')
+            providers = agent.get('providers', [])
+            if not isinstance(providers, list) or any(not isinstance(provider, dict) for provider in providers):
+                raise ValueError('Frozen session did not return valid provider status.')
+            if dependencies.get('available') is not True or dependencies.get('sdk_version') != PI_SDK_VERSION or any(provider.get('configured') for provider in providers):
+                raise ValueError('The frozen full runtime dependency or credential isolation check failed.')
+        phase = 'parent shutdown'
+        process.stdin.write('shutdown\n')
+        process.stdin.flush()
+        process.stdin.close()
+        if process.wait(timeout=10) != 0:
+            raise ValueError('Frozen bridge did not shut down cleanly.')
+        phase = 'listener release'
+        # A successful process exit must also release its loopback listener.
         try:
-            process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                       stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
-                                       cwd=temporary, env=smoke_environment(Path(temporary) / 'config'),
-                                       start_new_session=os.name != 'nt')
-            job.assign(process)
-            phase = 'startup protocol'
-            lines: queue.Queue[str] = queue.Queue()
-            threading.Thread(target=lambda: lines.put(process.stdout.readline(8193)), daemon=True).start()
-            line = lines.get(timeout=timeout)
-            if len(line) > 8192:
-                raise ValueError('Frozen bridge startup protocol exceeded its size limit.')
-            url = validated_smoke_url(json.loads(line), edition)
-            opener = build_opener(ProxyHandler({}))
-            phase = 'packaged UI'
-            with opener.open(url + '/', timeout=timeout) as response:
-                page = response.read(2 * 1024 * 1024 + 1)
-            if len(page) > 2 * 1024 * 1024 or b'Mdtero Connect' not in page or b"connect-src 'self'" not in page:
-                raise ValueError('Frozen bridge did not serve its packaged Connect UI.')
-            phase = 'anonymous session and dependencies'
-            with opener.open(url + '/connect/v1/session', timeout=timeout) as response:
-                raw = response.read(1024 * 1024 + 1)
-            if len(raw) > 1024 * 1024:
-                raise ValueError('Frozen session exceeded its size limit.')
-            session = json.loads(raw)
-            if not isinstance(session, dict):
-                raise ValueError('Frozen session did not return an object.')
-            if session.get('authenticated') is not False or session.get('mode') != ('full' if edition == 'full' else 'library') or not isinstance(session.get('csrf'), str) or not session['csrf']:
-                raise ValueError('Frozen session did not preserve the isolated anonymous mode.')
-            agent = session.get('agent') or {}
-            if agent.get('enabled') is not (edition == 'full'):
-                raise ValueError('Frozen session did not expose the expected agent mode.')
-            if edition == 'full':
-                dependencies = agent.get('dependencies') or {}
-                if dependencies.get('available') is not True or dependencies.get('sdk_version') != PI_SDK_VERSION or any(provider.get('configured') for provider in agent.get('providers', [])):
-                    raise ValueError('The frozen full runtime dependency or credential isolation check failed.')
-            phase = 'parent shutdown'
-            process.stdin.write('shutdown\n')
-            process.stdin.flush()
-            process.stdin.close()
-            if process.wait(timeout=10) != 0:
-                raise ValueError('Frozen bridge did not shut down cleanly.')
-            phase = 'listener release'
-            # A successful process exit must also release its loopback listener.
-            try:
-                with socket.create_connection(('127.0.0.1', urlparse(url).port), timeout=2):
-                    pass
-            except OSError:
+            with socket.create_connection(('127.0.0.1', urlparse(url).port), timeout=2):
                 pass
-            else:
-                raise ValueError('Frozen bridge left a listener after shutdown.')
-            completed = True
-            return {'status': 'passed', 'packaged_ui': True, 'anonymous_session': True,
-                    'parent_shutdown': True, 'pi_dependencies': edition == 'full'}
-        except (OSError, ValueError, queue.Empty, subprocess.SubprocessError):
-            # Do not echo child output, HTTP bodies, environment or credential paths.
-            raise RuntimeError(f'Frozen bridge smoke failed during {phase}; inspect the local bundle and supervised startup protocol.') from None
-        finally:
-            # Close the owning Job first, so failed Windows onefile bootloaders
-            # cannot leave their inner Python/Node descendants running.
+        except OSError:
+            pass
+        else:
+            raise ValueError('Frozen bridge left a listener after shutdown.')
+        completed = True
+        return {'status': 'passed', 'packaged_ui': True, 'anonymous_session': True,
+                'parent_shutdown': True, 'pi_dependencies': edition == 'full'}
+    except (OSError, ValueError, queue.Empty, subprocess.SubprocessError):
+        # Do not echo child output, HTTP bodies, environment or credential paths.
+        raise RuntimeError(f'Frozen bridge smoke failed during {phase}; inspect the local bundle and supervised startup protocol.') from None
+    finally:
+        # Keep the owning Job handle until all descendants have actually exited.
+        # Closing a kill-on-close Job alone only requests asynchronous cleanup.
+        try:
             job.close()
+        finally:
             if process is not None:
-                if not completed and os.name != 'nt':
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                if process.poll() is None:
-                    process.kill()
+                try:
+                    if not completed and os.name != 'nt':
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    if process.poll() is None:
+                        try:
+                            process.kill()
+                        except ProcessLookupError:
+                            pass
+                    # Reap even when poll already observed an exit.
                     process.wait(timeout=10)
-                for pipe in (process.stdin, process.stdout):
-                    if pipe is not None and not pipe.closed:
-                        pipe.close()
+                except (OSError, subprocess.SubprocessError):
+                    raise RuntimeError('Frozen bridge smoke cleanup could not reap its parent process.') from None
+                finally:
+                    for pipe in (process.stdin, process.stdout):
+                        if pipe is not None and not pipe.closed:
+                            pipe.close()
+        # If containment or reaping failed, leave the isolated directory alone:
+        # rmtree must not race descendants that may still hold it as their cwd.
+        if temporary is not None:
+            try:
+                shutil.rmtree(temporary)
+            except OSError:
+                raise RuntimeError('Frozen bridge smoke cleanup could not release its temporary directory.') from None
 
 
 def prepare(target: str, edition: str) -> dict:

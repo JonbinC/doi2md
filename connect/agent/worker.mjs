@@ -148,6 +148,8 @@ async function readInput() {
 }
 
 async function main() {
+  const checking = process.argv.length === 3 && process.argv[2] === '--check';
+  let stage = 'sdk_import';
   // Dependency code has no access to ambient provider credentials or custom proxies.
   for (const key of Object.keys(process.env)) {
     if (!['PATH', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'TMP', 'TEMP', 'TMPDIR', 'LANG'].includes(key)) delete process.env[key];
@@ -162,12 +164,14 @@ async function main() {
   try {
     const sdk = await import('@earendil-works/pi-coding-agent');
     if (sdk.VERSION !== SDK_VERSION) throw new WorkerError('agent_dependency_version_mismatch');
-    const result = process.argv.length === 3 && process.argv[2] === '--check'
+    stage = 'catalog';
+    const result = checking
       ? await catalog(sdk) : await runResearch(await readInput(), { sdk });
     emit(JSON.stringify(result) + '\n');
   } catch (error) {
     const code = error instanceof WorkerError ? error.code : 'agent_provider_failed';
-    emit(JSON.stringify({ error: { reason_code: code, message: 'Pi research could not complete. Check local provider configuration and retry.' } }) + '\n');
+    const probe = checking ? { probe_stage: stage, probe_code: ['ENOENT', 'ERR_MODULE_NOT_FOUND', 'ERR_DLOPEN_FAILED', 'MODULE_NOT_FOUND', 'EPERM', 'EACCES'].includes(error?.code) ? error.code : 'dependency_error' } : {};
+    emit(JSON.stringify({ error: { reason_code: code, message: 'Pi research could not complete. Check local provider configuration and retry.' }, ...probe }) + '\n');
     process.exitCode = 1;
   }
 }

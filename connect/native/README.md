@@ -6,7 +6,7 @@ See [debug downloads and per-computer acceptance](DEBUGGING.md), [build instruct
 
 The native **Connect** menu opens account login in the system browser, cancels login, reconnects the bridge and opens the export folder (`Downloads/Mdtero Connect`). Successful login restarts the bridge; this clears session BYOK and cancels active Pi requests. Account login reuses the existing CLI callback/state and account-storage contract. Separate provider BYOK may use a supported OS credential service.
 
-Go Relay is included in the native runtime but is **not started by the shell** in this slice. Relay start/stop/restart supervision is still open. There is no remote Tauri IPC, runtime dependency installation or automatic updater.
+Go Relay is included and starts only after explicit permission in Connections. The bridge manages only its own child, checks for an existing cloud Relay before starting, and stops its child on close. This mode carries HTTP traffic with the institution browser disabled; it does not install a background service. There is no remote Tauri IPC, runtime dependency installation or automatic updater.
 
 ## Run the current sources
 
@@ -33,7 +33,7 @@ The Pi child is supervised, cancellable and limited to one approved metadata-onl
 ## Native acceptance still required
 
 - macOS/Windows real-machine window, download, OAuth and lifecycle acceptance. Linux WebKit smoke does not certify them.
-- Reuse the Go Relay in `relay/` as a supervised sidecar, with start/stop/restart and upgrade evidence.
+- Supported-OS Relay start/stop/restart, crash cleanup and upgrade acceptance. A client-side precheck cannot atomically prevent two computers connecting at the same time.
 - Node/Pi delivery on clean machines and update integrity. Builds bundle locked dependencies; page loads never run npm.
 - Credential-store behavior on each supported OS, including locked/unavailable stores, key removal and uninstall policy.
 - Code signing/notarization, checksums and verified website release manifests.

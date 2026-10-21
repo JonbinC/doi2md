@@ -65,6 +65,14 @@
       return { blob, filename, exportLabel };
     },
     relayDiagnostics() { return api("/connect/v1/relay/diagnostics"); },
+    relayRuntime() { return api("/connect/v1/relay/runtime"); },
+    controlRelay(action, allow_campus_transport = false) {
+      if (!["start", "stop", "restart"].includes(action)) throw new Error("Unknown Relay action");
+      return api("/connect/v1/relay/" + action, {
+        method: "POST", headers: { "Content-Type": "application/json", ...jsonHeaders() },
+        body: JSON.stringify({ allow_campus_transport }),
+      });
+    },
     entitlementCheck(confirm_fulltext = false) {
       return api("/connect/v1/relay/entitlement-check", {
         method: "POST",

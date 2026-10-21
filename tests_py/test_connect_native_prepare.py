@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 from pathlib import Path
+import subprocess
 import sys
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -150,6 +154,152 @@ def test_smoke_child_failure_does_not_echo_its_private_output(tmp_path):
     with pytest.raises(RuntimeError) as caught:
         prepare.smoke_bridge([sys.executable, str(script)], tmp_path, 'basic', timeout=2)
     assert 'synthetic-sensitive-child-output' not in str(caught.value)
+
+
+@pytest.mark.parametrize('dependencies,expected', [
+    ({'available': False, 'reason_code': 'agent_sdk_missing', 'probe_exit_code': -1073741515,
+      'probe_stage': 'sdk_import', 'probe_code': 'ERR_DLOPEN_FAILED',
+      'node_probe_exit_code': 0, 'sdk_probe_exit_code': 1,
+      'stdout': 'synthetic-sensitive-probe-output', 'error': 'synthetic-sensitive-probe-output'},
+     ['reason_code=agent_sdk_missing', 'probe_exit_code=-1073741515', 'probe_stage=sdk_import',
+      'probe_code=ERR_DLOPEN_FAILED', 'node_probe_exit_code=0', 'sdk_probe_exit_code=1']),
+    ({'available': False, 'reason_code': 'synthetic-sensitive-probe-output',
+      'probe_stage': 'synthetic-sensitive-probe-output', 'probe_code': 'synthetic-sensitive-probe-output',
+      'probe_exit_code': True, 'node_probe_exit_code': 'synthetic-sensitive-probe-output'}, []),
+])
+def test_failed_dependency_smoke_only_exposes_allowed_diagnostics(fake_bridge, tmp_path, dependencies, expected):
+    source = fake_bridge.read_text()
+    original = "'dependencies': {'available': full, 'sdk_version': '1.3.0'}"
+    assert original in source
+    fake_bridge.write_text(source.replace(original, "'dependencies': " + repr(dependencies)))
+    with pytest.raises(RuntimeError) as caught:
+        prepare.smoke_bridge([sys.executable, str(fake_bridge)], tmp_path, 'full', timeout=5)
+    message = str(caught.value)
+    assert 'anonymous session and dependencies' in message
+    assert 'synthetic-sensitive-probe-output' not in message
+    for fact in expected:
+        assert fact in message
+    if not expected:
+        assert 'reason_code=' not in message and 'probe_' not in message
+
+
+def test_failed_smoke_reaps_an_already_exited_parent_and_closes_its_pipes(tmp_path, monkeypatch):
+    process = SimpleNamespace(stdin=io.StringIO(), stdout=io.StringIO('invalid-protocol\n'),
+                              pid=123, poll=Mock(return_value=0), wait=Mock(return_value=0), kill=Mock())
+    monkeypatch.setattr(prepare.subprocess, 'Popen', lambda *args, **kwargs: process)
+    job = SimpleNamespace(name=None, assign=Mock(), close=Mock())
+    monkeypatch.setattr(prepare, 'SmokeJob', lambda: job)
+    if hasattr(prepare.os, 'killpg'):
+        monkeypatch.setattr(prepare.os, 'killpg', lambda *_args: None)
+    with pytest.raises(RuntimeError, match='startup protocol'):
+        prepare.smoke_bridge(['synthetic-bridge'], tmp_path, 'basic')
+    process.wait.assert_called_once_with(timeout=10)
+    process.kill.assert_not_called()
+    assert process.stdin.closed and process.stdout.closed
+
+
+def test_uncertain_job_cleanup_never_removes_a_directory_that_descendants_may_hold(tmp_path, monkeypatch):
+    temporary = tmp_path / 'smoke-cwd'
+    temporary.mkdir()
+    process = SimpleNamespace(stdin=io.StringIO(), stdout=io.StringIO('invalid-protocol\n'),
+                              pid=123, poll=Mock(return_value=0), wait=Mock(return_value=0), kill=Mock())
+    monkeypatch.setattr(prepare.subprocess, 'Popen', lambda *args, **kwargs: process)
+    monkeypatch.setattr(prepare.tempfile, 'mkdtemp', lambda **_kwargs: str(temporary))
+    job = SimpleNamespace(name=None, assign=Mock(), close=Mock(side_effect=RuntimeError('Job cleanup uncertain')))
+    monkeypatch.setattr(prepare, 'SmokeJob', lambda: job)
+    if hasattr(prepare.os, 'killpg'):
+        monkeypatch.setattr(prepare.os, 'killpg', lambda *_args: None)
+    remove = Mock()
+    monkeypatch.setattr(prepare.shutil, 'rmtree', remove)
+    with pytest.raises(RuntimeError, match='Job cleanup uncertain'):
+        prepare.smoke_bridge(['synthetic-bridge'], tmp_path, 'basic')
+    remove.assert_not_called()
+    process.wait.assert_called_once_with(timeout=10)
+
+
+class SyntheticJobApi:
+    def __init__(self, counts=(2, 1, 0), failure=None):
+        self.counts = iter(counts)
+        self.failure = failure
+        self.events = []
+
+    def TerminateJobObject(self, handle, exit_code):
+        self.events.append(('terminate', handle, exit_code))
+        return self.failure != 'terminate'
+
+    def QueryInformationJobObject(self, handle, kind, output, size, returned):
+        assert kind == 1 and size == 48 and returned is None
+        self.events.append(('query', handle))
+        output._obj.ActiveProcesses = next(self.counts)
+        return self.failure != 'query'
+
+    def CloseHandle(self, handle):
+        self.events.append(('close', handle))
+        return True
+
+
+def synthetic_job(api):
+    job = prepare.SmokeJob.__new__(prepare.SmokeJob)
+    job.name, job.handle, job.api = None, 123, api
+    return job
+
+
+def test_windows_job_requests_termination_and_waits_for_all_descendants_before_handle_close(monkeypatch):
+    api = SyntheticJobApi()
+    job = synthetic_job(api)
+    monkeypatch.setattr(prepare.time, 'sleep', lambda _seconds: None)
+    job.close()
+    assert api.events == [('terminate', 123, 1), ('query', 123), ('query', 123), ('query', 123), ('close', 123)]
+    assert job.handle is None
+    job.close()
+    assert len(api.events) == 5
+
+
+@pytest.mark.parametrize('failure', ['terminate', 'query', 'timeout'])
+def test_windows_job_cleanup_failures_are_bounded_and_always_close_the_handle(failure, monkeypatch):
+    api = SyntheticJobApi(counts=(1, 1, 1), failure=failure)
+    job = synthetic_job(api)
+    ticks = iter([0, 0, 11])
+    monkeypatch.setattr(prepare.time, 'monotonic', lambda: next(ticks))
+    monkeypatch.setattr(prepare.time, 'sleep', lambda _seconds: None)
+    with pytest.raises(RuntimeError, match='Windows smoke Job'):
+        job.close()
+    assert api.events[0] == ('terminate', 123, 1)
+    assert api.events[-1] == ('close', 123)
+    assert job.handle is None
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Requires actual Windows Job termination and directory locking')
+def test_windows_job_cleanup_releases_descendant_cwd_after_parent_already_exited(tmp_path):
+    import shutil
+    import time
+
+    directory = tmp_path / 'held-cwd'
+    directory.mkdir()
+    marker = tmp_path / 'descendant-ready'
+    child_code = "from pathlib import Path; import sys,time; held=open('busy.txt','w'); Path(sys.argv[1]).write_text('ready'); time.sleep(30)"
+    parent_code = "import subprocess,sys; sys.stdin.readline(); subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)"
+    job = prepare.SmokeJob()
+    process = subprocess.Popen([sys.executable, '-c', parent_code, child_code, str(marker)], cwd=directory,
+                               stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    try:
+        job.assign(process)
+        process.stdin.write('go\n')
+        process.stdin.flush()
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert marker.exists(), 'The descendant did not reach its directory-locking checkpoint'
+        assert process.wait(timeout=5) == 0
+        job.close()
+        shutil.rmtree(directory)
+        assert not directory.exists()
+    finally:
+        job.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=5)
+        process.stdin.close()
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='Windows child containment is exercised by the Job lifecycle tests')

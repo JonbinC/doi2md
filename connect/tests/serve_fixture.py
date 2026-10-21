@@ -31,6 +31,7 @@ from mdtero.connect.bridge import ConnectBridge  # noqa: E402
 from mdtero.connect.agent_runtime import AgentRuntime  # noqa: E402
 from mdtero.connect.library import LibraryClient  # noqa: E402
 from mdtero.connect.providers import ProviderStore  # noqa: E402
+from mdtero.connect.relay_runtime import RelayError  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 SYNTHETIC_KEY = "synthetic-browser-fixture-not-a-credential"
@@ -48,6 +49,50 @@ def markdown(document_id: int) -> bytes:
     return f"# Synthetic document {document_id}\n\nText-only fixture. No images.\n".encode()
 
 
+class SyntheticRelayRuntime:
+    """Offline process boundary for UI tests; never starts a campus transport."""
+
+    def __init__(self, owner: "SyntheticClient", *, available: bool = False) -> None:
+        self.owner = owner
+        self.available = available
+        self.running = False
+
+    def status(self) -> dict[str, Any]:
+        return {"available": self.available, "running": self.running,
+                "state": "running" if self.running else "stopped" if self.available else "unavailable",
+                "managed_by_connect": self.running, "browser_enabled": False, "auto_start": False, "confirmation_required": True,
+                "reason_code": None if self.available else "relay_not_bundled",
+                "action_hint": "Synthetic managed Relay; no network transport is started." if self.available else
+                               "This synthetic basic client has no bundled Relay runtime."}
+
+    def _activate(self, operation: str, allow_campus_transport: bool) -> dict[str, Any]:
+        if allow_campus_transport is not True:
+            raise RelayError("relay_confirmation_required", "Allow this computer's network transport before starting Relay.")
+        if not self.available:
+            raise RelayError("relay_not_bundled", "This client has no bundled Relay runtime.")
+        if not self.owner.config.effective_api_key:
+            raise RelayError("relay_account_required", "Log in to the local Mdtero account first.")
+        with self.owner.lock:
+            self.owner.relay_runtime_calls.append({"operation": operation, "allow_campus_transport": True})
+            self.running = True
+            return self.status()
+
+    def start(self, *, allow_campus_transport: bool) -> dict[str, Any]:
+        return self._activate("start", allow_campus_transport)
+
+    def restart(self, *, allow_campus_transport: bool) -> dict[str, Any]:
+        return self._activate("restart", allow_campus_transport)
+
+    def stop(self) -> dict[str, Any]:
+        with self.owner.lock:
+            self.owner.relay_runtime_calls.append({"operation": "stop"})
+            self.running = False
+            return self.status()
+
+    def close(self) -> None:
+        self.running = False
+
+
 class SyntheticClient(MdteroClient):
     def __init__(self) -> None:
         super().__init__(MdteroConfig(api_key=SYNTHETIC_KEY, api_base_url="https://synthetic.invalid"))
@@ -61,14 +106,17 @@ class SyntheticClient(MdteroClient):
             self.provider_calls: list[dict[str, Any]] = []
             self.agent_calls: list[dict[str, Any]] = []
             self.discovery_calls: list[dict[str, Any]] = []
+            self.relay_runtime_calls: list[dict[str, Any]] = []
             self.settings = {"authenticated": True, "invalid_credentials": False, "fail_next": None, **(settings or {})}
             self.config.api_key = SYNTHETIC_KEY if self.settings["authenticated"] else None
+            self.relay_runtime = SyntheticRelayRuntime(self, available=bool(self.settings.get("relay_runtime_available", False)))
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
             return copy.deepcopy({"papers": self.papers, "calls": self.calls,
                                   "provider_calls": self.provider_calls, "agent_calls": self.agent_calls,
-                                  "discovery_calls": self.discovery_calls})
+                                  "discovery_calls": self.discovery_calls, "relay_runtime_calls": self.relay_runtime_calls,
+                                  "relay_runtime": self.relay_runtime.status()})
 
     def _record(self, method: str, path: str, kwargs: dict[str, Any]) -> None:
         self.calls.append({"method": method, "path": path, "body": copy.deepcopy(kwargs.get("json"))})
@@ -223,9 +271,11 @@ class ControlHandler(BaseHTTPRequestHandler):
         settings = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         assert bridge is not None
         bridge.agent_runtime.close()
+        bridge.relay_runtime.close()
         bridge.providers.clear_session()
         client.reset(settings)
         bridge.providers, bridge.agent_runtime = local_services(settings)
+        bridge.relay_runtime = client.relay_runtime
         self._json({"reset": True})
 
     def _json(self, payload: dict[str, Any]) -> None:
@@ -244,7 +294,7 @@ if __name__ == "__main__":
     control = ThreadingHTTPServer(("127.0.0.1", 18742), ControlHandler)
     providers, runtime = local_services()
     with ConnectBridge(host="127.0.0.1", port=18741, client=client, static_dir=APP_DIR,
-                       providers=providers, agent_runtime=runtime) as bridge:
+                       providers=providers, agent_runtime=runtime, relay_runtime=client.relay_runtime) as bridge:
         threading.Thread(target=control.serve_forever, daemon=True).start()
         print(f"Synthetic-only Connect fixture at {bridge.base_url}", flush=True)
         stopped.wait()

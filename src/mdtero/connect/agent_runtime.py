@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mdtero import _external_process
+
 PROVIDERS = ("openai", "anthropic", "google", "openrouter")
 SDK_VERSION = "1.3.0"
 MAX_INPUT_BYTES = 65536
@@ -96,10 +98,11 @@ class AgentRuntime:
             info["reason_code"] = "agent_node_missing"
             return info
         try:
-            version = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=5, env=self._safe_env(), check=False,
+            version = _external_process.run([node, "--version"], capture_output=True, text=True, timeout=5, env=self._safe_env(), check=False,
                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)\s*", version.stdout)
             if not match or version.returncode:
+                info["probe_exit_code"] = version.returncode
                 info["reason_code"] = "agent_node_unavailable"
                 return info
             info["node_version"] = ".".join(match.groups())
@@ -110,12 +113,22 @@ class AgentRuntime:
                 info["reason_code"] = "agent_runtime_missing"
                 return info
             with tempfile.TemporaryDirectory(prefix="mdtero-pi-probe-") as cwd:
-                checked = subprocess.run(
+                checked = _external_process.run(
                     [node, str(self.runtime_dir / "worker.mjs"), "--check"],
                     capture_output=True, text=True, timeout=15, cwd=cwd, env=self._safe_env(), check=False,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
             if checked.returncode or len(checked.stdout.encode("utf-8")) > 1024 * 1024:
+                info["probe_exit_code"] = checked.returncode
+                if len(checked.stdout.encode("utf-8")) <= 1024 * 1024:
+                    try:
+                        probe = json.loads(checked.stdout)
+                        if probe.get("probe_stage") in {"sdk_import", "catalog"}:
+                            info["probe_stage"] = probe["probe_stage"]
+                        if probe.get("probe_code") in {"ENOENT", "ERR_MODULE_NOT_FOUND", "ERR_DLOPEN_FAILED", "MODULE_NOT_FOUND", "EPERM", "EACCES", "dependency_error"}:
+                            info["probe_code"] = probe["probe_code"]
+                    except (ValueError, TypeError, AttributeError):
+                        pass
                 info["reason_code"] = "agent_sdk_missing"
                 return info
             payload = json.loads(checked.stdout)
@@ -317,7 +330,7 @@ class AgentRuntime:
                 # every child, and cannot permit a new child after its snapshot.
                 if self._closed or cancel_event.is_set():
                     raise AgentError("agent_cancelled", "Research was cancelled.")
-                process = subprocess.Popen(
+                process = _external_process.popen(
                     [node, str(self.runtime_dir / "worker.mjs")], stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                     cwd=cwd, env=self._safe_env(), encoding="utf-8",

@@ -21,6 +21,7 @@ from mdtero.loopback import LoopbackThreadingHTTPServer
 from mdtero.connect.library import LibraryClient
 from mdtero.connect.providers import ProviderError, ProviderStore
 from mdtero.connect.agent_runtime import AgentError, AgentRuntime
+from mdtero.connect.relay_runtime import RelayError, RelayRuntime
 from mdtero.local_discovery import LocalDiscoveryError, search_local_discovery
 from mdtero.connect.paths import app_static_dir
 from mdtero.connect.relay_diag import diagnose_relay, probe_article_entitlement
@@ -56,6 +57,7 @@ class ConnectBridge:
         full_mode: bool = False,
         providers: ProviderStore | None = None,
         agent_runtime: AgentRuntime | None = None,
+        relay_runtime: RelayRuntime | None = None,
     ) -> None:
         self.host = assert_loopback_bind(host)
         self.port = int(port)
@@ -63,6 +65,7 @@ class ConnectBridge:
         self.library = LibraryClient(self.client)
         self.providers = providers or ProviderStore(config=self.client.config)
         self.agent_runtime = agent_runtime or AgentRuntime(full_mode=full_mode, providers=self.providers, library=self.library)
+        self.relay_runtime = relay_runtime or RelayRuntime(config=self.client.config)
         self.static_dir = Path(static_dir) if static_dir else app_static_dir()
         self.csrf_token = new_csrf_token()
         self._httpd: LoopbackThreadingHTTPServer | None = None
@@ -93,6 +96,7 @@ class ConnectBridge:
         return self.base_url
 
     def stop(self) -> None:
+        self.relay_runtime.close()
         self.agent_runtime.close()
         self.providers.clear_session()
         if self._httpd is not None:
@@ -220,6 +224,7 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                             "bridge": {"host": bridge.host, "port": bridge.bound_port, "product": "mdtero-connect"},
                             "mode": "full" if agent_status.get("enabled") else "library",
                             "agent": agent_status,
+                            "relay_runtime": bridge.relay_runtime.status(),
                         },
                     )
                     return
@@ -266,6 +271,19 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                     return
                 if method == "GET" and path == "/connect/v1/relay/diagnostics":
                     self._json(HTTPStatus.OK, diagnose_relay(bridge.client))
+                    return
+                if method == "GET" and path == "/connect/v1/relay/runtime":
+                    self._json(HTTPStatus.OK, bridge.relay_runtime.status())
+                    return
+                if method == "POST" and path in {"/connect/v1/relay/start", "/connect/v1/relay/stop", "/connect/v1/relay/restart"}:
+                    action = path.rsplit("/", 1)[1]
+                    if action == "stop":
+                        result = bridge.relay_runtime.stop()
+                    else:
+                        # Never coerce strings/numbers into transport permission.
+                        permit = body.get("allow_campus_transport") is True
+                        result = getattr(bridge.relay_runtime, action)(allow_campus_transport=permit)
+                    self._json(HTTPStatus.OK, result)
                     return
                 if method == "POST" and path == "/connect/v1/relay/entitlement-check":
                     self._json(
@@ -352,7 +370,7 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                         self._json(HTTPStatus.OK, bridge.agent_runtime.cancel(run_path.removesuffix("/cancel")))
                         return
                 self._json(HTTPStatus.NOT_FOUND, {"reason_code": "not_found"})
-            except (ProviderError, AgentError) as exc:
+            except (ProviderError, AgentError, RelayError) as exc:
                 self._json(HTTPStatus.BAD_REQUEST, {"reason_code": exc.reason_code, "action_hint": exc.hint})
             except ZoteroLocalError as exc:
                 self._json(HTTPStatus.BAD_REQUEST, {"reason_code": exc.reason_code, "action_hint": str(exc)})

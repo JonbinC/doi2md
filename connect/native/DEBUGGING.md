@@ -32,7 +32,9 @@ uv run mdtero setup
 
 The full macOS/Windows native bundle includes Python bridge, Go Relay and the pinned Node/Pi runtime. Preparation runs the frozen bridge, requests its bundled UI/session, and checks shutdown. Collection rejects a mismatched target/edition/commit or missing runtime inputs. These checks do not run the installed application; the end-user launch test must be on a machine without development toolchains. Account authentication still uses the existing CLI account-storage contract; OS-keyring BYOK is a separate setting.
 
-Exports are saved under **Downloads / Mdtero Connect** with a unique prefix. Use **Connect → 打开导出文件夹** to find them. The shell includes Relay but does not start it: native Relay start/stop/restart controls remain open, and diagnostics may report it offline.
+Exports are saved under **Downloads / Mdtero Connect** with a unique prefix. Use **Connect → 打开导出文件夹** to find them.
+
+In Connections, explicitly allow this computer to carry the account's document HTTP requests before starting or restarting its bundled Relay. Stop remains available after a page reload; permission is not saved in the browser. Closing Connect stops only its owned child. An existing online Relay or unavailable cloud status blocks startup. This precheck has a race if two computers start simultaneously; it is not an atomic server lease. The institution browser remains disabled, existing services are not controlled, and no service is installed. A running process is shown separately from cloud transport and full-text entitlement.
 
 BYOK belongs to the local client: OpenAlex for discovery, MinerU for parsing, Voyage for retrieval, and a separate AI provider for Pi. Keys default to session memory. Explicit persistence requires a supported, working OS credential service; failure must remain visible and cannot create a plaintext fallback. MinerU and Voyage currently store credentials only. Pi handles approved metadata-only questions and has no model-callable shell or filesystem tools. It has not read paper full text. Real model calls require a provider key and may incur provider usage.
 
