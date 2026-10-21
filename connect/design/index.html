@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Mdtero Connect — UX handoff (offline design)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <a href="#start" class="brand"><span class="brand-icon">M</span><span>Mdtero <small>CONNECT · DESIGN</small></span></a>
+    <nav class="navigation">
+      <button type="button" data-view="start" class="active">开始使用</button>
+      <button type="button" data-view="library">我的文献库</button>
+      <button type="button" data-view="connections">连接中心</button>
+      <button type="button" data-view="storage">云端空间</button>
+      <button type="button" data-view="settings">设置</button>
+    </nav>
+    <section class="sidebar-note"><strong>5 GiB</strong><div>计划中的私人云空间</div><div class="progress"><span></span></div><small>演示数据 · 128 MiB</small></section>
+  </aside>
+  <div class="workarea">
+    <header class="topbar">
+      <div class="breadcrumb">MDTERO / RESEARCH WORKSPACE</div>
+      <div class="top-actions"><span id="current-account">未登录（演示）</span><button type="button" data-action="reset" class="ghost">重置演示</button></div>
+    </header>
+    <main id="screen" tabindex="-1"></main>
+    <footer class="footer">Mdtero Connect — 本地交互设计原型。所有文献、账户、权限和计费状态均为模拟数据；请勿输入真实密钥。</footer>
+  </div>
+</div>
+<script src="policy.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
