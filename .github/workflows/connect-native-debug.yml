@@ -112,4 +112,4 @@ jobs:
           name: mdtero-connect-debug-${{ matrix.id }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: connect/native/dist/${{ matrix.target }}/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1

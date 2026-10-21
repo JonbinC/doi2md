@@ -7,8 +7,10 @@ import time
 import urllib.parse
 import webbrowser
 from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from typing import Any
+
+from mdtero.loopback import LoopbackThreadingHTTPServer
 
 
 @dataclass
@@ -60,7 +62,7 @@ def run_web_login(site_base_url: str, *, timeout_seconds: float = 180.0, open_br
         thread.join(timeout=1.0)
 
 
-class _CallbackServer(ThreadingHTTPServer):
+class _CallbackServer(LoopbackThreadingHTTPServer):
     allow_reuse_address = True
 
 

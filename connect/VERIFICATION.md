@@ -120,7 +120,7 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 | Command/check | Result | Exit code |
 |---|---|---|
 | `uv sync --frozen --extra connect-full` | Completed | 0 |
-| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 202 passed, 1 Windows kernel integration test skipped on Linux | 0 |
+| `uv run --extra connect-full pytest tests_py/test_connect_*.py -q` | 210 passed, 1 Windows kernel integration test skipped on Linux | 0 |
 | `uv run --extra connect-full pytest tests_py/test_cli_contract.py -k login -q` | 14 passed | 0 |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 28 passed, including mobile navigation title visibility | 0 |
 | `npm --prefix connect/agent test` | 14 passed, pinned SDK with synthetic transport | 0 |
@@ -131,6 +131,7 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 | `cargo test --locked --manifest-path connect/native/src-tauri/Cargo.toml --lib` | 4 navigation, handshake and export-path policy tests | 0 |
 | `npm --prefix connect/native run build -- --debug --no-bundle -- --locked` | Actual Linux aarch64 Tauri CLI build | 0 |
 | Native binary `--smoke-test` under Xvfb | Real WebKit loaded loopback UI; exit released bridge port | 0 |
+| `uv run python connect/native/smoke.py --binary connect/native/src-tauri/target/debug/mdtero-connect-desktop --headless --crash-check` | Real WebKit synthetic download bytes matched; normal exit and native-parent SIGKILL both stopped bridge PID/port | 0 |
 | `cargo fmt --manifest-path connect/native/src-tauri/Cargo.toml -- --check` | Passed | 0 |
 | `uv run --extra connect-full python scripts/ci/secret_guard.py` after adding new sources to Git index | Passed | 0 |
 | `git diff --check` | Passed | 0 |
@@ -139,6 +140,8 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 The isolated full-suite snapshot preceded the final prepare-script cleanup regression, login-help text and Windows no-console flags. Those changes were checked by the final focused Connect suite above. The pre-existing adjacent-site manifest mismatch remains as recorded below; no install manifest was changed.
 
 These are Linux build and synthetic-service results. No current real paid AI, MinerU or Voyage request was made. They do not establish Mac/Windows installation, OS credential prompts, real account browser login, Zotero/CARSI depth or signed distribution. The native workflow must produce artifacts for the exact reviewed commit; every platform's human acceptance remains pending.
+
+The first Mac ARM job on `280a3933` produced a full `.app` artifact. Windows exposed a test-only file-URL/path conversion error, fixed with `fileURLToPath`. Mac Intel exposed HTTP-listener startup timeouts. The shared loopback listener now skips stdlib reverse DNS, with fault-injection tests proving both bridge and OAuth callback start with DNS unavailable. Final per-platform rebuild results must be checked separately; the first ARM artifact does not certify a later commit. Artifact retention is limited to one day by the repository.
 
 ## Previous BYOK/Pi iteration: 77bd331
 

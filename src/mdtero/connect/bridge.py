@@ -11,12 +11,13 @@ import mimetypes
 import socket
 import threading
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
 from mdtero.client import MdteroApiError, MdteroClient
+from mdtero.loopback import LoopbackThreadingHTTPServer
 from mdtero.connect.library import LibraryClient
 from mdtero.connect.providers import ProviderError, ProviderStore
 from mdtero.connect.agent_runtime import AgentError, AgentRuntime
@@ -40,7 +41,7 @@ from mdtero.connect.zotero_local import (
 )
 
 
-class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+class _IPv6ThreadingHTTPServer(LoopbackThreadingHTTPServer):
     address_family = socket.AF_INET6
 
 
@@ -64,7 +65,7 @@ class ConnectBridge:
         self.agent_runtime = agent_runtime or AgentRuntime(full_mode=full_mode, providers=self.providers, library=self.library)
         self.static_dir = Path(static_dir) if static_dir else app_static_dir()
         self.csrf_token = new_csrf_token()
-        self._httpd: ThreadingHTTPServer | None = None
+        self._httpd: LoopbackThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     @property
@@ -82,7 +83,7 @@ class ConnectBridge:
 
     def start(self) -> str:
         handler = _make_handler(self)
-        server_type = _IPv6ThreadingHTTPServer if self.host == "::1" else ThreadingHTTPServer
+        server_type = _IPv6ThreadingHTTPServer if self.host == "::1" else LoopbackThreadingHTTPServer
         self._httpd = server_type((self.host, self.port), handler)
         # Refuse accidental non-loopback binds even if the constructor was bypassed.
         bound_host = self._httpd.server_address[0]

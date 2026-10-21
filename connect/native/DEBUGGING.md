@@ -6,7 +6,7 @@ These debugging artifacts from Draft PR #10 have no verified developer signing i
 
 ## Get an artifact
 
-Open the **Connect native debug artifacts** workflow run for the exact commit under review. Download the artifact matching the computer's CPU, verify `SHA256SUMS` against the payload, and keep its build metadata with any report. GitHub requires sign-in to download Actions artifacts. Artifacts expire after seven days and are not GitHub Releases.
+Open the **Connect native debug artifacts** workflow run for the exact commit under review. Download the artifact matching the computer's CPU, verify `SHA256SUMS` against the payload, and keep its build metadata with any report. GitHub requires sign-in to download Actions artifacts. The repository currently limits artifact retention to **one day**; save a local copy for longer testing. These are not GitHub Releases.
 
 The extracted Actions artifact contains `artifact-index.json` (commit, edition, target, source digest and payload hash), `source-checksums.json`, the packaged runtime manifest and these debugging instructions. On macOS, run `shasum -a 256 -c SHA256SUMS` from that directory. On Windows, compare `Get-FileHash -Algorithm SHA256 <payload.exe>` with the matching line in `SHA256SUMS`. These hashes check integrity within the downloaded artifact; they are not a publisher identity signature.
 

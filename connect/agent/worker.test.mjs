@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import * as actualSdk from '@earendil-works/pi-coding-agent';
 import { runResearch, validateRequest, emptyResources, WorkerError, catalog, SDK_VERSION } from './worker.mjs';
@@ -131,7 +132,7 @@ test('a hallucinated shell tool cannot execute or trigger a second model request
 test('CLI worker emits one generic JSON failure and no credential/error dump',async()=>{
  const cwd=await mkdtemp(join(tmpdir(),'mdtero-agent-test-'));
  try {
-   const child=spawn(process.execPath,[new URL('./worker.mjs',import.meta.url).pathname],{cwd,env:{PATH:process.env.PATH,OPENAI_API_KEY:'ambient-key-must-not-enter'}});
+   const child=spawn(process.execPath,[fileURLToPath(new URL('./worker.mjs',import.meta.url))],{cwd,env:{PATH:process.env.PATH,OPENAI_API_KEY:'ambient-key-must-not-enter'}});
    let stdout='',stderr='';child.stdout.on('data',value=>stdout+=value);child.stderr.on('data',value=>stderr+=value);
    child.stdin.end(JSON.stringify(input()));
    const code=await new Promise(resolve=>child.on('close',resolve));

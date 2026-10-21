@@ -41,10 +41,13 @@ For local Linux verification, use `aarch64-unknown-linux-gnu` or `x86_64-unknown
 
 ```sh
 uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target aarch64-unknown-linux-gnu --edition basic
-npm --prefix connect/native run build -- --target aarch64-unknown-linux-gnu --no-bundle
+npm --prefix connect/native run build -- --debug --target aarch64-unknown-linux-gnu --no-bundle -- --locked
+uv run python connect/native/smoke.py --binary connect/native/src-tauri/target/aarch64-unknown-linux-gnu/debug/mdtero-connect-desktop --headless --crash-check
 ```
 
 Basic resources omit bundled Node/Pi. The keyring package is still included so the bridge can use a supported native credential store when one is available. The Linux basic source CI job does not claim to produce an accepted Linux installer.
+
+The native smoke loads the real WebKit window, downloads a fixed synthetic blob, verifies saved bytes, and removes that file. It then checks both normal exit and forced native-parent termination for bridge process/port cleanup. Its configuration, provider environment and Linux download directory are isolated. It makes no account or paid model request. Omit the target flag during a local Cargo build to use `src-tauri/target/debug/mdtero-connect-desktop` instead.
 
 ## Verification and provenance
 

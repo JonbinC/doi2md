@@ -104,6 +104,12 @@ def fake_bridge(tmp_path):
     script = tmp_path / 'fake_bridge.py'
     script.write_text('''import json, os, sys, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
+class LoopbackServer(ThreadingHTTPServer):
+    def server_bind(self):
+        TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
@@ -117,7 +123,7 @@ class Handler(BaseHTTPRequestHandler):
                                  'dependencies': {'available': full, 'sdk_version': '1.3.0'}}}
             body = json.dumps(payload).encode()
         self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
-server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+server = LoopbackServer(('127.0.0.1', 0), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 port = server.server_port
 print(json.dumps({'status': 'running', 'product': 'mdtero-connect', 'protocol': 1,

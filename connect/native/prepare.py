@@ -220,12 +220,14 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
         job = SmokeJob()
         if job.name is not None:
             args.extend(['--job-name', job.name])
+        phase = 'process launch'
         try:
             process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
                                        cwd=temporary, env=smoke_environment(Path(temporary) / 'config'),
                                        start_new_session=os.name != 'nt')
             job.assign(process)
+            phase = 'startup protocol'
             lines: queue.Queue[str] = queue.Queue()
             threading.Thread(target=lambda: lines.put(process.stdout.readline(8193)), daemon=True).start()
             line = lines.get(timeout=timeout)
@@ -233,10 +235,12 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
                 raise ValueError('Frozen bridge startup protocol exceeded its size limit.')
             url = validated_smoke_url(json.loads(line), edition)
             opener = build_opener(ProxyHandler({}))
+            phase = 'packaged UI'
             with opener.open(url + '/', timeout=timeout) as response:
                 page = response.read(2 * 1024 * 1024 + 1)
             if len(page) > 2 * 1024 * 1024 or b'Mdtero Connect' not in page or b"connect-src 'self'" not in page:
                 raise ValueError('Frozen bridge did not serve its packaged Connect UI.')
+            phase = 'anonymous session and dependencies'
             with opener.open(url + '/connect/v1/session', timeout=timeout) as response:
                 raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
@@ -253,11 +257,13 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
                 dependencies = agent.get('dependencies') or {}
                 if dependencies.get('available') is not True or dependencies.get('sdk_version') != PI_SDK_VERSION or any(provider.get('configured') for provider in agent.get('providers', [])):
                     raise ValueError('The frozen full runtime dependency or credential isolation check failed.')
+            phase = 'parent shutdown'
             process.stdin.write('shutdown\n')
             process.stdin.flush()
             process.stdin.close()
             if process.wait(timeout=10) != 0:
                 raise ValueError('Frozen bridge did not shut down cleanly.')
+            phase = 'listener release'
             # A successful process exit must also release its loopback listener.
             try:
                 with socket.create_connection(('127.0.0.1', urlparse(url).port), timeout=2):
@@ -271,7 +277,7 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
                     'parent_shutdown': True, 'pi_dependencies': edition == 'full'}
         except (OSError, ValueError, queue.Empty, subprocess.SubprocessError):
             # Do not echo child output, HTTP bodies, environment or credential paths.
-            raise RuntimeError('Frozen bridge smoke failed; inspect the local bundle and supervised startup protocol.') from None
+            raise RuntimeError(f'Frozen bridge smoke failed during {phase}; inspect the local bundle and supervised startup protocol.') from None
         finally:
             # Close the owning Job first, so failed Windows onefile bootloaders
             # cannot leave their inner Python/Node descendants running.
