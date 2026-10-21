@@ -1,6 +1,6 @@
 # Connect verification and remaining acceptance
 
-This is evidence for the loopback client on Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10), branch `handoff/connect-research-client-20261021`. It is not a native release certificate. Backend #43 already owns library tags/import/export; these checks exercise the client against that contract without creating another library database.
+Evidence for the loopback client on Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10), branch `handoff/connect-research-client-20261021`. Backend #43 owns library tags/import/export; the client reuses those contracts. The current work adds local BYOK, OpenAlex discovery and optional metadata-only Pi research. This is not a native release certificate.
 
 ## Reproduce local checks
 
@@ -8,14 +8,21 @@ Run from the repository root:
 
 ```sh
 uv sync --frozen
-uv run pytest tests_py/test_connect_security.py tests_py/test_connect_bridge.py tests_py/test_connect_zotero_local.py -q
+uv run pytest tests_py/test_connect_*.py -q
 node --check connect/app/api.js
 node --check connect/app/app.js
 node --test connect/design/policy.test.cjs
 uv run python scripts/ci/secret_guard.py
 ```
 
-Install and run Chromium browser regressions:
+With Node.js **22.19.0 or newer**, install the pinned Pi SDK and run its tests:
+
+```sh
+npm --prefix connect/agent ci --ignore-scripts
+npm --prefix connect/agent test
+```
+
+Install/run Chromium browser regressions:
 
 ```sh
 npm --prefix connect ci
@@ -23,80 +30,135 @@ npm --prefix connect run test:install
 npm --prefix connect test
 ```
 
-If Chromium is already installed, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path when running the tests. The suite starts a real loopback bridge with synthetic upstream/providers. To inspect that same fixture manually:
+When Chromium is already installed, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path. To inspect the synthetic fixture manually:
 
 ```sh
 uv run python connect/tests/serve_fixture.py
-# open http://127.0.0.1:18741 locally
+# Open http://127.0.0.1:18741 locally.
 ```
 
-The fixture is a test tool with synthetic documents and control state, not a production launcher. It deliberately replaces account, Relay and Zotero responses rather than using configured real credentials. The test entry points are [connect.spec.cjs](tests/connect.spec.cjs), [playwright.config.cjs](tests/playwright.config.cjs) and [serve_fixture.py](tests/serve_fixture.py).
+This fixture is not a production launcher. It uses the real loopback bridge, ProviderStore and AgentRuntime approval controls, but replaces account/Relay/Zotero, provider HTTP, Pi dependency discovery and model execution. Its provider store is isolated from real environment keys and the local OS keyring. Test entry points are [connect.spec.cjs](tests/connect.spec.cjs), [playwright.config.cjs](tests/playwright.config.cjs) and [serve_fixture.py](tests/serve_fixture.py).
 
-Do not infer a passed check from a command appearing in this document; see the recorded results.
+Do not infer a passed check from a command appearing in this document; recorded results are below.
 
 ## What the checks prove
 
 | Evidence | Coverage | Boundary |
 |---|---|---|
-| Python bridge/security tests | Loopback binding, HTTP request guards, CSRF and adapter payload semantics; failure handling and Zotero endpoint restrictions | Network and account responses use controlled fixtures; not production authentication |
-| Browser regressions through the real local bridge | Live `connect/app` UI, onboarding truthfulness, tag draft/preview/apply behavior, export downloads and connection states | Backend responses are synthetic; no real account, publisher entitlement or desktop install is certified |
-| Offline design policy tests | Prototype readiness, quota arithmetic and checkpoint policy examples | `connect/design` is mock-only with `connect-src 'none'`; no production quota or sync implementation |
-| Secret guard | Repository checks for prohibited secret patterns | Does not replace runtime credential storage and release audits |
-| Real account smoke (separate, requires local credentials) | Account list, tag dry-run/apply and downloaded backend exports | Must be run against an authorized account; cannot be replaced by browser fixtures |
-| Native/institution acceptance (outstanding) | Installation/signing, Relay lifecycle, visible CARSI login and article evidence | Requires each supported OS and school/publisher combination |
+| Python bridge/security tests | Loopback binding, Host/Origin/CSRF, library payload semantics, new provider/research routes and Zotero endpoint restrictions | Controlled account/network responses; not production authentication |
+| Provider tests | Session/OS/environment/legacy precedence, trusted-keyring allowlist, no plaintext fallback or key echo, explicit free OpenAlex check, verification invalidation and shutdown cleanup | Fake OS backend and synthetic OpenAlex responses; not real OS-keyring or provider acceptance |
+| Python Agent tests | Account-owned selection, frozen/single-use approval, basic/full separation, concurrency, secret-safe subprocess input/output, cancellation and timeout | Model execution/dependency fixtures; no paid generation |
+| Pi Node tests | Actual pinned SDK lifecycle, one request/output-token cap, absent tools, ignored project resources, no auth/session files, no retry, cancellation and sanitized errors | Local synthetic HTTP model server; real provider credentials/billing are not tested |
+| Browser regressions | Real live UI/bridge, onboarding, library operations, BYOK forms, discovery, approval invalidation, research output and cancellation, narrow/wide layouts | Synthetic upstream/provider/Agent responses; does not certify real full-text analysis |
+| Offline design policy tests | Prototype readiness, quota arithmetic and checkpoint examples | Mock-only `connect/design`, CSP `connect-src 'none'`; no production quota/sync implementation |
+| Secret guard | Repository checks for prohibited secret patterns | Does not replace runtime credential storage or release audits |
+| Real account smoke | Library list, reviewed temporary-tag apply/removal and backend exports | Separate authorized account check; baseline evidence does not validate new BYOK or Pi execution |
+| Native/institution acceptance | Installation/signing, Relay lifecycle, visible CARSI login and article evidence | Outstanding for each supported OS and school/publisher combination |
 
-## Real account smoke
-
-No API key should be pasted into the UI, committed, or recorded in screenshots/test logs.
+## Run and inspect the real client
 
 ```sh
-# configure the account in the terminal first; restart after configuration changes
+# Configure account authentication in the terminal first if needed.
+uv run mdtero setup
 uv run mdtero connect --no-browser --port 0 --json
 ```
 
-Open the printed loopback URL and record the bridge/client version and observations without credentials:
+No account key belongs in the page, committed files, screenshots or test logs. Restart the bridge after changing terminal/saved account configuration. In the library:
 
-1. Verify that a known document appears. A configured key with a failed list request must stay unverified.
-2. Select a small, authorized set. Preview a temporary tag and confirm no write occurs; apply the reviewed preview and confirm the library changes. Preview removal and apply it to restore the original tags.
-3. Change the draft or selection after preview and confirm applying requires a new preview.
-4. Download BibTeX and CSL JSON, plus single-document Markdown and Markdown ZIP for documents with saved text. Check the downloaded file contents. Markdown exports must remain labeled text-only, without images.
-5. Check Relay transport/browser diagnostics independently. A generic entitlement diagnostic must not mark the selected document or every publisher as verified.
-6. With Zotero desktop open, list collections and explicitly choose one for metadata import dry-run. Connector reachability, readable collections and import preview are separate observations; do not call this checkpoint synchronization.
+1. Confirm a known document appears. Configured credentials with a failed list request must remain unverified.
+2. Preview a temporary tag, confirm no write occurs, then apply the reviewed preview. Preview removal and apply it to restore original tags.
+3. Change draft/selection after preview; applying must require a new preview.
+4. Download BibTeX, CSL JSON, single-document Markdown and Markdown ZIP. Inspect downloaded contents; Markdown/ZIP must retain the text-only label without images.
+5. Inspect Relay transport/browser diagnostics independently. Generic entitlement diagnostics cannot verify a selected document or all publishers.
+6. With Zotero open, explicitly choose a collection for metadata import dry-run. Reachability, listing and preview are separate observations; this is not checkpoint synchronization.
+
+### BYOK checks
+
+Connections supports seven providers in four categories: OpenAlex discovery; MinerU parsing; Voyage retrieval; and OpenAI/Anthropic/Google/OpenRouter AI.
+
+- Session keys disappear when Connect stops. Explicit OS persistence requires a trusted working OS keyring; failures cannot produce a plaintext fallback. `connect-full` adds the optional Python keyring dependency, not an OS credential service.
+- Status reports configured/source/verification without key fragments or fingerprints. Saving must not make provider requests or mark a key verified. Environment and legacy OpenAlex config can reappear after clearing a session override; clearing does not erase those external sources.
+- OpenAlex's explicit check uses a fixed singleton endpoint with a Bearer header, no redirects and no environment proxy. Single-entity retrieval is free according to [OpenAlex example costs](https://developers.openalex.org/access/example-costs/); [authentication documentation](https://developers.openalex.org/how-to-use-the-api/rate-limits-and-authentication) supports Bearer keys. A network/probe failure is distinct from a proven invalid key.
+- MinerU/Voyage/AI checks remain configuration-only. No supported free authentication probe is implemented here; diagnostic buttons must not submit parsing, embeddings, reranking or generation. [MinerU's documented tasks](https://mineru.net/apiManage/docs) consume parsing quota; [Voyage pricing](https://docs.voyageai.com/docs/pricing) is usage-based.
+- A deliberate OpenAlex search uses the existing local discovery implementation and can consume the provider's search budget. This route does not fall back to the cloud, and results are metadata, not automatically imported documents.
+- MinerU/Voyage are `credential_only`: no local consumer or cloud per-user BYOK contract is added. Their saved keys do not change cloud parse/RAG credentials.
+
+No private provider key or paid-model smoke was run for this iteration. Automated provider checks use synthetic responses.
+
+### Optional Pi acceptance
+
+```sh
+uv sync --frozen --extra connect-full
+npm --prefix connect/agent ci --ignore-scripts
+uv run --extra connect-full mdtero connect --full --no-browser --port 0 --json
+```
+
+Use Node.js 22.19.0 or newer. In Connections configure an AI key locally, then select 1–10 account-library documents. Preview the question, provider, pinned-catalog model, exact selected metadata and 128–4,096 output-token limit. Review the transfer before approving. Approval is short-lived and single-use; changes require a new preview. A run permits one model request, supports cancellation and stops after 90 seconds.
+
+The payload contains only ID, title, authors, year, venue and DOI. It does not include full text, abstracts, images, tags, unselected documents or institution credentials. Answers cannot be treated as full-text reading or validated findings. Pi has no model-callable tools, shell/filesystem access or ambient resource discovery; installed SDK/dependencies remain trusted code rather than an OS sandbox. Output tokens and request count are bounded, but a dollar-denominated financial hard cap is not implemented. Real paid-model acceptance requires deliberate separate testing; opening full mode is not evidence that a provider key works.
+
+The implementation uses pinned `@earendil-works/pi-coding-agent@1.3.0`. Pi is the current Agent choice; no OpenCode runtime is included. See [runtime details and primary SDK sources](agent/README.md).
 
 ## Remaining work and risks
 
 | Area | Still required |
 |---|---|
-| Website/Dashboard | Connect entry, startup guidance/deep links and eventual verified release manifest in Nextmdtero |
-| Native runtime | Tauri shell, supervised Relay sidecar, OS credential storage, signing/notarization, installation and uninstall evidence |
-| Zotero | Pagination, durable checkpoints partitioned by source/account, dedupe, deletion sync and desktop-version acceptance |
-| CARSI/access | Visible local login, passwords/Cookies kept on-device, and school-by-publisher article evidence; online Relay alone is insufficient |
+| Website/Dashboard | Connect entry, startup guidance/deep links and verified release manifest in Nextmdtero |
+| Native runtime | Tauri shell, supervised Relay sidecar, native dependency delivery, supported-OS credential acceptance, signing/notarization and installation/uninstall evidence |
+| Zotero | Pagination, stable source/account checkpoints, dedupe, deletion sync and desktop-version acceptance |
+| CARSI/access | Visible local login, passwords/Cookies kept on-device, school/publisher article evidence; online Relay is insufficient |
+| MinerU/Voyage BYOK | Actual local adapters or explicit backend per-user credentials/consumption contracts; saved local keys do not change cloud jobs |
+| Pi research | Full-text evidence/tools, real provider acceptance, financial hard caps, OS sandboxing and durable history; current research is metadata-only |
 | Cloud storage | Backend quota enforcement, durable Markdown/private images and tested PostgreSQL backup/restore; no automatic 5 GiB migration claim |
-| Optional Agent | Pi/OpenCode runtime, BYOK, approvals, budgets and constrained tools; current status remains disabled |
 | Product integration | Backend MCP Reader embedding and website/client/Reader workflows |
-| Release | Keep Draft; merge, website support claims and publication require explicit authorization and the relevant acceptance evidence |
+| Release | Keep Draft; merge, publication and website support claims require explicit authorization and relevant acceptance evidence |
 
-The bridge currently loads CLI configuration at startup. After login/setup or key rotation, restart `mdtero connect`; a page refresh cannot reload saved credentials into an existing bridge process.
+## Current iteration results
 
-## Recorded results
+| Command/check | Result | Exit code |
+|---|---|---|
+| `uv run pytest tests_py/test_connect_providers.py -q` | 62 passed | 0 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 27 passed; original flows plus BYOK/discovery/Pi and reload recovery | 0 |
+| `node --check connect/tests/connect.spec.cjs` | Syntax valid | 0 |
+| `uv run python -m py_compile connect/tests/serve_fixture.py` | Syntax valid | 0 |
+| `uv run python -m compileall -q src/mdtero/connect/providers.py` | Syntax valid | 0 |
+| `uv run python scripts/ci/secret_guard.py` | Passed | 0 |
+| `git diff --check` | Passed | 0 |
+
+Additional checks on the current sources:
+
+| Command/check | Result | Exit code |
+|---|---|---|
+| `uv sync --frozen --extra connect-full` | Completed | 0 |
+| `uv run pytest tests_py/test_connect_*.py -q` | 119 passed | 0 |
+| `npm --prefix connect/agent test` | 14 passed with real pinned Pi SDK and synthetic HTTP model transport | 0 |
+| `node --test connect/design/policy.test.cjs` | 26 passed; offline policy only | 0 |
+| App JS and Pi worker `node --check` | Syntax valid | 0 |
+| `npm --prefix connect/agent audit --audit-level=moderate` | No vulnerabilities | 0 |
+| `python -m pytest tests_py -q` on an isolated current-source snapshot with a Git index | 523 passed, 1 skipped without adjacent website checkout | 0 |
+| `uv build` and packaged-asset comparison | UI plus five Pi runtime files match source; SDK dependencies/tests excluded from wheel | 0 |
+| Installed wheel outside checkout: full-mode loopback, SDK catalog and credential-free status | SDK 1.3.0 detected; correctly not ready without AI key | 0 |
+
+Current BYOK/Pi acceptance uses synthetic credentials and model/provider transport. No real paid model, MinerU parsing, or Voyage embedding/rerank request was made. OS credential behavior is covered with controlled backends; supported-OS interactive acceptance is still outstanding. Historical results below do not replace these current checks.
+
+## Previous baseline: a1d6104
+
+These results were recorded for `a1d6104033808df0d9fba26433e2651afe322f05`, before BYOK/Pi work:
 
 | Command/check | Result | Exit code |
 |---|---|---|
 | `uv sync --frozen` | Completed | 0 |
 | `uv run pytest tests_py/test_connect_security.py tests_py/test_connect_bridge.py tests_py/test_connect_zotero_local.py -q` | 29 passed | 0 |
-| `node --check connect/app/api.js` | Syntax valid | 0 |
-| `node --check connect/app/app.js` | Syntax valid | 0 |
+| `node --check connect/app/api.js` and `node --check connect/app/app.js` | Syntax valid | 0 |
 | `node --test connect/design/policy.test.cjs` | 26 passed | 0 |
 | `uv run python scripts/ci/secret_guard.py` | Passed | 0 |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 15 passed using installed Chromium | 0 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/snap/bin/chromium npm --prefix connect test` | 15 passed | 0 |
 | `npm --prefix connect audit --audit-level=moderate` | No vulnerabilities | 0 |
-| `uv build` | Built source distribution and wheel; all four packaged UI assets matched the source bytes | 0 |
-| Installed wheel: `mdtero connect --help` and loopback static-asset smoke outside the checkout | Passed in a fresh Python 3.14 environment | 0 |
-| `uv run pytest tests_py -q` in this three-repository workspace | 433 passed, 1 failed: existing public/site manifest mismatch | 1 |
-| `python -m pytest tests_py -q` on an isolated snapshot of the current sources | 433 passed, 1 skipped (no adjacent website checkout) | 0 |
+| `uv build` | Built sdist/wheel; four packaged UI assets matched source | 0 |
+| Installed-wheel CLI help/static-asset smoke outside checkout | Passed in a fresh Python 3.14 environment | 0 |
+| `uv run pytest tests_py -q` in this three-repository workspace | 433 passed, 1 existing public/site manifest failure | 1 |
+| `python -m pytest tests_py -q` on an isolated source snapshot | 433 passed, 1 skipped without adjacent website | 0 |
 
-The workspace-wide failure compares `install/manifest.json` with the adjacent Nextmdtero checkout. Those checkouts declare CLI 0.3.4 and 0.3.3 respectively, with an additional account-note difference. The same test fails on the original `5af8492` sources with that website manifest. Neither manifest was changed here. The isolated run used the current source changes and a local Git index for repository-boundary tests, without copying credentials or the adjacent website. Website manifest alignment remains separate work.
+The baseline workspace failure compares this repository's CLI 0.3.4 install manifest with the adjacent Nextmdtero checkout's 0.3.3 manifest and an account-note difference. It also failed on original `5af8492` sources. Neither manifest was changed by that work; website alignment remains separate.
 
-The browser regressions cover skip-capable onboarding; missing/invalid credentials; failed-session refresh clearing stale state and recovery; tag drafts, preview/apply/removal and stale-preview invalidation; all four download formats including JSON MIME handling; request guards; independent Relay/Zotero status; and narrow/wide layouts without JavaScript or CSP errors. Their upstream account, Relay and Zotero data remain synthetic.
-
-An authorized real-account browser check also passed library listing, tag preview/apply/removal with the original tags restored, and all four export formats. Markdown and ZIP retained the text-only export label. This verifies those account operations only; it does not certify native installation, complete Zotero synchronization, CARSI access, Agent execution or cloud storage durability.
+The baseline authorized real-account smoke passed listing, tag preview/apply/removal with original tags restored, and four export formats retaining text-only labels. It does not certify current BYOK/provider execution, Pi, native installation, complete Zotero synchronization, CARSI or cloud storage durability.

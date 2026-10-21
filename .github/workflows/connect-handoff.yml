@@ -4,6 +4,8 @@ on:
     paths:
       - 'connect/**'
       - 'src/mdtero/connect/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'tests_py/test_connect_*.py'
       - '.github/workflows/connect-handoff.yml'
   push:
@@ -12,6 +14,8 @@ on:
     paths:
       - 'connect/**'
       - 'src/mdtero/connect/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'tests_py/test_connect_*.py'
       - '.github/workflows/connect-handoff.yml'
 permissions:
@@ -52,7 +56,21 @@ jobs:
       - name: Connect bridge and security tests
         run: |
           uv sync --frozen
-          uv run pytest tests_py/test_connect_security.py tests_py/test_connect_bridge.py tests_py/test_connect_zotero_local.py -q
+          uv run pytest tests_py/test_connect_*.py -q
+  pi-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+          cache-dependency-path: connect/agent/package-lock.json
+      - name: Install pinned Pi SDK dependencies
+        run: npm ci --prefix connect/agent --ignore-scripts
+      - name: Exercise read-only Pi adapter without provider calls
+        run: npm test --prefix connect/agent
   live-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 12

@@ -85,5 +85,28 @@
       });
     },
     agentStatus() { return api("/connect/v1/agent/status"); },
+    providerStatus() { return api("/connect/v1/providers"); },
+    localDiscovery(query) { return api("/connect/v1/discovery/search", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }),
+    }); },
+    saveProvider(body) { return api("/connect/v1/providers/key", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }); },
+    clearProvider(body) { return api("/connect/v1/providers/clear", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }); },
+    checkProvider(provider) { return api("/connect/v1/providers/check", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider }),
+    }); },
+    prepareAgent(body) { return api("/connect/v1/agent/prepare", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }); },
+    startAgent(approval_id) { return api("/connect/v1/agent/runs", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approval_id }),
+    }); },
+    agentRun(run_id) { return api("/connect/v1/agent/runs/" + encodeURIComponent(run_id)); },
+    cancelAgent(run_id) { return api("/connect/v1/agent/runs/" + encodeURIComponent(run_id) + "/cancel", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    }); },
   };
 })();

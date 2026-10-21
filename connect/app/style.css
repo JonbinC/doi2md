@@ -128,3 +128,28 @@ summary { cursor: pointer; min-height: 44px; padding-top: 14px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+/* Optional local services and full research mode share the library's tokens. */
+.provider-settings, .agent-preview, .agent-output, .discovery { margin-top: 24px; }
+.provider-list { margin: 20px 0; }
+.provider-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 0; border-top: 1px solid var(--line); }
+.provider-row > div { min-width: 0; }
+.provider-row .actions { margin: 0; flex-shrink: 0; gap: 8px; }
+.provider-row p { margin: 5px 0 0; }
+.provider-form, .research-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; max-width: 820px; }
+.provider-key-field { grid-column: 1 / -1; }
+.research-form { grid-template-columns: 1fr 1.5fr 1fr; margin-top: 16px; }
+textarea, input[type=password], input[type=number] { display: block; font: inherit; border: 1px solid var(--line); padding: 11px 12px; border-radius: 10px; width: 100%; min-width: 0; background: var(--surface); color: var(--ink); min-height: 44px; }
+textarea { resize: vertical; line-height: 1.75; }
+.selected-references, .discovery-results { padding-left: 20px; line-height: 1.75; overflow-wrap: anywhere; }
+.selected-references:empty { display: none; }
+.discovery-results > li { padding: 12px 0; }
+.agent-result { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font: inherit; }
+@media (max-width: 1120px) {
+  .provider-row { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .research-form { grid-template-columns: 1fr; }
+}
+@media (max-width: 690px) {
+  .provider-form { grid-template-columns: 1fr; }
+  .provider-row .actions { flex-shrink: 1; }
+  .navigation button { padding-right: 3px; padding-left: 3px; }
+}

@@ -1,9 +1,10 @@
 """Synthetic-only browser fixture; never reads local credentials or contacts upstream.
 
-The product UI and /connect/v1 requests use the real ConnectBridge security and
-LibraryClient. Only the MdteroClient upstream, Relay diagnostic and local Zotero
-providers are replaced. A separate loopback-only control port resets fixtures
-and exposes request receipts to Playwright; it is not a shipped application API.
+The product UI and /connect/v1 requests use real bridge security, ProviderStore,
+LibraryClient, and AgentRuntime approval controls. Only upstream data, provider
+HTTP, Pi dependency discovery/model execution, Relay and Zotero are synthetic.
+A separate loopback-only control port resets fixtures and exposes sanitized
+request receipts to Playwright; it is not a shipped application API.
 """
 from __future__ import annotations
 
@@ -27,6 +28,9 @@ from mdtero.client import MdteroApiError, MdteroClient  # noqa: E402
 from mdtero.config import MdteroConfig  # noqa: E402
 import mdtero.connect.bridge as bridge_module  # noqa: E402
 from mdtero.connect.bridge import ConnectBridge  # noqa: E402
+from mdtero.connect.agent_runtime import AgentRuntime  # noqa: E402
+from mdtero.connect.library import LibraryClient  # noqa: E402
+from mdtero.connect.providers import ProviderStore  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 SYNTHETIC_KEY = "synthetic-browser-fixture-not-a-credential"
@@ -54,12 +58,17 @@ class SyntheticClient(MdteroClient):
         with self.lock:
             self.papers = copy.deepcopy(INITIAL_PAPERS)
             self.calls: list[dict[str, Any]] = []
+            self.provider_calls: list[dict[str, Any]] = []
+            self.agent_calls: list[dict[str, Any]] = []
+            self.discovery_calls: list[dict[str, Any]] = []
             self.settings = {"authenticated": True, "invalid_credentials": False, "fail_next": None, **(settings or {})}
             self.config.api_key = SYNTHETIC_KEY if self.settings["authenticated"] else None
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
-            return copy.deepcopy({"papers": self.papers, "calls": self.calls})
+            return copy.deepcopy({"papers": self.papers, "calls": self.calls,
+                                  "provider_calls": self.provider_calls, "agent_calls": self.agent_calls,
+                                  "discovery_calls": self.discovery_calls})
 
     def _record(self, method: str, path: str, kwargs: dict[str, Any]) -> None:
         self.calls.append({"method": method, "path": path, "body": copy.deepcopy(kwargs.get("json"))})
@@ -127,6 +136,63 @@ class SyntheticClient(MdteroClient):
 
 
 client = SyntheticClient()
+
+
+def synthetic_provider_http(url: str, **_kwargs: Any) -> httpx.Response:
+    # Never record kwargs: the production check attaches a private key there.
+    with client.lock:
+        client.provider_calls.append({"method": "GET", "url": url})
+    assert url == "https://api.openalex.org/works/W2741809807"
+    return httpx.Response(200, json={"id": "https://openalex.org/W2741809807"}, request=httpx.Request("GET", url))
+
+
+class SyntheticAgentRuntime(AgentRuntime):
+    """Keep real approval/run controls; replace just the SDK boundary offline."""
+
+    def _dependency_info(self) -> dict[str, Any]:
+        return {"available": True, "node_version": "v22.19.0", "sdk_version": "1.3.0", "models": {
+            "openai": [{"id": "gpt-4.1-mini", "name": "Synthetic model", "max_output_tokens": 4096}],
+            "anthropic": [{"id": "claude-sonnet-4-5", "name": "Synthetic model", "max_output_tokens": 4096}],
+            "google": [{"id": "gemini-2.5-flash", "name": "Synthetic model", "max_output_tokens": 4096}],
+            "openrouter": [{"id": "openai/gpt-4.1-mini", "name": "Synthetic model", "max_output_tokens": 4096}],
+        }}
+
+    def _execute_worker(self, payload: dict[str, Any], cancel_event: threading.Event, run_id: str) -> dict[str, Any]:
+        # Receipts intentionally exclude api_key and any SDK implementation state.
+        with client.lock:
+            client.agent_calls.append({"run_id": run_id, "payload": copy.deepcopy({
+                key: value for key, value in payload.items() if key != "api_key"
+            })})
+            delay = float(client.settings.get("agent_delay_seconds", 0.05))
+        cancel_event.wait(delay)
+        return {"text": 'Synthetic metadata summary [11]. <img src=x onerror="window.agentXss=true">',
+                "usage": {"input": 50, "output": 20, "totalTokens": 70}, "engine": "pi", "sdk_version": "1.3.0",
+                "provider": payload["provider"], "model": payload["model"], "scope": "selected_metadata",
+                "full_text_included": False, "model_requests": 1, "max_output_tokens": payload["max_output_tokens"]}
+
+
+def local_services(settings: dict[str, Any] | None = None) -> tuple[ProviderStore, SyntheticAgentRuntime]:
+    providers = ProviderStore(config=client.config, environ={}, keyring_backend=None, http_get=synthetic_provider_http)
+    runtime = SyntheticAgentRuntime(full_mode=bool((settings or {}).get("full_mode", False)),
+                                    providers=providers, library=LibraryClient(client))
+    return providers, runtime
+
+
+bridge: ConnectBridge | None = None
+
+
+def synthetic_discovery(query: str, **kwargs: Any) -> dict[str, Any]:
+    # Verify local selection without ever exposing the supplied OpenAlex key.
+    with client.lock:
+        client.discovery_calls.append({"query": query, "providers": kwargs.get("providers"),
+                                       "enrich": kwargs.get("enrich"), "key_configured": bool(kwargs.get("openalex_api_key"))})
+    return {"provider": "openalex", "source": "local_multi_source", "query": query,
+            "items": [{"title": 'Synthetic local discovery <script>window.discoveryXss=true</script>',
+                       "doi": "10.0000/synthetic.discovery", "authors": ["Synthetic Author"], "year": 2025}],
+            "result_count": 1, "meta": {"local": True}, "discovery_diagnostics": {"server_openalex_attempted": False}}
+
+
+bridge_module.search_local_discovery = synthetic_discovery
 bridge_module.diagnose_relay = lambda _: {
     "transport_online": True, "browser_ready": False, "article_entitlement": None,
     "cloud_status": {"connected": True, "egress_ip": "192.0.2.10"},
@@ -155,7 +221,11 @@ class ControlHandler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         settings = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        assert bridge is not None
+        bridge.agent_runtime.close()
+        bridge.providers.clear_session()
         client.reset(settings)
+        bridge.providers, bridge.agent_runtime = local_services(settings)
         self._json({"reset": True})
 
     def _json(self, payload: dict[str, Any]) -> None:
@@ -172,7 +242,9 @@ if __name__ == "__main__":
     for event in (signal.SIGTERM, signal.SIGINT):
         signal.signal(event, lambda *_args: stopped.set())
     control = ThreadingHTTPServer(("127.0.0.1", 18742), ControlHandler)
-    with ConnectBridge(host="127.0.0.1", port=18741, client=client, static_dir=APP_DIR) as bridge:
+    providers, runtime = local_services()
+    with ConnectBridge(host="127.0.0.1", port=18741, client=client, static_dir=APP_DIR,
+                       providers=providers, agent_runtime=runtime) as bridge:
         threading.Thread(target=control.serve_forever, daemon=True).start()
         print(f"Synthetic-only Connect fixture at {bridge.base_url}", flush=True)
         stopped.wait()

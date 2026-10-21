@@ -1,0 +1,10 @@
+{
+  "name": "mdtero-connect-pi-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Opt-in local Pi runtime for explicitly selected Mdtero metadata",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": { "test": "node --test worker.test.mjs", "check": "node worker.mjs --check" },
+  "dependencies": { "@earendil-works/pi-coding-agent": "1.3.0" }
+}

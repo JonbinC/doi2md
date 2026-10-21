@@ -23,6 +23,9 @@ dev = [
   "pytest>=8",
 ]
 
+[project.optional-dependencies]
+connect-full = ["keyring>=25.7,<27"]
+
 [project.urls]
 Homepage = "https://mdtero.com"
 Repository = "https://github.com/JonbinC/doi2md"
@@ -39,6 +42,11 @@ packages = ["src/mdtero"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "connect/app" = "mdtero/connect/static"
+"connect/agent/worker.mjs" = "mdtero/connect/agent/worker.mjs"
+"connect/agent/package.json" = "mdtero/connect/agent/package.json"
+"connect/agent/package-lock.json" = "mdtero/connect/agent/package-lock.json"
+"connect/agent/README.md" = "mdtero/connect/agent/README.md"
+"connect/agent/THIRD_PARTY_NOTICES.md" = "mdtero/connect/agent/THIRD_PARTY_NOTICES.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests_py"]
