@@ -1,0 +1,35 @@
+name: Connect handoff design checks
+on:
+  pull_request:
+    paths:
+      - 'connect/**'
+      - '.github/workflows/connect-handoff.yml'
+  push:
+    branches:
+      - handoff/connect-research-client-20261021
+    paths:
+      - 'connect/**'
+      - '.github/workflows/connect-handoff.yml'
+permissions:
+  contents: read
+jobs:
+  design:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JS syntax
+        run: |
+          node --check connect/design/policy.js
+          node --check connect/design/app.js
+      - name: Original 26 design-policy regressions
+        run: node --test connect/design/policy.test.cjs
+      - name: Static entry and safe mock-only checks
+        run: |
+          test -s connect/design/index.html
+          test -s connect/design/style.css
+          grep -q "connect-src 'none'" connect/design/index.html
+          ! grep -Eq 'https?://[^" ]+' connect/design/app.js
