@@ -43,13 +43,15 @@ def origin_allowed(origin: str | None, *, port: int) -> bool:
         return False
     try:
         parts = urlsplit(origin)
+        hostname = parts.hostname
+        origin_port = parts.port
     except ValueError:
         return False
     if parts.scheme != "http" or parts.path not in {"", "/"} or parts.query or parts.fragment:
         return False
-    if not is_loopback_host(parts.hostname):
+    if parts.username is not None or parts.password is not None or not is_loopback_host(hostname):
         return False
-    return parts.port == int(port) or (parts.port is None and int(port) == 80)
+    return origin_port == int(port) or (origin_port is None and int(port) == 80)
 
 
 def host_header_allowed(host: str | None, *, port: int) -> bool:

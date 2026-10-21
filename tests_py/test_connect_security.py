@@ -43,6 +43,20 @@ def test_origin_and_host_gates():
     assert not host_header_allowed("evil.example:8741", port=8741)
 
 
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://127.0.0.1:bad",
+        "http://127.0.0.1:-1",
+        "http://127.0.0.1:65536",
+        "http://[::1",
+        "http://user:password@127.0.0.1:8741",
+    ],
+)
+def test_malformed_origins_are_rejected(origin: str):
+    assert not origin_allowed(origin, port=8741)
+
+
 def test_zotero_endpoint_is_fixed_loopback():
     assert approved_zotero_url("/connector/ping").startswith(ZOTERO_LOCAL_BASE)
     with pytest.raises(ValueError):

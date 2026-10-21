@@ -13,3 +13,6 @@ extension/.vite/
 extension/.vitest/
 extension/releases/*.zip
 relay/dist/
+connect/node_modules/
+connect/test-results/
+connect/playwright-report/

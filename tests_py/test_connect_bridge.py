@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -152,3 +153,100 @@ def test_library_client_requires_explicit_dry_run_semantics():
     assert client._request.call_args.kwargs["json"]["dry_run"] is True  # type: ignore[attr-defined]
     LibraryClient(client).update_tags(document_ids=[1], add=["a"], dry_run=False)
     assert client._request.call_args.kwargs["json"]["dry_run"] is False  # type: ignore[attr-defined]
+
+
+def test_ipv6_loopback_bind_and_session():
+    # Some CI hosts disable IPv6 entirely; distinguish that from a bridge bug.
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            probe.bind(("::1", 0))
+    except OSError:
+        pytest.skip("IPv6 loopback is unavailable on this host")
+    client = MdteroClient(MdteroConfig())
+    with ConnectBridge(host="::1", port=0, client=client, static_dir=APP_DIR) as instance:
+        assert instance.base_url == f"http://[::1]:{instance.bound_port}"
+        response = httpx.get(instance.base_url + "/connect/v1/session", trust_env=False)
+        assert response.status_code == 200
+        assert response.json()["bridge"]["host"] == "::1"
+
+
+def test_malformed_origin_gets_a_forbidden_response(bridge: ConnectBridge):
+    response = httpx.get(
+        bridge.base_url + "/connect/v1/session",
+        headers={"Origin": "http://127.0.0.1:bad"},
+    )
+    assert response.status_code == 403
+    assert response.json()["reason_code"] == "origin_rejected"
+
+
+@pytest.mark.parametrize(
+    ("path", "headers", "expected_status", "reason_code"),
+    [
+        ("/connect/v1/library/tags/batch", {"X-Mdtero-CSRF": ""}, 403, "csrf_rejected"),
+        ("/connect/v1/library/tags/batch", {"X-Mdtero-CSRF": "invalid"}, 403, "csrf_rejected"),
+        ("/connect/v1/library/tags/batch", {"Origin": "http://evil.example"}, 403, "origin_rejected"),
+        ("/connect/v1/library/tags/batch", {"Host": "evil.example"}, 403, "host_rejected"),
+        ("/not-an-api", {}, 404, "not_found"),
+    ],
+)
+def test_rejected_post_body_does_not_corrupt_the_next_client_request(
+    bridge: ConnectBridge, path: str, headers: dict[str, str], expected_status: int, reason_code: str
+):
+    session = _get(bridge, "/connect/v1/session").json()
+    with httpx.Client(
+        base_url=bridge.base_url,
+        headers={"Origin": bridge.base_url, "X-Mdtero-CSRF": session["csrf"]},
+    ) as client:
+        rejected = client.post(path, headers=headers, json={"document_ids": [1], "dry_run": True})
+        assert rejected.status_code == expected_status
+        assert rejected.json()["reason_code"] == reason_code
+        assert rejected.headers["connection"] == "close"
+        # The same client's next request must reconnect cleanly, without a 501
+        # from parsing the rejected request's JSON as an HTTP method.
+        next_request = client.post("/connect/v1/library/tags/batch", json={"document_ids": [1]})
+        assert next_request.status_code == 400
+        assert next_request.json()["reason_code"] == "dry_run_required"
+        assert client.get("/connect/v1/session").status_code == 200
+    bridge.client._request.assert_not_called()  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("framing_headers", "expected_status", "reason_code"),
+    [
+        (["Content-Length: -1"], 400, "invalid_content_length"),
+        (["Content-Length: invalid"], 400, "invalid_content_length"),
+        (["Content-Length:"], 400, "invalid_content_length"),
+        (["Content-Length: 2097153"], 413, "body_too_large"),
+        (["Content-Length: " + "9" * 5000], 413, "body_too_large"),
+        (["Content-Length: 2", "Content-Length: 2"], 400, "invalid_body_framing"),
+        (["Transfer-Encoding: chunked"], 400, "invalid_body_framing"),
+    ],
+)
+def test_rejected_body_framing_closes_without_dispatching_pipelined_bytes(
+    bridge: ConnectBridge, framing_headers: list[str], expected_status: int, reason_code: str
+):
+    session = _get(bridge, "/connect/v1/session").json()
+    headers = [
+        "POST /connect/v1/library/tags/batch HTTP/1.1",
+        f"Host: 127.0.0.1:{bridge.bound_port}",
+        f"Origin: {bridge.base_url}",
+        f"X-Mdtero-CSRF: {session['csrf']}",
+        *framing_headers,
+    ]
+    # A second request must never be read out of an unconsumed rejected body.
+    request = (
+        "\r\n".join(headers)
+        + "\r\n\r\n{}\r\n"
+        + f"GET /connect/v1/session HTTP/1.1\r\nHost: 127.0.0.1:{bridge.bound_port}\r\n\r\n"
+    ).encode()
+    with socket.create_connection(("127.0.0.1", bridge.bound_port), timeout=2) as connection:
+        connection.sendall(request)
+        chunks = []
+        while chunk := connection.recv(8192):
+            chunks.append(chunk)
+    response = b"".join(chunks)
+    assert response.startswith(f"HTTP/1.1 {expected_status} ".encode())
+    assert b"Connection: close\r\n" in response
+    assert response.count(b"HTTP/1.1 ") == 1
+    assert json.loads(response.split(b"\r\n\r\n", 1)[1])["reason_code"] == reason_code
+    bridge.client._request.assert_not_called()  # type: ignore[attr-defined]

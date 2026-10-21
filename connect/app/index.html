@@ -8,11 +8,13 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<a class="skip-link" href="#screen">跳到主要内容</a>
 <div class="shell">
   <aside class="sidebar" aria-label="Main navigation">
-    <a href="#library" class="brand"><span class="brand-icon">M</span><span>Mdtero <small>CONNECT</small></span></a>
+    <a href="#start" class="brand"><span class="brand-icon">M</span><span>Mdtero <small>CONNECT</small></span></a>
     <nav class="navigation">
-      <button type="button" data-view="library" class="active">我的文献库</button>
+      <button type="button" data-view="start" class="active">开始使用</button>
+      <button type="button" data-view="library">我的文献库</button>
       <button type="button" data-view="connections">连接中心</button>
       <button type="button" data-view="settings">设置</button>
     </nav>
@@ -30,8 +32,8 @@
         <button type="button" data-action="refresh" class="ghost">刷新</button>
       </div>
     </header>
-    <main id="screen" tabindex="-1"></main>
-    <footer class="footer">Mdtero Connect — 经本机 loopback 桥接调用已合并的后端文献库/标签/导出接口。Markdown 导出为纯文本，不含图片。</footer>
+    <main id="screen" tabindex="-1" aria-busy="true"></main>
+    <footer class="footer">Mdtero Connect · 本机浏览器客户端预览版。Markdown 导出为纯文本，不含图片；原生安装包尚未发布。</footer>
   </div>
 </div>
 <script src="api.js"></script>

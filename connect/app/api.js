@@ -18,13 +18,14 @@
     throw error;
   }
 
-  async function api(path, options = {}) {
+  async function api(path, options = {}, rawResponse = false) {
     const response = await fetch(path, {
       ...options,
       headers: { ...jsonHeaders(), ...(options.headers || {}) },
       credentials: "same-origin",
     });
     if (!response.ok) await readError(response);
+    if (rawResponse) return response;
     const type = response.headers.get("content-type") || "";
     if (type.includes("application/json")) return response.json();
     return response;
@@ -55,7 +56,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json", ...jsonHeaders() },
         body: JSON.stringify({ document_ids, format }),
-      });
+      }, true);
       const blob = await response.blob();
       const disposition = response.headers.get("content-disposition") || "";
       const match = /filename="?([^";]+)"?/i.exec(disposition);

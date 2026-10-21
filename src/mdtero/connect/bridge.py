@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import socket
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,6 +37,10 @@ from mdtero.connect.zotero_local import (
 )
 
 
+class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+
 class ConnectBridge:
     def __init__(
         self,
@@ -58,7 +63,8 @@ class ConnectBridge:
     def base_url(self) -> str:
         if self._httpd is None:
             raise RuntimeError("Connect bridge is not running")
-        return f"http://{self.host}:{self._httpd.server_address[1]}"
+        hostname = f"[{self.host}]" if ":" in self.host else self.host
+        return f"http://{hostname}:{self._httpd.server_address[1]}"
 
     @property
     def bound_port(self) -> int:
@@ -68,7 +74,8 @@ class ConnectBridge:
 
     def start(self) -> str:
         handler = _make_handler(self)
-        self._httpd = ThreadingHTTPServer((self.host, self.port), handler)
+        server_type = _IPv6ThreadingHTTPServer if self.host == "::1" else ThreadingHTTPServer
+        self._httpd = server_type((self.host, self.port), handler)
         # Refuse accidental non-loopback binds even if the constructor was bypassed.
         bound_host = self._httpd.server_address[0]
         assert_loopback_bind(str(bound_host))
@@ -119,6 +126,10 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
             self._serve_static(path)
 
         def do_POST(self) -> None:  # noqa: N802
+            # All early rejections leave the body unread. Close until the body
+            # has been consumed so a keep-alive peer cannot reuse those bytes.
+            close_after_body = self.close_connection
+            self.close_connection = True
             parsed = urlparse(self.path)
             path = parsed.path
             if not path.startswith("/connect/v1/"):
@@ -126,11 +137,30 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                 return
             if not self._security_ok(require_csrf=True):
                 return
-            length = int(self.headers.get("Content-Length") or 0)
+            # Reject ambiguous framing before reading the body. Close on an early
+            # rejection so unread bytes cannot become another keep-alive request.
+            lengths = self.headers.get_all("Content-Length") or []
+            if self.headers.get("Transfer-Encoding") is not None or len(lengths) > 1:
+                self._reject_body(HTTPStatus.BAD_REQUEST, "invalid_body_framing")
+                return
+            length_text = lengths[0].strip() if lengths else "0"
+            if not length_text or not length_text.isascii() or not length_text.isdecimal():
+                self._reject_body(HTTPStatus.BAD_REQUEST, "invalid_content_length")
+                return
+            # Compare the digit count first; Python limits huge integer strings.
+            significant_length = length_text.lstrip("0") or "0"
+            if len(significant_length) > 7:
+                self._reject_body(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "body_too_large")
+                return
+            length = int(significant_length)
             if length > 2 * 1024 * 1024:
-                self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"reason_code": "body_too_large"})
+                self._reject_body(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "body_too_large")
                 return
             raw = self.rfile.read(length) if length else b"{}"
+            if length and len(raw) != length:
+                self._reject_body(HTTPStatus.BAD_REQUEST, "incomplete_body")
+                return
+            self.close_connection = close_after_body
             try:
                 body = json.loads(raw.decode("utf-8") or "{}")
             except (UnicodeDecodeError, json.JSONDecodeError):
@@ -140,6 +170,10 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                 self._json(HTTPStatus.BAD_REQUEST, {"reason_code": "invalid_json_object"})
                 return
             self._dispatch_api("POST", path, {}, body)
+
+        def _reject_body(self, status: int, reason_code: str) -> None:
+            self.close_connection = True
+            self._json(status, {"reason_code": reason_code})
 
         def _security_ok(self, *, require_csrf: bool) -> bool:
             port = bridge.bound_port
@@ -328,6 +362,8 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "private, no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            if self.close_connection:
+                self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(data)
 
