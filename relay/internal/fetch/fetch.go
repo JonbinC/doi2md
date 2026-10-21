@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +14,30 @@ import (
 
 const MaxBodyBytes = 32 * 1024 * 1024
 const MaxRedirects = 10
+
+const elsevierAPIHost = "api.elsevier.com"
+
+// elsevierCredentialHeaders are only ever sent to https://api.elsevier.com.
+var elsevierCredentialHeaders = []string{"X-ELS-APIKey", "X-ELS-Insttoken"}
+
+func isElsevierAPIURL(u *url.URL) bool {
+	if u == nil || u.Scheme != "https" || u.User != nil {
+		return false
+	}
+	port := u.Port()
+	return strings.EqualFold(u.Hostname(), elsevierAPIHost) && (port == "" || port == "443")
+}
+
+// stripElsevierCredentials removes Elsevier credential headers unless the
+// request targets https://api.elsevier.com. Never log these header values.
+func stripElsevierCredentials(req *http.Request) {
+	if isElsevierAPIURL(req.URL) {
+		return
+	}
+	for _, name := range elsevierCredentialHeaders {
+		req.Header.Del(name)
+	}
+}
 
 type Result struct {
 	StatusCode int
@@ -43,6 +68,8 @@ var newHTTPClient = func(timeout time.Duration) *http.Client {
 			if reason := domains.RejectionReason(req.URL.String()); reason != "" {
 				return redirectBlockedError{reason: reason}
 			}
+			// Go copies custom headers to redirect targets; drop Elsevier creds off-host.
+			stripElsevierCredentials(req)
 			return nil
 		},
 	}
@@ -67,6 +94,7 @@ func Execute(rawURL, method string, headers map[string]string, timeout time.Dura
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
+	stripElsevierCredentials(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		var blocked redirectBlockedError

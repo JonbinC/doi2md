@@ -18,7 +18,7 @@ Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译
 
 `https://api.mdtero.com/mcp`
 
-用 Mdtero 账号登录。Elsevier key 只放在 `https://api.mdtero.com/mcp/settings`，不要发进对话。官网没有一键安装按钮。机构全文仍需在有授权的设备上运行 Relay。
+用 Mdtero 账号登录，在[安全账户设置](https://api.mdtero.com/mcp/settings)中保存 Elsevier key。需要机构授权的全文时，连接校园设备上的 Relay。Relay 在线不代表某篇文章可用；`mdtero relay check --json` 会检查密钥有效性与文章授权。详见[云端 MCP 接入指南](https://mdtero.com/docs/zh/install)。
 
 Codex 和 ChatGPT 桌面版可以把这个仓库加为插件源：
 
@@ -126,7 +126,7 @@ Mdtero Account 是 Mdtero API key、额度、计费、历史和安装提示词�
 
 - [Mdtero 网站](https://mdtero.com)
 - [文档](https://mdtero.com/docs/)
-- [安装指南](https://mdtero.com/docs/install.html)
+- [安装指南](https://mdtero.com/docs/zh/install)
 
 ## 开发
 

@@ -20,7 +20,7 @@ Add this remote MCP URL in ChatGPT Plugins, Claude custom connectors, or Cursor 
 
 `https://api.mdtero.com/mcp`
 
-Sign in with a Mdtero account when asked. Elsevier keys are saved at `https://api.mdtero.com/mcp/settings`, not in the chat. There is no one-click install from the website. Campus full text still needs Relay on an authorized device.
+Sign in with a Mdtero account when asked. Save Elsevier keys at [secure account settings](https://api.mdtero.com/mcp/settings). For institutional full text, connect Relay on an authorized campus device. An online Relay does not prove a paper is available: `mdtero relay check --json` checks key validity and article entitlement. See the [Cloud MCP setup guide](https://mdtero.com/docs/install#cloud-mcp-chatgpt-claude-cursor).
 
 Codex and the ChatGPT desktop app can add this repo as a plugin source:
 
@@ -141,7 +141,7 @@ This public repository owns the Python CLI/TUI package, browser extension, campu
 
 - [Mdtero website](https://mdtero.com)
 - [Documentation](https://mdtero.com/docs/)
-- [Install guide](https://mdtero.com/docs/install.html)
+- [Install guide](https://mdtero.com/docs/install)
 
 ## Development
 

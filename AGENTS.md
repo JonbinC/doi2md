@@ -1,13 +1,15 @@
-# mdtero-public AGENTS.md
+# doi2md AGENTS.md
 
 ## OVERVIEW
 
-Public local-install/download surface: browser extension, public install manifest, local-file handoff assets, and agent skill materials.
+Public local-install/download surface: Python CLI/TUI, browser extension, campus Relay, install manifest, local-file handoff assets, and agent skill materials. Website/dashboard code belongs in `JonbinC/Nextmdtero`; backend runtime belongs in `JonbinC/mdtero-backend`.
 
 ## STRUCTURE
 
 ```text
-mdtero-public/
+doi2md/
+├── src/mdtero/ # public Python CLI/TUI and packaged agent skills
+├── relay/      # campus HTTP transport and optional authorized browser worker
 ├── extension/  # public browser extension SSOT
 ├── shared/     # public contract subset used by extension/public code
 ├── install/    # canonical public install manifest and docs
@@ -19,6 +21,8 @@ mdtero-public/
 
 | Task | Location | Notes |
 |---|---|---|
+| Public CLI/TUI | `src/mdtero` | Python runtime, project state, local agent installation. |
+| Campus Relay | `relay` | Native relay, browser worker, and their tests. |
 | Extension runtime | `extension` | Source, tests, manifest, build output. |
 | Extension protocol helpers | `extension/src/lib` | Route execution, browser capture, raw upload, runtime messages. |
 | Public install contract | `install/manifest.json` | Mirrored with site manifest; audited by tests. |
@@ -48,6 +52,12 @@ npm --prefix extension test -- --run
 npm --prefix extension run build
 uv run --with pytest python -m pytest tests_py
 ```
+
+## Cloud Agent setup
+
+- Use the repository's Python lockfile with `uv sync --frozen`, run `npm ci` in `extension/`, and run `go mod download` in `relay/`. Extension CI uses Node 22; the Relay module targets Go 1.22. Check the selected Cloud Agent image instead of assuming these tools are preinstalled.
+- Install Python venv support (`python3-venv` on Debian/Ubuntu) when the image cannot run `python3 -m venv`; the CI wheel smoke uses it. `uv sync` manages its own environment.
+- No resident dev server is needed for CLI, extension, or Relay verification. Check `uv run mdtero --version` and `uv run mdtero project init` in a disposable directory. Run `uv run pytest tests_py -q`, `npm --prefix extension test -- --run`, `npm --prefix extension run build`, and `go test ./...` from `relay/` as the relevant gates.
 
 ## CHILD GUIDANCE
 

@@ -21,7 +21,7 @@
     "serverBehavior": "skipped on headless/server environments",
     "browserFallback": "Mdtero browser extension remains available for current-tab or existing-session capture"
   },
-  "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Academic source keys stay in local mdtero CLI configuration. The runtime CLI and agent skill installer are both provided by the Python mdtero package. Portable Agent Skills installs also work via `npx skills add JonbinC/doi2md` and https://mdtero.com/.well-known/agent-skills/index.json.",
+  "accountBoundaryNote": "Mdtero Account is the control plane for Mdtero API keys, quota, billing, history, and install prompts. Save academic source keys in account settings for cloud MCP requests; local CLI academic keys remain on this machine. Campus Relay checks institutional access on the campus network and does not replace publisher entitlement. The runtime CLI and agent skill installer are both provided by the Python mdtero package. Portable Agent Skills installs also work via `npx skills add JonbinC/doi2md` and https://mdtero.com/.well-known/agent-skills/index.json.",
   "agentSkills": {
     "npxInstallCommand": "npx skills add JonbinC/doi2md",
     "discoveryInstallCommand": "npx skills add https://mdtero.com/agent-skills",
@@ -36,7 +36,7 @@
   },
   "cli": {
     "packageName": "mdtero",
-    "packageVersion": "0.3.3",
+    "packageVersion": "0.3.4",
     "packageManager": "uv",
     "runtimeInstallCommand": "uv tool install --upgrade mdtero",
     "scriptInstallCommand": "curl -Ls https://mdtero.com/install.sh | sh",
@@ -151,7 +151,7 @@
     },
     "current": {
       "cli": {
-        "version": "0.3.3",
+        "version": "0.3.4",
         "packageName": "mdtero",
         "packageManager": "uv",
         "installCommand": "uv tool install --upgrade mdtero",

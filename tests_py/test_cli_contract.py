@@ -8614,6 +8614,7 @@ def test_public_script_surface_is_ci_only():
     expected = {
         "scripts/ci/extension_dist_smoke.py",
         "scripts/ci/release_gate.sh",
+        "scripts/ci/release_policy.py",
         "scripts/ci/secret_guard.py",
     }
     actual = {
