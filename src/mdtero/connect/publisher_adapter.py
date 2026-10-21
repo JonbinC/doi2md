@@ -89,9 +89,13 @@ REGISTRY: dict[str, Publisher] = {p.key: p for p in [
 
 
 def normalize_doi(value: str) -> str:
-    v = value.strip()
-    v = re.sub(r"^(https?://(dx\.)?doi\.org/|doi:)", "", v, flags=re.I)
-    return v.strip().lower() if v.lower().startswith("10.") else v.strip()
+    """Normalise DOI input (URL, ``doi:`` prefix, %-encoding, trailing punctuation)."""
+    from urllib.parse import unquote
+    v = unquote((value or "").strip())
+    v = re.sub(r"^(https?://(dx\.)?doi\.org/|doi:\s*)", "", v, flags=re.I).strip()
+    v = re.split(r"[?#\s]", v, maxsplit=1)[0]
+    v = v.rstrip(".,;)]>\"'")
+    return v.lower() if v.lower().startswith("10.") else v
 
 
 def route(doi: str) -> Optional[Publisher]:
@@ -130,24 +134,83 @@ def ids_from_url(url: str) -> dict[str, str]:
     return out
 
 
-def pdf_candidates(doi: str, resolved_url: str = "", html: str = "") -> list[str]:
+def rsc_ids_from_doi(doi: str, html: str = "") -> list[dict[str, str]]:
+    """RSC article ids from the DOI suffix (e.g. 10.1039/d5qo01181g).
+
+    RSC moved landing pages to /{journal}/article/{vol}/{issue}/{pages}/{n},
+    which no longer contain the year/journal/id needed for /articlepdf/.
+    Suffix format: {letter}{year digit}{journal}{5 digits}{check}; the PDF
+    path year is the publication year, taken from citation_publication_date /
+    citation_date when available, else guessed from the suffix decade.
+    """
+    m = re.fullmatch(r"10\.1039/(([a-z])(\d)([a-z]{2})\d{5}[a-z])", normalize_doi(doi))
+    if not m:
+        return []
+    article_id, letter, digit, journal = m.group(1), m.group(2), int(m.group(3)), m.group(4)
+    years: list[str] = []
+    if html:
+        meta = parse_meta(html)
+        for name in ("citation_publication_date", "citation_date", "citation_online_date"):
+            for v in meta.get(name, []):
+                y = re.search(r"(19|20)\d{2}", v)
+                if y and y.group(0) not in years:
+                    years.append(y.group(0))
+    # 'b'/'c' -> 2000s/2010s, 'd' -> 2020s (RSC letter roughly tracks decade)
+    decade = {"b": 2000, "c": 2010, "d": 2020}.get(letter)
+    if decade is not None:
+        base = decade + digit
+        for y in (base, base + 1):
+            if str(y) not in years:
+                years.append(str(y))
+    return [{"year": y, "journal": journal, "article_id": article_id} for y in years]
+
+
+def pdf_candidates(doi: str, resolved_url: str = "", html: str = "",
+                   translator_pdfs: Optional[list[str]] = None) -> list[str]:
     """Ordered PDF URL candidates: citation_pdf_url, then templates."""
     pub = route(doi)
     if pub is None:
         return []
-    cands: list[str] = []
+    cands: list[str] = list(translator_pdfs or [])
     if html:
         meta = parse_meta(html).get("citation_pdf_url")
         if meta:
             cands.append(urljoin(resolved_url or landing_url(doi), meta[0]))
     ids = {"doi": normalize_doi(doi), **ids_from_url(resolved_url)}
+    id_sets = [ids]
+    if pub.key == "rsc" and "article_id" not in ids:
+        id_sets += [{**ids, **extra} for extra in rsc_ids_from_doi(doi, html)]
     for tpl in pub.pdf_templates:
-        try:
-            cands.append(tpl.format(**ids))
-        except KeyError:
-            continue  # ids not yet known (needs landing page)
+        for idset in id_sets:
+            try:
+                cands.append(tpl.format(**idset))
+            except KeyError:
+                continue  # ids not yet known (needs landing page)
     seen: set[str] = set()
-    return [c for c in cands if not (c in seen or seen.add(c))]
+    return [c for c in cands if c.startswith("https://") and not (c in seen or seen.add(c))]
+
+
+_PDF_LINK_PATTERNS = (
+    r'<a[^>]+class="[^"]*article-pdfLink[^"]*"[^>]+href="([^"]+)"',
+    r'<a[^>]+href="([^"]+)"[^>]+class="[^"]*article-pdfLink',
+    r'<i?frame[^>]+src="([^"]+(?:\.pdf|getPDF\.jsp)[^"]*)"',
+    r'<meta[^>]+http-equiv="refresh"[^>]+url=([^"\s>]+\.pdf[^"\s>]*)',
+    r'<a[^>]+id="pdf-link"[^>]+data-article-url="([^"]+)"',
+)
+
+
+def pdf_links_in_html(html: str, base_url: str) -> list[str]:
+    """PDF URLs from an HTML response that should have been a PDF.
+
+    AIP/Silverchair (``/doi/pdf/{doi}`` -> ``/article-pdf/...``), IEEE
+    (``stamp.jsp`` frame) and some Atypon sites answer a PDF URL with an HTML
+    viewer/interstitial that links to the real file.
+    """
+    out = [urljoin(base_url, u) for u in parse_meta(html).get("citation_pdf_url", [])]
+    for pat in _PDF_LINK_PATTERNS:
+        out += [urljoin(base_url, m.replace("&amp;", "&")) for m in re.findall(pat, html, flags=re.I)]
+    seen: set[str] = set()
+    return [u for u in out if not (u in seen or seen.add(u))]
 
 
 # --------------------------------------------------------------- HTML parsing
@@ -319,49 +382,176 @@ class FetchResult:
     path: Optional[str] = None
     size: int = 0
     detail: str = ""
+    metadata: Optional[dict] = None
+    tried: list = field(default_factory=list)
+    handoffs: int = 0
+
+
+def bring_to_front(page) -> None:
+    try:
+        page.bring_to_front()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def wait_for_clearance(page, kind: str, *, timeout_s: float = 300.0, poll_s: float = 2.0,
+                       notify: Optional[Callable[[str, str], None]] = None,
+                       sleep: Callable[[float], None] = time.sleep,
+                       clock: Callable[[], float] = time.monotonic) -> bool:
+    """Hand the visible window to the user and poll until the block is gone.
+
+    The user clicks/solves/logs in themselves. We only *read* the page state
+    (``page.content()`` / ``page.url``) every ``poll_s`` seconds; nothing is
+    clicked, typed, injected or spoofed. Returns True once cleared, False on
+    timeout.
+    """
+    bring_to_front(page)
+    if notify:
+        notify(kind, page.url)
+    deadline = clock() + timeout_s
+    while clock() < deadline:
+        sleep(poll_s)
+        html = safe_content(page, attempts=1)
+        if not html:
+            continue
+        if detect_block(html, 200, page.url) is None:
+            # give a just-cleared challenge time to redirect to the article
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=15_000)
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+    return False
+
+
+def safe_content(page, attempts: int = 5) -> str:
+    """page.content() that tolerates redirects/JS navigations in progress."""
+    for i in range(attempts):
+        try:
+            return page.content()
+        except Exception:  # noqa: BLE001 - "page is navigating"
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10_000)
+            except Exception:  # noqa: BLE001
+                pass
+            page.wait_for_timeout(500 * (i + 1))
+    return ""
+
+
+def _response_status(resp) -> int:
+    try:
+        return int(resp.status) if resp is not None else 0
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
-                  wait_for_user: Optional[Callable[[str], bool]] = None,
-                  goto_timeout_ms: int = 45_000) -> FetchResult:
+                  wait_for_user: Optional[Callable[[object, str], bool]] = None,
+                  goto_timeout_ms: int = 45_000, handoff_timeout_s: float = 300.0,
+                  use_translators: bool = True, translator_runner: Optional[Callable] = None,
+                  notify: Optional[Callable[[str, str], None]] = None,
+                  prefer_html: bool = True) -> FetchResult:
     """Fetch one article in an existing (headed, user-owned) Playwright page.
 
-    ``wait_for_user(kind)`` is invoked when a challenge/login is shown; it should
-    bring the window to the front and block until the user is done, returning
-    True to re-check. With no callback the block is reported as-is.
+    Order: landing page -> (challenge/login hand-off) -> HTML body ->
+    Zotero translator PDF -> citation_pdf_url -> built URLs.
+    ``wait_for_user(page, kind)`` overrides the default hand-off; pass
+    ``handoff_timeout_s=0`` to report blocks immediately.
     """
+    doi = normalize_doi(doi)
     pub = route(doi)
     if pub is None:
         return FetchResult(doi, "-", "error", detail="not a Connect publisher")
     limiter.acquire()
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = re.sub(r"[^\w.-]+", "_", normalize_doi(doi))
-    resp = page.goto(landing_url(doi), wait_until="domcontentloaded", timeout=goto_timeout_ms)
+    stem = re.sub(r"[^\w.-]+", "_", doi)[:150]
+    res = FetchResult(doi, pub.key, "not_found")
+
+    def handoff(kind: str) -> bool:
+        if handoff_timeout_s <= 0 and wait_for_user is None:
+            return False
+        res.handoffs += 1
+        if wait_for_user is not None:
+            return bool(wait_for_user(page, kind))
+        return wait_for_clearance(page, kind, timeout_s=handoff_timeout_s, notify=notify)
+
+    try:
+        resp = page.goto(landing_url(doi), wait_until="domcontentloaded", timeout=goto_timeout_ms)
+    except Exception as exc:  # noqa: BLE001
+        res.status, res.detail = "error", f"goto: {exc}"[:300]
+        return res
     page.wait_for_timeout(3000)
-    html, status = page.content(), (resp.status if resp else 0)
+    html, status = safe_content(page), _response_status(resp)
     block = detect_block(html, status, page.url)
-    if block and wait_for_user and wait_for_user(block):
-        html, status = page.content(), 200
+    if block == "login" and status < 400 and extract_fulltext(pub.key, html):
+        block = None  # "Get access"/"Sign in" chrome on a page that does show full text
+    if block and handoff(block):
+        html, status = safe_content(page), 200
         block = detect_block(html, status, page.url)
     if block == "challenge":
-        return FetchResult(doi, pub.key, "challenge", detail=f"http {status} {page.url}")
-    text = extract_fulltext(pub.key, html)
+        res.status, res.detail = "challenge", f"http {status} {page.url}"
+        return res
+    landing = page.url
+
+    if use_translators:
+        runner = translator_runner
+        if runner is None:
+            from .zotero.translators import run_translator as runner  # noqa: PLC0415
+        tr = runner(page, pub.key) or {}
+        items = tr.get("items") or []
+        res.metadata = {"translator": tr.get("translator"), "error": tr.get("error"), "item": items[0] if items else None}
+    from .zotero.translators import pdf_urls  # noqa: PLC0415
+    tr_pdfs = pdf_urls({"items": [res.metadata["item"]]}) if res.metadata and res.metadata.get("item") else []
+
+    if res.metadata:
+        (out_dir / f"{stem}.json").write_text(json.dumps(res.metadata, indent=1, ensure_ascii=False), encoding="utf-8")
+
+    text = extract_fulltext(pub.key, html) if prefer_html and not block else None
     if text:
         p = out_dir / f"{stem}.md"
         p.write_text(text, encoding="utf-8")
-        return FetchResult(doi, pub.key, "html", str(p), len(text.encode()), page.url)
-    for cand in pdf_candidates(doi, page.url, html):
+        res.status, res.path, res.size, res.detail = "html", str(p), len(text.encode()), landing
+        return res
+
+    queue = pdf_candidates(doi, landing, html, tr_pdfs)
+    seen: set[str] = set()
+    followups = 0
+    while queue:
+        cand = queue.pop(0)
+        if cand in seen:
+            continue
+        seen.add(cand)
+        res.tried.append(cand)
         try:
-            r = page.context.request.get(cand, timeout=goto_timeout_ms)
-            body = r.body()
+            r = page.context.request.get(cand, timeout=goto_timeout_ms, max_redirects=10)
+            body, rstatus, ctype, final = r.body(), r.status, r.headers.get("content-type", ""), (r.url or cand)
         except Exception as exc:  # noqa: BLE001
-            last = f"{cand}: {exc}"
+            res.detail = f"{cand}: {type(exc).__name__}"
             continue
         if is_pdf(body):
             p = out_dir / f"{stem}.pdf"
             p.write_bytes(body)
-            return FetchResult(doi, pub.key, "pdf", str(p), len(body), cand)
-        last = f"{cand}: http {r.status} {r.headers.get('content-type','')}"
-        if detect_block(body[:200_000].decode("utf-8", "ignore"), r.status) == "challenge":
-            return FetchResult(doi, pub.key, "challenge", detail=last)
-    return FetchResult(doi, pub.key, block or "not_found", detail=locals().get("last", f"http {status}"))
+            res.status, res.path, res.size, res.detail = "pdf", str(p), len(body), final
+            return res
+        snippet = body[:400_000].decode("utf-8", "ignore")
+        kind = detect_block(snippet, rstatus, final)
+        res.detail = f"{cand}: http {rstatus} {ctype.split(';')[0]}"
+        if kind == "challenge":
+            # Show the challenge in the visible window, let the user clear it, retry once.
+            try:
+                page.goto(cand, wait_until="domcontentloaded", timeout=goto_timeout_ms)
+            except Exception:  # noqa: BLE001 - a PDF navigation may "fail" as a download
+                pass
+            if handoff("challenge"):
+                seen.discard(cand)
+                queue.insert(0, cand)
+                continue
+            res.status = "challenge"
+            return res
+        if "html" in ctype and followups < 4:
+            extra = [u for u in pdf_links_in_html(snippet, final) if u not in seen]
+            followups += len(extra) > 0
+            queue[:0] = extra
+    if block:
+        res.status = block
+    return res
