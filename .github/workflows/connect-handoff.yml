@@ -59,7 +59,10 @@ jobs:
           test -s connect/design/index.html
           test -s connect/design/style.css
           grep -q "connect-src 'none'" connect/design/index.html
-          ! grep -Eq 'https?://[^" ]+' connect/design/app.js
+          if grep -Eq 'https?://[^" ]+' connect/design/app.js; then
+            echo "offline design bundle must not contain remote URLs"
+            exit 1
+          fi
           grep -q "connect-src 'self'" connect/app/index.html
           test -s connect/app/api.js
   bridge:
