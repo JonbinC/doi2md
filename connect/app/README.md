@@ -1,6 +1,6 @@
 # Mdtero Connect — live loopback UI
 
-The Python bridge serves this UI on `127.0.0.1` or `::1`. Browser requests use same-origin `/connect/v1/*`; the Mdtero account API key stays in CLI configuration/environment and never returns to the page. This is runnable source on Draft PR #10, not a signed desktop release.
+The Python bridge serves this UI on `127.0.0.1` or `::1`. Browser requests use same-origin `/connect/v1/*`; the Mdtero account API key stays in CLI configuration/environment and never returns to the page. [Connect v0.1.0-preview.1](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1) is a public unsigned desktop preview, not a signed release.
 
 ## Run
 
@@ -73,4 +73,4 @@ npm --prefix connect test
 
 See [recorded verification and remaining acceptance](../VERIFICATION.md). The real loopback browser fixture has synthetic upstream data; Pi SDK tests use a local fake HTTP model server. Neither spends model credits or certifies a real provider, native installer or institution's full-text access. The [offline design prototype](../design/README.md) remains mock-only.
 
-Website/Dashboard entry, signed native installers, per-OS native/Relay human acceptance, complete Zotero synchronization, visible CARSI login, cloud 5 GiB durability, full offline Markdown/figures, full-text Pi tools and financial hard caps remain incomplete. Windows frozen delivery is not validated by the current CI; see the exact platform results in [verification](../VERIFICATION.md). Institution passwords and Cookies must remain on-device. PR #10 stays Draft.
+Signed native installers, per-OS native/Relay human acceptance, complete Zotero synchronization, visible CARSI login, cloud 5 GiB durability, full offline Markdown/figures, full-text Pi tools and financial hard caps remain incomplete. The exact platform build results and limits are in [verification](../VERIFICATION.md). Institution passwords and Cookies must remain on-device.

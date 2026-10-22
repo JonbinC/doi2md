@@ -12,6 +12,10 @@ Parse a DOI or URL in one command, download structured Markdown (with a `quality
 
 Python/uv CLI, TUI, browser extension, and agent skill bundle are maintained as the public client surfaces.
 
+## Mdtero Connect desktop preview
+
+Download the unsigned [macOS Apple Silicon / Intel and Windows x64 preview builds](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Verify the release checksums and read the install warnings before use. Linux has no native installer; its basic CLI/browser setup is documented in the [Linux client guide](https://github.com/JonbinC/doi2md/blob/main/connect/native/DEBUGGING.md#linux-basic-client). Per-computer installation and account acceptance are still pending.
+
 **Languages:** English | [简体中文](./README_CN.md)
 
 ## Cloud MCP (ChatGPT / Claude / Cursor)

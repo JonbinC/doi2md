@@ -1,8 +1,10 @@
 {
   "schema_version": 1,
-  "channel": "debug-artifacts",
-  "release_status": "unreleased",
+  "channel": "public-debug-preview",
+  "release_status": "preview",
   "website_support_manifest": false,
+  "distribution_url": "https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1",
+  "build_source_commit": "bf7d719836bc9da6dccd0a77c1cf6a632b347626",
   "signing": {
     "developer_identity": false,
     "macos_notarized": false,
@@ -17,7 +19,8 @@
       "artifact": "app-tar-gz",
       "mode": "full",
       "human_acceptance": "pending",
-      "minimum_os_verified": null
+      "minimum_os_verified": null,
+      "download_url": "https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz"
     },
     {
       "id": "macos-x64",
@@ -27,7 +30,8 @@
       "artifact": "app-tar-gz",
       "mode": "full",
       "human_acceptance": "pending",
-      "minimum_os_verified": null
+      "minimum_os_verified": null,
+      "download_url": "https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-apple-darwin.tar.gz"
     },
     {
       "id": "windows-x64",
@@ -37,7 +41,8 @@
       "artifact": "nsis-exe",
       "mode": "full",
       "human_acceptance": "pending",
-      "minimum_os_verified": null
+      "minimum_os_verified": null,
+      "download_url": "https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-pc-windows-msvc-setup.exe"
     },
     {
       "id": "linux-x64",

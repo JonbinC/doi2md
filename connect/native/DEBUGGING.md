@@ -1,50 +1,31 @@
-# Connect desktop debugging
+# Connect desktop preview debugging
 
-The first desktop debugging targets are **macOS Apple Silicon, macOS Intel and Windows x64**. Linux keeps the existing basic loopback client. [The machine-readable matrix](support-matrix.json) describes build targets, not a website support promise or a list of accepted operating systems.
+The public preview targets are **macOS Apple Silicon, macOS Intel and Windows x64**. Linux keeps the basic CLI/browser client and has no native installer. [The machine-readable matrix](support-matrix.json) describes available preview builds; OS acceptance remains a separate status.
 
-These debugging artifacts from Draft PR #10 have no verified developer signing identity and are not notarized. A green build proves that the selected toolchain produced an artifact; it does not prove installation, credential storage, downloads or native process cleanup on a person's computer. No minimum operating-system version has been accepted yet. There is no signed/notarized Connect release, automatic updater or website download manifest in this work.
+These unsigned debugging artifacts are published as **Connect v0.1.0-preview.1**. macOS bundles use an ad-hoc signature, not a verified developer identity or notarization; Windows installers have no Authenticode signature. A successful build and archive audit verify the artifact and its checksums. They do not prove installation, credential storage, downloads, account login or process cleanup on a person's computer. No minimum operating-system version has been accepted. There is no automatic updater.
 
 ## Get an artifact
 
-Open the **Connect native debug artifacts** workflow run for the exact commit under review. Download the artifact matching the computer's CPU, verify `SHA256SUMS` against the payload, and keep its build metadata with any report. GitHub requires sign-in to download Actions artifacts. The repository currently limits artifact retention to **one day**; save a local copy for longer testing. These are not GitHub Releases.
+Download the platform payloads from the durable [Connect v0.1.0 preview release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Verify `SHA256SUMS` before opening the payload and keep its build metadata with any report. The binaries were built from source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`; the original Actions artifacts are short-lived. The release includes the payload checksums and artifact indexes.
 
 The extracted Actions artifact contains `artifact-index.json` (commit, edition, target, source digest and payload hash), `source-checksums.json`, the packaged runtime manifest and these debugging instructions. On macOS, run `shasum -a 256 -c SHA256SUMS` from that directory. On Windows, compare `Get-FileHash -Algorithm SHA256 <payload.exe>` with the matching line in `SHA256SUMS`. These hashes check integrity within the downloaded artifact; they are not a publisher identity signature.
 
 | Computer | Workflow runner | Rust target | Payload |
 |---|---|---|---|
-| Apple Silicon Mac | `macos-14` | `aarch64-apple-darwin` | `.app` inside `.tar.gz` |
-| Intel Mac | `macos-15-intel` | `x86_64-apple-darwin` | `.app` inside `.tar.gz` |
-| Windows x64 | `windows-2022` | `x86_64-pc-windows-msvc` | NSIS setup `.exe` |
+| Apple Silicon Mac | `macos-14` | `aarch64-apple-darwin` | [`.app` inside `.tar.gz`](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) |
+| Intel Mac | `macos-15-intel` | `x86_64-apple-darwin` | [`.app` inside `.tar.gz`](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-apple-darwin.tar.gz) |
+| Windows x64 | `windows-2022` | `x86_64-pc-windows-msvc` | [NSIS setup `.exe`](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-pc-windows-msvc-setup.exe) |
 | Linux x64 | `ubuntu-22.04` | Source verification | Basic CLI plus browser; no native artifact |
 
 ### Recorded artifact status
 
-Checked on **2026-10-22 UTC**; these links expire and identify exact source snapshots. This comparison records [`bd48a353` / 39693542222](https://github.com/JonbinC/doi2md/actions/runs/39693542222) and the follow-up Windows result from [`841f603c` / 39719990545](https://github.com/JonbinC/doi2md/actions/runs/39719990545). No successful Windows frozen result is recorded here.
+Checked on **2026-10-22 UTC**. The published platform assets below all came from successful full-bundle jobs in [Actions run 39720709023](https://github.com/JonbinC/doi2md/actions/runs/39720709023) at source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`. All three asset hashes matched their build indexes and `SHA256SUMS`; static archive inspection passed. Real-machine acceptance remains pending.
 
 | Target / source | Recorded result | Debug artifact |
 |---|---|---|
-| Apple Silicon, `bd48a353` | Build/upload succeeded | [12389488147](https://github.com/JonbinC/doi2md/actions/runs/39693542222/artifacts/12389488147), expires `2026-10-22T23:27:32Z` |
-| Intel Mac, `bd48a353` | Build and collection succeeded; artifact creation timed out after five upload attempts | None for this commit; [job evidence](https://github.com/JonbinC/doi2md/actions/runs/39693542222/job/119545303471) |
-| Windows x64, `bd48a353` | The source cleanup test hit a transient `busy.txt` lock; the job stopped before freezing | None; [job evidence](https://github.com/JonbinC/doi2md/actions/runs/39693542222/job/119545303351) |
-| Windows x64, `841f603c` | Source and standalone bundled Pi checks passed; the frozen `sdk_execution` probe timed out, with Node version probe exit 0 | None; [job evidence](https://github.com/JonbinC/doi2md/actions/runs/39719990545/job/119630992586) |
-| Intel Mac, older `8ad36cb1` | Build/upload succeeded; static archive audit passed | [12389234977](https://github.com/JonbinC/doi2md/actions/runs/39692375249/artifacts/12389234977), expires `2026-10-22T23:16:51Z` |
-| Apple Silicon, older `8ad36cb1` | Build/upload and static archive audit passed | [12389990883](https://github.com/JonbinC/doi2md/actions/runs/39692375249/artifacts/12389990883), same expiry |
-
-The older Intel artifact is a usable debugging snapshot of **8ad36cb1**, not the latest branch or an accepted release. Its ZIP SHA256 matches the GitHub digest:
-
-```text
-ea720e58f7673ca792ed93765f68b52cea69ba36446e14b975964be5e9654c0f
-```
-
-Its inner `mdtero-connect-debug-x86_64-apple-darwin.tar.gz` SHA256 is:
-
-```text
-e6b2f0a658c97215c1fa25f180aa4b3b1982c41984955d0275cdea69cc9758f0
-```
-
-Static audit on Linux passed all six `SHA256SUMS` entries, the metadata/source-digest checks, and all 158 recorded source checksums against the `8ad36cb1` Git tree. The desktop, bridge, Node and Relay files are x86_64 Mach-O with mode `0755`; Node 22.19.0, Pi 1.3.0, worker and complete Node license notices are present. No duplicate or escaping archive paths were found. No Mach-O was executed. macOS launch, Gatekeeper, account/provider access, OS credentials and installation remain human acceptance work. The latest per-platform results and local test commands are in [verification](../VERIFICATION.md).
-
-Probe stdin isolation and explicit UTF-8 are under follow-up verification. The Windows timeout's cause remains unconfirmed; a local regression pass does not certify the frozen Windows bundle.
+| Apple Silicon, `bf7d7198` | Full build and static archive audit passed; ad-hoc signature only | [Preview payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) · SHA256 `3e904b8fd9e3fd24871699286408d38b7acc000a5872378e690102102adec80e` |
+| Intel Mac, `bf7d7198` | Full build and static archive audit passed; ad-hoc signature only | [Preview payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-apple-darwin.tar.gz) · SHA256 `fef599b0a12fe6ba51d65c956e0db23dc4ce98086ce2faf9d69c7dab7a94b8c2` |
+| Windows x64, `bf7d7198` | Full build and static archive audit passed; unsigned installer | [Preview payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-pc-windows-msvc-setup.exe) · SHA256 `a68c26aa98a6d4b80c7676d1e85913103c94ce4753804e0e07b443fe94bdebde` |
 
 The Mac tar archive preserves executable permissions inside the application bundle. Extract it before opening the `.app`. macOS debugging bundles may use an ad-hoc signature so Apple Silicon can run their code; this does not authenticate the developer or provide notarization. Gatekeeper may refuse the build, and Windows may show an unrecognized-publisher warning. Record the exact result. Do not disable system-wide operating-system protections to make a test pass.
 
@@ -85,7 +66,7 @@ For each target, record the commit, artifact checksum, OS version, CPU architect
 | Lifecycle | Close all windows, reopen, kill the desktop parent unexpectedly, and restart. Inspect for orphaned bridge/Relay/Pi processes and stale listening ports. Repeated launch must not hide failures. |
 | Install/uninstall | Test fresh install, upgrade and uninstall. Record whether app data and credential entries remain; do not silently delete user data to make uninstall look complete. |
 
-Zotero needs separate real-desktop/version coverage for collection import. Pagination, stable checkpoints, dedupe and deletion synchronization remain open. CARSI needs a visible local login and school-by-publisher evidence; a browser fixture is not institutional access acceptance. Signing, notarization, supported OS minimums, automatic updates and website integration remain open.
+Zotero needs separate real-desktop/version coverage for collection import. Pagination, stable checkpoints, dedupe and deletion synchronization remain open. CARSI needs a visible local login and school-by-publisher evidence; a browser fixture is not institutional access acceptance. Developer identity signing, notarization, supported OS minimums and automatic updates remain open.
 
 ## Linux basic client
 
@@ -109,6 +90,6 @@ Include the acceptance-record fields, exact steps, expected/observed behavior, s
 | Build failed before an artifact exists | Record the failing job step. Source-test failure, frozen dependency failure, app build failure and artifact-upload timeout are different outcomes. An older artifact keeps its own commit identity. |
 | Export response succeeded but no file appears | Check `Downloads/Mdtero Connect` through the native menu and record the actual WebView result. HTTP bytes alone do not establish a native download. |
 
-Build logs, checksums and synthetic tests stay separate from human acceptance. Keep PR #10 Draft until remaining evidence is reviewed; this workflow neither merges the PR nor publishes a release.
+Build logs, checksums and synthetic tests stay separate from per-computer acceptance. Report any install warning or failure with the asset's commit and checksum; do not attach account/provider secrets or an environment dump.
 
 Runner names and architecture come from [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Packaging follows Tauri's [macOS application bundle](https://v2.tauri.app/distribute/macos-application-bundle/), [macOS signing](https://v2.tauri.app/distribute/sign/macos/), [Windows installer](https://v2.tauri.app/distribute/windows-installer/) and [external binary](https://v2.tauri.app/develop/sidecar/) documentation.

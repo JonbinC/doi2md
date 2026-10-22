@@ -1,8 +1,8 @@
 # Native Connect shell
 
-**Status: native debug builds, not a signed release.** The Tauri 2 shell starts the bundled Python loopback bridge, restricts its window to that bridge, and stops its managed processes on exit. macOS Apple Silicon, macOS Intel and Windows x64 target the full edition with bundled Node/Pi. Linux retains the basic CLI/browser client; a Linux native build is a development smoke target.
+**Status: public unsigned desktop preview.** The Tauri 2 shell starts the bundled Python loopback bridge, restricts its window to that bridge, and stops its managed processes on exit. macOS Apple Silicon, macOS Intel and Windows x64 have full debug bundles with Node/Pi. [Download them from the Connect v0.1.0 preview release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Linux has the basic CLI/browser client and no native installer.
 
-See [debug downloads and per-computer acceptance](DEBUGGING.md), [build instructions](BUILDING.md) and the [build matrix](support-matrix.json). The workflow uploads expiring Actions artifacts, without publishing a GitHub Release or changing the website support matrix. Per-OS human acceptance remains pending.
+See [debug downloads and per-computer acceptance](DEBUGGING.md), [build instructions](BUILDING.md) and the [build matrix](support-matrix.json). The desktop assets are published for debugging; per-OS installation, account login, credentials and lifecycle acceptance remains pending.
 
 The native **Connect** menu opens account login in the system browser, cancels login, reconnects the bridge and opens the export folder (`Downloads/Mdtero Connect`). Successful login restarts the bridge; this clears session BYOK and cancels active Pi requests. Account login reuses the existing CLI callback/state and account-storage contract. Separate provider BYOK may use a supported OS credential service.
 
@@ -39,4 +39,4 @@ The Pi child is supervised, cancellable and limited to one approved metadata-onl
 - Code signing/notarization, checksums and verified website release manifests.
 - Per-OS installation, upgrade, cancellation, shutdown and uninstall evidence.
 
-Nextmdtero website entry, CARSI school/publisher access, complete Zotero checkpoint sync, local MinerU/Voyage execution, full-text Pi evidence and financial hard caps also remain open. Do not advertise a signed desktop edition or accepted native support matrix. Keep PR #10 Draft.
+The Nextmdtero homepage now points users to this preview. CARSI school/publisher acceptance, complete Zotero checkpoint sync, local MinerU/Voyage execution, full-text Pi evidence and financial hard caps remain open. Do not advertise a signed desktop edition or accepted per-OS support.
