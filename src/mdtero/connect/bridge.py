@@ -49,6 +49,7 @@ class ConnectBridge:
         port: int = 0,
         client: MdteroClient | None = None,
         static_dir: Path | None = None,
+        fulltext_runner: Callable[[str], dict] | None = None,
     ) -> None:
         self.host = assert_loopback_bind(host)
         self.port = int(port)
@@ -58,6 +59,30 @@ class ConnectBridge:
         self.csrf_token = new_csrf_token()
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self.fulltext_runner = fulltext_runner or default_fulltext_runner
+        self.fulltext_jobs: dict[str, dict[str, Any]] = {}
+        self._fulltext_lock = threading.Lock()  # one browser fetch at a time
+
+    def start_fulltext(self, doi: str) -> dict[str, Any]:
+        from mdtero.connect.publisher_adapter import normalize_doi, route
+
+        doi = normalize_doi(doi)
+        if not doi.startswith("10.") or route(doi) is None:
+            raise ValueError("DOI is not handled by Connect full-text fetch")
+        job_id = new_csrf_token()[:16]
+        job: dict[str, Any] = {"id": job_id, "doi": doi, "state": "running", "result": None}
+        self.fulltext_jobs[job_id] = job
+
+        def run() -> None:
+            with self._fulltext_lock:
+                try:
+                    job["result"] = self.fulltext_runner(doi)
+                    job["state"] = "done"
+                except Exception as exc:  # noqa: BLE001
+                    job["state"], job["error"] = "error", type(exc).__name__ + ": " + str(exc)[:200]
+
+        threading.Thread(target=run, name="mdtero-connect-fulltext", daemon=True).start()
+        return {"id": job_id, "doi": doi, "state": "running"}
 
     @property
     def base_url(self) -> str:
@@ -293,6 +318,16 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                     )
                     self._json(HTTPStatus.OK, result)
                     return
+                if method == "POST" and path == "/connect/v1/fulltext/fetch":
+                    self._json(HTTPStatus.ACCEPTED, bridge.start_fulltext(str(body.get("doi") or "")))
+                    return
+                if method == "GET" and path.startswith("/connect/v1/fulltext/jobs/"):
+                    job = bridge.fulltext_jobs.get(path.rsplit("/", 1)[-1])
+                    if job is None:
+                        self._json(HTTPStatus.NOT_FOUND, {"reason_code": "job_not_found"})
+                    else:
+                        self._json(HTTPStatus.OK, job)
+                    return
                 if method == "GET" and path == "/connect/v1/agent/status":
                     self._json(
                         HTTPStatus.OK,
@@ -389,6 +424,18 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(data)
 
     return Handler
+
+
+def default_fulltext_runner(doi: str) -> dict:
+    """Fetch in the user's Chrome, store raw HTML locally, convert in-process."""
+    from mdtero.connect.browser import ConnectBrowser, default_profile_dir
+    from mdtero.connect.fulltext import fetch_fulltext
+    from mdtero.connect.publisher_adapter import RateLimiter
+
+    out_dir = default_profile_dir().parent / "connect-fulltext"
+    limiter = RateLimiter(out_dir / "rate.json")
+    with ConnectBrowser() as (_ctx, page):
+        return fetch_fulltext(page, doi, out_dir, limiter).to_dict()
 
 
 def run_bridge(

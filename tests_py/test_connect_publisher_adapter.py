@@ -42,7 +42,7 @@ def test_meta_and_fulltext_fixture(key):
     meta = pa.parse_meta(html)
     assert meta["citation_pdf_url"]
     doi = {"acs": "10.1021/a", "wiley": "10.1002/a", "tandf": "10.1080/a", "aip": "10.1063/a", "ieee": "10.1109/a",
-           "rsc": "10.1039/a", "elsevier": "10.1016/a", "oup": "10.1093/a"}[key]
+           "rsc": "10.1039/a", "elsevier": "10.1016/a", "oup": "10.1093/a", "springer": "10.1007/a"}[key]
     assert pa.pdf_candidates(doi, pa.landing_url(doi), html)[0].startswith("https://")
     text = pa.extract_fulltext(key, html)
     assert text.startswith(f"# Test {key} article")

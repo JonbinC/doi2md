@@ -2,13 +2,14 @@
 (() => {
   "use strict";
   const api = window.MdteroConnectApi;
-  const views = ["start", "library", "connections", "settings"];
+  const views = ["start", "library", "fulltext", "connections", "settings"];
   const state = {
     view: views.includes(location.hash.slice(1)) ? location.hash.slice(1) : "start",
     step: 1, session: null, libraryVerified: false, libraryError: "",
     papers: [], tags: [], selected: [], query: "", tag: "", tagDraft: "", tagPreview: null,
     busy: false, notice: "", error: "", relay: null, zotero: null, agent: null,
     collections: [], collectionKey: "", zoteroDetail: "", entitlement: null,
+    ftDoi: "", ftJob: null,
   };
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
@@ -119,6 +120,42 @@
       '<pre class="diagnostic" id="zotero-panel">' + esc(state.zoteroDetail) + '</pre><p class="hint">需要账户文献核验成功才能请求导入预览。最多读取首批 50 条；分页、去重检查点和删除同步仍待实现。</p></article></div>';
   }
 
+  const FT_LABELS = {
+    fulltext: "已获取全文（本机解析）",
+    paywall: "页面没有全文：可能是付费墙或仅摘要。未做任何绕过。",
+    challenge: "出版社要求人机验证：请在弹出的 Chrome 窗口里自己点击完成，然后重试。Connect 不会自动处理验证。",
+    error: "获取失败",
+  };
+
+  function fulltext() {
+    const job = state.ftJob;
+    const r = job?.result;
+    let out = "";
+    if (job && job.state === "running") out = status("正在用你的 Chrome 打开文章…如出现验证页，请在窗口里自己完成。");
+    else if (job && job.state === "error") out = '<div class="notice error" role="alert">' + esc(job.error || "获取失败") + "</div>";
+    else if (r) {
+      const s = r.signals || {};
+      out = status(FT_LABELS[r.status] || r.status, r.status === "fulltext") +
+        '<ul class="fact-list"><li>正文字符：' + esc(s.body_length ?? "-") + "；章节：" + esc(s.section_count ?? "-") + "；参考文献：" + esc(s.reference_count ?? "-") + "</li>" +
+        (s.companion_tables_merged != null ? "<li>表格页合并：" + esc(s.companion_tables_merged) + "，未匹配：" + esc(Array.isArray(s.companion_tables_unmatched) ? s.companion_tables_unmatched.join(", ") || "无" : (s.companion_tables_unmatched ?? 0)) + "（正文已含完整表格时未匹配属正常）</li>" : "") +
+        (r.markdown_path ? "<li>Markdown：<code>" + esc(r.markdown_path) + "</code></li>" : "") +
+        (r.raw_path ? "<li>原始 HTML（仅存本机）：<code>" + esc(r.raw_path) + "</code></li>" : "") +
+        (r.detail ? "<li>" + esc(r.detail) + "</li>" : "") + "</ul>";
+    }
+    return h("全文获取", "在你自己的 Chrome 里打开订阅文章，原始页面只存本机，并用本机解析器转换为 Markdown，不上传任何服务器。") +
+      '<article class="card"><label class="label" for="ft-doi">DOI</label><input id="ft-doi" value="' + esc(state.ftDoi) + '" placeholder="10.1007/…"' + (state.busy ? " disabled" : "") + ">" +
+      '<div class="actions">' + b("获取全文", "ft-fetch", "primary", !state.ftDoi.trim() || job?.state === "running") + "</div>" + out +
+      '<p class="hint">遇到验证页时由你本人点击完成；付费墙会如实报告，不会绕过。</p></article>';
+  }
+
+  async function pollFulltext(id) {
+    while (state.ftJob && state.ftJob.id === id && state.ftJob.state === "running") {
+      await new Promise((res) => setTimeout(res, 2000));
+      try { state.ftJob = await api.fulltextJob(id); } catch (err) { state.ftJob = { id, state: "error", error: err.message }; }
+      if (state.view === "fulltext") draw();
+    }
+  }
+
   function connections() {
     return h("连接状态，分开核验", "Relay 在线 ≠ 全文可读。学校密码与 Cookie 留在本机；CARSI 可见登录全流程尚未接入。") + connectionCards();
   }
@@ -142,7 +179,7 @@
     $("auth-badge").textContent = state.libraryVerified ? "已核验" : configured() ? "待核验" : "未配置";
     $("auth-detail").textContent = state.session ? "本机桥接可用" : "等待本机桥接";
     $("screen").setAttribute("aria-busy", String(state.busy));
-    $("screen").innerHTML = ({ start, library, connections, settings }[state.view])();
+    $("screen").innerHTML = ({ start, library, fulltext, connections, settings }[state.view])();
     document.querySelectorAll('[data-action="refresh"]').forEach((el) => { el.disabled = state.busy; });
   }
 
@@ -249,6 +286,12 @@
     if (action.startsWith("view-")) { navigate(action.slice(5)); return; }
     if (/^step-[123]$/.test(action)) { state.step = Number(action.slice(5)); draw(); return; }
     if (action === "refresh") { refreshAll(); return; }
+    if (action === "ft-fetch") {
+      withBusy(async () => {
+        state.ftJob = await api.fetchFulltext(state.ftDoi.trim());
+      }).then(() => { if (state.ftJob?.id) pollFulltext(state.ftJob.id); });
+      return;
+    }
     if (action === "connections-refresh") { refreshConnections(); return; }
     if (action === "relay-refresh") {
       withBusy(async () => { state.relay = null; state.entitlement = null; state.relay = await api.relayDiagnostics(); });
@@ -336,9 +379,10 @@
 
   document.addEventListener("input", (ev) => {
     const el = ev.target;
-    if (state.busy || !["find-paper", "new-tag"].includes(el.id)) return;
+    if (state.busy || !["find-paper", "new-tag", "ft-doi"].includes(el.id)) return;
     const offset = el.selectionStart;
-    if (el.id === "new-tag") { state.tagDraft = el.value; state.tagPreview = null; }
+    if (el.id === "ft-doi") state.ftDoi = el.value;
+    else if (el.id === "new-tag") { state.tagDraft = el.value; state.tagPreview = null; }
     else state.query = el.value;
     draw();
     const replacement = $(el.id);

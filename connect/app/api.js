@@ -84,6 +84,14 @@
         body: JSON.stringify({ collection_key, dry_run, request_id }),
       });
     },
+    fetchFulltext(doi) {
+      return api("/connect/v1/fulltext/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...jsonHeaders() },
+        body: JSON.stringify({ doi }),
+      });
+    },
+    fulltextJob(id) { return api("/connect/v1/fulltext/jobs/" + encodeURIComponent(id)); },
     agentStatus() { return api("/connect/v1/agent/status"); },
   };
 })();
