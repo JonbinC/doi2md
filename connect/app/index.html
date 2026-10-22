@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'">
+  <title>Mdtero Connect</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#screen">跳到主要内容</a>
+<div class="shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <a href="#start" class="brand"><span class="brand-icon">M</span><span>Mdtero <small>CONNECT</small></span></a>
+    <nav class="navigation">
+      <button type="button" data-view="start" class="active">开始使用</button>
+      <button type="button" data-view="library">我的文献库</button>
+      <button type="button" data-view="connections">连接中心</button>
+      <button type="button" data-view="settings">设置</button>
+    </nav>
+    <section class="sidebar-note">
+      <strong id="auth-badge">…</strong>
+      <div id="auth-detail">正在连接本机桥接</div>
+      <small>密钥留在本机 CLI 配置，不进入此页面</small>
+    </section>
+  </aside>
+  <div class="workarea">
+    <header class="topbar">
+      <div class="breadcrumb">MDTERO / CONNECT</div>
+      <div class="top-actions">
+        <span id="current-account">检查登录状态…</span>
+        <button type="button" data-action="refresh" class="ghost">刷新</button>
+      </div>
+    </header>
+    <main id="screen" tabindex="-1" aria-busy="true"></main>
+    <footer class="footer">Mdtero Connect · 本机浏览器客户端预览版。Markdown 导出为纯文本，不含图片；原生安装包尚未发布。</footer>
+  </div>
+</div>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

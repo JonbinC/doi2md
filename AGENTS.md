@@ -8,7 +8,8 @@ Public local-install/download surface: Python CLI/TUI, browser extension, campus
 
 ```text
 doi2md/
-├── src/mdtero/ # public Python CLI/TUI and packaged agent skills
+├── src/mdtero/ # public Python CLI/TUI, Connect bridge, packaged agent skills
+├── connect/    # Connect offline design + live loopback UI (served by mdtero connect)
 ├── relay/      # campus HTTP transport and optional authorized browser worker
 ├── extension/  # public browser extension SSOT
 ├── shared/     # public contract subset used by extension/public code
@@ -22,6 +23,7 @@ doi2md/
 | Task | Location | Notes |
 |---|---|---|
 | Public CLI/TUI | `src/mdtero` | Python runtime, project state, local agent installation. |
+| Mdtero Connect | `connect/`, `src/mdtero/connect/` | Loopback library UI + bridge; offline design under `connect/design/`. |
 | Campus Relay | `relay` | Native relay, browser worker, and their tests. |
 | Extension runtime | `extension` | Source, tests, manifest, build output. |
 | Extension protocol helpers | `extension/src/lib` | Route execution, browser capture, raw upload, runtime messages. |
@@ -51,6 +53,7 @@ npm --prefix extension install
 npm --prefix extension test -- --run
 npm --prefix extension run build
 uv run --with pytest python -m pytest tests_py
+uv run mdtero connect --help
 ```
 
 ## Cloud Agent setup

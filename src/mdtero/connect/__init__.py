@@ -1,0 +1,11 @@
+"""Mdtero Connect local bridge and library client adapters.
+
+The public desktop/research client talks to a loopback bridge. API keys stay in
+the existing CLI config / OS environment and never enter the web UI.
+"""
+
+from __future__ import annotations
+
+__all__ = ["__version__"]
+
+__version__ = "0.1.0-wip"
