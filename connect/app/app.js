@@ -63,7 +63,7 @@
       agent_node_unavailable: "研究模式组件未能启动，请重新检测；仍失败时请重新打开 Mdtero Connect。",
       agent_node_version: "研究模式需要 Node 22.19 或更新版本，请安装与这台电脑匹配的 Mdtero Connect。",
       agent_runtime_missing: "研究模式文件不完整，请重新安装 Mdtero Connect。",
-      agent_sdk_missing: "研究模式组件检测未通过，请重新检测；仍失败时请重新安装。",
+      agent_sdk_missing: "Pi 依赖检测未通过，请重新检测；仍失败时请重新安装 Mdtero Connect。",
       agent_dependency_version_mismatch: "研究模式组件版本不匹配，请重新安装最新版 Mdtero Connect。",
       agent_closed: "本机 Pi 运行时已停止，请通过 Connect 菜单重新连接客户端。",
     };
