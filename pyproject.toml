@@ -18,6 +18,16 @@ dependencies = [
   "websockets>=14",
 ]
 
+[project.optional-dependencies]
+# Local (offline) parser used by Connect full-text conversion. Called in-process;
+# raw publisher HTML is never sent to any server.
+parse = [
+  "mdtero-parser @ git+https://github.com/JonbinC/mdtero-backend@71b07b8a05be8d888021879c2de7b42e1a1bdc65#subdirectory=packages/mdtero-parser ; python_version >= '3.12'",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [dependency-groups]
 dev = [
   "pytest>=8",
