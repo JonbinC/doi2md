@@ -6,10 +6,11 @@ from mdtero.connect import browser as cb
 
 
 def test_chrome_command_is_plain():
-    cmd = cb.chrome_command("/usr/bin/google-chrome", port=9222, profile_dir=Path("/p"), proxy="http://127.0.0.1:1")
+    profile_dir = Path("/p")
+    cmd = cb.chrome_command("/usr/bin/google-chrome", port=9222, profile_dir=profile_dir, proxy="http://127.0.0.1:1")
     assert cmd[0] == "/usr/bin/google-chrome"
     assert "--remote-debugging-port=9222" in cmd and "--remote-debugging-address=127.0.0.1" in cmd
-    assert "--user-data-dir=/p" in cmd and "--proxy-server=http://127.0.0.1:1" in cmd
+    assert f"--user-data-dir={profile_dir}" in cmd and "--proxy-server=http://127.0.0.1:1" in cmd
     joined = " ".join(cmd).lower()
     for bad in ("automationcontrolled", "enable-automation", "headless", "user-agent", "disable-blink-features",
                 "stealth", "flaresolverr"):
