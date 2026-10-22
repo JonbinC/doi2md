@@ -27,9 +27,28 @@
   const h = (title, desc) => '<h1>' + esc(title) + '</h1><p class="lead">' + esc(desc) + "</p>" +
     (state.error ? '<div class="notice error" role="alert">' + esc(state.error) + "</div>" : "") +
     (state.notice ? '<div class="status ok" role="status">' + esc(state.notice) + "</div>" : "") +
-    (state.busy ? '<p class="hint" role="status">正在核验，请稍候…</p>' : "");
+    (state.busy ? '<p class="hint busy" role="status">' + spinner + '正在处理，请稍候…</p>' : "");
   const accountStatus = () => state.libraryVerified ? "文献库已核验" : configured() ? "已检测到本机 Key，文献接口未核验" : "未检测到本机 API Key";
-  const setupHint = '<p class="hint">桌面调试版：从窗口的 <strong>Connect → 登录 Mdtero 账户…</strong> 打开系统浏览器。登录成功后自动重新连接；会清除本次运行的 BYOK、取消研究请求并停止本客户端的 Relay。</p><p class="hint">命令行启动：在终端运行 <code>mdtero login</code> 或 <code>mdtero setup</code>，再重启 <code>mdtero connect</code> 并打开新地址。账户使用本机 CLI 配置，BYOK 服务 Key 单独设置。</p>';
+  const setupHint = '<p class="hint">点击“登录 Mdtero 账户”，在打开的浏览器页面完成登录，Connect 会自动连接。</p><details class="hint"><summary>使用命令行？</summary><p>在终端运行 <code>mdtero login</code>，然后重新运行 <code>mdtero connect</code>。</p></details>';
+  const loginLink = (label = "登录 Mdtero 账户", kind = "primary") => '<a class="button ' + kind + '" href="mdtero-action:login">' + esc(label) + "</a>";
+  const spinner = '<span class="spinner" aria-hidden="true"></span>';
+
+  function gateMode() {
+    if (!state.session) return state.busy || !state.error ? "boot" : "error";
+    return configured() ? "app" : "login";
+  }
+
+  function gate(mode) {
+    const brand = '<div class="gate-brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">Mdtero<small>Connect</small></span></div>';
+    if (mode === "boot") return '<div class="gate-card center">' + brand + spinner + '<h1>正在启动</h1><p class="lead">正在连接本机服务，通常只需几秒。</p></div>';
+    if (mode === "error") return '<div class="gate-card center">' + brand + '<div class="gate-icon warn" aria-hidden="true">!</div><h1>暂时连接不上本机服务</h1><p class="lead">Connect 会自动重试。也可以现在手动重试；如果一直失败，请退出后重新打开 Mdtero Connect。</p>' +
+      '<div class="actions center">' + b("重试", "refresh", "primary") + '</div><details class="hint"><summary>错误详情</summary><p>' + esc(state.error) + '</p></details></div>';
+    return '<div class="gate-card">' + brand + '<h1>登录后开始使用</h1><p class="lead">登录 Mdtero 账户后，即可在这台电脑上整理文献库、获取全文并用 AI 继续研究。</p>' +
+      '<ul class="gate-points"><li><b>文献库</b><span>筛选、标记、导出你账户里的文献</span></li><li><b>全文获取</b><span>用你自己的浏览器和机构权限打开文章</span></li><li><b>研究模式</b><span>用自己的模型账户整理选中文献</span></li></ul>' +
+      '<div class="actions">' + loginLink() + b("我已登录，刷新", "refresh", "ghost") + '</div>' +
+      (state.error ? '<div class="notice error" role="alert">' + esc(state.error) + '</div>' : '') +
+      '<details class="hint"><summary>使用命令行？</summary><p>在终端运行 <code>mdtero login</code>，然后重新运行 <code>mdtero connect</code>。</p></details></div>';
+  }
   const providerNames = { openalex: "OpenAlex · 学术检索", mineru: "MinerU · PDF 解析", voyage: "Voyage · 向量与重排", anthropic: "Anthropic · AI", openai: "OpenAI · AI", google: "Google · AI", openrouter: "OpenRouter · AI" };
   const agentActive = () => ["running", "starting", "pending"].includes(state.agentRun?.status);
   const agentLabel = () => !state.agent?.enabled ? "文献整理模式，Pi 未开启" : state.agent.ready ? "Pi 研究模式已就绪（模型凭据未远程核验）" : "完整版已开启，Pi 尚未就绪";
@@ -39,13 +58,13 @@
     const reason = state.agent?.reason_code || state.agent?.reason;
     const hints = {
       provider_key_missing: "Pi 已安装，尚未配置模型 Key。请在设置中选择模型服务并保存自己的 Key，然后返回研究。保存不会发起模型调用。",
-      full_mode_required: "当前是基础文献模式。桌面端请使用完整版调试包；源代码运行可用 mdtero connect --full 开启 Pi。",
-      agent_node_missing: "未找到本机 Node 运行时。桌面完整版应已内置 Node，请重新解压完整调试包后重试。",
-      agent_node_unavailable: "本机 Node 运行时未能启动。请重试检测，并在问题报告中记录调试包版本与系统版本。",
-      agent_node_version: "本机 Node 版本过旧，Pi 需要 Node 22.19 或更新版本。桌面端请使用匹配此电脑架构的完整调试包。",
-      agent_runtime_missing: "未找到 Pi 运行文件。桌面端请重新解压完整调试包，保留应用内部目录。",
-      agent_sdk_missing: "Pi 依赖检测未通过。可重试检测；若仍失败，请记录下方诊断状态与调试包版本。",
-      agent_dependency_version_mismatch: "Pi 依赖版本与客户端不匹配，请使用同一构建产出的完整调试包。",
+      full_mode_required: "当前是基础文献模式。研究模式需要完整版 Mdtero Connect；源代码运行可用 mdtero connect --full 开启。",
+      agent_node_missing: "研究模式组件缺失，请重新安装 Mdtero Connect 后重试。",
+      agent_node_unavailable: "研究模式组件未能启动，请重新检测；仍失败时请重新打开 Mdtero Connect。",
+      agent_node_version: "研究模式需要 Node 22.19 或更新版本，请安装与这台电脑匹配的 Mdtero Connect。",
+      agent_runtime_missing: "研究模式文件不完整，请重新安装 Mdtero Connect。",
+      agent_sdk_missing: "研究模式组件检测未通过，请重新检测；仍失败时请重新安装。",
+      agent_dependency_version_mismatch: "研究模式组件版本不匹配，请重新安装最新版 Mdtero Connect。",
       agent_closed: "本机 Pi 运行时已停止，请通过 Connect 菜单重新连接客户端。",
     };
     const diagnostics = {};
@@ -88,10 +107,10 @@
         '<div class="actions">' + b("检测本机连接", "connections-refresh", "primary") + b("打开连接中心", "view-connections") +
         '</div><p class="hint">Zotero connector 可达仅代表端口探测成功。集合读取与导入预览需另行检查。</p></article>' +
         '<article class="card"><h2>AI 与研究模式（可选）</h2><p>完整版内置 Pi 研究运行时。普通文献整理不要求 ChatGPT 或模型 Key。</p>' +
-        status(agentLabel(), !!state.agent?.ready) + '<p class="hint">用 <code>mdtero connect --full</code> 开启。当前只读选中文献元数据；云端 MCP Reader 尚未嵌入。</p><div class="actions">' + b("打开研究模式", "view-research") + '</div></article></div>' +
+        status(agentLabel(), !!state.agent?.ready) + '<p class="hint">研究模式只读取选中文献的元数据。</p><div class="actions">' + b("打开研究模式", "view-research") + '</div></article></div>' +
         '<div class="actions">' + b("进入文献库", "view-library", "primary") + b("上一步", "step-2") + "</div>";
     }
-    return h("一处整理文献，随处继续研究。", "三步了解账户、文献访问和本机连接。可选连接可稍后设置，继续按钮不会改变实际核验结果。") + steps + content;
+    return h("一处整理文献，随处继续研究。", "三步了解账户、文献访问和本机连接。可选项可以稍后再设置。") + steps + content;
   }
 
   function filteredPapers() {
@@ -138,7 +157,7 @@
     const zotero = state.zotero;
     return '<div class="grid"><article class="card"><h2>校园 Relay</h2>' +
       '<div id="relay-runtime-panel">' + status(runtime?.running ? "本客户端管理的 Relay：运行中" : "本客户端管理的 Relay：未运行", !!runtime?.running) +
-      '<p class="hint">' + esc(runtime?.action_hint || "桌面调试版内置 Relay；命令行模式目前仅提供诊断。") + '</p>' +
+      '<p class="hint">' + esc(runtime?.action_hint || "桌面版内置 Relay；命令行模式仅提供诊断。") + '</p>' +
       '<label class="hint"><input id="relay-consent" type="checkbox"' + (state.relayConsent ? " checked" : "") + (state.busy || !runtime?.available ? " disabled" : "") + '> 允许通过这台电脑的网络出口传输 Mdtero 文献请求</label>' +
       '<div class="actions">' + b("启动本机 Relay", "relay-start", "primary", !runtime?.available || !!runtime?.running || !state.relayConsent || !configured()) +
       b("停止本机 Relay", "relay-stop", "tool", !runtime?.running) + b("重启本机 Relay", "relay-restart", "tool", !runtime?.available || !runtime?.running || !state.relayConsent || !configured()) + '</div>' +
@@ -255,7 +274,7 @@
       '<p>API：' + esc(state.session?.api_base_url || "尚未连接") + '</p><p>凭据来源：' + esc(state.session?.auth_source || "无") + "</p>" + setupHint +
       '<div class="actions">' + b("打开三步引导", "view-start") + '</div></section><section class="card"><h2>研究模式 / Agent（可选）</h2>' +
       status(agentLabel(), !!state.agent?.ready) + '<p>完整版包含 Pi 运行时，通过 <code>mdtero connect --full</code> 显式开启。初版支持选中文献元数据上的一次只读研究。</p><div class="actions">' + b("打开研究模式", "view-research") +
-      '</div><p class="hint">云端 MCP Reader 尚未嵌入；官网/Dashboard 的 Connect 入口尚未对齐。</p></section></div>' + providerSettings();
+      '</div></section></div>' + providerSettings();
   }
 
   function draw() {
@@ -268,6 +287,11 @@
     $("current-account").textContent = accountStatus();
     $("auth-badge").textContent = state.libraryVerified ? "已核验" : configured() ? "待核验" : "未配置";
     $("auth-detail").textContent = state.session ? "本机桥接可用" : "等待本机桥接";
+    const mode = gateMode();
+    document.body.dataset.mode = mode;
+    $("gate").innerHTML = mode === "app" ? "" : gate(mode);
+    const navButton = document.querySelector('[data-view="' + state.view + '"]');
+    $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : "Mdtero Connect";
     $("screen").setAttribute("aria-busy", String(state.busy));
     $("screen").innerHTML = ({ start, library, fulltext, connections, research, settings }[state.view])();
     document.querySelectorAll('[data-action="refresh"]').forEach((el) => { el.disabled = state.busy; });
