@@ -113,7 +113,7 @@ def prepare_release(
             raise ValueError(f"runtime manifest does not match this build: {artifact_id}")
 
         payloads = index.get("payloads")
-        expected_name = f"mdtero-connect-debug-{target}{suffix}"
+        expected_name = f"mdtero-connect-{target}{suffix}"
         if not isinstance(payloads, list) or len(payloads) != 1:
             raise ValueError(f"expected exactly one payload in {artifact_id}")
         payload = payloads[0]

@@ -70,7 +70,7 @@ def validate_runtime(repository: Path, target: str, edition: str, commit: str) -
         raise ValueError("a valid prepared runtime manifest is required") from error
     required = {
         "protocol": 1,
-        "product": "mdtero-connect-debug",
+        "product": "mdtero-connect-desktop",
         "target": target,
         "edition": edition,
         "commit": commit,
@@ -126,10 +126,10 @@ def collect(
     output.mkdir(parents=True, exist_ok=True)
     payload = candidates[0]
     if bundle_format == "dmg":
-        payload_output = output / f"mdtero-connect-debug-{target}.dmg"
+        payload_output = output / f"mdtero-connect-{target}.dmg"
         shutil.copy2(payload, payload_output)
     else:
-        payload_output = output / f"mdtero-connect-debug-{target}-setup.exe"
+        payload_output = output / f"mdtero-connect-{target}-setup.exe"
         shutil.copy2(payload, payload_output)
 
     _write_json(output / "source-checksums.json", checksums)

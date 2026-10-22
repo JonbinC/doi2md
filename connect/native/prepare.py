@@ -106,7 +106,7 @@ def bundle_node_license(node: Path, version: str, destination: Path) -> None:
     data = next((path.read_bytes() for path in candidates if path.is_file()), None)
     if data is None:
         request = Request(f'https://raw.githubusercontent.com/nodejs/node/v{version}/LICENSE',
-                          headers={'User-Agent': 'mdtero-connect-debug-builder'})
+                          headers={'User-Agent': 'mdtero-connect-builder'})
         with urlopen(request, timeout=30) as response:
             data = response.read(4 * 1024 * 1024 + 1)
     if not data or len(data) > 4 * 1024 * 1024 or b'Node.js' not in data or b'Permission is hereby granted' not in data:
@@ -487,7 +487,7 @@ def prepare(target: str, edition: str) -> dict:
         if path.is_file() and 'node_modules' not in path.parts:
             files[str(path.relative_to(TAURI))] = digest(path)
     manifest = {
-        'protocol': 1, 'product': 'mdtero-connect-debug', 'target': target,
+        'protocol': 1, 'product': 'mdtero-connect-desktop', 'target': target,
         'edition': edition, 'commit': commit, 'pyinstaller': PYINSTALLER_VERSION,
         'node_version': node_version, 'pi_sdk_version': PI_SDK_VERSION if edition == 'full' else None,
         'relay_included': True, 'relay_auto_started': False,

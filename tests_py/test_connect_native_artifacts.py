@@ -37,7 +37,7 @@ def _prepared_runtime(repository, target, edition="full"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"synthetic runtime asset")
     manifest = {
-        "protocol": 1, "product": "mdtero-connect-debug", "target": target,
+        "protocol": 1, "product": "mdtero-connect-desktop", "target": target,
         "edition": edition, "commit": "a" * 40, "relay_included": True,
         "node_version": "22.19.0" if edition == "full" else None,
         "pi_sdk_version": "1.3.0" if edition == "full" else None,
@@ -48,14 +48,14 @@ def _prepared_runtime(repository, target, edition="full"):
 
 def test_mac_dmg_is_collected_and_records_payload(tmp_path, provenance):
     bundle = tmp_path / "bundle"
-    dmg = bundle / "dmg/Mdtero Connect Debug_0.1.0_aarch64.dmg"
+    dmg = bundle / "dmg/Mdtero Connect_0.1.0_aarch64.dmg"
     dmg.parent.mkdir(parents=True)
     dmg.write_bytes(b"UDIF debug disk image")
     _prepared_runtime(tmp_path, "aarch64-apple-darwin")
     output = tmp_path / "artifacts"
     index = collector.collect(target="aarch64-apple-darwin", source=bundle, output=output, edition="full", repository=tmp_path)
     payload = output / index["payloads"][0]["name"]
-    assert payload.name == "mdtero-connect-debug-aarch64-apple-darwin.dmg"
+    assert payload.name == "mdtero-connect-aarch64-apple-darwin.dmg"
     assert payload.read_bytes() == dmg.read_bytes()
     assert index["payloads"][0]["sha256"] == hashlib.sha256(payload.read_bytes()).hexdigest()
     assert index["commit"] == "a" * 40
