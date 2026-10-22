@@ -16,3 +16,4 @@ relay/dist/
 connect/node_modules/
 connect/test-results/
 connect/playwright-report/
+connect/agent/node_modules/

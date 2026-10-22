@@ -11,13 +11,18 @@ import mimetypes
 import socket
 import threading
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
 from mdtero.client import MdteroApiError, MdteroClient
+from mdtero.loopback import LoopbackThreadingHTTPServer
 from mdtero.connect.library import LibraryClient
+from mdtero.connect.providers import ProviderError, ProviderStore
+from mdtero.connect.agent_runtime import AgentError, AgentRuntime
+from mdtero.connect.relay_runtime import RelayError, RelayRuntime
+from mdtero.local_discovery import LocalDiscoveryError, search_local_discovery
 from mdtero.connect.paths import app_static_dir
 from mdtero.connect.relay_diag import diagnose_relay, probe_article_entitlement
 from mdtero.connect.security import (
@@ -37,7 +42,7 @@ from mdtero.connect.zotero_local import (
 )
 
 
-class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+class _IPv6ThreadingHTTPServer(LoopbackThreadingHTTPServer):
     address_family = socket.AF_INET6
 
 
@@ -50,14 +55,21 @@ class ConnectBridge:
         client: MdteroClient | None = None,
         static_dir: Path | None = None,
         fulltext_runner: Callable[[str], dict] | None = None,
+        full_mode: bool = False,
+        providers: ProviderStore | None = None,
+        agent_runtime: AgentRuntime | None = None,
+        relay_runtime: RelayRuntime | None = None,
     ) -> None:
         self.host = assert_loopback_bind(host)
         self.port = int(port)
         self.client = client or MdteroClient()
         self.library = LibraryClient(self.client)
+        self.providers = providers or ProviderStore(config=self.client.config)
+        self.agent_runtime = agent_runtime or AgentRuntime(full_mode=full_mode, providers=self.providers, library=self.library)
+        self.relay_runtime = relay_runtime or RelayRuntime(config=self.client.config)
         self.static_dir = Path(static_dir) if static_dir else app_static_dir()
         self.csrf_token = new_csrf_token()
-        self._httpd: ThreadingHTTPServer | None = None
+        self._httpd: LoopbackThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.fulltext_runner = fulltext_runner or default_fulltext_runner
         self.fulltext_jobs: dict[str, dict[str, Any]] = {}
@@ -99,7 +111,7 @@ class ConnectBridge:
 
     def start(self) -> str:
         handler = _make_handler(self)
-        server_type = _IPv6ThreadingHTTPServer if self.host == "::1" else ThreadingHTTPServer
+        server_type = _IPv6ThreadingHTTPServer if self.host == "::1" else LoopbackThreadingHTTPServer
         self._httpd = server_type((self.host, self.port), handler)
         # Refuse accidental non-loopback binds even if the constructor was bypassed.
         bound_host = self._httpd.server_address[0]
@@ -109,6 +121,9 @@ class ConnectBridge:
         return self.base_url
 
     def stop(self) -> None:
+        self.relay_runtime.close()
+        self.agent_runtime.close()
+        self.providers.clear_session()
         if self._httpd is not None:
             self._httpd.shutdown()
             self._httpd.server_close()
@@ -225,14 +240,16 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
             try:
                 if method == "GET" and path == "/connect/v1/session":
                     summary = bridge.library.session_summary()
+                    agent_status = bridge.agent_runtime.status()
                     self._json(
                         HTTPStatus.OK,
                         {
                             **summary,
                             "csrf": bridge.csrf_token,
                             "bridge": {"host": bridge.host, "port": bridge.bound_port, "product": "mdtero-connect"},
-                            "mode": "library",
-                            "agent": {"enabled": False, "reason_code": "agent_optional_not_shipped"},
+                            "mode": "full" if agent_status.get("enabled") else "library",
+                            "agent": agent_status,
+                            "relay_runtime": bridge.relay_runtime.status(),
                         },
                     )
                     return
@@ -279,6 +296,19 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                     return
                 if method == "GET" and path == "/connect/v1/relay/diagnostics":
                     self._json(HTTPStatus.OK, diagnose_relay(bridge.client))
+                    return
+                if method == "GET" and path == "/connect/v1/relay/runtime":
+                    self._json(HTTPStatus.OK, bridge.relay_runtime.status())
+                    return
+                if method == "POST" and path in {"/connect/v1/relay/start", "/connect/v1/relay/stop", "/connect/v1/relay/restart"}:
+                    action = path.rsplit("/", 1)[1]
+                    if action == "stop":
+                        result = bridge.relay_runtime.stop()
+                    else:
+                        # Never coerce strings/numbers into transport permission.
+                        permit = body.get("allow_campus_transport") is True
+                        result = getattr(bridge.relay_runtime, action)(allow_campus_transport=permit)
+                    self._json(HTTPStatus.OK, result)
                     return
                 if method == "POST" and path == "/connect/v1/relay/entitlement-check":
                     self._json(
@@ -328,18 +358,55 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                     else:
                         self._json(HTTPStatus.OK, job)
                     return
-                if method == "GET" and path == "/connect/v1/agent/status":
-                    self._json(
-                        HTTPStatus.OK,
-                        {
-                            "enabled": False,
-                            "reason_code": "agent_optional_not_shipped",
-                            "action_hint": "Research-mode Agent remains optional. Library tags/export work without it.",
-                            "adapters": [],
-                        },
-                    )
+                if method == "GET" and path == "/connect/v1/providers":
+                    self._json(HTTPStatus.OK, bridge.providers.status())
                     return
+                if method == "POST" and path == "/connect/v1/discovery/search":
+                    query_text = body.get("query")
+                    if not isinstance(query_text, str) or not 1 <= len(query_text.strip()) <= 500:
+                        raise ValueError("Provide a search query of 1–500 characters.")
+                    try:
+                        result = search_local_discovery(
+                            query_text.strip(), limit=8, page=1, providers="openalex", enrich="none",
+                            openalex_api_key=bridge.providers.get_key("openalex"),
+                            proxy_url=bridge.client.config.effective_proxy_url,
+                        )
+                    except LocalDiscoveryError:
+                        self._json(HTTPStatus.BAD_GATEWAY, {"reason_code": "local_discovery_failed", "action_hint": "本机 OpenAlex 检索未成功。请检查网络、Key 或额度后重试；未转发到云端检索。"})
+                        return
+                    self._json(HTTPStatus.OK, result)
+                    return
+                if method == "POST" and path == "/connect/v1/providers/key":
+                    self._json(HTTPStatus.OK, bridge.providers.set_key(body.get("provider"), body.get("key"), storage=body.get("storage", "session")))
+                    return
+                if method == "POST" and path == "/connect/v1/providers/clear":
+                    self._json(HTTPStatus.OK, bridge.providers.clear_key(body.get("provider"), storage=body.get("storage", "session")))
+                    return
+                if method == "POST" and path == "/connect/v1/providers/check":
+                    self._json(HTTPStatus.OK, bridge.providers.check(body.get("provider")))
+                    return
+                if method == "GET" and path == "/connect/v1/agent/status":
+                    self._json(HTTPStatus.OK, bridge.agent_runtime.status())
+                    return
+                if method == "POST" and path == "/connect/v1/agent/prepare":
+                    self._json(HTTPStatus.OK, bridge.agent_runtime.prepare(body))
+                    return
+                if method == "POST" and path == "/connect/v1/agent/runs":
+                    if set(body) != {"approval_id"}:
+                        raise ValueError("Start a reviewed plan using only its approval_id; prepare a new plan to change inputs.")
+                    self._json(HTTPStatus.ACCEPTED, bridge.agent_runtime.start(body.get("approval_id")))
+                    return
+                if path.startswith("/connect/v1/agent/runs/"):
+                    run_path = path.removeprefix("/connect/v1/agent/runs/")
+                    if method == "GET" and "/" not in run_path:
+                        self._json(HTTPStatus.OK, bridge.agent_runtime.get_run(run_path))
+                        return
+                    if method == "POST" and run_path.endswith("/cancel") and run_path.count("/") == 1:
+                        self._json(HTTPStatus.OK, bridge.agent_runtime.cancel(run_path.removesuffix("/cancel")))
+                        return
                 self._json(HTTPStatus.NOT_FOUND, {"reason_code": "not_found"})
+            except (ProviderError, AgentError, RelayError) as exc:
+                self._json(HTTPStatus.BAD_REQUEST, {"reason_code": exc.reason_code, "action_hint": exc.hint})
             except ZoteroLocalError as exc:
                 self._json(HTTPStatus.BAD_REQUEST, {"reason_code": exc.reason_code, "action_hint": str(exc)})
             except MdteroApiError as exc:
@@ -444,8 +511,9 @@ def run_bridge(
     port: int = 8741,
     open_browser: bool = True,
     forever: bool = True,
+    full_mode: bool = False,
 ) -> ConnectBridge:
-    bridge = ConnectBridge(host=host, port=port)
+    bridge = ConnectBridge(host=host, port=port, full_mode=full_mode)
     url = bridge.start()
     if open_browser:
         import webbrowser

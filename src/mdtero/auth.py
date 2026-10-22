@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import secrets
 import threading
+import time
 import urllib.parse
 import webbrowser
 from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from typing import Any
+
+from mdtero.loopback import LoopbackThreadingHTTPServer
 
 
 @dataclass
@@ -16,12 +19,16 @@ class WebLoginResult:
     prefix: str | None = None
 
 
+class WebLoginCancelled(RuntimeError):
+    """A local caller stopped waiting for the browser callback."""
+
+
 def build_cli_login_url(site_base_url: str, *, callback_url: str, state: str) -> str:
     params = urllib.parse.urlencode({"cli_callback": callback_url, "cli_state": state})
     return f"{site_base_url.rstrip('/')}/auth?{params}"
 
 
-def run_web_login(site_base_url: str, *, timeout_seconds: float = 180.0, open_browser: Any = webbrowser.open) -> WebLoginResult:
+def run_web_login(site_base_url: str, *, timeout_seconds: float = 180.0, open_browser: Any = webbrowser.open, cancel_event: threading.Event | None = None) -> WebLoginResult:
     state = secrets.token_urlsafe(24)
     event = threading.Event()
     result: dict[str, Any] = {}
@@ -32,9 +39,17 @@ def run_web_login(site_base_url: str, *, timeout_seconds: float = 180.0, open_br
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
+        if cancel_event is not None and cancel_event.is_set():
+            raise WebLoginCancelled("Mdtero web login was cancelled.")
         open_browser(url)
-        if not event.wait(timeout_seconds):
-            raise TimeoutError("Timed out waiting for Mdtero web login callback.")
+        deadline = time.monotonic() + timeout_seconds
+        while not event.wait(max(0, min(0.1, deadline - time.monotonic()))):
+            if cancel_event is not None and cancel_event.is_set():
+                raise WebLoginCancelled("Mdtero web login was cancelled.")
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Timed out waiting for Mdtero web login callback.")
+        if cancel_event is not None and cancel_event.is_set():
+            raise WebLoginCancelled("Mdtero web login was cancelled.")
         if result.get("error"):
             raise RuntimeError(str(result["error"]))
         api_key = str(result.get("api_key") or "").strip()
@@ -47,7 +62,7 @@ def run_web_login(site_base_url: str, *, timeout_seconds: float = 180.0, open_br
         thread.join(timeout=1.0)
 
 
-class _CallbackServer(ThreadingHTTPServer):
+class _CallbackServer(LoopbackThreadingHTTPServer):
     allow_reuse_address = True
 
 

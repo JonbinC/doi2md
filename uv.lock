@@ -1038,6 +1038,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+connect-full = [
+    { name = "keyring" },
+]
 parse = [
     { name = "mdtero-parser", marker = "python_full_version >= '3.12'" },
 ]
@@ -1052,6 +1055,7 @@ requires-dist = [
     { name = "curl-cffi", specifier = ">=0.7" },
     { name = "fastmcp", specifier = ">=2" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "keyring", marker = "extra == 'connect-full'", specifier = ">=25.7,<27" },
     { name = "mdtero-parser", marker = "python_full_version >= '3.12' and extra == 'parse'", git = "https://github.com/JonbinC/mdtero-backend?subdirectory=packages%2Fmdtero-parser&rev=71b07b8a05be8d888021879c2de7b42e1a1bdc65" },
     { name = "pyzotero", specifier = ">=1.5" },
     { name = "requests", specifier = ">=2.31" },
@@ -1060,7 +1064,7 @@ requires-dist = [
     { name = "textual", specifier = ">=0.80" },
     { name = "websockets", specifier = ">=14" },
 ]
-provides-extras = ["parse"]
+provides-extras = ["connect-full", "parse"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]

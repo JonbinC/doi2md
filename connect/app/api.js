@@ -65,6 +65,14 @@
       return { blob, filename, exportLabel };
     },
     relayDiagnostics() { return api("/connect/v1/relay/diagnostics"); },
+    relayRuntime() { return api("/connect/v1/relay/runtime"); },
+    controlRelay(action, allow_campus_transport = false) {
+      if (!["start", "stop", "restart"].includes(action)) throw new Error("Unknown Relay action");
+      return api("/connect/v1/relay/" + action, {
+        method: "POST", headers: { "Content-Type": "application/json", ...jsonHeaders() },
+        body: JSON.stringify({ allow_campus_transport }),
+      });
+    },
     entitlementCheck(confirm_fulltext = false) {
       return api("/connect/v1/relay/entitlement-check", {
         method: "POST",
@@ -93,5 +101,28 @@
     },
     fulltextJob(id) { return api("/connect/v1/fulltext/jobs/" + encodeURIComponent(id)); },
     agentStatus() { return api("/connect/v1/agent/status"); },
+    providerStatus() { return api("/connect/v1/providers"); },
+    localDiscovery(query) { return api("/connect/v1/discovery/search", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }),
+    }); },
+    saveProvider(body) { return api("/connect/v1/providers/key", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }); },
+    clearProvider(body) { return api("/connect/v1/providers/clear", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }); },
+    checkProvider(provider) { return api("/connect/v1/providers/check", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider }),
+    }); },
+    prepareAgent(body) { return api("/connect/v1/agent/prepare", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }); },
+    startAgent(approval_id) { return api("/connect/v1/agent/runs", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approval_id }),
+    }); },
+    agentRun(run_id) { return api("/connect/v1/agent/runs/" + encodeURIComponent(run_id)); },
+    cancelAgent(run_id) { return api("/connect/v1/agent/runs/" + encodeURIComponent(run_id) + "/cancel", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    }); },
   };
 })();

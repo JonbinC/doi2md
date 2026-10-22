@@ -1,77 +1,107 @@
-# Mdtero Connect — source handoff (2026-10-21)
+# Mdtero Connect — source handoff (updated 2026-10-22)
 
-> **Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10) — not a signed desktop release.** Continue on `handoff/connect-research-client-20261021`. The runnable client is the loopback UI and bridge; native packaging, website integration and institutional access acceptance remain separate work.
+> **Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10) — not a signed desktop release.** Continue on `handoff/connect-research-client-20261021`. The runnable client is the loopback UI and Python bridge, with an optional local Pi runtime in full mode. A Tauri debug shell and Mac/Windows artifact workflow now wrap this same client; see [native debugging](native/DEBUGGING.md). Website integration, native human acceptance and institutional access acceptance remain separate work.
 
-## Repository boundaries and refs
+## Repository boundaries
 
-- This public repository owns installable clients, Relay, browser extension, distributions and public docs. Do not move private backend or website code here.
-- Backend **PR #43 was merged** (`66d4388…`), adding authenticated tags, tag search, scoped MCP library tools, BibTeX/CSL/Markdown exports. **Reuse these contracts; do not reimplement an alternate library database.**
-- Backend **PR #42**: design-only cloud-first RFC (may still be open).
-- Existing mainline Relay supports campus HTTP transport and multi-OS Go release artifacts; see `relay/README.md`.
-- Website `JonbinC/Nextmdtero` owns dashboard/download-page publication.
+- This public repository owns installable clients, Relay, extension, distributions and public docs. Do not copy private backend or website implementation here.
+- Backend **PR #43 is merged** (`66d4388…`) and owns library tags, tag search, metadata import, scoped MCP tools and BibTeX/CSL/Markdown exports. Reuse those contracts; do not build another library database.
+- Backend **PR #42** is a design-only cloud-first RFC, not evidence of implemented cloud storage.
+- `JonbinC/Nextmdtero` owns website/Dashboard publication. This PR does not deploy that site.
+- Existing Relay transport and Go release artifacts remain under `relay/`; see [its README](../relay/README.md).
 
-## What is in this branch
+## Runnable sources
 
 | Path | Role |
 |---|---|
-| `connect/design/` | Offline editable prototype (mock data, CSP `connect-src 'none'`). Keep for UX reference + 26 policy tests. |
-| `connect/app/` | **Live UI** with three-step onboarding, library operations and connection diagnostics. Served by the loopback bridge; talks to `/connect/v1/*` on the same origin. |
-| `src/mdtero/connect/` | Python bridge, library adapters, Zotero loopback client, Relay diagnostics, CLI (`mdtero connect`). |
-| `connect/VERIFICATION.md` | Reproducible checks, evidence boundaries and outstanding acceptance work. |
-| `connect/native/README.md` | Native packaging plan; interim entry is `mdtero connect`. |
+| `connect/design/` | Offline prototype with mock data, CSP `connect-src 'none'` and 26 policy tests |
+| `connect/app/` | Live UI: onboarding, library, local discovery, BYOK and optional Pi research; same-origin `/connect/v1/*` requests |
+| `src/mdtero/connect/` | Loopback bridge, library adapters, provider credentials, supervised Pi and Relay runtimes, native account login, Zotero client, diagnostics and CLI |
+| `connect/agent/` | Pinned Pi SDK adapter, dependency lockfile, license notice and real-SDK tests with synthetic HTTP |
+| `connect/VERIFICATION.md` | Reproducible checks, recorded results and acceptance gaps |
+| `connect/native/README.md` | Native packaging boundary; no signed installer is shipped here |
 
-### Runnable slice (verify locally)
+### Basic client
 
 ```sh
 uv sync --frozen
-uv run pytest tests_py/test_connect_security.py tests_py/test_connect_bridge.py tests_py/test_connect_zotero_local.py -q
-node --check connect/app/api.js && node --check connect/app/app.js
-node --test connect/design/policy.test.cjs
-uv run python scripts/ci/secret_guard.py
-# with a real API key already configured:
-uv run mdtero connect --no-browser --json
+# Configure the Mdtero account in the terminal if needed:
+uv run mdtero setup
+uv run mdtero connect --no-browser --port 0 --json
+# Open the printed loopback URL locally; stop with Ctrl+C.
 ```
 
-See [verification](VERIFICATION.md) for browser regression commands and the distinction between synthetic fixtures and real account/desktop acceptance. An API key must be configured in the CLI, never in this page. Restart `mdtero connect` after changing saved configuration; refreshing the page does not reload the bridge's CLI configuration.
+Basic mode does not require Node or the Pi SDK. Account secrets stay in the existing CLI configuration/environment and never return to the page. Restart the bridge after terminal login or saved-account configuration changes; refreshing the page does not reload the account configuration.
 
-### Live client behavior
+The desktop debug shell uses the same client. Its Connect menu offers account login in the system browser, cancellation/reconnection, and the export folder (`Downloads/Mdtero Connect`). Successful login restarts the bridge, clears session BYOK and cancels active research. Native Mac/Windows account-login and installation acceptance remain pending. [Debugging status](native/DEBUGGING.md#recorded-artifact-status) identifies which exact commits have artifacts; an older successful Mac artifact does not certify current Windows delivery.
 
-- Three-step onboarding carries the offline prototype's visual design into the live app. It explains account setup, literature access and optional device/AI connections without simulated registration or invented verification.
-- Configured credentials and a successful account-library request are separate states. A present key is not proof of server authentication, publisher access or cloud storage durability.
-- Tag drafts survive redraws. Adding or removing tags first makes an explicit `dry_run: true` preview; applying the reviewed selection sends `dry_run: false`. Selection or draft changes invalidate the previous preview.
-- BibTeX, CSL JSON, single-document Markdown and Markdown ZIP use backend #43. Markdown is text-only, without images; JSON downloads remain downloadable bytes.
-- Relay transport, browser capability and entitlement diagnostics are separate. A diagnostic without an article identifier/full-text evidence cannot certify the selected paper or every publisher.
-- Zotero offers explicit collection selection and metadata-only import preview. Connector reachability does not mean collection listing or complete synchronization works.
-- Agent stays disabled. The UI does not claim a verified AI connection from opening the onboarding step.
+### Optional full mode
 
-Security gates already enforced in the bridge:
+With Node.js **22.19.0 or newer**:
 
-- Bind host must be `127.0.0.1` or `::1`
-- Host / Origin checks for API routes
-- CSRF required for POST
-- Zotero uses fixed `http://127.0.0.1:23119` only (no user-supplied base URL)
-- API key never returned to the UI
+```sh
+uv sync --frozen --extra connect-full
+npm --prefix connect/agent ci --ignore-scripts
+uv run --extra connect-full mdtero connect --full --no-browser --port 0 --json
+```
 
-## Product direction (unchanged)
+The Python extra makes OS keyring support an explicit dependency; it cannot create or unlock an OS credential service. Session-only keys also work in full mode. The page never installs Node packages or enables full mode itself. See [the runtime README](agent/README.md) for installation from a locally built wheel and runtime details.
 
-One unified **Mdtero Connect** desktop application, with **Library mode** (everyday) and optional **Research mode** (AI agent), sharing account/library contracts. Do not create two unsynchronized libraries.
+Select 1–10 account-library documents, enter a question, select an AI provider and a model from the pinned SDK's catalog, and preview the request. The preview freezes the selected metadata and the 128–4,096 output-token limit. A short-lived, single-use approval permits one model request; cancellation and a 90-second timeout stop the supervised child. Changing the selection, question, model or budget requires a new preview.
 
-## Remaining work (not claimed done)
+Only document ID, title, authors, year, venue and DOI are included. This is **metadata-only research**: the model has not read the full text, figures or abstracts. Pi exposes no model-callable tools, shell or filesystem access and does not discover local skills, extensions, project instructions or auth files. The SDK is trusted local code, not an OS sandbox. The token/request limit is not a dollar-denominated financial hard cap.
 
-1. Nextmdtero website/Dashboard Connect entry, launch guidance and eventual verified release manifest; no signed desktop download is available from this work.
-2. Tauri 2 shell, Relay sidecar supervision, OS credential storage, signed/notarized installers and uninstall evidence.
-3. Zotero pagination, stable source/account checkpoints, dedupe and deletion synchronization; desktop/version acceptance remains required.
-4. Visible local CARSI login, passwords/Cookies kept on-device, and school-by-publisher full-text acceptance. Generic Relay diagnostics do not replace it.
-5. Optional Agent (Pi/OpenCode), BYOK, approvals, budgets and tool isolation — currently `enabled: false`.
-6. Cloud 5 GiB Markdown/private-image quota, durable object storage and PostgreSQL backup/restore (backend/ops), not a Connect-only flag flip.
-7. Embedding the backend MCP Reader, plus product-level website/client/Reader integration.
+## BYOK and capability boundaries
 
-## First implementation sequence (status)
+| Service category | Provider IDs | What the local key currently enables |
+|---|---|---|
+| Discovery | `openalex` | Existing local OpenAlex discovery; no cloud fallback on the Connect search route |
+| Parsing | `mineru` | Credential storage only; does not change cloud parsing credentials |
+| Retrieval | `voyage` | Credential storage only; does not change cloud RAG credentials |
+| AI | `openai`, `anthropic`, `google`, `openrouter` | Explicitly approved requests in the optional local Pi runtime |
 
-- **Client (this Draft PR):** three-step onboarding, loopback UI, account-library verification and separate connection diagnostics.
-- **Library (this Draft PR):** reviewed tag preview/apply and guarded exports through backend #43; no alternate library database.
-- **Zotero (partial):** loopback probe, collection selection and metadata import dry-run; full checkpoint sync still open.
-- **Agent PR:** status stub only
-- **Website/backend:** out of scope for this repo’s deploy path
+Session storage is the default and is cleared when the bridge stops. Persistent storage is an explicit OS-keyring choice; unavailable, locked, plaintext/file and unsupported backends cannot silently become a plaintext fallback. Existing environment keys and legacy local OpenAlex configuration remain compatible. The provider status reports the effective source without returning key fragments or fingerprints. Saving never marks a key as verified.
 
-**Keep PR #10 Draft.** Passing tests makes this client reviewable; merge, publication, website support-matrix changes and native release claims still need explicit authorization and their own evidence.
+OpenAlex's explicit key check uses a fixed, free single-entity lookup with the key in a Bearer header. MinerU, Voyage and AI checks are configuration-only: no parsing, embedding, reranking or generation is submitted for diagnosis. Search results are metadata and are not automatically added to the account library. See [verification](VERIFICATION.md) for provider documentation and test boundaries.
+
+## Existing client behavior
+
+- Three-step onboarding, account-library verification and distinct configured/verified states.
+- Tag drafts survive redraws. Preview explicitly sends `dry_run: true`; applying the reviewed selection sends `false`. Draft/selection changes invalidate the preview.
+- Backend #43 provides BibTeX, CSL JSON, Markdown and Markdown ZIP. Markdown exports remain text-only, without images.
+- Connections can explicitly start, stop or restart the native bundle's owned HTTP-only Relay. Startup/restart requires current-page transport permission, a local account key and a confirmed cloud-offline precheck. Reload restores the owned-process state without saving permission. Plain CLI mode has no bundled Relay resource path and offers diagnostics only.
+- Relay process, cloud transport, browser capability and entitlement remain independent observations. The managed browser stays disabled, existing external Relays are not controlled, and no background service is installed. An online Relay is not evidence of full-text access; the client-side precheck is not an atomic cross-computer lease.
+- Zotero has explicit collection selection and metadata-only import preview. Connector reachability is not full synchronization.
+
+Bridge guards apply to provider, research and Relay control routes: loopback-only binding, Host/Origin validation, CSRF for POST, same-origin UI requests, secret-free status/errors and fixed Zotero `http://127.0.0.1:23119`. Newly entered provider keys do not enter `config.json`, prompts, browser persistence or process argv; Pi receives only its selected AI key over stdin. The owned Relay receives account credentials through its sanitized child environment; its temporary browser-off policy contains no key.
+
+## Reproduce checks
+
+```sh
+uv sync --frozen --extra connect-full
+uv run --extra connect-full pytest tests_py/test_connect_*.py -q
+node --check connect/app/api.js
+node --check connect/app/app.js
+node --test connect/design/policy.test.cjs
+npm --prefix connect/agent ci --ignore-scripts
+npm --prefix connect/agent test
+npm --prefix connect ci
+npm --prefix connect run test:install
+npm --prefix connect test
+uv run --extra connect-full python scripts/ci/secret_guard.py
+```
+
+The browser fixture uses real UI/bridge security and real provider/Agent approval logic while replacing upstream account/Relay/Zotero/provider services and model execution. Relay UI coverage simulates the process boundary; separate runtime tests exercise supervised children. Node tests use the actual pinned Pi SDK with a synthetic HTTP model server. Neither is a private-provider-key or paid-model acceptance test. Detailed commands, recorded exit codes and platform CI failures are in [VERIFICATION.md](VERIFICATION.md).
+
+## Remaining work
+
+1. Nextmdtero website/Dashboard Connect entry, launch guidance/deep links and an eventual verified release manifest.
+2. Resolve the Windows frozen SDK check and latest Intel artifact delivery, then complete per-OS installation, native account login, downloads, Relay lifecycle/upgrade, credential-store and uninstall acceptance. Mac debug artifacts exist for specified commits; Tauri, bundled Python/Node/Pi and explicitly approved HTTP-only Relay controls are implemented. Developer signing, notarization and a verified release manifest remain open.
+3. Zotero pagination, stable source/account checkpoints, dedupe, deletion synchronization and real desktop/version acceptance.
+4. Visible local CARSI login, passwords/Cookies kept on-device, and school-by-publisher full-text acceptance.
+5. Pi full-text evidence/tools, production model-provider acceptance, financial hard caps, OS sandboxing and durable run history. Pi is the selected Agent implementation; no OpenCode runtime ships here.
+6. Actual local MinerU/Voyage consumers or explicit backend per-user BYOK contracts. Storing a key does not add those contracts.
+7. Backend 5 GiB Markdown/private-image quota, durable object storage and tested PostgreSQL backup/restore.
+8. Backend MCP Reader embedding and product-level website/client/Reader integration.
+
+**Keep PR #10 Draft.** Reviewable local sources and passing tests do not authorize merge, publication, website support-matrix changes or native release claims.

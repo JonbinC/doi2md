@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "channel": "debug-artifacts",
+  "release_status": "unreleased",
+  "website_support_manifest": false,
+  "signing": {
+    "developer_identity": false,
+    "macos_notarized": false,
+    "windows_authenticode": false
+  },
+  "targets": [
+    {
+      "id": "macos-arm64",
+      "priority": "primary-debug",
+      "runner": "macos-14",
+      "target": "aarch64-apple-darwin",
+      "artifact": "app-tar-gz",
+      "mode": "full",
+      "human_acceptance": "pending",
+      "minimum_os_verified": null
+    },
+    {
+      "id": "macos-x64",
+      "priority": "primary-debug",
+      "runner": "macos-15-intel",
+      "target": "x86_64-apple-darwin",
+      "artifact": "app-tar-gz",
+      "mode": "full",
+      "human_acceptance": "pending",
+      "minimum_os_verified": null
+    },
+    {
+      "id": "windows-x64",
+      "priority": "primary-debug",
+      "runner": "windows-2022",
+      "target": "x86_64-pc-windows-msvc",
+      "artifact": "nsis-exe",
+      "mode": "full",
+      "human_acceptance": "pending",
+      "minimum_os_verified": null
+    },
+    {
+      "id": "linux-x64",
+      "priority": "basic-source",
+      "runner": "ubuntu-22.04",
+      "target": "x86_64-unknown-linux-gnu",
+      "artifact": null,
+      "mode": "basic-loopback",
+      "human_acceptance": "pending",
+      "minimum_os_verified": null
+    }
+  ],
+  "shared_capabilities": {
+    "account_login": "existing-system-browser-flow-native-acceptance-pending",
+    "relay": "explicitly-approved-owned-http-child-with-cloud-precheck-no-atomic-lease",
+    "library_tags_exports": "existing-backend-43",
+    "openalex": "local-byok-search",
+    "mineru": "credential-storage-only",
+    "voyage": "credential-storage-only",
+    "pi": "explicitly-approved-metadata-only-request",
+    "zotero": "metadata-preview-apply-no-checkpoints",
+    "carsi": "institutional-acceptance-pending"
+  },
+  "acceptance_required_per_native_target": [
+    "fresh-machine-launch-without-python-node-go",
+    "system-browser-account-login-callback-cancel-timeout-reopen",
+    "webview-library-tags-all-export-downloads",
+    "os-credential-store-save-reload-remove-locked-unavailable",
+    "bundled-pi-preview-approve-cancel-timeout",
+    "relay-start-stop-restart-and-no-orphan-processes",
+    "close-reopen-crash-shutdown-port-reuse",
+    "installation-upgrade-uninstall-and-credential-retention-policy",
+    "signing-notarization-and-verified-distribution"
+  ],
+  "runner_reference": "https://docs.github.com/en/actions/reference/runners/github-hosted-runners"
+}
