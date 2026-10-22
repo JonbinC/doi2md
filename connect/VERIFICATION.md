@@ -1,6 +1,6 @@
 # Connect verification and remaining acceptance
 
-Evidence for the loopback client on Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10), branch `handoff/connect-research-client-20261021`. Backend #43 owns library tags/import/export; the client reuses those contracts. Implemented client paths include local BYOK, OpenAlex discovery, optional metadata-only Pi research, native account-login/export menus and explicitly approved HTTP-only Relay supervision. Recorded local checks, platform CI and human acceptance are separate below. This is not a native release certificate.
+Evidence for the loopback client from merged [PR #10](https://github.com/JonbinC/doi2md/pull/10), branch `handoff/connect-research-client-20261021`, and the public unsigned [v0.1.0-preview.1 release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Backend #43 owns library tags/import/export; the client reuses those contracts. Implemented client paths include local BYOK, OpenAlex discovery, optional metadata-only Pi research, native account-login/export menus and explicitly approved HTTP-only Relay supervision. Recorded local checks, platform CI and human acceptance are separate below. This is not a signed desktop release certificate.
 
 ## Reproduce local checks
 
@@ -119,19 +119,19 @@ The implementation uses pinned `@earendil-works/pi-coding-agent@1.3.0`. Pi is th
 
 | Area | Still required |
 |---|---|
-| Website/Dashboard | Connect entry, startup guidance/deep links and verified release manifest in Nextmdtero |
-| Native runtime | Resolve the Windows frozen SDK check and latest Intel artifact delivery; complete clean-machine account login, downloads, Relay lifecycle, credentials and installation/upgrade/uninstall acceptance. Tauri, bundled dependencies and explicit HTTP-only Relay supervision are implemented. |
+| Website/Dashboard | Publish the Connect preview download card; dashboard deep links and verified release manifest remain |
+| Native runtime | Complete clean-machine account login, downloads, Relay lifecycle, credentials and installation/upgrade/uninstall acceptance. Tauri, bundled dependencies and explicit HTTP-only Relay supervision are implemented; current Mac/Windows bundles are available as unsigned previews. |
 | Zotero | Pagination, stable source/account checkpoints, dedupe, deletion sync and desktop-version acceptance |
 | CARSI/access | Visible local login, passwords/Cookies kept on-device, school/publisher article evidence; online Relay is insufficient |
 | MinerU/Voyage BYOK | Actual local adapters or explicit backend per-user credentials/consumption contracts; saved local keys do not change cloud jobs |
 | Pi research | Full-text evidence/tools, real provider acceptance, financial hard caps, OS sandboxing and durable history; current research is metadata-only |
 | Cloud storage | Backend quota enforcement, durable Markdown/private images and tested PostgreSQL backup/restore; no automatic 5 GiB migration claim |
 | Product integration | Backend MCP Reader embedding and website/client/Reader workflows |
-| Release | Keep Draft; merge, publication and website support claims require explicit authorization and relevant acceptance evidence |
+| Release | Public unsigned preview is published; developer identity signing, notarization, per-OS acceptance and a machine-verified website manifest remain |
 
 ## Native debug iteration
 
-The native shell reuses the same loopback API and backend #43. Mac Apple Silicon, Mac Intel and Windows x64 target full debug artifacts; Linux remains basic first. See [native build instructions](native/BUILDING.md), [artifact/acceptance instructions](native/DEBUGGING.md) and [the machine-readable build matrix](native/support-matrix.json). No release, merge or website support claim is made.
+The native shell reuses the same loopback API and backend #43. Mac Apple Silicon, Mac Intel and Windows x64 have full debug preview artifacts; Linux remains a basic CLI/browser client. See [native build instructions](native/BUILDING.md), [artifact/acceptance instructions](native/DEBUGGING.md) and [the machine-readable build matrix](native/support-matrix.json).
 
 | Command/check | Result | Exit code |
 |---|---|---|
@@ -155,32 +155,29 @@ The native shell reuses the same loopback API and backend #43. Mac Apple Silicon
 
 The isolated full-suite snapshot preceded later directory-lock, readiness and dependency-probe changes. The final focused Connect, browser and Pi suites above cover those client changes; the bundled Go probe ran locally with prepared resources. The isolated full-suite result is evidence for that earlier snapshot. The pre-existing adjacent-site manifest mismatch remains as recorded below; no install manifest was changed.
 
-These are Linux build and synthetic-service results. No current real paid AI, MinerU or Voyage request was made. They do not establish Mac/Windows installation, OS credential prompts, real account browser login, Zotero/CARSI depth or signed distribution. The native workflow must produce artifacts for the exact reviewed commit; every platform's human acceptance remains pending.
+These Linux build and synthetic-service results do not establish Mac/Windows installation, OS credential prompts, real account browser login, Zotero/CARSI depth or signed distribution. No real paid AI, MinerU or Voyage request was made. The published Mac/Windows artifacts are from the exact reviewed client commit; every platform's human acceptance remains pending.
 
 ### Recorded native CI and artifact status
 
-Checked on **2026-10-22 UTC**. The comparison below records [`bd48a353` / run 39693542222](https://github.com/JonbinC/doi2md/actions/runs/39693542222), with a subsequent Windows result from [`841f603c` / run 39719990545](https://github.com/JonbinC/doi2md/actions/runs/39719990545). No successful Windows frozen result is recorded here. Recheck the exact commit, job and artifact before testing; the repository retains Actions artifacts for one day.
+Checked on **2026-10-22 UTC**. All three current platform bundles came from the successful full-bundle jobs in [Actions run 39720709023](https://github.com/JonbinC/doi2md/actions/runs/39720709023), source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`. The release includes the payload checksums and artifact indexes. Older failures below were superseded by this successful build; clean-computer acceptance remains pending.
 
 | Target / commit | Observed result | Artifact / acceptance boundary |
 |---|---|---|
-| Mac ARM, `bd48a353` | Native build and artifact upload succeeded | [Debug artifact 12389488147](https://github.com/JonbinC/doi2md/actions/runs/39693542222/artifacts/12389488147), expires `2026-10-22T23:27:32Z`; native human acceptance pending |
-| Mac Intel, `bd48a353` | App build and collection succeeded; CreateArtifact timed out after five upload attempts | [Job 119545303471](https://github.com/JonbinC/doi2md/actions/runs/39693542222/job/119545303471); no artifact for this target/commit |
-| Windows x64, `bd48a353` | Source test failed with a transient `busy.txt` directory lock in the Windows Job cleanup test | [Job 119545303351](https://github.com/JonbinC/doi2md/actions/runs/39693542222/job/119545303351); freezing/installer delivery was not reached |
-| Windows x64, `841f603c` | Source checks and standalone bundled Pi check passed; the frozen SDK execution probe timed out (`sdk_execution`, `timeout`), while the Node version probe exited 0 | [Job 119630992586](https://github.com/JonbinC/doi2md/actions/runs/39719990545/job/119630992586); no installer artifact |
-| Mac Intel, older `8ad36cb1` | Native build and upload succeeded; static audit passed | [Debug artifact 12389234977](https://github.com/JonbinC/doi2md/actions/runs/39692375249/artifacts/12389234977), expires `2026-10-22T23:16:51Z`; previous-commit evidence |
-| Mac ARM, older `8ad36cb1` | Native build/upload and static audit passed | [Debug artifact 12389990883](https://github.com/JonbinC/doi2md/actions/runs/39692375249/artifacts/12389990883), same expiry; previous-commit evidence |
+| Mac ARM, `bf7d7198` | Full bundle build and static archive audit passed; ad-hoc signature only | [Release payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) · SHA256 `3e904b8fd9e3fd24871699286408d38b7acc000a5872378e690102102adec80e` |
+| Mac Intel, `bf7d7198` | Full bundle build and static archive audit passed; ad-hoc signature only | [Release payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-apple-darwin.tar.gz) · SHA256 `fef599b0a12fe6ba51d65c956e0db23dc4ce98086ce2faf9d69c7dab7a94b8c2` |
+| Windows x64, `bf7d7198` | Full bundle build and static archive audit passed; unsigned installer | [Release payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-pc-windows-msvc-setup.exe) · SHA256 `a68c26aa98a6d4b80c7676d1e85913103c94ce4753804e0e07b443fe94bdebde` |
 
-Both `8ad36cb1` Mac archives passed all six payload `SHA256SUMS` entries and GitHub ZIP-digest checks. Their inner desktop/bridge/Node/Relay binaries retain executable permissions and the matching CPU architecture; Node/Pi, worker and complete Node license notices are present. The Intel audit additionally compared all 158 recorded source checksums with the `8ad36cb1` Git tree. These were static audits on Linux: no Mach-O was executed, and they establish neither Gatekeeper acceptance nor installation, real login, OS credentials or provider access. See [native debugging](native/DEBUGGING.md#recorded-artifact-status) for the Intel checksums.
+The new Mac/Windows archives passed their payload checksum and static metadata audits; those checks establish neither Gatekeeper/SmartScreen acceptance nor installation, real login, OS credentials or provider access. No Mach-O or installer was executed on a user's computer.
 
 Earlier builds exposed a Windows file-URL conversion error and Mac Intel reverse-DNS listener delays. The shared loopback listener now skips stdlib reverse DNS, with fault-injection checks for the bridge and OAuth callback. Explicit HTTP-only Relay supervision and frozen Windows external-process DLL-path handling are implemented and covered by controlled process tests. No real cloud Relay was started for those tests.
 
 Authorized real-account checks through the live bridge passed document listing, tags, explicit tag dry-run and nonempty BibTeX/CSL/Markdown/ZIP responses. The Markdown formats retained `markdown-text-only`. No tags were applied or removed in this check, no Relay was started, and no provider/model request was made. This HTTP evidence does not replace native WebView download or account-login acceptance.
 
-Windows `f0d617b3` passed Python/Pi source tests but its frozen dependency probe failed. Windows `8ad36cb1` also reached freezing and failed the anonymous-session dependency check with `agent_sdk_missing`; its cleanup did not produce the earlier secondary directory-deletion exception. External launches now sanitize DLL search paths following [PyInstaller's Windows guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#launching-external-programs-from-the-frozen-application), diagnostics expose allowlisted probe fields only, and Job cleanup waits for descendants before deleting temporary files. A successful Windows frozen rebuild is still required; these changes do not establish the original dependency failure's cause.
+Earlier Windows frozen builds exposed an SDK dependency-probe timeout and transient directory locks. The later run above successfully produced the full installer bundle. External launches sanitize DLL search paths following [PyInstaller's Windows guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#launching-external-programs-from-the-frozen-application), diagnostics expose allowlisted probe fields only, and Job cleanup waits for descendants before deleting temporary files.
 
-Windows `05abe13d` and `bd48a353` caught transient directory-lock failures in the cleanup test before freezing. Cleanup retries briefly after confirmed process exit and preserves the safe original phase if deletion still fails. The earlier retry patch passed focused preparation checks on Linux (45 passed, 1 Windows-only skip); the latest local focused Connect suite is recorded above. Local full frozen preparation and actual WebKit download/parent-crash smoke both passed again, exit 0. Those Linux results do not fill the outstanding Windows CI or human acceptance rows.
+Windows `05abe13d` and `bd48a353` caught transient directory-lock failures in the cleanup test before freezing. Cleanup retries briefly after confirmed process exit and preserves the safe original phase if deletion still fails; later CI produced the full Windows bundle recorded above.
 
-The follow-up isolates probe stdin from the native control pipe and uses explicit UTF-8. Local regression coverage passed, but the Windows frozen change still needs CI evidence. The `841f603c` timeout does not establish stdin or encoding as its cause.
+The follow-up isolates probe stdin from the native control pipe and uses explicit UTF-8. The successful bundle build supersedes the earlier timeout as delivery evidence; it does not establish Windows runtime behavior after installation.
 
 The repository Extension CI also encountered newly published Vitest advisories. Its test dependencies were patched from 4.1.11 to 4.1.12 without changing extension runtime sources. `npm --prefix extension audit --audit-level=moderate`, extension tests (210 passed) and build all exited 0.
 

@@ -1,6 +1,6 @@
 # Mdtero Connect — source handoff (updated 2026-10-22)
 
-> **Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10) — not a signed desktop release.** Continue on `handoff/connect-research-client-20261021`. The runnable client is the loopback UI and Python bridge, with an optional local Pi runtime in full mode. A Tauri debug shell and Mac/Windows artifact workflow now wrap this same client; see [native debugging](native/DEBUGGING.md). Website integration, native human acceptance and institutional access acceptance remain separate work.
+> **Public unsigned desktop preview.** [PR #10](https://github.com/JonbinC/doi2md/pull/10) is merged. Connect v0.1.0-preview.1 has durable [Mac and Windows debug downloads](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1); the release page also documents Linux's basic CLI/browser setup. The Nextmdtero download entry is being published separately. The Tauri shell wraps the same loopback UI and Python bridge, with an optional local Pi runtime in full mode. Per-computer installation, account login and institutional access acceptance remain pending; see [native debugging](native/DEBUGGING.md).
 
 ## Repository boundaries
 
@@ -95,8 +95,8 @@ The browser fixture uses real UI/bridge security and real provider/Agent approva
 
 ## Remaining work
 
-1. Nextmdtero website/Dashboard Connect entry, launch guidance/deep links and an eventual verified release manifest.
-2. Resolve the Windows frozen SDK check and latest Intel artifact delivery, then complete per-OS installation, native account login, downloads, Relay lifecycle/upgrade, credential-store and uninstall acceptance. Mac debug artifacts exist for specified commits; Tauri, bundled Python/Node/Pi and explicitly approved HTTP-only Relay controls are implemented. Developer signing, notarization and a verified release manifest remain open.
+1. Keep the Nextmdtero Connect download entry aligned with this preview release and add dashboard deep links and a machine-verified release manifest.
+2. Complete per-OS installation, native account login, downloads, Relay lifecycle/upgrade, credential-store and uninstall acceptance. Mac and Windows full bundles are published with hashes; Tauri, bundled Python/Node/Pi and explicitly approved HTTP-only Relay controls are implemented. Developer identity signing, notarization and a machine-verified website release manifest remain open.
 3. Zotero pagination, stable source/account checkpoints, dedupe, deletion synchronization and real desktop/version acceptance.
 4. Visible local CARSI login, passwords/Cookies kept on-device, and school-by-publisher full-text acceptance.
 5. Pi full-text evidence/tools, production model-provider acceptance, financial hard caps, OS sandboxing and durable run history. Pi is the selected Agent implementation; no OpenCode runtime ships here.
@@ -104,4 +104,4 @@ The browser fixture uses real UI/bridge security and real provider/Agent approva
 7. Backend 5 GiB Markdown/private-image quota, durable object storage and tested PostgreSQL backup/restore.
 8. Backend MCP Reader embedding and product-level website/client/Reader integration.
 
-**Keep PR #10 Draft.** Reviewable local sources and passing tests do not authorize merge, publication, website support-matrix changes or native release claims.
+PR #10 is merged and this preview is published. Do not describe these unsigned artifacts as a signed desktop release or completed per-OS acceptance.

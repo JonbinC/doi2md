@@ -12,6 +12,10 @@ Mdtero 把论文转换为可复用的 Markdown 研究包，用于阅读、翻译
 
 **语言：** [English](./README.md) | 简体中文
 
+## Mdtero Connect 桌面调试版
+
+下载 [macOS Apple Silicon / Intel 和 Windows x64 调试包](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1)。安装前请核对发布包内的校验和并阅读系统提示。Linux 暂无原生安装包，可查看 [基础 CLI/浏览器客户端说明](https://github.com/JonbinC/doi2md/blob/main/connect/native/DEBUGGING.md#linux-basic-client)。各系统的真人安装与登录验收仍待完成。
+
 ## 云端 MCP（ChatGPT / Claude / Cursor）
 
 在 ChatGPT Plugins、Claude 自定义连接器或 Cursor 的 `mcp.json` 里填入：
