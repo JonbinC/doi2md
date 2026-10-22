@@ -111,7 +111,9 @@ class AgentRuntime:
                     info["probe_os_error"] = number
 
         try:
-            version = _external_process.run([node, "--version"], capture_output=True, text=True, timeout=5, env=self._safe_env(), check=False,
+            # Probes never consume input. In particular, do not inherit the
+            # desktop bridge's long-lived shutdown/control pipe on Windows.
+            version = _external_process.run([node, "--version"], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=5, env=self._safe_env(), check=False,
                                             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             diagnostics["node_probe_exit_code"] = version.returncode
             match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)\s*", version.stdout)
@@ -134,7 +136,7 @@ class AgentRuntime:
                 stage = "sdk_execution"
                 checked = _external_process.run(
                     [node, str(self.runtime_dir / "worker.mjs"), "--check"],
-                    capture_output=True, text=True, timeout=15, cwd=temporary.name, env=self._safe_env(), check=False,
+                    stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=15, cwd=temporary.name, env=self._safe_env(), check=False,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
                 diagnostics["sdk_probe_exit_code"] = checked.returncode
@@ -179,6 +181,17 @@ class AgentRuntime:
                 return info
             info.update({"available": True, "sdk_version": SDK_VERSION, "models": payload.get("models", {})})
         except subprocess.TimeoutExpired as exc:
+            # Only report shape, never partial provider/dependency output. This
+            # distinguishes a silent startup hang from a worker that emitted
+            # its record but left the event loop running.
+            if stage == "sdk_execution":
+                partial = exc.output
+                raw = partial.encode("utf-8") if isinstance(partial, str) else partial if isinstance(partial, bytes) else b""
+                diagnostics.update({"probe_stdout_bytes": len(raw), "probe_empty_output": not raw})
+                try:
+                    diagnostics["probe_json_complete"] = len(raw) <= 1024 * 1024 and isinstance(json.loads(raw), dict)
+                except (ValueError, UnicodeError):
+                    diagnostics["probe_json_complete"] = False
             failure("agent_sdk_missing", "timeout", exc)
         except OSError as exc:
             failure("agent_sdk_missing", "os_error", exc)

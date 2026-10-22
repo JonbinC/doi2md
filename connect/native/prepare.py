@@ -156,8 +156,9 @@ def dependency_smoke_phase(dependencies: object) -> str:
         value = dependencies.get(field)
         if type(value) is int:
             facts.append(field + '=' + str(value))
-    if type(dependencies.get('probe_empty_output')) is bool:
-        facts.append('probe_empty_output=' + str(dependencies['probe_empty_output']).lower())
+    for field in ('probe_empty_output', 'probe_json_complete'):
+        if type(dependencies.get(field)) is bool:
+            facts.append(field + '=' + str(dependencies[field]).lower())
     return phase + (' (' + ', '.join(facts) + ')' if facts else '')
 
 
@@ -292,7 +293,7 @@ def probe_bundled_agent(runtime: Path, *, timeout: float = 15) -> dict:
     try:
         result = subprocess.run([str(node.resolve()), str(worker.resolve()), '--check'],
                                 cwd=temporary, env=AgentRuntime._safe_env(),
-                                capture_output=True, text=True, encoding='utf-8', timeout=timeout,
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8', timeout=timeout,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         phase = 'standalone_output'
         if len(result.stdout.encode('utf-8')) > 1024 * 1024:

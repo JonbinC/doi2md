@@ -110,6 +110,46 @@ test('configured but rejected credentials never produce a verified account', asy
   await expect(page.locator('#screen')).not.toContainText('已通过本机 API Key 认证');
 });
 
+test('bundled Pi with no model key directs setup without reinstall instructions', async ({ page, request }) => {
+  await reset(request, { full_mode: true });
+  await page.goto('/#research');
+  const readiness = page.locator('#agent-readiness');
+  await expect(readiness).toContainText('Pi 已安装');
+  await expect(readiness).not.toContainText('npm');
+  await expect(action(page, 'agent-prepare')).toBeDisabled();
+  await action(page, 'providers-refresh').click();
+  await expect(readiness).toContainText('尚未配置模型 Key');
+  await expect(action(page, 'view-settings')).toBeEnabled();
+});
+
+test('Pi dependency retry preserves the selected papers and research draft', async ({ page, request }) => {
+  await reset(request, { full_mode: true });
+  await configureProvider(page.request);
+  await openLibrary(page);
+  await select(page, 11);
+  await action(page, 'view-research').click();
+  await page.locator('#agent-prompt').fill('Keep this research question after retry.');
+  await page.route('**/connect/v1/agent/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.ready = false;
+    body.reason_code = 'agent_sdk_missing';
+    body.dependencies = { available: false, reason_code: 'agent_sdk_missing', probe_stage: 'sdk_cleanup', probe_code: 'os_error', probe_os_error: 32 };
+    await route.fulfill({ response, json: body });
+  });
+  await page.locator('[data-view="research"]').click();
+  await expect(page.locator('#agent-readiness')).toContainText('Pi 依赖检测未通过');
+  await page.locator('#agent-readiness summary').click();
+  await expect(page.locator('#agent-readiness')).toContainText('sdk_cleanup');
+  await expect(action(page, 'agent-prepare')).toBeDisabled();
+  await page.unroute('**/connect/v1/agent/status');
+  await action(page, 'providers-refresh').click();
+  await expect(page.locator('#agent-readiness')).toHaveCount(0);
+  await expect(page.locator('#agent-prompt')).toHaveValue('Keep this research question after retry.');
+  await expect(page.locator('.selected-references')).toContainText('Cycling stability');
+  await expect(action(page, 'agent-prepare')).toBeEnabled();
+});
+
 test('three onboarding steps remain optional and lead to the working library', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#auth-badge')).toHaveText(/已核验/);

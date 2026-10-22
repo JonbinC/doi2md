@@ -351,6 +351,18 @@ def test_dependency_cleanup_cannot_mask_the_original_execution_timeout(dependenc
     assert_safe_probe(info)
 
 
+@pytest.mark.parametrize("partial,complete", [(b"", False), (b'{"available":true}', True), (b"synthetic-sdk-secret-must-not-return", False)])
+def test_dependency_timeout_only_reports_partial_output_shape(dependency_probe, partial, complete):
+    runtime, command, _ = dependency_probe
+    command.side_effect = [node_version(), subprocess.TimeoutExpired(["node"], 15, output=partial)]
+    info = runtime._dependency_info()
+    assert info["probe_code"] == "timeout" and info["probe_stage"] == "sdk_execution"
+    assert info["probe_stdout_bytes"] == len(partial)
+    assert info["probe_empty_output"] is (not partial)
+    assert info["probe_json_complete"] is complete
+    assert_safe_probe(info)
+
+
 @pytest.mark.parametrize("stdout,code", [("", "invalid_json"), ("synthetic-sdk-secret-must-not-return", "invalid_json"), ("[]", "invalid_schema")])
 def test_dependency_json_failures_reveal_only_size_and_empty_state(dependency_probe, stdout, code):
     runtime, command, _ = dependency_probe
@@ -384,6 +396,44 @@ def test_successful_dependency_probe_schema_and_timeouts_stay_unchanged(dependen
     info = runtime._dependency_info()
     assert info == {"available": True, "node_version": "22.19.0", "sdk_version": SDK_VERSION, "models": models}
     assert [call.kwargs["timeout"] for call in command.call_args_list] == [5, 15]
+    assert all(call.kwargs["stdin"] == subprocess.DEVNULL and call.kwargs["encoding"] == "utf-8" for call in command.call_args_list)
+
+
+def test_dependency_probe_cannot_read_or_wait_for_the_bridges_control_pipe(tmp_path):
+    import shutil
+    import sys
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("A real Node executable is needed for pipe isolation")
+    (tmp_path / "worker.mjs").write_text(
+        "let received = ''; for await (const chunk of process.stdin) received += chunk; "
+        "if (received) throw new Error('probe consumed parent control input'); "
+        "console.log(JSON.stringify({available:true,sdk_version:'1.3.0',models:{}}));",
+        encoding="utf-8",
+    )
+    script = """import json,sys
+from pathlib import Path
+from types import SimpleNamespace
+from mdtero.connect.agent_runtime import AgentRuntime
+runtime=AgentRuntime(full_mode=True,providers=SimpleNamespace(get_key=lambda _:None),library=None,
+                     runtime_dir=Path(sys.argv[1]),node_executable=Path(sys.argv[2]))
+try: print(json.dumps(runtime._dependency_info()),flush=True)
+finally: runtime.close()
+"""
+    # Keep this parent input open while waiting: communicate() would close it
+    # and conceal the native bridge's persistent control-pipe condition.
+    child = subprocess.Popen([sys.executable, "-c", script, str(tmp_path), node],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+    try:
+        assert child.wait(timeout=8) == 0
+        assert json.loads(child.stdout.read())["available"] is True
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=5)
+        child.stdin.close()
+        child.stdout.close()
 
 
 def test_invalid_node_version_never_returns_raw_version_stdout(dependency_probe):

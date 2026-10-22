@@ -1,7 +1,6 @@
 /** One JSON request on stdin, one sanitized JSON response on stdout. No CLI agent. */
-import { readFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
 
 export const PROVIDERS = Object.freeze(['openai', 'anthropic', 'google', 'openrouter']);
 export const SDK_VERSION = '1.3.0';
@@ -176,4 +175,15 @@ async function main() {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try {
+    // Node resolves ESM symlinks before setting import.meta.url. Compare both
+    // canonical paths so a linked CLI entry still emits its protocol record.
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) await main();

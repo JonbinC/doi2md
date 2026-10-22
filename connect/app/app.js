@@ -33,6 +33,30 @@
   const agentActive = () => ["running", "starting", "pending"].includes(state.agentRun?.status);
   const agentLabel = () => !state.agent?.enabled ? "文献整理模式，Pi 未开启" : state.agent.ready ? "Pi 研究模式已就绪（模型凭据未远程核验）" : "完整版已开启，Pi 尚未就绪";
 
+  function agentReadiness() {
+    if (state.agent?.ready) return "";
+    const reason = state.agent?.reason_code || state.agent?.reason;
+    const hints = {
+      provider_key_missing: "Pi 已安装，尚未配置模型 Key。请在设置中选择模型服务并保存自己的 Key，然后返回研究。保存不会发起模型调用。",
+      full_mode_required: "当前是基础文献模式。桌面端请使用完整版调试包；源代码运行可用 mdtero connect --full 开启 Pi。",
+      agent_node_missing: "未找到本机 Node 运行时。桌面完整版应已内置 Node，请重新解压完整调试包后重试。",
+      agent_node_unavailable: "本机 Node 运行时未能启动。请重试检测，并在问题报告中记录调试包版本与系统版本。",
+      agent_node_version: "本机 Node 版本过旧，Pi 需要 Node 22.19 或更新版本。桌面端请使用匹配此电脑架构的完整调试包。",
+      agent_runtime_missing: "未找到 Pi 运行文件。桌面端请重新解压完整调试包，保留应用内部目录。",
+      agent_sdk_missing: "Pi 依赖检测未通过。可重试检测；若仍失败，请记录下方诊断状态与调试包版本。",
+      agent_dependency_version_mismatch: "Pi 依赖版本与客户端不匹配，请使用同一构建产出的完整调试包。",
+      agent_closed: "本机 Pi 运行时已停止，请通过 Connect 菜单重新连接客户端。",
+    };
+    const diagnostics = {};
+    for (const key of ["reason_code", "node_version", "sdk_version", "probe_stage", "probe_code", "probe_os_error", "probe_exit_code"]) {
+      if (state.agent?.dependencies?.[key] !== undefined) diagnostics[key] = state.agent.dependencies[key];
+    }
+    return '<div class="notice" id="agent-readiness"><p>' + esc(hints[reason] || "尚未取得可用的 Pi 运行状态，请重新检测。") + '</p>' +
+      (reason === "full_mode_required" ? '<details><summary>源代码运行方式</summary><p>先安装 Node 22.19+，执行 <code>npm --prefix connect/agent ci --ignore-scripts</code>，再运行 <code>mdtero connect --full</code>。</p></details>' : '') +
+      (Object.keys(diagnostics).length && reason !== "provider_key_missing" ? '<details><summary>依赖诊断状态</summary><pre class="diagnostic">' + esc(JSON.stringify(diagnostics, null, 2)) + '</pre></details>' : '') +
+      '<div class="actions">' + b("重新检测 Pi", "providers-refresh") + (reason === "provider_key_missing" ? b("配置模型 Key", "view-settings") : '') + '</div></div>';
+  }
+
   function start() {
     const labels = ["连接账户", "配置文献访问", "连接电脑与 AI"];
     const facts = [accountStatus(), "按需配置，可先用已有文献", state.session ? "本机桥接可用，扩展按需连接" : "本机桥接待核验"];
@@ -173,10 +197,9 @@
     const models = state.agent?.models?.[state.agentProvider] || [];
     const frozen = preview?.documents || [];
     const run = state.agentRun;
-    const reasons = state.agent?.reason_code || state.agent?.reason || "尚未读取运行时状态";
     return h("用选中文献继续研究", "完整版内置 Pi，使用你自己的模型账户。当前范围是文献元数据，可用于主题归类和检索规划；不据此声称已阅读正文。") +
       status(agentLabel(), !!state.agent?.ready) +
-      (!state.agent?.ready ? '<div class="notice">' + esc(state.agent?.action_hint || reasons) + '<p>源代码运行：先执行 <code>npm --prefix connect/agent ci --ignore-scripts</code>，再运行 <code>mdtero connect --full</code>，并在设置中配置模型 Key。需要 Node 22.19 或更新版本。</p></div>' : '') +
+      agentReadiness() +
       '<section class="card"><h2>研究输入</h2><p class="hint">当前勾选 ' + ids.length + ' 篇，最多 10 篇。选择来自同一个账户文献库。</p><ul class="selected-references">' + state.papers.filter((p) => ids.includes(p.id)).map((p) => '<li>' + esc(p.title) + '</li>').join("") + '</ul><div class="actions">' + b("回文献库选择", "view-library") + b("配置模型 Key", "view-settings") + '</div>' +
       '<div class="research-form"><div><label class="label" for="agent-provider">模型服务</label><select id="agent-provider"' + (state.busy || active ? " disabled" : "") + '>' + ["anthropic", "openai", "google", "openrouter"].map((id) => '<option value="' + id + '"' + (id === state.agentProvider ? " selected" : "") + '>' + esc(providerNames[id]) + '</option>').join("") + '</select></div><div><label class="label" for="agent-model">模型 ID</label><input id="agent-model" type="text" list="agent-models" maxlength="200" value="' + esc(state.agentModel) + '"' + (state.busy || active ? " disabled" : "") + '><datalist id="agent-models">' + models.map((m) => '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>').join("") + '</datalist></div>' +
       '<div><label class="label" for="agent-max-tokens">最多输出 tokens</label><input id="agent-max-tokens" type="number" min="128" max="4096" value="' + esc(state.agentMaxTokens) + '"' + (state.busy || active ? " disabled" : "") + '></div></div>' +

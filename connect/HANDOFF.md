@@ -1,4 +1,4 @@
-# Mdtero Connect — source handoff (2026-10-21)
+# Mdtero Connect — source handoff (updated 2026-10-22)
 
 > **Draft [PR #10](https://github.com/JonbinC/doi2md/pull/10) — not a signed desktop release.** Continue on `handoff/connect-research-client-20261021`. The runnable client is the loopback UI and Python bridge, with an optional local Pi runtime in full mode. A Tauri debug shell and Mac/Windows artifact workflow now wrap this same client; see [native debugging](native/DEBUGGING.md). Website integration, native human acceptance and institutional access acceptance remain separate work.
 
@@ -16,7 +16,7 @@
 |---|---|
 | `connect/design/` | Offline prototype with mock data, CSP `connect-src 'none'` and 26 policy tests |
 | `connect/app/` | Live UI: onboarding, library, local discovery, BYOK and optional Pi research; same-origin `/connect/v1/*` requests |
-| `src/mdtero/connect/` | Loopback bridge, library adapters, provider credentials, supervised Agent runtime, Zotero client, Relay diagnostics and CLI |
+| `src/mdtero/connect/` | Loopback bridge, library adapters, provider credentials, supervised Pi and Relay runtimes, native account login, Zotero client, diagnostics and CLI |
 | `connect/agent/` | Pinned Pi SDK adapter, dependency lockfile, license notice and real-SDK tests with synthetic HTTP |
 | `connect/VERIFICATION.md` | Reproducible checks, recorded results and acceptance gaps |
 | `connect/native/README.md` | Native packaging boundary; no signed installer is shipped here |
@@ -32,6 +32,8 @@ uv run mdtero connect --no-browser --port 0 --json
 ```
 
 Basic mode does not require Node or the Pi SDK. Account secrets stay in the existing CLI configuration/environment and never return to the page. Restart the bridge after terminal login or saved-account configuration changes; refreshing the page does not reload the account configuration.
+
+The desktop debug shell uses the same client. Its Connect menu offers account login in the system browser, cancellation/reconnection, and the export folder (`Downloads/Mdtero Connect`). Successful login restarts the bridge, clears session BYOK and cancels active research. Native Mac/Windows account-login and installation acceptance remain pending. [Debugging status](native/DEBUGGING.md#recorded-artifact-status) identifies which exact commits have artifacts; an older successful Mac artifact does not certify current Windows delivery.
 
 ### Optional full mode
 
@@ -67,31 +69,34 @@ OpenAlex's explicit key check uses a fixed, free single-entity lookup with the k
 - Three-step onboarding, account-library verification and distinct configured/verified states.
 - Tag drafts survive redraws. Preview explicitly sends `dry_run: true`; applying the reviewed selection sends `false`. Draft/selection changes invalidate the preview.
 - Backend #43 provides BibTeX, CSL JSON, Markdown and Markdown ZIP. Markdown exports remain text-only, without images.
-- Relay transport, browser capability and entitlement remain independent diagnostics. An online Relay is not evidence of full-text access.
+- Connections can explicitly start, stop or restart the native bundle's owned HTTP-only Relay. Startup/restart requires current-page transport permission, a local account key and a confirmed cloud-offline precheck. Reload restores the owned-process state without saving permission. Plain CLI mode has no bundled Relay resource path and offers diagnostics only.
+- Relay process, cloud transport, browser capability and entitlement remain independent observations. The managed browser stays disabled, existing external Relays are not controlled, and no background service is installed. An online Relay is not evidence of full-text access; the client-side precheck is not an atomic cross-computer lease.
 - Zotero has explicit collection selection and metadata-only import preview. Connector reachability is not full synchronization.
 
-Bridge guards apply to the new provider/research routes too: loopback-only binding, Host/Origin validation, CSRF for POST, same-origin UI requests, secret-free status/errors and fixed Zotero `http://127.0.0.1:23119`. Newly entered provider keys do not enter `config.json`, prompts, browser persistence or process argv; Pi receives only its selected AI key over stdin.
+Bridge guards apply to provider, research and Relay control routes: loopback-only binding, Host/Origin validation, CSRF for POST, same-origin UI requests, secret-free status/errors and fixed Zotero `http://127.0.0.1:23119`. Newly entered provider keys do not enter `config.json`, prompts, browser persistence or process argv; Pi receives only its selected AI key over stdin. The owned Relay receives account credentials through its sanitized child environment; its temporary browser-off policy contains no key.
 
 ## Reproduce checks
 
 ```sh
-uv run pytest tests_py/test_connect_*.py -q
+uv sync --frozen --extra connect-full
+uv run --extra connect-full pytest tests_py/test_connect_*.py -q
 node --check connect/app/api.js
 node --check connect/app/app.js
 node --test connect/design/policy.test.cjs
+npm --prefix connect/agent ci --ignore-scripts
 npm --prefix connect/agent test
 npm --prefix connect ci
 npm --prefix connect run test:install
 npm --prefix connect test
-uv run python scripts/ci/secret_guard.py
+uv run --extra connect-full python scripts/ci/secret_guard.py
 ```
 
-The browser fixture replaces upstream account/Relay/Zotero/provider services. Node tests use the actual pinned Pi SDK with a synthetic HTTP model server. Neither is a private-provider-key or paid-model acceptance test. Detailed commands and recorded exit codes are in [VERIFICATION.md](VERIFICATION.md).
+The browser fixture uses real UI/bridge security and real provider/Agent approval logic while replacing upstream account/Relay/Zotero/provider services and model execution. Relay UI coverage simulates the process boundary; separate runtime tests exercise supervised children. Node tests use the actual pinned Pi SDK with a synthetic HTTP model server. Neither is a private-provider-key or paid-model acceptance test. Detailed commands, recorded exit codes and platform CI failures are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Remaining work
 
 1. Nextmdtero website/Dashboard Connect entry, launch guidance/deep links and an eventual verified release manifest.
-2. macOS/Windows Tauri debug artifacts and human acceptance; supported-OS Relay lifecycle/upgrade, credentials, signed/notarized installers and install/upgrade/uninstall evidence. Shell, bundled Python/Node/Pi and explicitly approved HTTP-only Relay controls now exist. The client Relay precheck is not an atomic cross-computer lease.
+2. Resolve the Windows frozen SDK check and latest Intel artifact delivery, then complete per-OS installation, native account login, downloads, Relay lifecycle/upgrade, credential-store and uninstall acceptance. Mac debug artifacts exist for specified commits; Tauri, bundled Python/Node/Pi and explicitly approved HTTP-only Relay controls are implemented. Developer signing, notarization and a verified release manifest remain open.
 3. Zotero pagination, stable source/account checkpoints, dedupe, deletion synchronization and real desktop/version acceptance.
 4. Visible local CARSI login, passwords/Cookies kept on-device, and school-by-publisher full-text acceptance.
 5. Pi full-text evidence/tools, production model-provider acceptance, financial hard caps, OS sandboxing and durable run history. Pi is the selected Agent implementation; no OpenCode runtime ships here.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -139,5 +139,33 @@ test('CLI worker emits one generic JSON failure and no credential/error dump',as
    assert.equal(code,1);const result=JSON.parse(stdout);assert.equal(result.error.reason_code,'model_not_supported');
    assert.equal(stderr,'');assert.ok(!stdout.includes(input().api_key));assert.ok(!stdout.includes('ambient-key'));
    assert.deepEqual(await readdir(cwd),[]);
+ } finally { await rm(cwd,{recursive:true,force:true}); }
+});
+
+test('CLI worker launched through a symlink emits one SDK catalog record',async(t)=>{
+ const cwd=await mkdtemp(join(tmpdir(),'mdtero-agent-link-test-'));
+ try {
+   const entry=join(cwd,'worker-entry.mjs');
+   try {
+     await symlink(fileURLToPath(new URL('./worker.mjs',import.meta.url)),entry,'file');
+   } catch (error) {
+     if (process.platform==='win32' && ['EPERM','EACCES','ENOSYS'].includes(error.code)) {
+       t.skip('Windows does not grant permission to create file symlinks');
+       return;
+     }
+     throw error;
+   }
+   const allowed=['PATH','SystemRoot','SYSTEMROOT','WINDIR','TMP','TEMP','TMPDIR','LANG'];
+   const env=Object.fromEntries(allowed.filter(key=>process.env[key]!==undefined).map(key=>[key,process.env[key]]));
+   const child=spawn(process.execPath,[entry,'--check'],{cwd,env,timeout:15000});
+   let stdout='',stderr='';child.stdout.on('data',value=>stdout+=value);child.stderr.on('data',value=>stderr+=value);
+   child.stdin.end();
+   const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+   assert.equal(code,0);
+   assert.equal(stdout.trim().split('\n').length,1);
+   const result=JSON.parse(stdout);
+   assert.equal(result.available,true);assert.equal(result.sdk_version,SDK_VERSION);
+   assert.deepEqual(Object.keys(result.models),['openai','anthropic','google','openrouter']);
+   assert.equal(stderr,'');assert.deepEqual(await readdir(cwd),['worker-entry.mjs']);
  } finally { await rm(cwd,{recursive:true,force:true}); }
 });
