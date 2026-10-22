@@ -130,10 +130,12 @@ def test_bridge_fulltext_job(tmp_path):
     import time as _t
     from mdtero.connect.bridge import ConnectBridge
 
-    class C:  # minimal client stub
-        pass
+    from mdtero.client import MdteroClient
+    from mdtero.config import MdteroConfig
 
-    br = ConnectBridge(client=C(), static_dir=tmp_path, fulltext_runner=lambda d: {"doi": d, "status": "paywall"})
+    # A real (offline) client: the bridge also wires providers/relay from client.config.
+    client = MdteroClient(MdteroConfig())
+    br = ConnectBridge(client=client, static_dir=tmp_path, fulltext_runner=lambda d: {"doi": d, "status": "paywall"})
     job = br.start_fulltext("https://doi.org/10.1080/0000.4")
     for _ in range(50):
         if br.fulltext_jobs[job["id"]]["state"] != "running":
