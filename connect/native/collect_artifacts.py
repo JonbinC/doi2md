@@ -9,14 +9,13 @@ import json
 import re
 import shutil
 import subprocess
-import tarfile
 from pathlib import Path
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 TARGET_FORMATS = {
-    "aarch64-apple-darwin": "app",
-    "x86_64-apple-darwin": "app",
+    "aarch64-apple-darwin": "dmg",
+    "x86_64-apple-darwin": "dmg",
     "x86_64-pc-windows-msvc": "nsis",
 }
 SOURCE_ROOTS = (
@@ -108,13 +107,13 @@ def collect(
     if edition not in {"basic", "full"}:
         raise ValueError("edition must be basic or full")
     bundle_format = TARGET_FORMATS[target]
-    pattern = "macos/*.app" if bundle_format == "app" else "nsis/*.exe"
+    pattern = "dmg/*.dmg" if bundle_format == "dmg" else "nsis/*.exe"
     candidates = sorted(source.glob(pattern))
     candidates = [
         path
         for path in candidates
         if not path.is_symlink()
-        and (path.is_dir() if bundle_format == "app" else path.is_file())
+        and path.is_file()
     ]
     if len(candidates) != 1:
         raise ValueError(f"expected one {bundle_format} payload under {source}; found {len(candidates)}")
@@ -124,11 +123,9 @@ def collect(
     runtime_manifest = validate_runtime(repository, target, edition, commit)
     output.mkdir(parents=True, exist_ok=True)
     payload = candidates[0]
-    if bundle_format == "app":
-        archive_path = output / f"mdtero-connect-debug-{target}.tar.gz"
-        with tarfile.open(archive_path, "w:gz") as archive:
-            archive.add(payload, arcname=payload.name)
-        payload_output = archive_path
+    if bundle_format == "dmg":
+        payload_output = output / f"mdtero-connect-debug-{target}.dmg"
+        shutil.copy2(payload, payload_output)
     else:
         payload_output = output / f"mdtero-connect-debug-{target}-setup.exe"
         shutil.copy2(payload, payload_output)

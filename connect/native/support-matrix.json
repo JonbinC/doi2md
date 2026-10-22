@@ -16,11 +16,11 @@
       "priority": "primary-debug",
       "runner": "macos-14",
       "target": "aarch64-apple-darwin",
-      "artifact": "app-tar-gz",
+      "artifact": "app-dmg",
       "mode": "full",
       "human_acceptance": "pending",
       "minimum_os_verified": null,
-      "download_url": "https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz"
+      "download_url": "https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.dmg"
     },
     {
       "id": "macos-x64",

@@ -1,12 +1,10 @@
-"""Debug artifact collection must preserve app modes and tie payloads to source."""
+"""Debug artifact collection must verify payloads and tie them to source."""
 
 from __future__ import annotations
 
 import hashlib
 import importlib.util
 import json
-import os
-import tarfile
 from pathlib import Path
 
 import pytest
@@ -48,22 +46,17 @@ def _prepared_runtime(repository, target, edition="full"):
     return runtime
 
 
-@pytest.mark.skipif(os.name == "nt", reason="macOS executable-mode preservation needs a POSIX filesystem")
-def test_mac_archive_preserves_executable_and_records_payload(tmp_path, provenance):
+def test_mac_dmg_is_collected_and_records_payload(tmp_path, provenance):
     bundle = tmp_path / "bundle"
-    app = bundle / "macos/Mdtero Connect.app"
-    binary = app / "Contents/MacOS/mdtero-connect"
-    binary.parent.mkdir(parents=True)
-    binary.write_bytes(b"debug executable")
-    binary.chmod(0o755)
+    dmg = bundle / "dmg/Mdtero Connect Debug_0.1.0_aarch64.dmg"
+    dmg.parent.mkdir(parents=True)
+    dmg.write_bytes(b"UDIF debug disk image")
     _prepared_runtime(tmp_path, "aarch64-apple-darwin")
     output = tmp_path / "artifacts"
     index = collector.collect(target="aarch64-apple-darwin", source=bundle, output=output, edition="full", repository=tmp_path)
     payload = output / index["payloads"][0]["name"]
-    with tarfile.open(payload) as archive:
-        member = archive.getmember("Mdtero Connect.app/Contents/MacOS/mdtero-connect")
-        assert member.mode & 0o111 == 0o111
-        assert archive.extractfile(member).read() == b"debug executable"
+    assert payload.name == "mdtero-connect-debug-aarch64-apple-darwin.dmg"
+    assert payload.read_bytes() == dmg.read_bytes()
     assert index["payloads"][0]["sha256"] == hashlib.sha256(payload.read_bytes()).hexdigest()
     assert index["commit"] == "a" * 40
     assert index["source_digest"] == "b" * 64
@@ -130,15 +123,19 @@ def test_full_windows_artifact_records_matching_bundled_runtime(tmp_path, proven
     assert index["edition"] == "full"
 
 
+@pytest.mark.parametrize(("target", "bundle_type", "suffix"), [
+    ("x86_64-pc-windows-msvc", "nsis", "exe"),
+    ("aarch64-apple-darwin", "dmg", "dmg"),
+])
 @pytest.mark.parametrize("count", [0, 2])
-def test_missing_or_ambiguous_installer_fails_without_output(tmp_path, provenance, count):
-    bundle = tmp_path / "bundle"
-    (bundle / "nsis").mkdir(parents=True)
+def test_missing_or_ambiguous_native_payload_fails_without_output(tmp_path, provenance, target, bundle_type, suffix, count):
+    bundle = tmp_path / "bundle" / bundle_type
+    bundle.mkdir(parents=True)
     for number in range(count):
-        (bundle / "nsis" / f"{number}-setup.exe").write_bytes(b"MZ")
+        (bundle / f"{number}-setup.{suffix}").write_bytes(b"native debug payload")
     output = tmp_path / "artifacts"
-    with pytest.raises(ValueError, match="expected one nsis payload"):
-        collector.collect(target="x86_64-pc-windows-msvc", source=bundle, output=output, edition="full", repository=tmp_path)
+    with pytest.raises(ValueError, match=f"expected one {bundle_type} payload"):
+        collector.collect(target=target, source=bundle.parent, output=output, edition="full", repository=tmp_path)
     assert not output.exists()
 
 

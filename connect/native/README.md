@@ -1,6 +1,6 @@
 # Native Connect shell
 
-**Status: public unsigned desktop preview.** The Tauri 2 shell starts the bundled Python loopback bridge, restricts its window to that bridge, and stops its managed processes on exit. macOS Apple Silicon, macOS Intel and Windows x64 have full debug bundles with Node/Pi. [Download them from the Connect v0.1.0 preview release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Linux has the basic CLI/browser client and no native installer.
+**Status: public unsigned desktop preview.** The Tauri 2 shell starts the bundled Python loopback bridge, restricts its window to that bridge, and stops its managed processes on exit. macOS Apple Silicon has a full DMG; Intel Mac currently has a full `.tar.gz` app bundle; Windows x64 has a full installer, all with Node/Pi. [Download them from the Connect v0.1.0 preview release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Linux has the basic CLI/browser client and no native installer.
 
 See [debug downloads and per-computer acceptance](DEBUGGING.md), [build instructions](BUILDING.md) and the [build matrix](support-matrix.json). The desktop assets are published for debugging; per-OS installation, account login, credentials and lifecycle acceptance remains pending.
 

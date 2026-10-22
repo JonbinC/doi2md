@@ -6,28 +6,29 @@ These unsigned debugging artifacts are published as **Connect v0.1.0-preview.1**
 
 ## Get an artifact
 
-Download the platform payloads from the durable [Connect v0.1.0 preview release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Verify `SHA256SUMS` before opening the payload and keep its build metadata with any report. The binaries were built from source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`; the original Actions artifacts are short-lived. The release includes the payload checksums and artifact indexes.
+Download the platform payloads from the durable [Connect v0.1.0 preview release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.1). Verify `SHA256SUMS` before opening the payload and keep its build metadata with any report. The binaries were built from source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`; the original Actions artifacts are short-lived. The release includes checksums and build provenance for the Apple Silicon DMG, plus artifact indexes for the Actions-built payloads.
 
 The extracted Actions artifact contains `artifact-index.json` (commit, edition, target, source digest and payload hash), `source-checksums.json`, the packaged runtime manifest and these debugging instructions. On macOS, run `shasum -a 256 -c SHA256SUMS` from that directory. On Windows, compare `Get-FileHash -Algorithm SHA256 <payload.exe>` with the matching line in `SHA256SUMS`. These hashes check integrity within the downloaded artifact; they are not a publisher identity signature.
 
-| Computer | Workflow runner | Rust target | Payload |
+| Computer | Build host | Rust target | Payload |
 |---|---|---|---|
-| Apple Silicon Mac | `macos-14` | `aarch64-apple-darwin` | [`.app` inside `.tar.gz`](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) |
+| Apple Silicon Mac | Mac mini · macOS 27.0.1 | `aarch64-apple-darwin` | [DMG installer](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.dmg) · [previous `.app` archive](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) |
 | Intel Mac | `macos-15-intel` | `x86_64-apple-darwin` | [`.app` inside `.tar.gz`](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-apple-darwin.tar.gz) |
 | Windows x64 | `windows-2022` | `x86_64-pc-windows-msvc` | [NSIS setup `.exe`](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-pc-windows-msvc-setup.exe) |
 | Linux x64 | `ubuntu-22.04` | Source verification | Basic CLI plus browser; no native artifact |
 
 ### Recorded artifact status
 
-Checked on **2026-10-22 UTC**. The published platform assets below all came from successful full-bundle jobs in [Actions run 39720709023](https://github.com/JonbinC/doi2md/actions/runs/39720709023) at source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`. All three asset hashes matched their build indexes and `SHA256SUMS`; static archive inspection passed. Real-machine acceptance remains pending.
+Checked on **2026-10-22 UTC**. The Apple Silicon DMG was built on a Mac mini from source commit `bf7d719836bc9da6dccd0a77c1cf6a632b347626`; `hdiutil verify`, app code-signature verification and the bundled-runtime smoke passed. The Intel Mac and Windows assets came from successful full-bundle jobs in [Actions run 39720709023](https://github.com/JonbinC/doi2md/actions/runs/39720709023). Real-machine account, credential, download and lifecycle acceptance remains pending.
 
 | Target / source | Recorded result | Debug artifact |
 |---|---|---|
+| Apple Silicon DMG, `bf7d7198` | Mac mini, macOS 27.0.1 / Xcode 26.6; DMG and ad-hoc app signature verified; notarization not performed; human acceptance pending | [DMG installer](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.dmg) · [Build provenance](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.provenance.json) · SHA256 `a6b0bab4ca6425e671be8bdb5157456d542ecf64ca196082cd303825a99cff64` |
 | Apple Silicon, `bf7d7198` | Full build and static archive audit passed; ad-hoc signature only | [Preview payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) · SHA256 `3e904b8fd9e3fd24871699286408d38b7acc000a5872378e690102102adec80e` |
 | Intel Mac, `bf7d7198` | Full build and static archive audit passed; ad-hoc signature only | [Preview payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-apple-darwin.tar.gz) · SHA256 `fef599b0a12fe6ba51d65c956e0db23dc4ce98086ce2faf9d69c7dab7a94b8c2` |
 | Windows x64, `bf7d7198` | Full build and static archive audit passed; unsigned installer | [Preview payload](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-x86_64-pc-windows-msvc-setup.exe) · SHA256 `a68c26aa98a6d4b80c7676d1e85913103c94ce4753804e0e07b443fe94bdebde` |
 
-The Mac tar archive preserves executable permissions inside the application bundle. Extract it before opening the `.app`. macOS debugging bundles may use an ad-hoc signature so Apple Silicon can run their code; this does not authenticate the developer or provide notarization. Gatekeeper may refuse the build, and Windows may show an unrecognized-publisher warning. Record the exact result. Do not disable system-wide operating-system protections to make a test pass.
+The Mac DMG contains a `.app` signed ad hoc so Apple Silicon can run its code; it does not authenticate the developer or provide notarization. The previous Mac tar archive preserves executable permissions inside the app bundle and must be extracted before opening. Gatekeeper may refuse either build, and Windows may show an unrecognized-publisher warning. Record the exact result. Do not disable system-wide operating-system protections to make a test pass.
 
 Windows uses the system WebView2 runtime; installation may need a network connection to obtain the runtime if it is absent. This is not an offline installer acceptance claim. Use a normal user account for the first test and record any request for elevation.
 

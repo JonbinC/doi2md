@@ -1,6 +1,6 @@
 # Building the native debug client
 
-The native workflow builds full macOS Apple Silicon, macOS Intel and Windows x64 debug payloads. Linux remains a basic client first. Build artifacts are for debugging: macOS uses ad-hoc signing, Windows installers are unsigned, and real OS acceptance remains pending. This workflow uploads short-lived Actions artifacts; it does not create a GitHub Release or update website downloads.
+The native workflow builds full macOS Apple Silicon and Intel `.dmg` installers plus a Windows x64 debug installer. Linux remains a basic client first. Build artifacts are for debugging: macOS uses ad-hoc signing, Windows installers are unsigned, and real OS acceptance remains pending. This workflow uploads short-lived Actions artifacts; it does not create a GitHub Release or update website downloads.
 
 ## Build prerequisites
 
@@ -17,19 +17,19 @@ Prepare a full bundle on the appropriate host, choosing one target:
 
 ```sh
 # Apple Silicon Mac
-uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target aarch64-apple-darwin --edition full
-npm --prefix connect/native run build -- --target aarch64-apple-darwin --bundles app
+CGO_ENABLED=0 uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target aarch64-apple-darwin --edition full
+npm --prefix connect/native run build -- --target aarch64-apple-darwin --bundles dmg
 
 # Intel Mac
-uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target x86_64-apple-darwin --edition full
-npm --prefix connect/native run build -- --target x86_64-apple-darwin --bundles app
+CGO_ENABLED=0 uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target x86_64-apple-darwin --edition full
+npm --prefix connect/native run build -- --target x86_64-apple-darwin --bundles dmg
 
 # Windows x64 (PowerShell, cmd or the workflow's bash)
 uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target x86_64-pc-windows-msvc --edition full
 npm --prefix connect/native run build -- --target x86_64-pc-windows-msvc --bundles nsis
 ```
 
-Preparation freezes the existing public Python bridge and real `connect/app` assets, builds the existing Go Relay, and installs the pinned Pi dependencies into generated runtime resources using `npm ci --ignore-scripts --omit=dev`. Full builds also copy the host Node executable and its complete license notices. If a distribution does not include those notices locally, preparation retrieves `LICENSE` from the fixed official Node GitHub tag matching the detected version. Windows executes npm's JavaScript entry point through Node directly, without constructing a shell command.
+Preparation freezes the existing public Python bridge and real `connect/app` assets, builds the existing pure-Go Relay with `CGO_ENABLED=0`, and installs the pinned Pi dependencies into generated runtime resources using `npm ci --ignore-scripts --omit=dev`. Full builds also copy the host Node executable and its complete license notices. If a distribution does not include those notices locally, preparation retrieves `LICENSE` from the fixed official Node GitHub tag matching the detected version. Windows executes npm's JavaScript entry point through Node directly, without constructing a shell command.
 
 Each preparation then launches the actual frozen executable with a temporary anonymous configuration. It checks the served UI and CSP, loopback session, full-mode Node/Pi dependency probe when applicable, parent-requested shutdown and released listener. The smoke environment excludes inherited account keys, provider keys, proxies and Python/Node hooks; keyring reads are disabled for this build check. It performs no login, cloud library request, credential verification or model request. Windows smoke owns a named kill-on-close Job before launching the onefile bootloader; the bridge joins it before opening a listener. Failed Unix smoke processes and descendants are stopped through their separate process group.
 
