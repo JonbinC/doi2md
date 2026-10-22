@@ -8613,6 +8613,7 @@ def test_public_script_surface_is_ci_only():
     repo_root = Path(__file__).resolve().parents[1]
     expected = {
         "scripts/ci/extension_dist_smoke.py",
+        "scripts/ci/prepare_connect_release.py",
         "scripts/ci/release_gate.sh",
         "scripts/ci/release_policy.py",
         "scripts/ci/secret_guard.py",

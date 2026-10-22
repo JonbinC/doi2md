@@ -28,6 +28,7 @@ struct NativeState {
     generation: AtomicU64,
     login_generation: AtomicU64,
     smoke_download: Mutex<Option<PathBuf>>,
+    bridge_attempts: AtomicU64,
 }
 
 const SMOKE_EXPORT: &str = "@misc{mdtero_native_smoke, title={Synthetic native download test}}\n";
@@ -59,7 +60,7 @@ fn resources(
     }
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(runtime.join("manifest.json"))?)?;
-    if manifest["product"] != "mdtero-connect-debug"
+    if manifest["product"] != "mdtero-connect-desktop"
         || manifest["protocol"] != 1
         || manifest["target"] != env!("MDTERO_NATIVE_TARGET")
     {
@@ -74,11 +75,59 @@ fn resources(
 }
 
 fn status(app: &tauri::AppHandle, message: &str) {
+    show(app, message, "");
+}
+
+/// Show a fixed native message on the bootstrap page. `action` is "", "login" or "retry"
+/// and selects which button is visible. Only native constant strings reach this script.
+fn show(app: &tauri::AppHandle, message: &str, action: &str) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_title(&format!("Mdtero Connect Debug · {message}"));
-        // Only native fixed messages enter this expression. No sidecar output is evaluated.
+        let _ = window.set_title("Mdtero Connect");
         let literal = serde_json::to_string(message).unwrap();
-        let _ = window.eval(&format!("document.getElementById('status')?.replaceChildren(document.createTextNode({literal}))"));
+        let action = serde_json::to_string(action).unwrap();
+        let _ = window.eval(&format!("document.getElementById('status')?.replaceChildren(document.createTextNode({literal}));document.body.dataset.action={action}"));
+    }
+}
+
+/// True when the Mdtero account key is configured (same sources as the CLI config).
+fn has_account() -> bool {
+    if std::env::var("MDTERO_API_KEY").is_ok_and(|v| !v.trim().is_empty()) {
+        return true;
+    }
+    let dir = match std::env::var_os("MDTERO_CONFIG_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None => match std::env::var_os("XDG_CONFIG_HOME") {
+            Some(base) => PathBuf::from(base).join("mdtero"),
+            None => match std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+                Some(home) => PathBuf::from(home).join(".config").join("mdtero"),
+                None => return false,
+            },
+        },
+    };
+    std::fs::read(dir.join("config.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .and_then(|v| v["api_key"].as_str().map(|k| !k.trim().is_empty()))
+        .unwrap_or(false)
+}
+
+const BRIDGE_AUTO_RETRIES: u64 = 2;
+
+fn bridge_failed(app: &tauri::AppHandle) {
+    let state = app.state::<NativeState>();
+    if state.exiting.load(Ordering::SeqCst) {
+        return;
+    }
+    let attempt = state.bridge_attempts.fetch_add(1, Ordering::SeqCst) + 1;
+    if attempt <= BRIDGE_AUTO_RETRIES {
+        show(app, "正在重新启动本机服务…", "");
+        let app = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2 * attempt));
+            start_bridge(app);
+        });
+    } else {
+        show(app, "本机服务暂时没有启动成功。请点击重试；如果仍然失败，请重新打开 Mdtero Connect。", "retry");
     }
 }
 
@@ -94,7 +143,9 @@ fn start_bridge(app: tauri::AppHandle) {
     let (child, ready) = match ManagedChild::launch(&state.binary, &state.runtime, state.full) {
         Ok(value) => value,
         Err(_) => {
-            status(&app, "本机桥接启动失败，请检查调试构建资源");
+            drop(slot);
+            drop(state);
+            bridge_failed(&app);
             return;
         }
     };
@@ -115,9 +166,10 @@ fn start_bridge(app: tauri::AppHandle) {
                 *state.origin.lock().unwrap() = Some(url.clone());
                 if let Some(window) = app.get_webview_window("main") {
                     if window.navigate(url.clone()).is_err() {
-                        status(&app, "无法载入本机页面");
+                        show(&app, "无法载入本机页面，请重试。", "retry");
                     } else {
-                        let _ = window.set_title("Mdtero Connect Debug");
+                        state.bridge_attempts.store(0, Ordering::SeqCst);
+                        let _ = window.set_title("Mdtero Connect");
                     }
                 }
                 println!(
@@ -128,7 +180,8 @@ fn start_bridge(app: tauri::AppHandle) {
             _ => {
                 let child = state.bridge.lock().unwrap().take();
                 drop(child);
-                status(&app, "本机桥接未就绪，请退出后重试");
+                drop(state);
+                bridge_failed(&app);
             }
         }
     });
@@ -144,13 +197,13 @@ fn login(app: tauri::AppHandle) {
     let (child, ready) = match ManagedChild::login(&state.binary) {
         Ok(value) => value,
         Err(_) => {
-            status(&app, "无法启动登录，请重试");
+            show(&app, "无法打开登录页面，请重试。", "login");
             return;
         }
     };
     *slot = Some(child);
     drop(slot);
-    status(&app, "正在系统浏览器登录；可从菜单取消");
+    show(&app, "请在打开的浏览器页面中登录 Mdtero 账户。", "");
     std::thread::spawn(move || {
         let result = ready.recv_timeout(Duration::from_secs(360));
         let state = app.state::<NativeState>();
@@ -175,9 +228,10 @@ fn login(app: tauri::AppHandle) {
                     && v["status"] == "authenticated"
             });
         if authenticated {
+            show(&app, "登录成功，正在进入…", "");
             start_bridge(app.clone());
         } else {
-            status(&app, "登录未完成，可从菜单重试");
+            show(&app, "登录没有完成。", "login");
         }
     });
 }
@@ -214,6 +268,7 @@ pub fn run() {
                 generation: AtomicU64::new(0),
                 login_generation: AtomicU64::new(0),
                 smoke_download: Mutex::new(None),
+                bridge_attempts: AtomicU64::new(0),
             });
             let handle = app.handle().clone();
             let nav = handle.clone();
@@ -223,10 +278,23 @@ pub fn run() {
                 "main",
                 WebviewUrl::App("index.html".into()),
             )
-            .title("Mdtero Connect Debug")
+            .title("Mdtero Connect")
             .inner_size(1200.0, 820.0)
             .min_inner_size(840.0, 600.0)
             .on_navigation(move |url| {
+                // Buttons on the bootstrap page; never a real navigation.
+                if url.scheme() == "mdtero-action" {
+                    match url.path() {
+                        "login" => login(nav.clone()),
+                        "retry" => {
+                            nav.state::<NativeState>().bridge_attempts.store(0, Ordering::SeqCst);
+                            show(&nav, "正在启动…", "");
+                            start_bridge(nav.clone());
+                        }
+                        _ => (),
+                    }
+                    return false;
+                }
                 let state = nav.state::<NativeState>();
                 let allowed = allow_navigation(url, state.origin.lock().unwrap().as_ref());
                 if !allowed {
@@ -342,7 +410,13 @@ pub fn run() {
                 "reload" => start_bridge(app.clone()),
                 _ => (),
             });
-            start_bridge(handle.clone());
+            if smoke || has_account() {
+                start_bridge(handle.clone());
+            } else {
+                // First launch: go straight to account login; the bridge starts after it succeeds.
+                show(&handle, "请先登录 Mdtero 账户。", "login");
+                login(handle.clone());
+            }
             if smoke {
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_secs(75));
@@ -352,7 +426,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("Could not initialize the Connect debug client");
+        .expect("Could not initialize Mdtero Connect");
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             let state = app.state::<NativeState>();

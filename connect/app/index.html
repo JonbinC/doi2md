@@ -3,39 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'">
   <title>Mdtero Connect</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-mode="boot">
 <a class="skip-link" href="#screen">跳到主要内容</a>
+<section id="gate" class="gate" aria-live="polite"></section>
 <div class="shell">
-  <aside class="sidebar" aria-label="Main navigation">
-    <a href="#start" class="brand"><span class="brand-icon">M</span><span>Mdtero <small>CONNECT</small></span></a>
+  <aside class="sidebar" aria-label="主导航">
+    <a href="#library" class="brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">Mdtero<small>Connect</small></span></a>
     <nav class="navigation">
-      <button type="button" data-view="start" class="active">开始使用</button>
-      <button type="button" data-view="library">我的文献库</button>
-      <button type="button" data-view="fulltext">全文获取</button>
-      <button type="button" data-view="connections">连接中心</button>
-      <button type="button" data-view="research">研究模式</button>
-      <button type="button" data-view="settings">设置</button>
+      <button type="button" data-view="start"><span class="nav-icon" aria-hidden="true">◎</span>开始使用</button>
+      <button type="button" data-view="library"><span class="nav-icon" aria-hidden="true">▤</span>我的文献库</button>
+      <button type="button" data-view="fulltext"><span class="nav-icon" aria-hidden="true">⇩</span>全文获取</button>
+      <button type="button" data-view="research"><span class="nav-icon" aria-hidden="true">✦</span>研究模式</button>
+      <button type="button" data-view="connections"><span class="nav-icon" aria-hidden="true">⇄</span>连接中心</button>
+      <button type="button" data-view="settings"><span class="nav-icon" aria-hidden="true">⚙</span>设置</button>
     </nav>
     <section class="sidebar-note">
-      <strong id="auth-badge">…</strong>
-      <div id="auth-detail">正在连接本机桥接</div>
-      <small>账户 Key 由 CLI 保管，BYOK 服务 Key 独立留在本机</small>
+      <div class="account-line"><span class="avatar" aria-hidden="true">✓</span><strong id="auth-badge">…</strong></div>
+      <div id="auth-detail">正在连接本机服务</div>
     </section>
   </aside>
   <div class="workarea">
     <header class="topbar">
-      <div class="breadcrumb">MDTERO / CONNECT</div>
+      <div class="breadcrumb" id="breadcrumb">Mdtero Connect</div>
       <div class="top-actions">
-        <span id="current-account">检查登录状态…</span>
+        <span id="current-account" class="pill">检查登录状态…</span>
         <button type="button" data-action="refresh" class="ghost">刷新</button>
       </div>
     </header>
     <main id="screen" tabindex="-1" aria-busy="true"></main>
-    <footer class="footer">Mdtero Connect · 本机浏览器客户端预览版。Markdown 导出为纯文本，不含图片；原生安装包尚未发布。</footer>
   </div>
 </div>
 <script src="api.js"></script>

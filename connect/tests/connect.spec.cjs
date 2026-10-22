@@ -86,18 +86,19 @@ test.afterEach(async ({ page }) => {
 test('missing local credentials show terminal login guidance without collecting a key', async ({ page, request }) => {
   await reset(request, { authenticated: false });
   await page.goto('/');
-  await expect(page.locator('[data-view="start"]')).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('#screen')).toContainText('mdtero login');
+  // Login-first: without a local account the app shows only the login gate.
+  await expect(page.locator('body')).toHaveAttribute('data-mode', 'login');
+  await expect(page.locator('#gate')).toBeVisible();
+  await expect(page.locator('#gate')).toContainText('mdtero login');
+  await expect(page.locator('#gate a[href="mdtero-action:login"]')).toBeVisible();
+  await expect(page.locator('.shell')).toBeHidden();
   await expect(page.locator('#auth-badge')).not.toHaveText(/已连接|已认证|已核验/);
   await expect(page.locator('input[type="password"], input[name="api_key"], input[name="api-key"]')).toHaveCount(0);
   const session = await (await request.get('/connect/v1/session')).json();
   expect(session.authenticated).toBe(false);
   expect(JSON.stringify(session)).not.toContain('synthetic-browser-fixture-not-a-credential');
   expect((await snapshot(request)).calls).toEqual([]);
-  await action(page, 'step-3').click();
-  await action(page, 'view-library').click();
   await expect(page.locator('input[data-id]')).toHaveCount(0);
-  await expect(page.locator('[data-view="library"]')).toHaveAttribute('aria-current', 'page');
 });
 
 test('configured but rejected credentials never produce a verified account', async ({ page, request }) => {
@@ -715,9 +716,9 @@ test('Relay API rejects absent, false and string campus permission before reachi
 test('an available bundled Relay still requires a local Mdtero account before UI startup', async ({ page, request }) => {
   await reset(request, { authenticated: false, relay_runtime_available: true });
   await page.goto('/');
-  await page.locator('[data-view="connections"]').click();
-  await page.locator('#relay-consent').check();
-  await expect(action(page, 'relay-start')).toBeDisabled();
-  await expect(action(page, 'relay-restart')).toBeDisabled();
+  // Login-first: Relay controls are unreachable until a local account exists.
+  await expect(page.locator('body')).toHaveAttribute('data-mode', 'login');
+  await expect(page.locator('.shell')).toBeHidden();
+  await expect(page.locator('#relay-consent')).toBeHidden();
   expect((await snapshot(request)).relay_runtime_calls).toEqual([]);
 });

@@ -1,0 +1,132 @@
+name: Connect desktop preview release
+
+on:
+  push:
+    tags:
+      - 'connect-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connect-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Full bundle (${{ matrix.id }})
+    runs-on: ${{ fromJSON(matrix.runner) }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: macos-arm64
+            runner: '["self-hosted","macOS","ARM64","connect-release"]'
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - id: macos-x64
+            runner: '["macos-15-intel"]'
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - id: windows-x64
+            runner: '["windows-2022"]'
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: '1'
+      CARGO_TERM_COLOR: always
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+          cache-dependency-path: |
+            connect/native/package-lock.json
+            connect/agent/package-lock.json
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+          enable-cache: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: relay/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install locked full-client dependencies
+        run: |
+          uv sync --frozen --extra connect-full
+          npm --prefix connect/native ci --ignore-scripts
+          npm --prefix connect/agent ci --ignore-scripts
+      - name: Verify Connect and Pi adapters
+        run: |
+          uv run pytest tests_py/test_connect_*.py -q
+          npm test --prefix connect/agent
+      - name: Freeze bridge and bundle Relay, Node and Pi
+        run: |
+          uv run --extra connect-full --with pyinstaller==6.19.0 python connect/native/prepare.py --target ${{ matrix.target }} --edition full
+          uv run --extra connect-full pytest tests_py/test_connect_relay_runtime.py -k actual_bundled_go_relay_without_key_cannot_start_browser -q
+      - name: Build native installer
+        run: |
+          cargo test --locked --manifest-path connect/native/src-tauri/Cargo.toml --lib --target ${{ matrix.target }}
+          npm --prefix connect/native run build -- --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+      - name: Collect checksummed target artifact
+        run: uv run python connect/native/collect_artifacts.py --target ${{ matrix.target }} --edition full
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdtero-connect-release-${{ matrix.id }}
+          path: connect/native/dist/${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish preview Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdtero-connect-release-*
+          path: artifacts
+          merge-multiple: false
+      - name: Verify source commit, payloads and assemble Release assets
+        run: |
+          python scripts/ci/prepare_connect_release.py \
+            --artifacts artifacts \
+            --output dist \
+            --tag "$GITHUB_REF_NAME" \
+            --commit "$GITHUB_SHA"
+      - name: Publish GitHub preview Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Mdtero Connect ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: dist/*
+          body: |
+            Mdtero Connect full-client debugging preview.
+
+            Includes per-platform runtime manifests, artifact indexes, source checksums, and a release-wide `SHA256SUMS` file. Verify the checksums before installing.
+
+            macOS apps use an ad-hoc signature and are not notarized. The Windows installer is unsigned. OS first-run, account, credential, Zotero, and institutional-access acceptance remain in progress. This preview has no automatic updater.
+          draft: false
+          prerelease: true
+          fail_on_unmatched_files: true
+          token: ${{ github.token }}
