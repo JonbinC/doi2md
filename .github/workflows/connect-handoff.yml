@@ -8,6 +8,9 @@ on:
       - 'uv.lock'
       - 'tests_py/test_connect_*.py'
       - '.github/workflows/connect-handoff.yml'
+      - '.github/workflows/connect-release.yml'
+      - '.github/actionlint.yaml'
+      - 'scripts/ci/prepare_connect_release.py'
   push:
     branches:
       - handoff/connect-research-client-20261021
@@ -18,9 +21,23 @@ on:
       - 'uv.lock'
       - 'tests_py/test_connect_*.py'
       - '.github/workflows/connect-handoff.yml'
+      - '.github/workflows/connect-release.yml'
+      - '.github/actionlint.yaml'
+      - 'scripts/ci/prepare_connect_release.py'
 permissions:
   contents: read
 jobs:
+  workflow-lint:
+    name: Validate Connect Actions workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Lint release and PR workflow definitions
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/connect-release.yml .github/workflows/connect-native-debug.yml .github/workflows/connect-handoff.yml
   design:
     runs-on: ubuntu-latest
     timeout-minutes: 6

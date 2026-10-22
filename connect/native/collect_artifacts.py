@@ -27,6 +27,8 @@ SOURCE_ROOTS = (
     "pyproject.toml",
     "uv.lock",
     ".github/workflows/connect-native-debug.yml",
+    ".github/workflows/connect-release.yml",
+    "scripts/ci/prepare_connect_release.py",
 )
 
 

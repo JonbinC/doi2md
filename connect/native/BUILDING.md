@@ -1,6 +1,8 @@
 # Building the native debug client
 
-The native workflow builds full macOS Apple Silicon and Intel `.dmg` installers plus a Windows x64 debug installer. Linux remains a basic client first. Build artifacts are for debugging: macOS uses ad-hoc signing, Windows installers are unsigned, and real OS acceptance remains pending. This workflow uploads short-lived Actions artifacts; it does not create a GitHub Release or update website downloads.
+Pull requests build full macOS Apple Silicon and Intel `.dmg` installers plus a Windows x64 debug installer on GitHub-hosted runners; those checks upload short-lived Actions artifacts only. A trusted `connect-v*` tag runs the separate [Connect desktop preview release workflow](../../.github/workflows/connect-release.yml), which builds the same payloads, validates their source commit and checksums, and publishes a GitHub prerelease. Linux remains a basic client first. macOS uses ad-hoc signing, Windows installers are unsigned, and real OS acceptance remains pending.
+
+The Apple Silicon tag-release job requires a dedicated repository runner labeled `connect-release`; the existing `macmini-trove` runner is registered only to the private Trove repository and cannot run doi2md jobs. Keep the Connect release runner limited to the tag workflow. The public pull-request build stays on GitHub-hosted machines and must never send fork code to the Mac mini. Intel Mac and Windows release jobs use GitHub-hosted runners.
 
 ## Build prerequisites
 

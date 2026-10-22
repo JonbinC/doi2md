@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - connect-release
+    - macos-15-intel

@@ -10,6 +10,8 @@ Download the platform payloads from the durable [Connect v0.1.0 preview release]
 
 The extracted Actions artifact contains `artifact-index.json` (commit, edition, target, source digest and payload hash), `source-checksums.json`, the packaged runtime manifest and these debugging instructions. On macOS, run `shasum -a 256 -c SHA256SUMS` from that directory. On Windows, compare `Get-FileHash -Algorithm SHA256 <payload.exe>` with the matching line in `SHA256SUMS`. These hashes check integrity within the downloaded artifact; they are not a publisher identity signature.
 
+Future full-client preview Releases are created by pushing a reviewed `connect-vMAJOR.MINOR.PATCH-preview.N` tag. The tag workflow builds Apple Silicon on the dedicated Connect Mac runner, Intel Mac and Windows on GitHub-hosted runners, then publishes the payloads and provenance together. Pull-request artifacts remain short-lived CI outputs. Each Release is still an unsigned/unnotarized debugging preview with human OS acceptance pending.
+
 | Computer | Build host | Rust target | Payload |
 |---|---|---|---|
 | Apple Silicon Mac | Mac mini · macOS 27.0.1 | `aarch64-apple-darwin` | [DMG installer](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.dmg) · [previous `.app` archive](https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.1/mdtero-connect-debug-aarch64-apple-darwin.tar.gz) |
