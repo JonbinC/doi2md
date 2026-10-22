@@ -264,8 +264,10 @@ class SmokeJob:
 
 
 def remove_smoke_directory(directory: str, phase: str, *, timeout: float = 5) -> None:
-    # Even after a Job is empty, Windows filesystem/antivirus handles may take
-    # a short time to release. Retry only after process containment succeeded.
+    # ActiveProcesses reaching zero confirms process containment, not immediate
+    # file-handle release: Windows teardown/filesystem filters can still return
+    # sharing violations briefly. Production and real Job regressions use this
+    # same bounded cleanup after Job termination/closure has succeeded.
     deadline = time.monotonic() + timeout
     while True:
         try:

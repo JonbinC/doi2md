@@ -298,6 +298,53 @@ def test_windows_job_requests_termination_and_waits_for_all_descendants_before_h
     assert len(api.events) == 5
 
 
+def test_empty_job_still_uses_bounded_file_handle_release_cleanup(tmp_path, monkeypatch):
+    directory = tmp_path / 'released-job-cwd'
+    directory.mkdir()
+    (directory / 'busy.txt').write_text('synthetic data')
+    api = SyntheticJobApi(counts=(0,))
+    job = synthetic_job(api)
+    actual_remove = prepare.shutil.rmtree
+    attempts = []
+
+    def remove(path):
+        # A directory must never be removed until containment is verified and
+        # the owning Job handle has closed, even when filesystem retry is needed.
+        assert job.handle is None and api.events[-1] == ('close', 123)
+        attempts.append(path)
+        if len(attempts) == 1:
+            error = PermissionError(13, 'synthetic-private-sharing-violation')
+            error.winerror = 32
+            raise error
+        actual_remove(path)
+
+    monkeypatch.setattr(prepare.sys, 'platform', 'win32')
+    monkeypatch.setattr(prepare.shutil, 'rmtree', remove)
+    monkeypatch.setattr(prepare.time, 'sleep', lambda _seconds: None)
+    job.close()
+    prepare.remove_smoke_directory(str(directory), 'descendant handle release')
+    assert len(attempts) == 2 and not directory.exists()
+
+
+def test_persistent_post_job_file_lock_fails_within_the_same_cleanup_budget(tmp_path, monkeypatch):
+    api = SyntheticJobApi(counts=(0,))
+    job = synthetic_job(api)
+    job.close()
+    error = PermissionError(13, 'synthetic-private-sharing-violation')
+    error.winerror = 32
+    remove = Mock(side_effect=error)
+    ticks = iter([0, 1, 6])
+    monkeypatch.setattr(prepare.sys, 'platform', 'win32')
+    monkeypatch.setattr(prepare.shutil, 'rmtree', remove)
+    monkeypatch.setattr(prepare.time, 'monotonic', lambda: next(ticks))
+    monkeypatch.setattr(prepare.time, 'sleep', lambda _seconds: None)
+    with pytest.raises(RuntimeError, match='descendant handle release') as caught:
+        prepare.remove_smoke_directory(str(tmp_path), 'descendant handle release')
+    assert 'synthetic-private' not in str(caught.value)
+    assert remove.call_count == 2 and tmp_path.exists()
+    assert job.handle is None
+
+
 @pytest.mark.parametrize('failure', ['terminate', 'query', 'timeout'])
 def test_windows_job_cleanup_failures_are_bounded_and_always_close_the_handle(failure, monkeypatch):
     api = SyntheticJobApi(counts=(1, 1, 1), failure=failure)
@@ -314,7 +361,6 @@ def test_windows_job_cleanup_failures_are_bounded_and_always_close_the_handle(fa
 
 @pytest.mark.skipif(sys.platform != 'win32', reason='Requires actual Windows Job termination and directory locking')
 def test_windows_job_cleanup_releases_descendant_cwd_after_parent_already_exited(tmp_path):
-    import shutil
     import time
 
     directory = tmp_path / 'held-cwd'
@@ -335,7 +381,7 @@ def test_windows_job_cleanup_releases_descendant_cwd_after_parent_already_exited
         assert marker.exists(), 'The descendant did not reach its directory-locking checkpoint'
         assert process.wait(timeout=5) == 0
         job.close()
-        shutil.rmtree(directory)
+        prepare.remove_smoke_directory(str(directory), 'descendant handle release')
         assert not directory.exists()
     finally:
         job.close()
