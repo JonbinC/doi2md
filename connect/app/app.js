@@ -244,6 +244,13 @@
     return h("一处整理文献，随处继续研究。", "三步了解账户、文献访问和本机连接。可选项可以稍后再设置。") + steps + content;
   }
 
+  function paperKind(paper) {
+    const raw = String(paper.status || (paper.has_saved_text ? "source ready" : "metadata")).trim();
+    if (raw === "source ready") return t("全文已就绪", "Full text ready");
+    if (raw === "metadata") return t("仅元数据", "Metadata only");
+    return raw;
+  }
+
   function filteredPapers() {
     const q = state.query.toLowerCase();
     return state.papers.filter((p) => (!q || (p.title + " " + p.authors + " " + (p.doi || "")).toLowerCase().includes(q)) && (!state.tag || (p.tags || []).includes(state.tag)));
@@ -254,12 +261,14 @@
     const selection = selectedIds();
     const validSelection = state.libraryVerified && selection.length > 0 && selection.length <= 200;
     const allTags = [...new Set([...state.tags, ...state.papers.flatMap((p) => p.tags || [])])].sort((a, b) => a.localeCompare(b));
-    const list = filtered.map((p) => '<label class="listrow ' + (selection.includes(p.id) ? "selected" : "") + '">' +
-      '<input type="checkbox" data-id="' + esc(p.id) + '" ' + (selection.includes(p.id) ? "checked" : "") + (state.busy ? " disabled" : "") + ">" +
-      '<span><b>' + esc(p.title) + '</b><small>' + esc(p.authors || "Unknown authors") + " · " + esc(p.year || "—") + " · " + esc(p.venue) +
-      '</small><small>' + esc(p.status || (p.has_saved_text ? "source ready" : "metadata")) + " · " +
-      (p.tags || []).map((t) => "#" + esc(t)).join(" ") + "</small></span></label>"
-    ).join("");
+    const list = filtered.map((p) => {
+      const kind = esc(paperKind(p));
+      const tags = (p.tags || []).filter(Boolean).map((tag) => "#" + esc(tag)).join(" ");
+      return '<label class="listrow ' + (selection.includes(p.id) ? "selected" : "") + '">' +
+        '<input type="checkbox" data-id="' + esc(p.id) + '" ' + (selection.includes(p.id) ? "checked" : "") + (state.busy ? " disabled" : "") + ">" +
+        '<span><b>' + esc(p.title) + '</b><small>' + esc(p.authors || "Unknown authors") + " · " + esc(p.year || "—") + " · " + esc(p.venue) +
+        "</small><small>" + (tags ? kind + " · " + tags : kind) + "</small></span></label>";
+    }).join("");
     const preview = state.tagPreview;
     return h("我的文献库", state.libraryVerified ? "筛选、标记和导出账户文献。批量操作仅针对当前勾选，最多 200 篇。" : "账户文献尚未核验。请先检查本机配置并刷新。") +
       (!state.libraryVerified ? setupHint + '<div class="actions">' + b("刷新账户与文献", "refresh", "primary") + b("打开三步引导", "view-start") + "</div>" : "") +
@@ -461,7 +470,10 @@
     } else clearRetry();
     applyChrome();
     const navButton = document.querySelector('[data-view="' + state.view + '"]');
-    $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : t("mdtero 客户端", "mdtero client");
+    const navLabel = navButton
+      ? [...navButton.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.nodeValue).join("").trim()
+      : "";
+    $("breadcrumb").textContent = navLabel || t("mdtero 客户端", "mdtero client");
     $("screen").setAttribute("aria-busy", String(state.busy));
     $("screen").innerHTML = ({ start, library, fulltext, connections, research, settings }[state.view])();
     document.querySelectorAll('[data-action="refresh"]').forEach((el) => { el.disabled = state.busy; });
