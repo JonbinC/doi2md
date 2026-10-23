@@ -19,6 +19,7 @@ gantt
     合 #80 部署验证（Jianbin 在场）        :b1, 2026-10-26, 1d
     合 #82 埋点                           :b2, after b1, 1d
     合 #81 MCP 只读工具                   :b3, after b2, 1d
+    外部 MCP 默认隐藏 8 个写入工具（开关，需重启）  :b6, after b3, 1d
     文献库入库自动同步 R2                  :b5, after b3, 1d
     回归集 15-20 篇 + 基线数据             :b4, after b2, 8d
     section 宣传
@@ -28,6 +29,7 @@ gantt
     section 约定与界面
     contracts 目录 tokens 状态码 OpenAPI  :c1, 2026-10-26, 3d
     界面小修 错误页标题 侧栏选中（设计师） :c2, 2026-10-26, 2d
+    第三方声明补 Zotero translators 与关于页开源许可 :c9, 2026-10-26, 1d
     状态码对照表进 contracts 中英文提示与按钮（设计师） :c5, 2026-10-26, 2d
     MCP 接入页 授权页规范 教程截图界面（设计师） :c6, 2026-10-26, 2d
     公测前过一遍教程和录屏界面 查旧名和调试信息（设计师） :c7, after c6, 1d
