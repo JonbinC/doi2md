@@ -82,7 +82,7 @@ fn status(app: &tauri::AppHandle, message: &str) {
 /// and selects which button is visible. Only native constant strings reach this script.
 fn show(app: &tauri::AppHandle, message: &str, action: &str) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_title("Mdtero Connect");
+        let _ = window.set_title("mdtero");
         let literal = serde_json::to_string(message).unwrap();
         let action = serde_json::to_string(action).unwrap();
         let _ = window.eval(&format!("document.getElementById('status')?.replaceChildren(document.createTextNode({literal}));document.body.dataset.action={action}"));
@@ -127,7 +127,7 @@ fn bridge_failed(app: &tauri::AppHandle) {
             start_bridge(app);
         });
     } else {
-        show(app, "本机服务暂时没有启动成功。请点击重试；如果仍然失败，请重新打开 Mdtero Connect。", "retry");
+        show(app, "本机服务暂时没有启动成功。请点击重试；如果仍然失败，请重新打开 mdtero。", "retry");
     }
 }
 
@@ -169,7 +169,7 @@ fn start_bridge(app: tauri::AppHandle) {
                         show(&app, "无法载入本机页面，请重试。", "retry");
                     } else {
                         state.bridge_attempts.store(0, Ordering::SeqCst);
-                        let _ = window.set_title("Mdtero Connect");
+                        let _ = window.set_title("mdtero");
                     }
                 }
                 println!(
@@ -237,7 +237,7 @@ fn login(app: tauri::AppHandle) {
 }
 
 fn export_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let path = app.path().download_dir().ok()?.join("Mdtero Connect");
+    let path = app.path().download_dir().ok()?.join("mdtero");
     std::fs::create_dir_all(&path).ok()?;
     Some(path)
 }
@@ -278,7 +278,7 @@ pub fn run() {
                 "main",
                 WebviewUrl::App("index.html".into()),
             )
-            .title("Mdtero Connect")
+            .title("mdtero")
             .inner_size(1200.0, 820.0)
             .min_inner_size(840.0, 600.0)
             .on_navigation(move |url| {
@@ -426,7 +426,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("Could not initialize Mdtero Connect");
+        .expect("Could not initialize mdtero");
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             let state = app.state::<NativeState>();

@@ -1,4 +1,4 @@
-/* Mdtero Connect — desktop client styles. Light and dark themes share one token set. */
+/* mdtero — desktop client styles. Light and dark themes share one token set. */
 :root {
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -177,3 +177,6 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .split, .steps { grid-template-columns: 1fr; }
   main, .topbar { padding-left: var(--s4); padding-right: var(--s4); }
 }
+
+.error-code { display: flex; align-items: center; justify-content: center; gap: var(--s3); margin-top: var(--s2); }
+.error-code code { font: 600 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 6px 10px; border-radius: var(--r-sm); background: var(--sunken); border: 1px solid var(--border); user-select: all; }

@@ -32,6 +32,14 @@ SOURCE_ROOTS = (
 )
 
 
+def _bundle_version(payload: Path) -> str:
+    """Tauri names bundles <productName>_<version>_<arch>[-setup].<ext>."""
+    match = re.fullmatch(r"[^_]+_(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)_[^_]+", payload.stem)
+    if not match:
+        raise ValueError(f"cannot read the app version from bundle name: {payload.name}")
+    return match.group(1)
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -126,10 +134,10 @@ def collect(
     output.mkdir(parents=True, exist_ok=True)
     payload = candidates[0]
     if bundle_format == "dmg":
-        payload_output = output / f"mdtero-connect-{target}.dmg"
+        payload_output = output / f"mdtero-{_bundle_version(payload)}-{target}.dmg"
         shutil.copy2(payload, payload_output)
     else:
-        payload_output = output / f"mdtero-connect-{target}-setup.exe"
+        payload_output = output / f"mdtero-{_bundle_version(payload)}-{target}.exe"
         shutil.copy2(payload, payload_output)
 
     _write_json(output / "source-checksums.json", checksums)

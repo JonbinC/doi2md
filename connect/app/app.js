@@ -38,11 +38,20 @@
     return configured() ? "app" : "login";
   }
 
+  function errorCode(message) {
+    const text = String(message || "");
+    const status = (text.match(/HTTP (\d{3})/) || [])[1];
+    let hash = 5381;
+    for (let i = 0; i < text.length; i += 1) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+    const kind = status ? status : /fetch|network|Failed/i.test(text) ? "NET" : "APP";
+    return "MDT-" + kind + "-" + hash.toString(16).toUpperCase().padStart(8, "0").slice(-6);
+  }
+
   function gate(mode) {
-    const brand = '<div class="gate-brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">Mdtero<small>Connect</small></span></div>';
+    const brand = '<div class="gate-brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">mdtero</span></div>';
     if (mode === "boot") return '<div class="gate-card center">' + brand + spinner + '<h1>正在启动</h1><p class="lead">正在连接本机服务，通常只需几秒。</p></div>';
-    if (mode === "error") return '<div class="gate-card center">' + brand + '<div class="gate-icon warn" aria-hidden="true">!</div><h1>暂时连接不上本机服务</h1><p class="lead">Connect 会自动重试。也可以现在手动重试；如果一直失败，请退出后重新打开 Mdtero Connect。</p>' +
-      '<div class="actions center">' + b("重试", "refresh", "primary") + '</div><details class="hint"><summary>错误详情</summary><p>' + esc(state.error) + '</p></details></div>';
+    if (mode === "error") return '<div class="gate-card center">' + brand + '<div class="gate-icon warn" aria-hidden="true">!</div><h1>暂时连接不上本机服务</h1><p class="lead">mdtero 会自动重试。也可以现在手动重试；如果一直失败，请退出后重新打开 mdtero。</p>' +
+      '<div class="actions center">' + b("重试", "refresh", "primary") + '</div><details class="hint error-details"><summary>错误详情</summary><p>联系支持时请提供错误代码：</p><div class="error-code"><code id="error-code">' + esc(errorCode(state.error)) + '</code>' + b("复制", "copy-error-code", "ghost") + '</div></details></div>';
     return '<div class="gate-card">' + brand + '<h1>登录后开始使用</h1><p class="lead">登录 Mdtero 账户后，即可在这台电脑上整理文献库、获取全文并用 AI 继续研究。</p>' +
       '<ul class="gate-points"><li><b>文献库</b><span>筛选、标记、导出你账户里的文献</span></li><li><b>全文获取</b><span>用你自己的浏览器和机构权限打开文章</span></li><li><b>研究模式</b><span>用自己的模型账户整理选中文献</span></li></ul>' +
       '<div class="actions">' + loginLink() + b("我已登录，刷新", "refresh", "ghost") + '</div>' +
@@ -58,13 +67,13 @@
     const reason = state.agent?.reason_code || state.agent?.reason;
     const hints = {
       provider_key_missing: "Pi 已安装，尚未配置模型 Key。请在设置中选择模型服务并保存自己的 Key，然后返回研究。保存不会发起模型调用。",
-      full_mode_required: "当前是基础文献模式。研究模式需要完整版 Mdtero Connect；源代码运行可用 mdtero connect --full 开启。",
-      agent_node_missing: "研究模式组件缺失，请重新安装 Mdtero Connect 后重试。",
-      agent_node_unavailable: "研究模式组件未能启动，请重新检测；仍失败时请重新打开 Mdtero Connect。",
-      agent_node_version: "研究模式需要 Node 22.19 或更新版本，请安装与这台电脑匹配的 Mdtero Connect。",
-      agent_runtime_missing: "研究模式文件不完整，请重新安装 Mdtero Connect。",
-      agent_sdk_missing: "Pi 依赖检测未通过，请重新检测；仍失败时请重新安装 Mdtero Connect。",
-      agent_dependency_version_mismatch: "研究模式组件版本不匹配，请重新安装最新版 Mdtero Connect。",
+      full_mode_required: "当前是基础文献模式。研究模式需要完整版 mdtero；源代码运行可用 mdtero connect --full 开启。",
+      agent_node_missing: "研究模式组件缺失，请重新安装 mdtero 后重试。",
+      agent_node_unavailable: "研究模式组件未能启动，请重新检测；仍失败时请重新打开 mdtero。",
+      agent_node_version: "研究模式需要 Node 22.19 或更新版本，请安装与这台电脑匹配的 mdtero。",
+      agent_runtime_missing: "研究模式文件不完整，请重新安装 mdtero。",
+      agent_sdk_missing: "Pi 依赖检测未通过，请重新检测；仍失败时请重新安装 mdtero。",
+      agent_dependency_version_mismatch: "研究模式组件版本不匹配，请重新安装最新版 mdtero。",
       agent_closed: "本机 Pi 运行时已停止，请通过 Connect 菜单重新连接客户端。",
     };
     const diagnostics = {};
@@ -291,7 +300,7 @@
     document.body.dataset.mode = mode;
     $("gate").innerHTML = mode === "app" ? "" : gate(mode);
     const navButton = document.querySelector('[data-view="' + state.view + '"]');
-    $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : "Mdtero Connect";
+    $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : "mdtero";
     $("screen").setAttribute("aria-busy", String(state.busy));
     $("screen").innerHTML = ({ start, library, fulltext, connections, research, settings }[state.view])();
     document.querySelectorAll('[data-action="refresh"]').forEach((el) => { el.disabled = state.busy; });
@@ -438,6 +447,11 @@
     const action = el.dataset.action || "";
     if (action.startsWith("view-")) { navigate(action.slice(5)); return; }
     if (/^step-[123]$/.test(action)) { state.step = Number(action.slice(5)); draw(); return; }
+    if (action === "copy-error-code") {
+      const code = $("error-code") ? $("error-code").textContent : "";
+      if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => { el.textContent = "已复制"; }, () => {});
+      return;
+    }
     if (action === "refresh") { refreshAll(); return; }
     if (action === "ft-fetch") {
       withBusy(async () => {

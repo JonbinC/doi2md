@@ -53,7 +53,7 @@ def _post(bridge: ConnectBridge, path: str, payload: dict, *, csrf: str):
 def test_session_and_static(bridge: ConnectBridge):
     home = _get(bridge, "/")
     assert home.status_code == 200
-    assert b"Mdtero Connect" in home.content
+    assert b"<title>mdtero</title>" in home.content
     session = _get(bridge, "/connect/v1/session")
     assert session.status_code == 200
     data = session.json()
