@@ -83,7 +83,7 @@ def test_native_handshake_real_ui_secrets_and_parent_shutdown(native_process, sh
     with httpx.Client(base_url=summary["url"], trust_env=False, timeout=2) as client:
         page = client.get("/")
         assert page.status_code == 200
-        assert "<title>mdtero</title>" in page.text and "UNTRUSTED_UI_SENTINEL" not in page.text
+        assert "mdtero 客户端" in page.text and "UNTRUSTED_UI_SENTINEL" not in page.text
         assert "connect-src 'self'" in page.text
         session = client.get("/connect/v1/session")
         assert session.status_code == 200

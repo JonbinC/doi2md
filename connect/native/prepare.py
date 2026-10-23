@@ -349,7 +349,7 @@ def smoke_bridge(command: list[str], runtime: Path, edition: str, *, timeout: fl
         phase = 'packaged UI'
         with opener.open(url + '/', timeout=timeout) as response:
             page = response.read(2 * 1024 * 1024 + 1)
-        if len(page) > 2 * 1024 * 1024 or b'<title>mdtero</title>' not in page or b"connect-src 'self'" not in page:
+        if len(page) > 2 * 1024 * 1024 or "mdtero 客户端".encode() not in page or b"connect-src 'self'" not in page:
             raise ValueError('Frozen bridge did not serve its packaged Connect UI.')
         phase = 'anonymous session and dependencies'
         with opener.open(url + '/connect/v1/session', timeout=timeout) as response:

@@ -22,59 +22,167 @@
   const b = (name, action, kind = "tool", disabled = false) =>
     '<button type="button" class="' + kind + '" data-action="' + action + '"' +
     (state.busy || disabled ? " disabled" : "") + ">" + esc(name) + "</button>";
-  const diagButton = (message) =>
-    '<button type="button" class="ghost" data-action="copy-diagnostics" data-diag="' + esc(String(message || "")) + '">复制诊断信息</button>';
-  const errorBlock = (message, label = "重试", action = "refresh") =>
-    '<div class="notice error" role="alert"><p>' + esc(friendly(message)) + '</p><div class="actions">' +
-    b(label, action, "primary") + diagButton(message) + "</div></div>";
   const status = (label, good = false) =>
     '<div class="status ' + (good ? "ok" : "") + '"><span class="dot" aria-hidden="true"></span>' + esc(label) + "</div>";
   const h = (title, desc) => '<h1>' + esc(title) + '</h1><p class="lead">' + esc(desc) + "</p>" +
-    (state.error ? errorBlock(state.error) : "") +
+    errorPanel() +
     (state.notice ? '<div class="status ok" role="status">' + esc(state.notice) + "</div>" : "") +
-    (state.busy ? '<p class="hint busy" role="status">' + spinner + '正在处理，请稍候…</p>' : "");
+    (state.busy ? '<p class="hint busy" role="status">' + spinner + esc(t("正在处理，请稍候…", "Working…")) + "</p>" : "");
   const accountStatus = () => state.libraryVerified ? "文献库已核验" : configured() ? "已检测到本机 Key，文献接口未核验" : "未检测到本机 API Key";
-  const setupHint = '<p class="hint">点击“登录 Mdtero 账户”，在打开的浏览器页面完成登录，mdtero 会自动连接。</p><details class="hint"><summary>使用命令行？</summary><p>在终端运行 <code>mdtero login</code>，然后重新运行 <code>mdtero connect</code>。</p></details>';
-  const loginLink = (label = "登录 Mdtero 账户", kind = "primary") => '<a class="button ' + kind + '" href="mdtero-action:login">' + esc(label) + "</a>";
+  const setupHint = '<p class="hint">点击“登录 mdtero 账户”，在打开的浏览器页面完成登录，mdtero 客户端会自动连接。</p><details class="hint"><summary>使用命令行？</summary><p>在终端运行 <code>mdtero login</code>，然后重新运行 <code>mdtero connect</code>。</p></details>';
+  const loginLink = (label, kind = "primary") => '<a class="button ' + kind + '" href="mdtero-action:login">' + esc(label || t("登录 mdtero 账户", "Sign in to mdtero")) + "</a>";
   const spinner = '<span class="spinner" aria-hidden="true"></span>';
+  const RETRY_SECONDS = 8;
+  let retryTimer = null;
+  let retryDeadline = 0;
+
+  function pageLang() {
+    return String(document.documentElement.lang || "zh-CN").toLowerCase().startsWith("en") ? "en" : "zh";
+  }
+  function t(zh, en) { return pageLang() === "en" ? en : zh; }
+
+  function diagnosticText(err) {
+    const lines = ["mdtero 客户端", "time: " + new Date().toISOString()];
+    if (err && err.status) lines.push("status: " + err.status);
+    const code = err && err.payload && err.payload.reason_code;
+    if (code) lines.push("code: " + code);
+    const requestId = err && err.payload && (err.payload.request_id || err.payload.requestId);
+    if (requestId) lines.push("request_id: " + requestId);
+    const detail = err && err.payload ? (err.payload.action_hint || err.payload.message) : "";
+    if (!detail && err && !err.friendly && err.message) lines.push("detail: " + err.message);
+    else if (detail) lines.push("detail: " + detail);
+    return lines.join("\n");
+  }
+
+  function presentError(err) {
+    if (err && err.friendly) {
+      return {
+        sentence: err.message,
+        action: err.action || "refresh",
+        label: err.label || t("重试", "Try again"),
+        diagnostics: err.diagnostics || diagnosticText(err),
+      };
+    }
+    const status = Number(err && err.status) || 0;
+    const code = String((err && err.payload && err.payload.reason_code) || "");
+    const raw = String((err && err.message) || err || "");
+    const friendly = /[\u4e00-\u9fff]/.test(raw) && !/HTTP\s*\d|\b[a-z]+_[a-z0-9_]*\b|\{|\}|https?:|\/api\/|Error:/i.test(raw);
+    if (friendly && !status && !code) {
+      return { sentence: raw, action: "refresh", label: t("重试", "Try again"), diagnostics: diagnosticText(err) };
+    }
+    let sentence = t("我们这边出了问题，已经记录。稍后重试。", "Something went wrong on our side, and we logged it. Try again in a moment.");
+    let action = "refresh";
+    let label = t("重试", "Try again");
+    if (status === 401 || status === 403 || /unauthor|forbidden|expired/i.test(code)) {
+      sentence = t("登录已过期。重新登录后会回到这里。", "Your login expired. Sign in again to come back here.");
+      action = "login";
+      label = t("重新登录", "Sign in again");
+    } else if (!status || /failed to fetch|network|timeout/i.test(raw)) {
+      sentence = t("连不上 mdtero。检查网络后重试。", "mdtero could not be reached. Check the network and try again.");
+    }
+    return { sentence, action, label, diagnostics: diagnosticText(err) };
+  }
+
+  function rememberError(err) {
+    const view = presentError(err);
+    state.error = view.sentence;
+    state.errorAction = view.action;
+    state.errorLabel = view.label;
+    state.diagnostics = view.diagnostics;
+    return view;
+  }
+
+  function nextStep(action, label, kind) {
+    return action === "login" ? loginLink(label, kind || "primary") : b(label, action || "refresh", kind || "primary");
+  }
+
+  function errorPanel() {
+    if (!state.error) return "";
+    return '<div class="notice error" role="alert"><p>' + esc(state.error) + '</p><div class="actions">' +
+      nextStep(state.errorAction, state.errorLabel || t("重试", "Try again")) +
+      b(t("复制诊断信息", "Copy diagnostics"), "copy-diagnostics") + "</div></div>";
+  }
+
+  function clearRetry() {
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = null;
+    retryDeadline = 0;
+  }
+
+  function paintRetry() {
+    const count = document.getElementById("retry-count");
+    const bar = document.getElementById("retry-bar");
+    if (!count || !retryDeadline) return;
+    const left = Math.max(0, Math.ceil((retryDeadline - Date.now()) / 1000));
+    count.textContent = String(left);
+    if (bar) bar.style.width = Math.min(100, ((RETRY_SECONDS - left) / RETRY_SECONDS) * 100) + "%";
+  }
+
+  function armRetry() {
+    if (retryTimer) return;
+    retryDeadline = Date.now() + RETRY_SECONDS * 1000;
+    retryTimer = setInterval(() => {
+      paintRetry();
+      if (Date.now() >= retryDeadline) {
+        clearRetry();
+        refreshAll();
+      }
+    }, 250);
+  }
+
+  function copyDiagnostics() {
+    const text = state.diagnostics || "";
+    const done = (ok) => {
+      state.notice = ok ? t("诊断信息已复制。", "Diagnostics copied.") : t("没有复制成功。请再试一次。", "Could not copy. Try again.");
+      draw();
+    };
+    const fallback = () => {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.left = "-9999px";
+      document.body.append(area);
+      area.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch { ok = false; }
+      area.remove();
+      done(ok);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => done(true), fallback);
+    } else fallback();
+  }
 
   function gateMode() {
     if (!state.session) return state.busy || !state.error ? "boot" : "error";
     return configured() ? "app" : "login";
   }
 
-  function errorCode(message) {
-    const text = String(message || "");
-    const status = (text.match(/HTTP (\d{3})/) || [])[1];
-    let hash = 5381;
-    for (let i = 0; i < text.length; i += 1) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
-    const kind = status ? status : /fetch|network|Failed/i.test(text) ? "NET" : "APP";
-    return "MDT-" + kind + "-" + hash.toString(16).toUpperCase().padStart(8, "0").slice(-6);
-  }
-
-  function diagnostics(message) {
-    return ["mdtero 诊断信息", "错误代码：" + errorCode(message), "详情：" + message, "页面：" + state.view,
-      "时间：" + new Date().toISOString(), "环境：" + navigator.userAgent].join("\n");
-  }
-
-  function friendly(text) {
-    return String(text || "").replace(/本机 Relay|校园 Relay|Relay/g, "校园网络通道").replace(/\bPi\b ?/g, "研究助手").replace(/Connect 菜单/g, "应用菜单").replace(/\bConnect\b/g, "mdtero");
-  }
-
   function gate(mode) {
-    const brand = '<div class="gate-brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">mdtero</span></div>';
-    if (mode === "boot") return '<div class="gate-card center">' + brand + spinner + '<h1>正在启动</h1><p class="lead">正在连接本机服务，通常只需几秒。</p></div>';
-    if (mode === "error") return '<div class="gate-card center">' + brand + '<div class="gate-icon warn" aria-hidden="true">!</div><h1>暂时连接不上本机服务</h1><p class="lead">mdtero 会自动重试。也可以现在手动重试；如果一直失败，请退出后重新打开 mdtero。</p>' +
-      '<div class="actions center">' + b("重试", "refresh", "primary") + diagButton(state.error) + '</div></div>';
-    return '<div class="gate-card">' + brand + '<h1>登录后开始使用</h1><p class="lead">登录 Mdtero 账户后，即可在这台电脑上整理文献库、获取全文并用 AI 继续研究。</p>' +
-      '<ul class="gate-points"><li><b>文献库</b><span>筛选、标记、导出你账户里的文献</span></li><li><b>全文获取</b><span>用你自己的浏览器和机构权限打开文章</span></li><li><b>研究模式</b><span>用自己的模型账户整理选中文献</span></li></ul>' +
-      '<div class="actions">' + loginLink() + b("我已登录，刷新", "refresh", "ghost") + '</div>' +
-      (state.error ? errorBlock(state.error, "我已登录，刷新") : '') +
-      '<details class="hint"><summary>使用命令行？</summary><p>在终端运行 <code>mdtero login</code>，然后重新运行 <code>mdtero connect</code>。</p></details></div>';
+    const brand = '<div class="gate-brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">mdtero<small>' + esc(t("客户端", "client")) + "</small></span></div>";
+    if (mode === "boot") return '<div class="gate-card center">' + brand + spinner + '<h1>' + esc(t("正在启动", "Starting")) + '</h1><p class="lead">' + esc(t("正在连接，通常只需几秒。", "Connecting. This usually takes a few seconds.")) + "</p></div>";
+    if (mode === "error") {
+      const sentence = state.error || t("连不上 mdtero。检查网络后重试。", "mdtero could not be reached. Check the network and try again.");
+      const retry = (state.errorAction || "refresh") === "refresh"
+        ? '<p class="hint">' + (pageLang() === "en"
+          ? 'Automatic retry in <span id="retry-count">' + RETRY_SECONDS + "</span>s"
+          : '<span id="retry-count">' + RETRY_SECONDS + "</span> 秒后自动重试") + '</p><div class="retry-meter" aria-hidden="true"><span id="retry-bar"></span></div>'
+        : "";
+      return '<div class="gate-card center">' + brand + '<div class="gate-icon error" aria-hidden="true">!</div><h1>' + esc(sentence) + "</h1>" + retry +
+        '<div class="actions center">' + nextStep(state.errorAction, state.errorLabel || t("重试", "Try again")) +
+        b(t("复制诊断信息", "Copy diagnostics"), "copy-diagnostics") + "</div>" +
+        (state.notice ? '<p class="status ok" role="status">' + esc(state.notice) + "</p>" : "") + "</div>";
+    }
+    return '<div class="gate-card">' + brand + '<h1>' + esc(t("登录后开始使用", "Sign in to start")) + '</h1><p class="lead">' + esc(t("登录 mdtero 账户后，即可在这台电脑上整理文献库、获取全文并用 AI 继续研究。", "Sign in to organize your library, fetch full text, and keep researching on this computer.")) + "</p>" +
+      '<ul class="gate-points"><li><b>' + esc(t("文献库", "Library")) + "</b><span>" + esc(t("筛选、标记、导出你账户里的文献", "Filter, tag, and export papers in your account")) + "</span></li><li><b>" + esc(t("全文获取", "Full text")) + "</b><span>" + esc(t("用你自己的浏览器和机构权限打开文章", "Open papers with your own browser and institution access")) + "</span></li><li><b>" + esc(t("研究模式", "Research")) + "</b><span>" + esc(t("用自己的模型账户整理选中文献", "Organize the papers you select with your own model account")) + "</span></li></ul>" +
+      '<div class="actions">' + loginLink() + b(t("我已登录，刷新", "I signed in, refresh"), "refresh", "ghost") + "</div>" +
+      errorPanel() +
+      '<details class="hint"><summary>' + esc(t("使用命令行？", "Prefer the terminal?")) + "</summary><p>" + (pageLang() === "en" ? "In a terminal, run <code>mdtero login</code>, then run <code>mdtero connect</code>." : "在终端运行 <code>mdtero login</code>，然后重新运行 <code>mdtero connect</code>。") + "</p></details></div>";
   }
   const providerNames = { openalex: "OpenAlex · 学术检索", mineru: "MinerU · PDF 解析", voyage: "Voyage · 向量与重排", anthropic: "Anthropic · AI", openai: "OpenAI · AI", google: "Google · AI", openrouter: "OpenRouter · AI" };
   const agentActive = () => ["running", "starting", "pending"].includes(state.agentRun?.status);
-  const agentLabel = () => !state.agent?.enabled ? "文献整理模式，研究助手未开启" : state.agent.ready ? "研究模式已就绪（模型凭据未远程核验）" : "完整版已开启，研究助手尚未就绪";
+  const agentLabel = () => !state.agent?.enabled ? t("文献整理可用，研究模式未开启", "Library tools are available. Research is off.") : state.agent.ready ? t("研究模式已就绪", "Research is ready") : t("研究模式尚未就绪", "Research is not ready yet");
 
   function agentReadiness() {
     if (state.agent?.ready) return "";
@@ -102,7 +210,7 @@
 
   function start() {
     const labels = ["连接账户", "配置文献访问", "连接电脑与 AI"];
-    const facts = [accountStatus(), "按需配置，可先用已有文献", state.session ? "本机桥接可用，扩展按需连接" : "本机桥接待核验"];
+    const facts = [accountStatus(), t("按需配置，可先用已有文献", "Set this up when you need it. Papers you already have can be used now."), state.session ? t("已连接", "Connected") : t("未连接", "Not connected")];
     const steps = '<nav class="steps" aria-label="三步开始使用">' + labels.map((label, i) =>
       '<button type="button" class="step ' + (state.step === i + 1 ? "active" : "") + '" data-action="step-' + (i + 1) +
       '"' + (state.step === i + 1 ? ' aria-current="step"' : "") + (state.busy ? " disabled" : "") +
@@ -112,24 +220,24 @@
     let content;
     if (state.step === 1) {
       content = '<article class="card onboarding"><h2>从你的账户文献库开始</h2>' + status(accountStatus(), state.libraryVerified) +
-        '<p>mdtero 使用本机 CLI 的账户配置。只有成功读取账户文献列表后，才会显示“文献库已核验”。</p>' + setupHint +
-        (state.libraryError ? errorBlock(state.libraryError) : "") +
+        '<p>' + esc(t("使用这台电脑上已经登录的账户。只有成功读取文献列表后，才会显示“文献库已核验”。", "Uses the account already signed in on this computer. “Library checked” appears only after the paper list loads.")) + "</p>" + setupHint +
+        (state.libraryError && state.libraryError !== state.error ? '<div class="notice">' + esc(state.libraryError) + "</div>" : "") +
         '<div class="actions">' + b("刷新账户与文献", "refresh", "primary") + b("下一步：文献访问", "step-2") + "</div></article>";
     } else if (state.step === 2) {
       content = '<article class="card onboarding"><h2>先整理已有文献，访问能力按需配置</h2>' +
         '<p>现有账户文献可以直接筛选、标记和导出。BYOK 分为 OpenAlex 检索、MinerU 解析、Voyage 检索增强和 AI 模型；出版社访问凭据单独处理。</p>' +
-        '<ul class="fact-list"><li>此客户端尚未提供出版社 Key 校验或可见 CARSI 登录。</li>' +
-        '<li>校园网络通道传输、授权浏览器和具体文章的全文权限分别核验。</li>' +
-        '<li>学校密码与 Cookie 留在本机；Markdown 导出为纯文本，不含图片。</li></ul>' +
+        '<ul class="fact-list"><li>' + esc(t("此客户端尚未提供出版社 Key 校验或可见的学校登录。", "Publisher key checks and a visible school login are not in this client yet.")) + "</li>" +
+        "<li>" + esc(t("学校网络、授权浏览器和单篇全文的权限是分开确认的。", "School-network access, the signed-in browser, and each paper’s full text are checked separately.")) + "</li>" +
+        "<li>" + esc(t("学校密码与 Cookie 留在本机；Markdown 导出为纯文本，不含图片。", "School passwords and cookies stay on this computer. Markdown export is text only, without images.")) + "</li></ul>" +
         '<div class="actions">' + b("下一步：本机连接", "step-3", "primary") + b("设置 BYOK", "view-settings") + b("先用已有文献", "view-library") + b("上一步", "step-1") + "</div></article>";
     } else {
       content = '<div class="grid"><article class="card"><h2>本机连接</h2>' +
-        status(state.session ? "本机桥接可用" : "本机桥接待核验", !!state.session) +
-        status(state.relay ? (state.relay.transport_online ? "校园网络通道传输在线" : "校园网络通道传输离线") : "校园网络通道尚未检测", !!state.relay?.transport_online) +
-        status(state.zotero ? (state.zotero.available ? "Zotero connector 可达" : "未检测到本机 Zotero") : "Zotero 尚未检测", !!state.zotero?.available) +
-        '<div class="actions">' + b("检测本机连接", "connections-refresh", "primary") + b("打开连接中心", "view-connections") +
-        '</div><p class="hint">Zotero connector 可达仅代表端口探测成功。集合读取与导入预览需另行检查。</p></article>' +
-        '<article class="card"><h2>AI 与研究模式（可选）</h2><p>完整版内置研究助手。普通文献整理不要求 ChatGPT 或模型 Key。</p>' +
+        status(state.session ? t("已连接", "Connected") : t("未连接", "Not connected"), !!state.session) +
+        status(state.relay ? (state.relay.transport_online ? t("学校网络：在线", "School network: online") : t("学校网络：离线", "School network: offline")) : t("学校网络：尚未检查", "School network: not checked"), !!state.relay?.transport_online) +
+        status(state.zotero ? (state.zotero.available ? t("Zotero 可以访问", "Zotero is reachable") : t("未检测到本机 Zotero", "Zotero was not found on this computer")) : t("Zotero 尚未检查", "Zotero has not been checked"), !!state.zotero?.available) +
+        '<div class="actions">' + b(t("检查连接", "Check connection"), "connections-refresh", "primary") + b(t("打开连接状态", "Open connection status"), "view-connections") +
+        '</div><p class="hint">' + esc(t("能访问 Zotero 只说明端口通了。集合和导入预览需要另外检查。", "Reaching Zotero only means the port responded. Collections and import preview are checked separately.")) + "</p></article>" +
+        '<article class="card"><h2>' + esc(t("AI 与研究模式（可选）", "AI and research (optional)")) + '</h2><p>' + esc(t("研究模式使用你自己的模型账户。整理已有文献不需要模型 Key。", "Research uses your own model account. Organizing papers you already have does not need a model key.")) + "</p>" +
         status(agentLabel(), !!state.agent?.ready) + '<p class="hint">研究模式只读取选中文献的元数据。</p><div class="actions">' + b("打开研究模式", "view-research") + '</div></article></div>' +
         '<div class="actions">' + b("进入文献库", "view-library", "primary") + b("上一步", "step-2") + "</div>";
     }
@@ -174,36 +282,48 @@
       '</div><div class="actions">' + b("用选中文献研究", "view-research", "tool", !validSelection) + '</div><p class="hint">先勾选文献才能操作。Markdown ≤2 MiB/篇，批量内联 ≤4 MiB；导出不含图片，不能作为完整离线包。</p></div></section></div>' + discovery();
   }
 
+  function entitlementSentence(data) {
+    const status = String(data && (data.status || data.reason_code) || "");
+    if (!status || /unverified|failed|error/i.test(status)) return t("还不能确认能否获取全文。", "Full-text access could not be confirmed.");
+    if (/ok|allowed|entitled/i.test(status)) return t("可以继续获取全文。", "Full text can be fetched.");
+    return t("检查已完成。", "The check finished.");
+  }
+
   function connectionCards() {
     const relay = state.relay;
     const runtime = state.relayRuntime || state.session?.relay_runtime;
     const zotero = state.zotero;
-    return '<div class="grid"><article class="card"><h2>校园网络通道</h2>' +
-      '<div id="relay-runtime-panel">' + status(runtime?.running ? "本客户端管理的校园网络通道：运行中" : "本客户端管理的校园网络通道：未运行", !!runtime?.running) +
-      '<p class="hint">' + esc(runtime?.action_hint || "桌面版内置校园网络通道；命令行模式仅提供诊断。") + '</p>' +
-      '<label class="hint"><input id="relay-consent" type="checkbox"' + (state.relayConsent ? " checked" : "") + (state.busy || !runtime?.available ? " disabled" : "") + '> 允许通过这台电脑的网络出口传输 Mdtero 文献请求</label>' +
-      '<div class="actions">' + b("启动校园网络通道", "relay-start", "primary", !runtime?.available || !!runtime?.running || !state.relayConsent || !configured()) +
-      b("停止校园网络通道", "relay-stop", "tool", !runtime?.running) + b("重启校园网络通道", "relay-restart", "tool", !runtime?.available || !runtime?.running || !state.relayConsent || !configured()) + '</div>' +
-      '<p class="hint">只管理此客户端启动的进程，关闭客户端时停止；不安装后台服务，账户已有校园网络通道在线时不会再启动。此模式不启动机构浏览器；进程运行不代表云端在线或全文可读。</p></div>' +
-      status(relay ? (relay.transport_online ? "校园网络通道传输在线" : "校园网络通道传输离线") : "校园网络通道尚未检测", !!relay?.transport_online) +
-      status(relay ? (relay.browser_ready ? "本机授权浏览器就绪" : "本机浏览器未就绪") : "浏览器状态尚未检测", !!relay?.browser_ready) +
-      '<p class="hint">' + esc(relay?.cloud_status?.action_hint || relay?.notes?.[0] || "传输在线不代表全文可读。") + "</p>" +
-      '<div class="actions">' + b("刷新诊断", "relay-refresh", "primary") + b("运行 entitlement 诊断", "relay-entitlement", "tool", !state.libraryVerified) + "</div>" +
-      '<p class="hint">使用后端诊断样本，confirm_fulltext=false。此操作不核验当前选中文献，也不执行完整全文确认。</p>' +
-      (state.entitlement ? '<details open><summary>本次诊断结果</summary><pre class="diagnostic">' + esc(JSON.stringify(state.entitlement, null, 2)) + "</pre></details>" : "") +
-      '</article><article class="card"><h2>Zotero 书目预览</h2>' + status(zotero ? (zotero.available ? "本机 connector 可达" : "未检测到本机 Zotero") : "Zotero 尚未检测", !!zotero?.available) +
-      '<p class="hint">仅连接 127.0.0.1:23119。请选择集合后预览 metadata-only 导入；当前 UI 不应用导入。</p>' +
-      '<div class="actions">' + b("检测 Zotero", "zotero-status", "primary") + b("列出集合", "zotero-collections") + "</div>" +
-      '<label class="label" for="zotero-collection">预览集合</label><select id="zotero-collection"' + (state.busy ? " disabled" : "") + '><option value="">请选择集合</option>' +
+    const schoolHint = !runtime?.available
+      ? t("这台电脑还不能通过学校网络获取全文。", "This computer cannot fetch through the school network yet.")
+      : runtime?.running
+        ? t("已开启。在线不代表能拿到全文。", "On. Being online does not mean the full text is available.")
+        : t("开启后，可以通过这台电脑的学校网络获取全文。", "Turn this on to fetch through this computer's school network.");
+    return '<div class="grid"><article class="card"><h2>' + esc(t("学校网络", "School network")) + "</h2>" +
+      '<div id="relay-runtime-panel">' + status(runtime?.running ? t("学校网络通道：在线", "School network: online") : t("学校网络通道：未开启", "School network: off"), !!runtime?.running) +
+      '<p class="hint">' + esc(schoolHint) + "</p>" +
+      '<label class="hint"><input id="relay-consent" type="checkbox"' + (state.relayConsent ? " checked" : "") + (state.busy || !runtime?.available ? " disabled" : "") + "> " + esc(t("允许用这台电脑的网络获取文献", "Allow this computer's network to fetch papers")) + "</label>" +
+      '<div class="actions">' + b(t("开启学校网络", "Turn on school network"), "relay-start", "primary", !runtime?.available || !!runtime?.running || !state.relayConsent || !configured()) +
+      b(t("停止", "Stop"), "relay-stop", "tool", !runtime?.running) + b(t("重新连接", "Reconnect"), "relay-restart", "tool", !runtime?.available || !runtime?.running || !state.relayConsent || !configured()) + "</div>" +
+      '<p class="hint">' + esc(t("只管理这个客户端启动的连接，关闭客户端时停止。在线不代表能拿到全文。", "Only the connection this client starts is managed, and it stops when the client closes. Online does not mean the full text is available.")) + "</p></div>" +
+      status(relay ? (relay.transport_online ? t("学校网络：在线", "School network: online") : t("学校网络：离线", "School network: offline")) : t("学校网络：尚未检查", "School network: not checked"), !!relay?.transport_online) +
+      status(relay ? (relay.browser_ready ? t("本机浏览器已就绪", "Browser on this computer is ready") : t("本机浏览器未就绪", "Browser on this computer is not ready")) : t("浏览器状态尚未检查", "Browser status has not been checked"), !!relay?.browser_ready) +
+      '<p class="hint">' + esc(t("在线不代表能拿到全文。", "Online does not mean the full text is available.")) + "</p>" +
+      '<div class="actions">' + b(t("刷新状态", "Refresh status"), "relay-refresh", "primary") + b(t("检查能否获取全文", "Check full-text access"), "relay-entitlement", "tool", !state.libraryVerified) + "</div>" +
+      '<p class="hint">' + esc(t("这次检查不会确认你选中的那篇文献，也不会把全文写入文献库。", "This check does not confirm the paper you selected, and it does not add full text to the library.")) + "</p>" +
+      (state.entitlement ? "<p>" + esc(entitlementSentence(state.entitlement)) + '</p><div class="actions">' + b(t("复制诊断信息", "Copy diagnostics"), "copy-diagnostics") + "</div>" : "") +
+      '</article><article class="card"><h2>' + esc(t("Zotero 书目预览", "Zotero preview")) + "</h2>" + status(zotero ? (zotero.available ? t("Zotero 可以访问", "Zotero is reachable") : t("未检测到本机 Zotero", "Zotero was not found on this computer")) : t("Zotero 尚未检查", "Zotero has not been checked"), !!zotero?.available) +
+      '<p class="hint">' + esc(t("只连接这台电脑上的 Zotero。选择集合后可以预览，不会写入文献库。", "Connects only to Zotero on this computer. You can preview a collection without adding it to the library.")) + "</p>" +
+      '<div class="actions">' + b(t("检查 Zotero", "Check Zotero"), "zotero-status", "primary") + b(t("列出集合", "List collections"), "zotero-collections") + "</div>" +
+      '<label class="label" for="zotero-collection">' + esc(t("预览集合", "Collection")) + '</label><select id="zotero-collection"' + (state.busy ? " disabled" : "") + '><option value="">' + esc(t("请选择集合", "Choose a collection")) + "</option>" +
       state.collections.map((c) => '<option value="' + esc(c.key) + '"' + (state.collectionKey === c.key ? " selected" : "") + ">" + esc(c.name || c.key) + "</option>").join("") + "</select>" +
-      '<div class="actions">' + b("预览导入（dry-run）", "zotero-import-preview", "tool", !state.collectionKey || !state.libraryVerified) + "</div>" +
-      '<pre class="diagnostic" id="zotero-panel">' + esc(state.zoteroDetail) + '</pre><p class="hint">需要账户文献核验成功才能请求导入预览。最多读取首批 50 条；分页、去重检查点和删除同步仍待实现。</p></article></div>';
+      '<div class="actions">' + b(t("预览导入", "Preview import"), "zotero-import-preview", "tool", !state.collectionKey || !state.libraryVerified) + "</div>" +
+      '<p class="hint" id="zotero-panel">' + esc(state.zoteroDetail) + '</p><div class="actions">' + (state.diagnostics ? b(t("复制诊断信息", "Copy diagnostics"), "copy-diagnostics") : "") + '</div><p class="hint">' + esc(t("需要先核验文献库，才能预览导入。目前只看前 50 条，还不会写入。", "The library has to be checked before an import can be previewed. Only the first 50 items are read, and nothing is written.")) + "</p></article></div>";
   }
 
   const FT_LABELS = {
     fulltext: "已获取全文（本机解析）",
     paywall: "页面没有全文：可能是付费墙或仅摘要。未做任何绕过。",
-    challenge: "出版社要求人机验证：请在弹出的 Chrome 窗口里自己点击完成，然后重试。mdtero 不会自动处理验证。",
+    challenge: "出版社要求人机验证：请在弹出的窗口里自己点击完成，然后重试。mdtero 不会代你处理验证。",
     error: "获取失败",
   };
 
@@ -212,15 +332,14 @@
     const r = job?.result;
     let out = "";
     if (job && job.state === "running") out = status("正在用你的 Chrome 打开文章…如出现验证页，请在窗口里自己完成。");
-    else if (job && job.state === "error") out = errorBlock(job.error || "获取失败", "重新获取", "ft-fetch");
+    else if (job && job.state === "error") out = '<div class="notice error" role="alert"><p>' + esc(t("全文没有取到。可以稍后重试，或换一篇再试。", "The full text did not come through. Try again later, or try another paper.")) + '</p><div class="actions">' + b(t("重试", "Try again"), "ft-fetch", "primary", !state.ftDoi.trim()) + b(t("复制诊断信息", "Copy diagnostics"), "copy-diagnostics") + "</div></div>";
     else if (r) {
       const s = r.signals || {};
-      out = status(FT_LABELS[r.status] || r.status, r.status === "fulltext") +
+      out = status(FT_LABELS[r.status] || t("获取没有完成。可以稍后重试。", "The fetch did not finish. Try again in a moment."), r.status === "fulltext") +
         '<ul class="fact-list"><li>正文字符：' + esc(s.body_length ?? "-") + "；章节：" + esc(s.section_count ?? "-") + "；参考文献：" + esc(s.reference_count ?? "-") + "</li>" +
         (s.companion_tables_merged != null ? "<li>表格页合并：" + esc(s.companion_tables_merged) + "，未匹配：" + esc(Array.isArray(s.companion_tables_unmatched) ? s.companion_tables_unmatched.join(", ") || "无" : (s.companion_tables_unmatched ?? 0)) + "（正文已含完整表格时未匹配属正常）</li>" : "") +
         (r.markdown_path ? "<li>Markdown：<code>" + esc(r.markdown_path) + "</code></li>" : "") +
-        (r.raw_path ? "<li>原始 HTML（仅存本机）：<code>" + esc(r.raw_path) + "</code></li>" : "") +
-        (r.detail ? "<li>" + esc(r.detail) + "</li>" : "") + "</ul>";
+        (r.raw_path ? "<li>" + esc(t("原始页面只保存在这台电脑上。", "The original page stays on this computer.")) + "</li>" : "") + "</ul>";
     }
     return h("全文获取", "在你自己的 Chrome 里打开订阅文章，原始页面只存本机，并用本机解析器转换为 Markdown，不上传任何服务器。") +
       '<article class="card"><label class="label" for="ft-doi">DOI</label><input id="ft-doi" value="' + esc(state.ftDoi) + '" placeholder="10.1007/…"' + (state.busy ? " disabled" : "") + ">" +
@@ -231,13 +350,20 @@
   async function pollFulltext(id) {
     while (state.ftJob && state.ftJob.id === id && state.ftJob.state === "running") {
       await new Promise((res) => setTimeout(res, 2000));
-      try { state.ftJob = await api.fulltextJob(id); } catch (err) { state.ftJob = { id, state: "error", error: err.message }; }
+      try { state.ftJob = await api.fulltextJob(id); }
+      catch (err) {
+        state.diagnostics = diagnosticText(err);
+        state.ftJob = { id, state: "error" };
+      }
+      if (state.ftJob && state.ftJob.state === "error" && state.ftJob.error) {
+        state.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + state.ftJob.error].join("\n");
+      }
       if (state.view === "fulltext") draw();
     }
   }
 
   function connections() {
-    return h("连接状态，分开核验", "校园网络通道在线 ≠ 全文可读。学校密码与 Cookie 留在本机；CARSI 可见登录全流程尚未接入。") + connectionCards();
+    return h(t("连接状态", "Connection"), t("在线不代表能拿到全文。学校密码和 Cookie 留在这台电脑上。", "Online does not mean the full text is available. School passwords and cookies stay on this computer.")) + connectionCards();
   }
 
   function discovery() {
@@ -255,10 +381,10 @@
     const verification = { not_checked: "未远程校验", verified: "已通过 OpenAlex 单条查询校验", failed: "校验失败", configuration_only: "仅配置检查", unsupported: "无免费校验接口" };
     const sources = { session: "仅此次运行", os: "系统凭据库", environment: "环境变量", legacy_config: "旧 CLI 配置", missing: "未配置" };
     const rowButton = (name, action, row, disabled = false) => '<button type="button" class="tool" data-action="' + action + '" data-provider="' + esc(row.id) + '" data-storage="' + (row.source === "os" ? "os" : "session") + '"' + (state.busy || disabled ? " disabled" : "") + '>' + name + '</button>';
-    return '<section class="card provider-settings"><h2>BYOK 服务凭据</h2><p>OpenAlex 用于本机学术检索，MinerU 用于 PDF 解析，Voyage 用于向量与重排，AI Key 用于完整版研究助手。各服务的 Key 分开保管。</p>' +
+    return '<section class="card provider-settings"><h2>BYOK 服务凭据</h2><p>OpenAlex 用于本机学术检索，MinerU 用于 PDF 解析，Voyage 用于向量与重排，AI Key 用于研究模式。各服务的 Key 分开保管。</p>' +
       '<div class="notice">当前 MinerU、Voyage 只支持本机凭据管理；云解析、云 RAG 仍使用服务端配置，不会自动消费这里保存的 Key。</div>' +
       '<div class="provider-list">' + rows.map((row) => '<div class="provider-row"><div><strong>' + esc(providerNames[row.id] || row.name) + '</strong><p class="hint">' +
-        esc(row.configured ? "已配置 · " + (sources[row.source] || row.source) : "未配置") + ' · ' + esc(verification[row.verification] || row.verification) + '</p><p class="hint">' + esc(row.capability === "credential_only" ? "仅本机凭据管理；云端任务尚未消费此 Key" : row.capability === "pi" ? "用于完整版研究助手；调用前另行确认" : "用于本机 OpenAlex 检索") + '</p></div><div class="actions">' +
+        esc(row.configured ? "已配置 · " + (sources[row.source] || row.source) : "未配置") + " · " + esc(verification[row.verification] || row.verification) + '</p><p class="hint">' + esc(row.capability === "credential_only" ? "仅本机凭据管理；云端任务尚未使用此 Key" : row.capability === "pi" ? "用于研究模式；调用前另行确认" : "用于本机 OpenAlex 检索") + '</p></div><div class="actions">' +
         rowButton(row.id === "openalex" ? "校验 OpenAlex" : "检查配置", "provider-check", row, !row.configured) +
         rowButton("清除保存的 Key", "provider-clear", row, !["session", "os"].includes(row.source)) + '</div></div>').join("") + '</div>' +
       (!state.providers ? '<p class="hint">服务配置尚未读取，请刷新设置。</p>' : '') +
@@ -295,9 +421,25 @@
   function settings() {
     return h("设置", "账户、BYOK 服务与可选研究模式。") + '<div class="grid"><section class="card"><h2>账户</h2>' + status(accountStatus(), state.libraryVerified) +
       '<p>API：' + esc(state.session?.api_base_url || "尚未连接") + '</p><p>凭据来源：' + esc(state.session?.auth_source || "无") + "</p>" + setupHint +
-      '<div class="actions">' + b("打开三步引导", "view-start") + '</div></section><section class="card"><h2>研究模式 / Agent（可选）</h2>' +
-      status(agentLabel(), !!state.agent?.ready) + '<p>完整版包含研究助手运行时，通过 <code>mdtero connect --full</code> 显式开启。初版支持选中文献元数据上的一次只读研究。</p><div class="actions">' + b("打开研究模式", "view-research") +
+      '<div class="actions">' + b("打开三步引导", "view-start") + '</div></section><section class="card"><h2>' + esc(t("研究模式（可选）", "Research (optional)")) + "</h2>" +
+      status(agentLabel(), !!state.agent?.ready) + '<p>' + esc(t("完整版才有研究模式。它只根据你选中文献的题目、作者和年份做一次只读整理。", "Research is part of the full client. It does one read-only pass over the title, authors, and year of the papers you select.")) + '</p><div class="actions">' + b(t("打开研究模式", "Open research"), "view-research") +
       '</div></section></div>' + providerSettings();
+  }
+
+  function applyChrome() {
+    const en = pageLang() === "en";
+    document.title = en ? "mdtero client" : "mdtero 客户端";
+    document.querySelectorAll(".brand-name").forEach((node) => {
+      if (node.firstChild && node.firstChild.nodeType === Node.TEXT_NODE) node.firstChild.textContent = "mdtero";
+      const small = node.querySelector("small");
+      if (small) small.textContent = en ? "client" : "客户端";
+    });
+    const icon = document.querySelector('[data-view="connections"] .nav-icon');
+    const button = icon && icon.parentElement;
+    if (button) {
+      const text = [...button.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+      if (text) text.nodeValue = en ? "Connection" : "连接状态";
+    }
   }
 
   function draw() {
@@ -309,12 +451,17 @@
     });
     $("current-account").textContent = accountStatus();
     $("auth-badge").textContent = state.libraryVerified ? "已核验" : configured() ? "待核验" : "未配置";
-    $("auth-detail").textContent = state.session ? "本机桥接可用" : "等待本机桥接";
+    $("auth-detail").textContent = state.session ? t("已连接", "Connected") : t("未连接", "Not connected");
     const mode = gateMode();
     document.body.dataset.mode = mode;
     $("gate").innerHTML = mode === "app" ? "" : gate(mode);
+    if (mode === "error" && (state.errorAction || "refresh") === "refresh") {
+      armRetry();
+      paintRetry();
+    } else clearRetry();
+    applyChrome();
     const navButton = document.querySelector('[data-view="' + state.view + '"]');
-    $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : "mdtero";
+    $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : t("mdtero 客户端", "mdtero client");
     $("screen").setAttribute("aria-busy", String(state.busy));
     $("screen").innerHTML = ({ start, library, fulltext, connections, research, settings }[state.view])();
     document.querySelectorAll('[data-action="refresh"]').forEach((el) => { el.disabled = state.busy; });
@@ -328,8 +475,8 @@
     draw();
     try { await fn(); }
     catch (err) {
-      state.error = err.message || String(err);
-      if (err.status === 401 || err.status === 403) {
+      rememberError(err);
+      if (err.status === 401 || err.status === 403 || err.action === "login") {
         state.libraryVerified = false;
         state.tagPreview = null;
       }
@@ -351,8 +498,15 @@
       state.selected = selectedIds();
       state.libraryVerified = true;
     } catch (err) {
-      state.libraryError = "文献接口核验失败：" + (err.message || String(err)) + "。请检查本机配置或网络后重试。";
-      throw new Error(state.libraryError);
+      const view = presentError(err);
+      state.libraryError = view.sentence;
+      const wrapped = new Error(view.sentence);
+      wrapped.friendly = true;
+      wrapped.action = view.action;
+      wrapped.label = view.label;
+      wrapped.status = err.status;
+      wrapped.diagnostics = view.diagnostics;
+      throw wrapped;
     }
     try {
       const tags = await api.listTags();
@@ -386,7 +540,12 @@
       if (results[1].status === "fulfilled") state.zotero = results[1].value;
       if (results[2].status === "fulfilled") state.relayRuntime = results[2].value;
       const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
-      if (errors.length) throw new Error("部分连接未能核验：" + errors.join("；"));
+      if (errors.length) {
+        const err = new Error(t("有一项连接暂时检查不了。稍后重试。", "One connection could not be checked. Try again in a moment."));
+        err.friendly = true;
+        err.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + errors.join("; ")].join("\n");
+        throw err;
+      }
     });
   }
 
@@ -409,7 +568,12 @@
     recoverActiveRun();
     if (results[1].status === "fulfilled") state.providers = results[1].value;
     const errors = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
-    if (errors.length) throw new Error("部分设置未能读取：" + errors.join("；"));
+    if (errors.length) {
+      const err = new Error(t("设置暂时读不出来。稍后重试。", "Settings could not be loaded. Try again in a moment."));
+      err.friendly = true;
+      err.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + errors.join("; ")].join("\n");
+      throw err;
+    }
   }
 
   let agentPollTimer;
@@ -461,12 +625,8 @@
     const action = el.dataset.action || "";
     if (action.startsWith("view-")) { navigate(action.slice(5)); return; }
     if (/^step-[123]$/.test(action)) { state.step = Number(action.slice(5)); draw(); return; }
-    if (action === "copy-diagnostics") {
-      const text = diagnostics(el.dataset.diag || "");
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => { el.textContent = "已复制诊断信息"; }, () => {});
-      return;
-    }
     if (action === "refresh") { refreshAll(); return; }
+    if (action === "copy-diagnostics") { copyDiagnostics(); return; }
     if (action === "ft-fetch") {
       withBusy(async () => {
         state.ftJob = await api.fetchFulltext(state.ftDoi.trim());
@@ -479,7 +639,7 @@
         const operation = action.slice(6);
         state.relayRuntime = await api.controlRelay(operation, state.relayConsent);
         if (operation === "stop") state.relayConsent = false;
-        state.notice = operation === "stop" ? "本客户端启动的校园网络通道已停止。" : "已请求启动校园网络通道；请刷新诊断核验云端传输状态。";
+        state.notice = operation === "stop" ? t("学校网络通道已停止。", "School network is off.") : t("已请求开启学校网络。请刷新状态。", "School network was requested. Refresh the status.");
       });
       return;
     }
@@ -559,14 +719,19 @@
       return;
     }
     if (action === "relay-entitlement") {
-      withBusy(async () => { state.entitlement = null; state.entitlement = await api.entitlementCheck(false); });
+      withBusy(async () => {
+        state.entitlement = null;
+        state.entitlement = await api.entitlementCheck(false);
+        state.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + JSON.stringify(state.entitlement)].join("\n");
+      });
       return;
     }
     if (action === "zotero-status") {
       withBusy(async () => {
         state.zotero = null;
         state.zotero = await api.zoteroStatus();
-        state.zoteroDetail = JSON.stringify(state.zotero, null, 2);
+        state.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + JSON.stringify(state.zotero)].join("\n");
+        state.zoteroDetail = state.zotero.available ? t("Zotero 可以访问。", "Zotero is reachable.") : t("没有找到这台电脑上的 Zotero。", "Zotero was not found on this computer.");
       });
       return;
     }
@@ -577,7 +742,8 @@
         const data = await api.zoteroCollections();
         state.zotero = data;
         state.collections = data.collections || [];
-        state.zoteroDetail = state.collections.length ? "请选择要预览的集合。" : data.action_hint || data.reason_code || "此集合列表为空。";
+        state.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + JSON.stringify({ reason_code: data.reason_code || "", action_hint: data.action_hint || "" })].join("\n");
+        state.zoteroDetail = state.collections.length ? t("请选择要预览的集合。", "Choose a collection to preview.") : t("没有可预览的集合。", "There is no collection to preview.");
       });
       return;
     }
@@ -586,8 +752,9 @@
       withBusy(async () => {
         if (!key || !state.libraryVerified) throw new Error("请先核验账户，并选择 Zotero 集合。");
         const result = await api.zoteroImport({ collection_key: key, dry_run: true, request_id: "connect-" + Date.now() });
-        state.zoteroDetail = JSON.stringify(result, null, 2).slice(0, 4000);
-        state.notice = "集合 " + key + " 的 metadata-only 预览已返回（dry_run=true，未写入）";
+        state.diagnostics = ["mdtero 客户端", "time: " + new Date().toISOString(), "detail: " + JSON.stringify(result)].join("\n");
+        state.zoteroDetail = t("已生成导入预览，还没有写入文献库。", "Import preview is ready. Nothing was added to the library.");
+        state.notice = state.zoteroDetail;
       });
       return;
     }

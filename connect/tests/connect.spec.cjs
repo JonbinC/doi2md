@@ -104,7 +104,9 @@ test('missing local credentials show terminal login guidance without collecting 
 test('configured but rejected credentials never produce a verified account', async ({ page, request }) => {
   await reset(request, { invalid_credentials: true });
   await page.goto('/');
-  await expect(page.locator('#screen')).toContainText('Synthetic key rejected');
+  await expect(page.locator('#screen')).toContainText('登录已过期');
+  await expect(page.locator('#screen')).not.toContainText('Synthetic key rejected');
+  await expect(page.locator('[data-action="copy-diagnostics"]')).toBeVisible();
   await expect(page.locator('#auth-badge')).not.toHaveText(/已连接|已认证|已核验/);
   await page.locator('[data-view="settings"]').click();
   await expect(page.locator('#screen')).not.toContainText('文献库已核验');
@@ -157,7 +159,8 @@ test('three onboarding steps remain optional and lead to the working library', a
   await action(page, 'step-2').click();
   await expect(action(page, 'view-library')).toBeVisible();
   await action(page, 'step-3').click();
-  await expect(page.locator('#screen')).toContainText('研究助手');
+  await expect(page.locator('#screen')).toContainText('研究模式');
+  await expect(page.locator('#screen')).not.toContainText('Pi');
   await action(page, 'view-library').click();
   await expect(page.locator('input[data-id]')).toHaveCount(3);
   await page.locator('[data-view="start"]').click();
@@ -276,7 +279,8 @@ test('failed preview releases busy state, preserves the draft and allows retry',
   await select(page, 11);
   await page.locator('#new-tag').fill('Retry safely');
   await action(page, 'tag-preview').click();
-  await expect(page.locator('#screen')).toContainText('Synthetic service unavailable');
+  await expect(page.locator('#screen')).toContainText('已经记录');
+  await expect(page.locator('#screen')).not.toContainText('Synthetic service unavailable');
   await expect(action(page, 'tag-preview')).toBeEnabled();
   await expect(action(page, 'tag-apply')).toBeDisabled();
   await expect(page.locator('#new-tag')).toHaveValue('Retry safely');
@@ -294,7 +298,9 @@ test('a lost bridge session clears prior verification and refresh recovers', asy
     body: JSON.stringify({ reason_code: 'synthetic_bridge_unavailable', action_hint: 'Synthetic bridge temporarily unavailable.' }),
   }));
   await action(page, 'refresh').click();
-  await expect(page.locator('#screen')).toContainText('Synthetic bridge temporarily unavailable');
+  await expect(page.locator('#screen')).toContainText('已经记录');
+  await expect(page.locator('#screen')).not.toContainText('Synthetic bridge temporarily unavailable');
+  await expect(page.locator('#screen')).not.toContainText('synthetic_bridge_unavailable');
   await expect(page.locator('#auth-badge')).not.toHaveText(/已连接|已认证|已核验/);
   await expect(page.locator('input[data-id]')).toHaveCount(0);
   await expect(action(page, 'refresh')).toBeEnabled();
@@ -336,11 +342,13 @@ test('bridge enforces Host, Origin and CSRF independently of browser UI', async 
 test('Relay online stays distinct from browser readiness and article entitlement', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-view="connections"]').click();
-  await expect(page.locator('#screen')).toContainText('传输在线');
-  await expect(page.locator('#screen')).toContainText('校园网络通道在线 ≠ 全文可读');
+  await expect(page.locator('#screen')).toContainText('学校网络：在线');
+  await expect(page.locator('#screen')).toContainText('在线不代表能拿到全文');
   await expect(page.locator('#screen')).toContainText('本机浏览器未就绪');
+  await expect(page.locator('#screen')).not.toContainText('Relay');
   await action(page, 'relay-entitlement').click();
-  await expect(page.locator('#screen')).toContainText('article_entitlement_unverified');
+  await expect(page.locator('#screen')).toContainText('还不能确认能否获取全文');
+  await expect(page.locator('#screen')).not.toContainText('article_entitlement_unverified');
 });
 
 test('Zotero import preview remains metadata-only and explicitly dry-run', async ({ page, request }) => {
@@ -350,7 +358,8 @@ test('Zotero import preview remains metadata-only and explicitly dry-run', async
   await expect(page.locator('#zotero-collection option')).toContainText(['请选择集合', 'Synthetic collection']);
   await page.locator('#zotero-collection').selectOption('SYNTH001');
   await action(page, 'zotero-import-preview').click();
-  await expect(page.locator('#zotero-panel')).toContainText('"dry_run": true');
+  await expect(page.locator('#zotero-panel')).toContainText('还没有写入文献库');
+  await expect(page.locator('#zotero-panel')).not.toContainText('dry_run');
   const calls = (await snapshot(request)).calls.filter((call) => call.path === '/api/v1/library/import');
   expect(calls).toHaveLength(1);
   expect(calls[0].body.dry_run).toBe(true);
@@ -635,7 +644,8 @@ test('mobile navigation brings the research heading below the sticky navigation'
 test('the basic client shows unavailable managed Relay controls without starting a transport', async ({ page, request }) => {
   await page.goto('/');
   await page.locator('[data-view="connections"]').click();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('This synthetic basic client has no bundled Relay runtime.');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('还不能通过学校网络获取全文');
+  await expect(page.locator('#relay-runtime-panel')).not.toContainText('Relay');
   await expect(page.locator('#relay-consent')).toBeDisabled();
   for (const operation of ['start', 'stop', 'restart']) await expect(action(page, `relay-${operation}`)).toBeDisabled();
   const runtime = await (await request.get('/connect/v1/relay/runtime')).json();
@@ -656,7 +666,7 @@ test('managed Relay start and restart require explicit current-page campus trans
   const start = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/start'));
   await action(page, 'relay-start').click();
   expect((await start).request().postDataJSON()).toEqual({ allow_campus_transport: true });
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：运行中');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('学校网络通道：在线');
   await expect(action(page, 'relay-start')).toBeDisabled();
   await expect(action(page, 'relay-stop')).toBeEnabled();
   await page.locator('#relay-consent').uncheck();
@@ -669,7 +679,7 @@ test('managed Relay start and restart require explicit current-page campus trans
   await expect.poll(async () => (await snapshot(request)).relay_runtime_calls).toEqual([
     { operation: 'start', allow_campus_transport: true }, { operation: 'restart', allow_campus_transport: true },
   ]);
-  await expect(page.locator('#screen')).toContainText('校园网络通道在线 ≠ 全文可读');
+  await expect(page.locator('#screen')).toContainText('在线不代表能拿到全文');
 });
 
 test('refresh restores a managed Relay process while consent stays unchecked and stop remains available', async ({ page, request }) => {
@@ -678,10 +688,10 @@ test('refresh restores a managed Relay process while consent stays unchecked and
   expect(start.ok()).toBeTruthy();
   await page.goto('/');
   await page.locator('[data-view="connections"]').click();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：运行中');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('学校网络通道：在线');
   await page.locator('#relay-consent').check();
   await page.reload();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：运行中');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('学校网络通道：在线');
   await expect(page.locator('#relay-consent')).not.toBeChecked();
   await expect(action(page, 'relay-start')).toBeDisabled();
   await expect(action(page, 'relay-restart')).toBeDisabled();
@@ -692,7 +702,7 @@ test('refresh restores a managed Relay process while consent stays unchecked and
   const stopped = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/stop'));
   await action(page, 'relay-stop').click();
   expect((await stopped).ok()).toBeTruthy();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：未运行');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('学校网络通道：未开启');
   expect((await snapshot(request)).relay_runtime_calls).toEqual([
     { operation: 'start', allow_campus_transport: true }, { operation: 'stop' },
   ]);
@@ -721,4 +731,54 @@ test('an available bundled Relay still requires a local Mdtero account before UI
   await expect(page.locator('.shell')).toBeHidden();
   await expect(page.locator('#relay-consent')).toBeHidden();
   expect((await snapshot(request)).relay_runtime_calls).toEqual([]);
+});
+
+test('client chrome, error copy, and theme tokens stay free of internal names', async ({ page, request }) => {
+  await reset(request, { authenticated: false });
+  await page.goto('/');
+  await expect(page.locator('#gate .brand-name')).toContainText('mdtero');
+  await expect(page.locator('#gate .brand-name')).toContainText('客户端');
+  await expect(page.locator('#gate')).toContainText('mdtero login');
+  await expect(page.locator('body')).not.toContainText('Mdtero Connect');
+  await expect(page.locator('body')).not.toContainText('错误详情');
+  const lightAccent = await page.locator('#gate a.button.primary').evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(lightAccent).toBe('rgb(163, 84, 47)');
+
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+  await expect.poll(async () => page.locator('#gate a.button.primary').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(208, 120, 79)');
+  await expect.poll(async () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(28, 31, 30)');
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+
+  await page.route('**/connect/v1/session', (route) => route.fulfill({
+    status: 503,
+    contentType: 'application/json',
+    body: JSON.stringify({ reason_code: 'synthetic_bridge_unavailable', action_hint: 'Synthetic bridge temporarily unavailable. HTTP 503', request_id: 'req-hidden' }),
+  }));
+  await action(page, 'refresh').click();
+  await expect(page.locator('#gate')).toContainText('已经记录');
+  await expect(page.locator('#retry-count')).toBeVisible();
+  await expect(page.locator('.retry-meter')).toBeVisible();
+  const started = Number(await page.locator('#retry-count').textContent());
+  expect(started).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await page.locator('#retry-count').textContent()), { timeout: 3000 }).toBeLessThan(started);
+  await expect(page.locator('body')).not.toContainText('synthetic_bridge_unavailable');
+  await expect(page.locator('body')).not.toContainText('HTTP 503');
+  await expect(page.locator('body')).not.toContainText('req-hidden');
+  await expect(page.locator('body')).not.toContainText('错误详情');
+  await page.evaluate(() => {
+    window.__copied = '';
+    const write = (text) => { window.__copied = text; return Promise.resolve(); };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: write } });
+  });
+  await page.locator('#gate [data-action="copy-diagnostics"]').click();
+  await expect.poll(() => page.evaluate(() => window.__copied)).toContain('synthetic_bridge_unavailable');
+  await expect.poll(() => page.evaluate(() => window.__copied)).toContain('req-hidden');
+  await expect(page.locator('#gate')).toContainText('诊断信息已复制');
+  await expect(page.locator('body')).not.toContainText('synthetic_bridge_unavailable');
+
+  await page.evaluate(() => { document.documentElement.lang = 'en'; });
+  await action(page, 'refresh').click();
+  await expect(page.locator('#gate')).toContainText('Something went wrong on our side');
+  await expect(page.locator('#gate')).toContainText('Copy diagnostics');
+  await expect(page.locator('#gate')).toContainText('Automatic retry');
 });
