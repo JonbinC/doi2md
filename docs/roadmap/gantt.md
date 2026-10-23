@@ -29,6 +29,8 @@ gantt
     contracts 目录 tokens 状态码 OpenAPI  :c1, 2026-10-26, 3d
     界面小修 错误页标题 侧栏选中（设计师） :c2, 2026-10-26, 2d
     第三方声明补 Zotero translators 与关于页开源许可 :c9, 2026-10-26, 1d
+    用自己的账号（OpenRouter/Copilot OAuth，ChatGPT/Claude 实验项，钥匙串） :c10, after m3, 2d
+    MCP 登录 授权 设置 工作台换 tokens.css 共享组件 :u2, 2026-10-26, 2d
     状态码对照表进 contracts 中英文提示与按钮（设计师） :c5, 2026-10-26, 2d
     MCP 接入页 授权页规范 教程截图界面（设计师） :c6, 2026-10-26, 2d
     公测前过一遍教程和录屏界面 查旧名和调试信息（设计师） :c7, after c6, 1d
