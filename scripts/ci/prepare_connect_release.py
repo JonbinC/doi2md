@@ -14,7 +14,7 @@ from pathlib import Path
 TARGETS = {
     "macos-arm64": ("aarch64-apple-darwin", ".dmg"),
     "macos-x64": ("x86_64-apple-darwin", ".dmg"),
-    "windows-x64": ("x86_64-pc-windows-msvc", "-setup.exe"),
+    "windows-x64": ("x86_64-pc-windows-msvc", ".exe"),
 }
 METADATA_FILES = ("artifact-index.json", "runtime-manifest.json", "source-checksums.json")
 TAG_PATTERN = re.compile(r"connect-v\d+\.\d+\.\d+(?:-(?:preview|beta|rc)\.\d+)?\Z")
@@ -85,6 +85,7 @@ def prepare_release(
     if output.exists() and any(output.iterdir()):
         raise ValueError("release output directory must be empty")
 
+    version = tag[len("connect-v"):].split("-", 1)[0]
     validated: list[tuple[str, Path, dict]] = []
     for artifact_id, (target, suffix) in TARGETS.items():
         directory = artifacts / f"mdtero-connect-release-{artifact_id}"
@@ -113,7 +114,7 @@ def prepare_release(
             raise ValueError(f"runtime manifest does not match this build: {artifact_id}")
 
         payloads = index.get("payloads")
-        expected_name = f"mdtero-connect-{target}{suffix}"
+        expected_name = f"mdtero-{version}-{target}{suffix}"
         if not isinstance(payloads, list) or len(payloads) != 1:
             raise ValueError(f"expected exactly one payload in {artifact_id}")
         payload = payloads[0]

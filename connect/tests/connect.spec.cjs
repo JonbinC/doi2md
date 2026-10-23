@@ -115,7 +115,7 @@ test('bundled Pi with no model key directs setup without reinstall instructions'
   await reset(request, { full_mode: true });
   await page.goto('/#research');
   const readiness = page.locator('#agent-readiness');
-  await expect(readiness).toContainText('Pi 已安装');
+  await expect(readiness).toContainText('研究助手已安装');
   await expect(readiness).not.toContainText('npm');
   await expect(action(page, 'agent-prepare')).toBeDisabled();
   await action(page, 'providers-refresh').click();
@@ -139,7 +139,7 @@ test('Pi dependency retry preserves the selected papers and research draft', asy
     await route.fulfill({ response, json: body });
   });
   await page.locator('[data-view="research"]').click();
-  await expect(page.locator('#agent-readiness')).toContainText('Pi 依赖检测未通过');
+  await expect(page.locator('#agent-readiness')).toContainText('研究助手依赖检测未通过');
   await page.locator('#agent-readiness summary').click();
   await expect(page.locator('#agent-readiness')).toContainText('sdk_cleanup');
   await expect(action(page, 'agent-prepare')).toBeDisabled();
@@ -157,7 +157,7 @@ test('three onboarding steps remain optional and lead to the working library', a
   await action(page, 'step-2').click();
   await expect(action(page, 'view-library')).toBeVisible();
   await action(page, 'step-3').click();
-  await expect(page.locator('#screen')).toContainText('Pi');
+  await expect(page.locator('#screen')).toContainText('研究助手');
   await action(page, 'view-library').click();
   await expect(page.locator('input[data-id]')).toHaveCount(3);
   await page.locator('[data-view="start"]').click();
@@ -337,7 +337,7 @@ test('Relay online stays distinct from browser readiness and article entitlement
   await page.goto('/');
   await page.locator('[data-view="connections"]').click();
   await expect(page.locator('#screen')).toContainText('传输在线');
-  await expect(page.locator('#screen')).toContainText('Relay 在线 ≠ 全文可读');
+  await expect(page.locator('#screen')).toContainText('校园网络通道在线 ≠ 全文可读');
   await expect(page.locator('#screen')).toContainText('本机浏览器未就绪');
   await action(page, 'relay-entitlement').click();
   await expect(page.locator('#screen')).toContainText('article_entitlement_unverified');
@@ -656,7 +656,7 @@ test('managed Relay start and restart require explicit current-page campus trans
   const start = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/start'));
   await action(page, 'relay-start').click();
   expect((await start).request().postDataJSON()).toEqual({ allow_campus_transport: true });
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：运行中');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：运行中');
   await expect(action(page, 'relay-start')).toBeDisabled();
   await expect(action(page, 'relay-stop')).toBeEnabled();
   await page.locator('#relay-consent').uncheck();
@@ -669,7 +669,7 @@ test('managed Relay start and restart require explicit current-page campus trans
   await expect.poll(async () => (await snapshot(request)).relay_runtime_calls).toEqual([
     { operation: 'start', allow_campus_transport: true }, { operation: 'restart', allow_campus_transport: true },
   ]);
-  await expect(page.locator('#screen')).toContainText('Relay 在线 ≠ 全文可读');
+  await expect(page.locator('#screen')).toContainText('校园网络通道在线 ≠ 全文可读');
 });
 
 test('refresh restores a managed Relay process while consent stays unchecked and stop remains available', async ({ page, request }) => {
@@ -678,10 +678,10 @@ test('refresh restores a managed Relay process while consent stays unchecked and
   expect(start.ok()).toBeTruthy();
   await page.goto('/');
   await page.locator('[data-view="connections"]').click();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：运行中');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：运行中');
   await page.locator('#relay-consent').check();
   await page.reload();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：运行中');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：运行中');
   await expect(page.locator('#relay-consent')).not.toBeChecked();
   await expect(action(page, 'relay-start')).toBeDisabled();
   await expect(action(page, 'relay-restart')).toBeDisabled();
@@ -692,7 +692,7 @@ test('refresh restores a managed Relay process while consent stays unchecked and
   const stopped = page.waitForResponse((response) => response.url().endsWith('/connect/v1/relay/stop'));
   await action(page, 'relay-stop').click();
   expect((await stopped).ok()).toBeTruthy();
-  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的 Relay：未运行');
+  await expect(page.locator('#relay-runtime-panel')).toContainText('本客户端管理的校园网络通道：未运行');
   expect((await snapshot(request)).relay_runtime_calls).toEqual([
     { operation: 'start', allow_campus_transport: true }, { operation: 'stop' },
   ]);

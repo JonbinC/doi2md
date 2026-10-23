@@ -48,14 +48,14 @@ def _prepared_runtime(repository, target, edition="full"):
 
 def test_mac_dmg_is_collected_and_records_payload(tmp_path, provenance):
     bundle = tmp_path / "bundle"
-    dmg = bundle / "dmg/Mdtero Connect_0.1.0_aarch64.dmg"
+    dmg = bundle / "dmg/mdtero_0.1.0_aarch64.dmg"
     dmg.parent.mkdir(parents=True)
     dmg.write_bytes(b"UDIF debug disk image")
     _prepared_runtime(tmp_path, "aarch64-apple-darwin")
     output = tmp_path / "artifacts"
     index = collector.collect(target="aarch64-apple-darwin", source=bundle, output=output, edition="full", repository=tmp_path)
     payload = output / index["payloads"][0]["name"]
-    assert payload.name == "mdtero-connect-aarch64-apple-darwin.dmg"
+    assert payload.name == "mdtero-0.1.0-aarch64-apple-darwin.dmg"
     assert payload.read_bytes() == dmg.read_bytes()
     assert index["payloads"][0]["sha256"] == hashlib.sha256(payload.read_bytes()).hexdigest()
     assert index["commit"] == "a" * 40
@@ -70,7 +70,7 @@ def test_mac_dmg_is_collected_and_records_payload(tmp_path, provenance):
 
 def test_windows_collects_installer_without_mutating_it(tmp_path, provenance):
     bundle = tmp_path / "bundle"
-    installer = bundle / "nsis/Mdtero Connect_0.1.0_x64-setup.exe"
+    installer = bundle / "nsis/mdtero_0.1.0_x64-setup.exe"
     installer.parent.mkdir(parents=True)
     installer.write_bytes(b"MZdebug installer")
     _prepared_runtime(tmp_path, "x86_64-pc-windows-msvc", "basic")
@@ -116,7 +116,7 @@ def test_full_windows_artifact_records_matching_bundled_runtime(tmp_path, proven
     runtime = _prepared_runtime(tmp_path, target)
     bundle = tmp_path / "bundle"
     (bundle / "nsis").mkdir(parents=True)
-    (bundle / "nsis/debug-setup.exe").write_bytes(b"MZ")
+    (bundle / "nsis/mdtero_0.1.0_x64-setup.exe").write_bytes(b"MZ")
     output = tmp_path / "artifacts"
     index = collector.collect(target=target, source=bundle, output=output, edition="full", repository=tmp_path)
     assert (output / "runtime-manifest.json").read_bytes() == (runtime / "manifest.json").read_bytes()
@@ -142,7 +142,7 @@ def test_missing_or_ambiguous_native_payload_fails_without_output(tmp_path, prov
 def test_existing_artifacts_are_not_silently_mixed(tmp_path, provenance):
     bundle = tmp_path / "bundle"
     (bundle / "nsis").mkdir(parents=True)
-    (bundle / "nsis/debug-setup.exe").write_bytes(b"MZ")
+    (bundle / "nsis/mdtero_0.1.0_x64-setup.exe").write_bytes(b"MZ")
     output = tmp_path / "artifacts"
     output.mkdir()
     (output / "previous-build").write_bytes(b"retain me")

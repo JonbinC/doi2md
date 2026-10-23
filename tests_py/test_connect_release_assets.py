@@ -21,7 +21,7 @@ COMMIT = "a" * 40
 BUILDS = {
     "macos-arm64": ("aarch64-apple-darwin", ".dmg"),
     "macos-x64": ("x86_64-apple-darwin", ".dmg"),
-    "windows-x64": ("x86_64-pc-windows-msvc", "-setup.exe"),
+    "windows-x64": ("x86_64-pc-windows-msvc", ".exe"),
 }
 
 
@@ -29,7 +29,7 @@ def _write_artifact(root: Path, artifact_id: str, *, commit: str = COMMIT) -> Pa
     target, suffix = BUILDS[artifact_id]
     directory = root / f"mdtero-connect-release-{artifact_id}"
     directory.mkdir(parents=True)
-    payload_name = f"mdtero-connect-{target}{suffix}"
+    payload_name = f"mdtero-0.1.1-{target}{suffix}"
     payload_bytes = f"synthetic {artifact_id} payload".encode()
     (directory / payload_name).write_bytes(payload_bytes)
     (directory / "runtime-manifest.json").write_text(json.dumps({
@@ -91,9 +91,9 @@ def test_release_assets_validate_all_targets_and_build_one_checksum_manifest(tmp
     assert result["source_commit"] == COMMIT
     assert result["human_acceptance"] == "pending"
     assert len(result["payloads"]) == 3
-    assert (output / "mdtero-connect-aarch64-apple-darwin.dmg").is_file()
-    assert (output / "mdtero-connect-x86_64-apple-darwin.dmg").is_file()
-    assert (output / "mdtero-connect-x86_64-pc-windows-msvc-setup.exe").is_file()
+    assert (output / "mdtero-0.1.1-aarch64-apple-darwin.dmg").is_file()
+    assert (output / "mdtero-0.1.1-x86_64-apple-darwin.dmg").is_file()
+    assert (output / "mdtero-0.1.1-x86_64-pc-windows-msvc.exe").is_file()
     assert (output / "artifact-index-windows-x64.json").is_file()
     for line in (output / "SHA256SUMS").read_text().splitlines():
         digest, name = line.split("  ", 1)
@@ -116,7 +116,7 @@ def test_release_assets_reject_a_build_from_another_commit(tmp_path):
 def test_release_assets_reject_tampered_platform_payload(tmp_path):
     artifacts = tmp_path / "artifacts"
     _all_artifacts(artifacts)
-    payload = artifacts / "mdtero-connect-release-macos-arm64" / "mdtero-connect-aarch64-apple-darwin.dmg"
+    payload = artifacts / "mdtero-connect-release-macos-arm64" / "mdtero-0.1.1-aarch64-apple-darwin.dmg"
     payload.write_bytes(b"changed after upload")
 
     with pytest.raises(ValueError, match="checksum mismatch"):
