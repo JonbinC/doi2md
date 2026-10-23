@@ -39,6 +39,9 @@ gantt
     OAuth 统一 授权页 已授权应用 客户端回跳 只读范围 :o1, after b3, 4d
     设备码登录 relay 与无界面 CLI               :o2, after o1, 2d
     Grok Bot 连接器接入验证                    :g1, after o1, 1d
+    多个全文出口与切换（后端加客户端）          :r1, after o2, 2d
+    Zotero 文件导入接入客户端（自动分批）       :z1, after m3, 1d
+    右键获取全文队列（限速，每批最多 20 篇）     :z2, after z1, 2d
     MCP 第一期验收                         :milestone, d4, after d1 o1 g1 a4, 0d
     14 天待确认区                          :d2, after d4, 7d
     服务与密钥页 BYOK                      :d3, after d2, 6d
