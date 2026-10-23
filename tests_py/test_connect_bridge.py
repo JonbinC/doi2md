@@ -53,7 +53,20 @@ def _post(bridge: ConnectBridge, path: str, payload: dict, *, csrf: str):
 def test_session_and_static(bridge: ConnectBridge):
     home = _get(bridge, "/")
     assert home.status_code == 200
-    assert b"Mdtero Connect" in home.content
+    assert "mdtero 客户端".encode() in home.content
+    css = (APP_DIR / "style.css").read_text(encoding="utf-8")
+    tokens = (APP_DIR / "tokens.css").read_text(encoding="utf-8")
+    assert css.startswith('@import url("tokens.css");')
+    assert ':root[data-theme="dark"]' in tokens
+    assert "prefers-color-scheme: dark" in tokens
+    assert "#a3542f" not in css and "#8c4626" not in css
+    script = (APP_DIR / "app.js").read_text(encoding="utf-8")
+    assert "错误详情" not in script
+    assert "复制诊断信息" in script
+    bootstrap = Path(__file__).resolve().parents[1] / "connect" / "native" / "bootstrap"
+    assert (bootstrap / "style.css").read_text(encoding="utf-8").startswith('@import url("tokens.css");')
+    assert (bootstrap / "tokens.css").read_bytes() == (APP_DIR / "tokens.css").read_bytes()
+    assert "#925739" not in (bootstrap / "style.css").read_text(encoding="utf-8")
     session = _get(bridge, "/connect/v1/session")
     assert session.status_code == 200
     data = session.json()

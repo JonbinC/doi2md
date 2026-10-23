@@ -118,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
         if self.path == '/':
-            body = b"<title>Mdtero Connect</title><meta content=\\\"connect-src 'self'\\\">"
+            body = "<title>mdtero 客户端</title><meta content=\\\"connect-src 'self'\\\">".encode()
         else:
             full = '--full' in sys.argv
             payload = {'authenticated': bool(os.environ.get('MDTERO_API_KEY')),

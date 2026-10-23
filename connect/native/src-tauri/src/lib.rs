@@ -82,7 +82,7 @@ fn status(app: &tauri::AppHandle, message: &str) {
 /// and selects which button is visible. Only native constant strings reach this script.
 fn show(app: &tauri::AppHandle, message: &str, action: &str) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_title("Mdtero Connect");
+        let _ = window.set_title("mdtero 客户端");
         let literal = serde_json::to_string(message).unwrap();
         let action = serde_json::to_string(action).unwrap();
         let _ = window.eval(&format!("document.getElementById('status')?.replaceChildren(document.createTextNode({literal}));document.body.dataset.action={action}"));
@@ -120,14 +120,15 @@ fn bridge_failed(app: &tauri::AppHandle) {
     }
     let attempt = state.bridge_attempts.fetch_add(1, Ordering::SeqCst) + 1;
     if attempt <= BRIDGE_AUTO_RETRIES {
-        show(app, "正在重新启动本机服务…", "");
+        let wait = 2 * attempt;
+        show(app, &format!("正在重新连接，{wait} 秒后自动重试。"), "");
         let app = app.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_secs(2 * attempt));
+            std::thread::sleep(Duration::from_secs(wait));
             start_bridge(app);
         });
     } else {
-        show(app, "本机服务暂时没有启动成功。请点击重试；如果仍然失败，请重新打开 Mdtero Connect。", "retry");
+        show(app, "本机服务暂时没有启动成功。请点击重试；如果仍然失败，请重新打开 mdtero 客户端。", "retry");
     }
 }
 
@@ -169,7 +170,7 @@ fn start_bridge(app: tauri::AppHandle) {
                         show(&app, "无法载入本机页面，请重试。", "retry");
                     } else {
                         state.bridge_attempts.store(0, Ordering::SeqCst);
-                        let _ = window.set_title("Mdtero Connect");
+                        let _ = window.set_title("mdtero 客户端");
                     }
                 }
                 println!(
@@ -278,7 +279,7 @@ pub fn run() {
                 "main",
                 WebviewUrl::App("index.html".into()),
             )
-            .title("Mdtero Connect")
+            .title("mdtero 客户端")
             .inner_size(1200.0, 820.0)
             .min_inner_size(840.0, 600.0)
             .on_navigation(move |url| {
@@ -382,12 +383,12 @@ pub fn run() {
             use tauri::menu::{Menu, SubmenuBuilder};
             let menu = Menu::default(&handle)?;
             menu.append(
-                &SubmenuBuilder::new(&handle, "Connect")
-                    .text("login", "登录 Mdtero 账户…")
+                &SubmenuBuilder::new(&handle, "mdtero")
+                    .text("login", "登录 mdtero 账户…")
                     .text("cancel-login", "取消登录")
                     .separator()
                     .text("exports", "打开导出文件夹")
-                    .text("reload", "重新连接本机桥接")
+                    .text("reload", "重新连接")
                     .build()?,
             )?;
             app.set_menu(menu)?;
@@ -414,7 +415,7 @@ pub fn run() {
                 start_bridge(handle.clone());
             } else {
                 // First launch: go straight to account login; the bridge starts after it succeeds.
-                show(&handle, "请先登录 Mdtero 账户。", "login");
+                show(&handle, "请先登录 mdtero 账户。", "login");
                 login(handle.clone());
             }
             if smoke {
