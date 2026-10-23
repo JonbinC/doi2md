@@ -45,7 +45,6 @@ jobs:
       # The self-hosted macOS runner has a system proxy; loopback bridge tests
       # (including deliberately bad Host headers) must never go through it.
       NO_PROXY: '127.0.0.1,localhost,::1'
-      no_proxy: '127.0.0.1,localhost,::1'
     steps:
       - uses: actions/checkout@v4
         with:
