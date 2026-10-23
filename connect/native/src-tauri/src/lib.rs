@@ -382,7 +382,7 @@ pub fn run() {
             use tauri::menu::{Menu, SubmenuBuilder};
             let menu = Menu::default(&handle)?;
             menu.append(
-                &SubmenuBuilder::new(&handle, "Connect")
+                &SubmenuBuilder::new(&handle, "账户")
                     .text("login", "登录 Mdtero 账户…")
                     .text("cancel-login", "取消登录")
                     .separator()
