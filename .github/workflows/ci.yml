@@ -15,7 +15,8 @@ permissions:
 jobs:
   python-client:
     name: Python CLI Package
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -49,7 +50,8 @@ jobs:
 
   relay:
     name: Campus Relay Go Tests
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -66,7 +68,8 @@ jobs:
 
   extension:
     name: Browser Extension
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6

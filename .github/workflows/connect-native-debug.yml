@@ -22,7 +22,8 @@ concurrency:
 jobs:
   linux-basic:
     name: Linux basic source verification
-    runs-on: ubuntu-22.04
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-22.04' }}
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4

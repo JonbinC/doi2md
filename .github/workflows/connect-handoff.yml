@@ -29,7 +29,8 @@ permissions:
 jobs:
   workflow-lint:
     name: Validate Connect Actions workflows
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +40,8 @@ jobs:
       - name: Lint release and PR workflow definitions
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/connect-release.yml .github/workflows/connect-native-debug.yml .github/workflows/connect-handoff.yml
   design:
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +68,8 @@ jobs:
           grep -q "connect-src 'self'" connect/app/index.html
           test -s connect/app/api.js
   bridge:
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +81,8 @@ jobs:
           uv sync --frozen
           uv run pytest tests_py/test_connect_*.py -q
   pi-readonly:
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +96,8 @@ jobs:
       - name: Exercise read-only Pi adapter without provider calls
         run: npm test --prefix connect/agent
   live-ui:
-    runs-on: ubuntu-latest
+    # Same-repo events run on the mdtero box; fork PRs stay on GitHub-hosted.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","mdtero-box"]') || 'ubuntu-latest' }}
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +113,7 @@ jobs:
         run: |
           uv sync --frozen
           npm ci --prefix connect
-          npx --prefix connect playwright install --with-deps chromium
+          npx --prefix connect playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
       - name: Exercise the live loopback UI with synthetic upstream data
         run: npm --prefix connect test
       - name: Upload failure traces
