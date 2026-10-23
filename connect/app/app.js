@@ -2,6 +2,8 @@
 (() => {
   "use strict";
   const api = window.MdteroConnectApi;
+  const chat = window.MdteroResearchChat;
+  const uiLang = () => document.documentElement.lang || "zh-CN";
   const views = ["start", "library", "fulltext", "connections", "research", "settings"];
   const state = {
     view: views.includes(location.hash.slice(1)) ? location.hash.slice(1) : "start",
@@ -13,6 +15,9 @@
     providers: null, providerId: "openalex", providerStorage: "session",
     agentPrompt: "", agentProvider: "anthropic", agentModel: "", agentMaxTokens: 800,
     agentPreview: null, agentRun: null, agentPollError: "",
+    agentMessages: [], agentHistory: [], agentHistoryOpen: false, agentThreadId: "",
+    agentSettingsOpen: false, agentCursor: 0, agentSlashDismissed: false,
+    agentExpanded: {}, agentWriteConfirmed: {}, agentUsage: null, agentSent: null,
     discoveryQuery: "", discoveryResults: null, discoveryOpen: false,
   };
   const $ = (id) => document.getElementById(id);
@@ -55,26 +60,17 @@
 
   function agentReadiness() {
     if (state.agent?.ready) return "";
+    const lang = uiLang();
     const reason = state.agent?.reason_code || state.agent?.reason;
-    const hints = {
-      provider_key_missing: "Pi 已安装，尚未配置模型 Key。请在设置中选择模型服务并保存自己的 Key，然后返回研究。保存不会发起模型调用。",
-      full_mode_required: "当前是基础文献模式。研究模式需要完整版 Mdtero Connect；源代码运行可用 mdtero connect --full 开启。",
-      agent_node_missing: "研究模式组件缺失，请重新安装 Mdtero Connect 后重试。",
-      agent_node_unavailable: "研究模式组件未能启动，请重新检测；仍失败时请重新打开 Mdtero Connect。",
-      agent_node_version: "研究模式需要 Node 22.19 或更新版本，请安装与这台电脑匹配的 Mdtero Connect。",
-      agent_runtime_missing: "研究模式文件不完整，请重新安装 Mdtero Connect。",
-      agent_sdk_missing: "Pi 依赖检测未通过，请重新检测；仍失败时请重新安装 Mdtero Connect。",
-      agent_dependency_version_mismatch: "研究模式组件版本不匹配，请重新安装最新版 Mdtero Connect。",
-      agent_closed: "本机 Pi 运行时已停止，请通过 Connect 菜单重新连接客户端。",
-    };
+    const message = chat.has(lang, "ready." + reason) ? chat.text(lang, "ready." + reason) : chat.text(lang, "ready.unknown");
     const diagnostics = {};
     for (const key of ["reason_code", "node_version", "sdk_version", "probe_stage", "probe_code", "probe_os_error", "probe_exit_code"]) {
       if (state.agent?.dependencies?.[key] !== undefined) diagnostics[key] = state.agent.dependencies[key];
     }
-    return '<div class="notice" id="agent-readiness"><p>' + esc(hints[reason] || "尚未取得可用的 Pi 运行状态，请重新检测。") + '</p>' +
-      (reason === "full_mode_required" ? '<details><summary>源代码运行方式</summary><p>先安装 Node 22.19+，执行 <code>npm --prefix connect/agent ci --ignore-scripts</code>，再运行 <code>mdtero connect --full</code>。</p></details>' : '') +
-      (Object.keys(diagnostics).length && reason !== "provider_key_missing" ? '<details><summary>依赖诊断状态</summary><pre class="diagnostic">' + esc(JSON.stringify(diagnostics, null, 2)) + '</pre></details>' : '') +
-      '<div class="actions">' + b("重新检测 Pi", "providers-refresh") + (reason === "provider_key_missing" ? b("配置模型 Key", "view-settings") : '') + '</div></div>';
+    return '<div class="notice" id="agent-readiness"><p>' + esc(message) + '</p>' +
+      (reason === "full_mode_required" ? '<details><summary>' + esc(chat.text(lang, "sourceSummary")) + '</summary><p>' + esc(chat.text(lang, "sourceBody")) + '</p></details>' : '') +
+      (Object.keys(diagnostics).length && reason !== "provider_key_missing" ? '<details><summary>' + esc(chat.text(lang, "diagSummary")) + '</summary><pre class="diagnostic">' + esc(JSON.stringify(diagnostics, null, 2)) + '</pre></details>' : '') +
+      '<div class="actions">' + b(chat.text(lang, "recheck"), "providers-refresh") + (reason === "provider_key_missing" ? b(chat.text(lang, "configureKey"), "view-settings") : '') + '</div></div>';
   }
 
   function start() {
@@ -246,27 +242,107 @@
       '<div class="actions">' + b("保存服务 Key", "provider-save", "primary", !state.providers) + b("刷新设置", "providers-refresh") + '</div></section>';
   }
 
-  function research() {
-    const active = agentActive();
-    const ids = selectedIds();
+  function selectedPapers() {
+    return selectedIds().map((id) => state.papers.find((paper) => paper.id === id)).filter(Boolean);
+  }
+
+  function paperChipHtml(papers, removable, lang) {
+    return papers.map((paper) => {
+      const label = chat.chipLabel(paper, lang);
+      const remove = removable ? '<button type="button" data-action="agent-remove-paper" data-id="' + esc(paper.id) + '" aria-label="' + esc(chat.text(lang, "removeChip", { label })) + '">×</button>' : "";
+      return '<span class="paper-chip' + (removable ? "" : " static") + '" data-id="' + esc(paper.id) + '" title="' + esc(paper.title) + '">' + esc(label) + remove + "</span>";
+    }).join("");
+  }
+
+  function researchStepsHtml(steps, lang, prefix) {
+    return steps.map((step) => {
+      const id = prefix + step.id;
+      return chat.renderStepCard(Object.assign({}, step, { id }), lang, {
+        open: !!state.agentExpanded[id],
+        userConfirmed: !!state.agentWriteConfirmed[id],
+      });
+    }).join("");
+  }
+
+  function researchTranscript(lang) {
+    if (!state.agentMessages.length) {
+      if (state.agentPreview || agentActive()) return "";
+      const prompts = chat.quickPrompts(lang).map((item) => '<button type="button" data-action="agent-quick" data-quick="' + esc(item.id) + '" data-prompt="' + esc(item.prompt) + '">' + esc(item.label) + "</button>").join("");
+      return '<div class="research-empty"><p>' + esc(chat.text(lang, "emptyLead")) + '</p><div class="quick-prompts">' + prompts + "</div></div>";
+    }
+    const latestId = state.agentMessages.reduce((found, item) => item.runId || found, "");
+    return state.agentMessages.map((message) => {
+      const run = message.run ? Object.assign({}, message.run, {
+        provider: message.run.provider || message.provider,
+        model: message.run.model || message.model,
+        max_output_tokens: message.run.max_output_tokens || message.maxOutputTokens,
+      }) : null;
+      const steps = chat.buildLiveSteps({ documents: message.documents || [], run, lang });
+      const text = run?.text || run?.error?.action_hint || run?.error?.hint || run?.error?.message || run?.error?.reason_code || (typeof run?.error === "string" ? run.error : "");
+      const resultId = message.runId && message.runId === latestId ? ' id="agent-result"' : "";
+      const cancel = agentActive() && state.agentRun?.run_id === message.runId ? '<div class="actions">' + b(chat.text(lang, "cancelRun"), "agent-cancel") + "</div>" : "";
+      const poll = state.agentPollError && state.agentRun?.run_id === message.runId ? '<div class="notice">' + esc(chat.text(lang, "pollError")) + '<div class="actions">' + b(chat.text(lang, "refreshRun"), "agent-run-refresh") + "</div></div>" : "";
+      return '<article class="chat-message user"><p>' + esc(message.prompt) + '</p><div class="composer-chips">' + (message.chips || []).map((label) => '<span class="paper-chip static">' + esc(label) + "</span>").join("") + "</div></article>" +
+        '<article class="chat-message assistant">' + researchStepsHtml(steps, lang, message.runId + ":") + poll +
+        '<pre class="agent-result"' + resultId + ">" + esc(text) + "</pre>" + cancel + "</article>";
+    }).join("");
+  }
+
+  function confirmationCard(lang) {
     const preview = state.agentPreview;
+    if (!preview) return "";
+    const documents = preview.documents || [];
+    const steps = chat.buildLiveSteps({ documents, run: null, lang });
+    const titles = documents.map((doc) => doc.title).filter(Boolean);
+    return '<section class="card confirm-card" id="agent-preview"><h2>' + esc(chat.text(lang, "confirmTitle")) + "</h2><p>" + esc(preview.provider) + " / " + esc(preview.model) + '</p><p class="hint">' +
+      esc(chat.text(lang, "confirmScope", { n: preview.document_count ?? documents.length, bytes: preview.input_bytes ?? 0, tokens: preview.max_output_tokens ?? state.agentMaxTokens })) + "</p>" +
+      (titles.length ? '<ul class="confirm-titles">' + titles.map((title) => "<li>" + esc(title) + "</li>").join("") + "</ul>" : "") +
+      "<p>" + esc(preview.prompt) + "</p>" + researchStepsHtml(steps, lang, "preview:") +
+      "<details><summary>" + esc(chat.text(lang, "confirmMetadata")) + '</summary><pre class="diagnostic">' + esc(JSON.stringify(documents, null, 2)) + "</pre></details>" +
+      '<p class="hint">' + esc(chat.text(lang, "confirmCaveat")) + '</p><div class="actions">' + b(chat.text(lang, "confirmSend"), "agent-run", "primary", agentActive()) + "</div></section>";
+  }
+
+  function slashMenu(lang, papers) {
+    const query = chat.slashQuery(state.agentPrompt, state.agentCursor);
+    if (query === null || state.agentSlashDismissed) return "";
+    if (!chat.canAddPaper(papers.length)) return '<div id="agent-slash" class="slash-menu" role="listbox"><p class="hint">' + esc(chat.text(lang, "slashLimit")) + "</p></div>";
+    const matches = chat.searchPapers(state.papers, query, papers.map((paper) => paper.id));
+    if (!matches.length) return '<div id="agent-slash" class="slash-menu" role="listbox"><p class="hint">' + esc(chat.text(lang, "slashEmpty")) + "</p></div>";
+    return '<div id="agent-slash" class="slash-menu" role="listbox">' + matches.map((paper) => '<button type="button" data-action="agent-add-paper" data-id="' + esc(paper.id) + '"><b>' + esc(chat.chipLabel(paper, lang)) + "</b><small>" + esc(paper.title) + "</small></button>").join("") + "</div>";
+  }
+
+  function historyDrawer(lang) {
+    if (!state.agentHistoryOpen) return "";
+    const items = state.agentHistory.length ? state.agentHistory.map((item) => '<button type="button" class="history-item" data-action="agent-history-restore" data-thread="' + esc(item.id) + '"><b>' + esc(item.title) + "</b></button>").join("") : '<p class="empty">' + esc(chat.text(lang, "historyEmpty")) + "</p>";
+    return '<button type="button" class="history-backdrop" data-action="agent-history-close" aria-label="' + esc(chat.text(lang, "close")) + '"></button><aside id="agent-history" class="history-drawer" role="dialog" aria-label="' + esc(chat.text(lang, "history")) + '"><header><h2>' + esc(chat.text(lang, "history")) + "</h2>" + b(chat.text(lang, "close"), "agent-history-close", "ghost") + "</header>" + items + "</aside>";
+  }
+
+  function research() {
+    const lang = uiLang();
+    const active = agentActive();
+    const papers = selectedPapers();
+    const locked = state.busy || active;
     const models = state.agent?.models?.[state.agentProvider] || [];
-    const frozen = preview?.documents || [];
-    const run = state.agentRun;
-    return h("用选中文献继续研究", "完整版内置 Pi，使用你自己的模型账户。当前范围是文献元数据，可用于主题归类和检索规划；不据此声称已阅读正文。") +
-      status(agentLabel(), !!state.agent?.ready) +
-      agentReadiness() +
-      '<section class="card"><h2>研究输入</h2><p class="hint">当前勾选 ' + ids.length + ' 篇，最多 10 篇。选择来自同一个账户文献库。</p><ul class="selected-references">' + state.papers.filter((p) => ids.includes(p.id)).map((p) => '<li>' + esc(p.title) + '</li>').join("") + '</ul><div class="actions">' + b("回文献库选择", "view-library") + b("配置模型 Key", "view-settings") + '</div>' +
-      '<div class="research-form"><div><label class="label" for="agent-provider">模型服务</label><select id="agent-provider"' + (state.busy || active ? " disabled" : "") + '>' + ["anthropic", "openai", "google", "openrouter"].map((id) => '<option value="' + id + '"' + (id === state.agentProvider ? " selected" : "") + '>' + esc(providerNames[id]) + '</option>').join("") + '</select></div><div><label class="label" for="agent-model">模型 ID</label><input id="agent-model" type="text" list="agent-models" maxlength="200" value="' + esc(state.agentModel) + '"' + (state.busy || active ? " disabled" : "") + '><datalist id="agent-models">' + models.map((m) => '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>').join("") + '</datalist></div>' +
-      '<div><label class="label" for="agent-max-tokens">最多输出 tokens</label><input id="agent-max-tokens" type="number" min="128" max="4096" value="' + esc(state.agentMaxTokens) + '"' + (state.busy || active ? " disabled" : "") + '></div></div>' +
-      '<label class="label" for="agent-prompt">研究任务</label><textarea id="agent-prompt" rows="4" maxlength="4000" placeholder="例如：根据题目、作者和年份，按研究主题归类，列出仍需查阅正文确认的问题。"' + (state.busy || active ? " disabled" : "") + '>' + esc(state.agentPrompt) + '</textarea>' +
-      '<p class="hint">每次最多一次模型请求；输出上限不是价格承诺，输入 tokens 也可能计费。模型调用不执行 shell、任意文件操作或文献写入。</p><div class="actions">' + b("预览发送范围", "agent-prepare", "primary", !state.agent?.ready || active || ids.length < 1 || ids.length > 10) + '</div></section>' +
-      (preview ? '<section class="card agent-preview" id="agent-preview"><h2>确认这次模型调用</h2><p>' + esc(preview.provider) + ' / ' + esc(preview.model) + '</p><p class="hint">选中元数据 ' + esc(preview.document_count ?? frozen.length) + ' 篇 · 问题与元数据 ' + esc(preview.input_bytes) + ' bytes · 最多输出 ' + esc(preview.max_output_tokens) + ' tokens · 模型请求上限 1 次。</p><p>' + esc(preview.prompt) + '</p><details><summary>查看将发送的文献元数据</summary><pre class="diagnostic">' + esc(JSON.stringify(frozen, null, 2)) + '</pre></details><p class="hint">确认后，以上内容发送至所选模型服务商；不包含 Mdtero 账户 Key、全文、图片、密码或 Cookie。修改任务、模型或文献选择后需重新预览。</p><div class="actions">' + b("确认并运行", "agent-run", "primary", active) + '</div></section>' : '') +
-      (run ? '<section class="card agent-output"><h2>Pi 研究结果</h2><p class="hint">任务状态：' + esc(run.status) + '</p>' +
-        (active ? '<div class="actions">' + b("取消本次运行", "agent-cancel") + '</div>' : '') +
-        (state.agentPollError ? '<div class="notice">' + esc(state.agentPollError) + '<div class="actions">' + b("刷新运行状态", "agent-run-refresh") + '</div></div>' : '') +
-        '<pre class="agent-result" id="agent-result">' + esc(run.text || run.error?.action_hint || run.error?.hint || run.error?.message || run.error?.reason_code || (typeof run.error === "string" ? run.error : "")) + '</pre>' +
-        (run.usage ? '<p class="hint">实际用量：' + esc(JSON.stringify(run.usage)) + '</p>' : '') + '</section>' : '');
+    const providerIds = ["anthropic", "openai", "google", "openrouter"];
+    const modelSummary = state.agentModel.trim() || chat.text(lang, "chooseModel");
+    const providerShort = { anthropic: "Anthropic", openai: "OpenAI", google: "Google", openrouter: "OpenRouter" };
+    const sendLocked = !state.agent?.ready || active || papers.length < 1 || papers.length > chat.LIMIT || !state.agentPrompt.trim();
+    const readyText = !state.agent?.enabled ? chat.text(lang, "statusOff") : state.agent.ready ? chat.text(lang, "statusReady") : chat.text(lang, "statusNotReady");
+    const notices = (state.error ? '<div class="notice error" role="alert">' + esc(state.error) + "</div>" : "") +
+      (state.notice ? '<div class="status ok" role="status">' + esc(state.notice) + "</div>" : "") +
+      (state.busy ? '<p class="hint busy" role="status">' + spinner + "正在处理，请稍候…</p>" : "");
+    return notices + '<div class="research-chat"><header class="research-toolbar"><div><h1>' + esc(chat.text(lang, "pageTitle")) + '</h1><p class="hint">' + esc(chat.text(lang, "pageHint")) + '</p></div><div class="research-toolbar-actions">' +
+      b(chat.text(lang, "newChat"), "agent-new", "ghost", active) + b(chat.text(lang, "history"), "agent-history", "ghost") + "</div></header>" +
+      '<div class="research-stream">' + agentReadiness() + researchTranscript(lang) + "</div>" + confirmationCard(lang) +
+      '<div class="research-composer"><div class="composer-card"><div class="composer-chips">' + paperChipHtml(papers, true, lang) +
+      '<span id="agent-selection-count" class="chip-count' + (papers.length > chat.LIMIT ? " warn" : "") + '">' + esc(chat.selectionCount(papers.length, lang)) + "</span></div>" +
+      (papers.length > chat.LIMIT ? '<p class="hint">' + esc(chat.text(lang, "overLimit")) + "</p>" : "") +
+      '<label class="visually-hidden" for="agent-prompt">' + esc(chat.text(lang, "promptLabel")) + '</label><textarea id="agent-prompt" rows="3" maxlength="4000" placeholder="' + esc(chat.text(lang, "placeholder")) + '"' + (locked ? " disabled" : "") + ">" + esc(state.agentPrompt) + "</textarea>" +
+      slashMenu(lang, papers) + '<div class="composer-tools"><button type="button" class="tool composer-settings" data-action="agent-settings-toggle" aria-expanded="' + (state.agentSettingsOpen ? "true" : "false") + '" aria-controls="agent-settings"' + (state.busy ? " disabled" : "") + ">" + esc(providerShort[state.agentProvider] || state.agentProvider) + " · " + esc(modelSummary) + " · " + esc(state.agentMaxTokens) + "</button>" +
+      b(chat.text(lang, "send"), "agent-prepare", "primary", sendLocked) + "</div>" +
+      '<div id="agent-settings" class="settings-popover' + (state.agentSettingsOpen ? " open" : "") + '"><div class="research-settings"><div><label class="label" for="agent-provider">' + esc(chat.text(lang, "providerLabel")) + '</label><select id="agent-provider"' + (locked ? " disabled" : "") + ">" + providerIds.map((id) => '<option value="' + id + '"' + (id === state.agentProvider ? " selected" : "") + ">" + esc(chat.text(lang, "provider." + id)) + "</option>").join("") + '</select></div><div><label class="label" for="agent-model">' + esc(chat.text(lang, "modelLabel")) + '</label><input id="agent-model" type="text" list="agent-models" maxlength="200" value="' + esc(state.agentModel) + '"' + (locked ? " disabled" : "") + '><datalist id="agent-models">' + models.map((model) => '<option value="' + esc(model.id) + '">' + esc(model.name) + "</option>").join("") + '</datalist></div><div><label class="label" for="agent-max-tokens">' + esc(chat.text(lang, "tokensLabel")) + '</label><input id="agent-max-tokens" type="number" min="128" max="4096" value="' + esc(state.agentMaxTokens) + '"' + (locked ? " disabled" : "") + "></div></div>" +
+      '<div class="actions">' + b(chat.text(lang, "configureKey"), "view-settings") + "</div></div></div>" +
+      '<div class="composer-status">' + status(readyText, !!state.agent?.ready) + '<span id="agent-token-count">' + esc(chat.tokenLabel(state.agentUsage, state.agentMaxTokens, lang)) + "</span></div></div></div>" + historyDrawer(lang);
   }
 
   function settings() {
@@ -278,6 +354,10 @@
   }
 
   function draw() {
+    const activeId = document.activeElement && document.activeElement.id;
+    const activeField = activeId ? document.getElementById(activeId) : null;
+    const selection = activeField && typeof activeField.selectionStart === "number" ? [activeField.selectionStart, activeField.selectionEnd] : null;
+    const streamScroll = document.querySelector(".research-stream")?.scrollTop || 0;
     document.querySelectorAll("[data-view]").forEach((el) => {
       const active = el.dataset.view === state.view;
       el.classList.toggle("active", active);
@@ -293,8 +373,19 @@
     const navButton = document.querySelector('[data-view="' + state.view + '"]');
     $("breadcrumb").textContent = navButton ? navButton.textContent.trim() : "Mdtero Connect";
     $("screen").setAttribute("aria-busy", String(state.busy));
+    $("screen").classList.toggle("research-mode", state.view === "research");
+    document.body.dataset.research = state.view === "research" ? "true" : "false";
     $("screen").innerHTML = ({ start, library, fulltext, connections, research, settings }[state.view])();
     document.querySelectorAll('[data-action="refresh"]').forEach((el) => { el.disabled = state.busy; });
+    const stream = document.querySelector(".research-stream");
+    if (stream) stream.scrollTop = streamScroll;
+    if (["agent-prompt", "agent-model"].includes(activeId)) {
+      const next = document.getElementById(activeId);
+      if (next) {
+        next.focus({ preventScroll: true });
+        if (selection && next.setSelectionRange) next.setSelectionRange(selection[0], selection[1]);
+      }
+    }
   }
 
   async function withBusy(fn) {
@@ -373,6 +464,8 @@
     history.replaceState(null, "", "#" + view);
     state.error = "";
     state.notice = "";
+    state.agentHistoryOpen = false;
+    state.agentSettingsOpen = false;
     draw();
     $("screen").focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -390,10 +483,42 @@
   }
 
   let agentPollTimer;
+  function syncRunMessage() {
+    const run = state.agentRun;
+    if (!run?.run_id) return;
+    if (!state.agentThreadId) state.agentThreadId = "t" + Date.now().toString(36);
+    const sent = state.agentSent || {};
+    const existing = state.agentMessages.find((item) => item.runId === run.run_id);
+    const entry = {
+      runId: run.run_id,
+      prompt: existing?.prompt || sent.prompt || "",
+      documents: existing?.documents || sent.documents || [],
+      chips: existing?.chips || sent.chips || [],
+      provider: existing?.provider || sent.provider || run.provider || "",
+      model: existing?.model || sent.model || run.model || "",
+      maxOutputTokens: existing?.maxOutputTokens || sent.maxOutputTokens || run.max_output_tokens || state.agentMaxTokens,
+      run,
+    };
+    if (existing) Object.assign(existing, entry);
+    else state.agentMessages.push(entry);
+    if (run.usage && typeof run.usage === "object") state.agentUsage = run.usage;
+  }
+  function archiveResearchThread() {
+    if (!state.agentMessages.length || !state.agentThreadId) return;
+    if (state.agentHistory.some((item) => item.id === state.agentThreadId)) return;
+    state.agentHistory.unshift({
+      id: state.agentThreadId,
+      title: chat.threadTitle(state.agentMessages[0].prompt || "", uiLang()),
+      messages: JSON.parse(JSON.stringify(state.agentMessages)),
+      usage: state.agentUsage,
+    });
+    if (state.agentHistory.length > 20) state.agentHistory.length = 20;
+  }
   function recoverActiveRun() {
     const active = state.agent?.active_run;
     if (active?.run_id && active.run_id !== state.agentRun?.run_id) {
       state.agentRun = active;
+      syncRunMessage();
       agentPollTimer = setTimeout(pollAgentRun, 200);
     }
   }
@@ -406,12 +531,28 @@
       if (state.agentRun?.run_id !== runId) return;
       state.agentRun = run;
       state.agentPollError = "";
+      syncRunMessage();
       if (state.view === "research" && !state.busy) draw();
       if (agentActive()) agentPollTimer = setTimeout(pollAgentRun, 500);
     } catch {
-      state.agentPollError = "运行状态暂时无法读取。可刷新状态或取消本次运行。";
+      state.agentPollError = chat.text(uiLang(), "pollError");
       if (state.view === "research" && !state.busy) draw();
     }
+  }
+  function findWriteStep(stepId) {
+    for (const message of state.agentMessages) {
+      const run = message.run ? Object.assign({}, message.run, {
+        provider: message.run.provider || message.provider,
+        model: message.run.model || message.model,
+        max_output_tokens: message.run.max_output_tokens || message.maxOutputTokens,
+      }) : null;
+      const steps = chat.buildLiveSteps({ documents: message.documents || [], run, lang: uiLang() });
+      const found = steps.find((step) => message.runId + ":" + step.id === stepId);
+      if (found) return Object.assign({}, found, { id: stepId });
+    }
+    const previewSteps = state.agentPreview ? chat.buildLiveSteps({ documents: state.agentPreview.documents || [], run: null, lang: uiLang() }) : [];
+    const preview = previewSteps.find((step) => "preview:" + step.id === stepId);
+    return preview ? Object.assign({}, preview, { id: stepId }) : null;
   }
 
   function downloadBlob(blob, filename) {
@@ -426,8 +567,13 @@
   }
 
   document.addEventListener("click", (ev) => {
+    const closedSettings = !state.busy && state.agentSettingsOpen && !ev.target.closest(".research-composer, .agent-step");
+    if (closedSettings) state.agentSettingsOpen = false;
     const el = ev.target.closest("button");
-    if (!el || el.disabled || state.busy) return;
+    if (!el || el.disabled || state.busy) {
+      if (closedSettings) draw();
+      return;
+    }
     if (el.dataset.view) { navigate(el.dataset.view); return; }
     if (el.hasAttribute("data-tag")) {
       state.tag = el.dataset.tag;
@@ -492,8 +638,81 @@
       });
       return;
     }
+    if (action === "agent-settings-toggle") { state.agentSettingsOpen = !state.agentSettingsOpen; draw(); return; }
+    if (action === "agent-history") { state.agentHistoryOpen = !state.agentHistoryOpen; state.agentSettingsOpen = false; draw(); return; }
+    if (action === "agent-history-close") { state.agentHistoryOpen = false; draw(); return; }
+    if (action === "agent-new") {
+      if (agentActive()) return;
+      archiveResearchThread();
+      state.agentMessages = [];
+      state.agentThreadId = "";
+      state.agentPrompt = "";
+      state.agentPreview = null;
+      state.agentRun = null;
+      state.agentSent = null;
+      state.agentUsage = null;
+      state.agentExpanded = {};
+      state.agentWriteConfirmed = {};
+      state.agentHistoryOpen = false;
+      state.agentCursor = 0;
+      draw();
+      return;
+    }
+    if (action === "agent-history-restore") {
+      if (agentActive()) return;
+      const item = state.agentHistory.find((entry) => entry.id === el.dataset.thread);
+      if (!item) return;
+      archiveResearchThread();
+      state.agentHistory = state.agentHistory.filter((entry) => entry.id !== item.id);
+      state.agentThreadId = item.id;
+      state.agentMessages = JSON.parse(JSON.stringify(item.messages || []));
+      state.agentUsage = item.usage || null;
+      state.agentRun = null;
+      state.agentPreview = null;
+      state.agentPrompt = "";
+      state.agentHistoryOpen = false;
+      draw();
+      return;
+    }
+    if (action === "agent-quick") {
+      state.agentPrompt = el.dataset.prompt || "";
+      state.agentCursor = state.agentPrompt.length;
+      state.agentPreview = null;
+      state.agentSlashDismissed = false;
+      draw();
+      $("agent-prompt")?.focus();
+      return;
+    }
+    if (action === "agent-remove-paper") {
+      const id = Number(el.dataset.id);
+      state.selected = state.selected.filter((value) => value !== id);
+      state.agentPreview = null;
+      draw();
+      return;
+    }
+    if (action === "agent-add-paper") {
+      const added = chat.addPaper(state.selected, Number(el.dataset.id), state.papers);
+      state.selected = added.selected;
+      if (added.added) {
+        state.agentPrompt = chat.stripSlashToken(state.agentPrompt, state.agentCursor);
+        state.agentCursor = state.agentPrompt.length;
+        state.agentPreview = null;
+      }
+      draw();
+      $("agent-prompt")?.focus();
+      return;
+    }
+    if (action === "agent-confirm-write") {
+      const step = findWriteStep(el.dataset.stepId || "");
+      const decision = chat.commitLibraryWrite(step || { id: el.dataset.stepId, kind: "library_write" }, true);
+      if (decision.reason === "research_runtime_readonly" && el.dataset.stepId) state.agentWriteConfirmed[el.dataset.stepId] = true;
+      state.notice = chat.text(uiLang(), decision.reason === "research_runtime_readonly" ? "writeNotApplied" : "writeBlocked");
+      draw();
+      return;
+    }
     if (action === "agent-prepare") {
       const payload = { document_ids: selectedIds(), prompt: state.agentPrompt.trim(), provider: state.agentProvider, model: state.agentModel.trim(), max_output_tokens: state.agentMaxTokens };
+      state.agentSettingsOpen = false;
       withBusy(async () => {
         state.agentPreview = null;
         state.agentPreview = await api.prepareAgent(payload);
@@ -501,12 +720,25 @@
       return;
     }
     if (action === "agent-run") {
-      const approvalId = state.agentPreview?.approval_id;
+      const preview = state.agentPreview;
+      const approvalId = preview?.approval_id;
       withBusy(async () => {
-        if (!approvalId) throw new Error("请先预览当前模型调用。");
+        if (!approvalId || !preview) throw new Error(chat.text(uiLang(), "needPreview"));
         state.agentRun = await api.startAgent(approvalId);
+        state.agentSent = {
+          prompt: preview.prompt,
+          documents: preview.documents || [],
+          chips: (preview.documents || []).map((doc) => chat.chipLabel(doc, uiLang())),
+          provider: preview.provider,
+          model: preview.model,
+          maxOutputTokens: preview.max_output_tokens,
+        };
+        state.agentPrompt = "";
+        state.agentCursor = 0;
         state.agentPreview = null;
         state.agentPollError = "";
+        state.agentSettingsOpen = false;
+        syncRunMessage();
         agentPollTimer = setTimeout(pollAgentRun, 200);
       });
       return;
@@ -517,6 +749,7 @@
         if (!runId) return;
         state.agentRun = await api.cancelAgent(runId);
         state.agentPollError = "";
+        syncRunMessage();
         clearTimeout(agentPollTimer);
       });
       return;
@@ -624,7 +857,11 @@
     else if (el.id === "find-paper") state.query = el.value;
     else if (el.id === "discovery-query") { state.discoveryQuery = el.value; return; }
     else {
-      if (el.id === "agent-prompt") state.agentPrompt = el.value;
+      if (el.id === "agent-prompt") {
+        state.agentPrompt = el.value;
+        state.agentCursor = el.selectionStart || 0;
+        state.agentSlashDismissed = false;
+      }
       if (el.id === "agent-model") state.agentModel = el.value;
       if (el.id === "agent-max-tokens") state.agentMaxTokens = Number(el.value);
       state.agentPreview = null;
@@ -634,6 +871,51 @@
     replacement?.focus();
     if (el.type !== "number") replacement?.setSelectionRange(offset, offset);
   });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      const query = chat.slashQuery(state.agentPrompt, state.agentCursor);
+      if (query !== null && !state.agentSlashDismissed) {
+        state.agentSlashDismissed = true;
+        draw();
+        return;
+      }
+      if (state.agentHistoryOpen || state.agentSettingsOpen) {
+        state.agentHistoryOpen = false;
+        state.agentSettingsOpen = false;
+        draw();
+      }
+      return;
+    }
+    if (ev.target.id !== "agent-prompt" || ev.key !== "Enter" || ev.shiftKey || ev.isComposing || state.busy) return;
+    const query = chat.slashQuery(state.agentPrompt, ev.target.selectionStart);
+    if (query !== null && !state.agentSlashDismissed) {
+      const match = chat.searchPapers(state.papers, query, selectedIds())[0];
+      if (match && chat.canAddPaper(selectedIds().length)) {
+        ev.preventDefault();
+        const added = chat.addPaper(state.selected, match.id, state.papers);
+        state.selected = added.selected;
+        if (added.added) {
+          state.agentPrompt = chat.stripSlashToken(state.agentPrompt, ev.target.selectionStart);
+          state.agentCursor = state.agentPrompt.length;
+          state.agentPreview = null;
+        }
+        draw();
+        $("agent-prompt")?.focus();
+      }
+      return;
+    }
+    const send = document.querySelector('[data-action="agent-prepare"]');
+    if (!send || send.disabled) return;
+    ev.preventDefault();
+    send.click();
+  });
+
+  document.addEventListener("toggle", (ev) => {
+    const card = ev.target;
+    if (!card.classList || !card.classList.contains("agent-step") || !card.dataset.stepId) return;
+    state.agentExpanded[card.dataset.stepId] = card.open;
+  }, true);
 
   window.addEventListener("hashchange", () => {
     const view = location.hash.slice(1);

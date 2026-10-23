@@ -51,9 +51,10 @@ jobs:
           node --check connect/design/policy.js
           node --check connect/design/app.js
           node --check connect/app/api.js
+          node --check connect/app/research-chat.js
           node --check connect/app/app.js
       - name: Original 26 design-policy regressions
-        run: node --test connect/design/policy.test.cjs
+        run: node --test connect/design/policy.test.cjs connect/design/research-chat.test.cjs
       - name: Static entry and safe mock-only checks
         run: |
           test -s connect/design/index.html

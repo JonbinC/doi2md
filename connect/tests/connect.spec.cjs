@@ -43,6 +43,12 @@ async function select(page, id) {
   await page.locator(`input[data-id="${id}"]`).check();
 }
 
+async function openModelSettings(page) {
+  const provider = page.locator('#agent-provider');
+  if (!(await provider.isVisible())) await page.locator('[data-action="agent-settings-toggle"]').click();
+  await expect(provider).toBeVisible();
+}
+
 async function preview(page) {
   const result = page.waitForResponse((response) => response.url().endsWith('/connect/v1/library/tags/batch'));
   await action(page, 'tag-preview').click();
@@ -147,7 +153,9 @@ test('Pi dependency retry preserves the selected papers and research draft', asy
   await action(page, 'providers-refresh').click();
   await expect(page.locator('#agent-readiness')).toHaveCount(0);
   await expect(page.locator('#agent-prompt')).toHaveValue('Keep this research question after retry.');
-  await expect(page.locator('.selected-references')).toContainText('Cycling stability');
+  await expect(page.locator('.paper-chip[data-id="11"]')).toContainText('Example, 2025');
+  await expect(page.locator('.paper-chip[data-id="11"]')).toHaveAttribute('title', /Cycling stability/);
+  await expect(page.locator('#agent-selection-count')).toContainText('1 / 10');
   await expect(action(page, 'agent-prepare')).toBeEnabled();
 });
 
@@ -548,6 +556,7 @@ test('research UI invalidates edited approvals and renders model output as plain
   await openLibrary(page);
   await select(page, 11);
   await page.locator('[data-view="research"]').click();
+  await openModelSettings(page);
   await page.locator('#agent-provider').selectOption('openai');
   await page.locator('#agent-model').fill('gpt-4.1-mini');
   await page.locator('#agent-max-tokens').fill('256');
@@ -566,6 +575,14 @@ test('research UI invalidates edited approvals and renders model output as plain
   expect(await page.evaluate(() => window.agentXss)).toBeUndefined();
   expect((await snapshot(request)).agent_calls).toHaveLength(1);
   expect((await snapshot(request)).calls.every((call) => call.method === 'GET')).toBe(true);
+  await expect(page.locator('#agent-token-count')).toContainText('70 tokens');
+  await action(page, 'agent-new').click();
+  await expect(page.locator('#agent-result')).toHaveCount(0);
+  await action(page, 'agent-history').click();
+  await expect(page.locator('#agent-history')).toContainText('Compare selected titles');
+  await action(page, 'agent-history-restore').click();
+  await expect(page.locator('#agent-result')).toContainText('Synthetic metadata summary');
+  await expect(page.locator('#agent-result img')).toHaveCount(0);
 });
 
 test('a running metadata-only research request can be cancelled from the UI', async ({ page, request }) => {
@@ -574,6 +591,7 @@ test('a running metadata-only research request can be cancelled from the UI', as
   await openLibrary(page);
   await select(page, 11);
   await page.locator('[data-view="research"]').click();
+  await openModelSettings(page);
   await page.locator('#agent-provider').selectOption('openai');
   await page.locator('#agent-model').fill('gpt-4.1-mini');
   await page.locator('#agent-max-tokens').fill('256');
@@ -582,6 +600,10 @@ test('a running metadata-only research request can be cancelled from the UI', as
   await expect(action(page, 'agent-run')).toBeEnabled();
   await action(page, 'agent-run').click();
   await expect(action(page, 'agent-cancel')).toBeEnabled();
+  await expect(page.locator('.agent-step[data-step-kind="model_request"][data-status="running"]')).toContainText('进行中');
+  await page.locator('.research-stream .agent-step[data-step-kind="metadata_lookup"] summary').click();
+  await expect(page.locator('.research-stream .agent-step[data-step-kind="metadata_lookup"]')).toContainText('document_ids');
+  await expect(action(page, 'agent-new')).toBeDisabled();
   await action(page, 'agent-cancel').click();
   await expect.poll(async () => {
     const state = await snapshot(request);
@@ -597,6 +619,7 @@ test('reloading the page recovers a running Pi request and still allows cancella
   await openLibrary(page);
   await select(page, 11);
   await page.locator('[data-view="research"]').click();
+  await openModelSettings(page);
   await page.locator('#agent-provider').selectOption('openai');
   await page.locator('#agent-model').fill('gpt-4.1-mini');
   await page.locator('#agent-max-tokens').fill('256');
@@ -711,6 +734,75 @@ test('Relay API rejects absent, false and string campus permission before reachi
   const stop = await mutation(request, 'relay/stop', {});
   expect(stop.ok()).toBeTruthy();
   expect(await stop.json()).toMatchObject({ available: true, running: false });
+});
+
+test('research chat keeps papers on chips, searches with slash, and stays inside the ten-paper cap', async ({ page, request }) => {
+  await openLibrary(page);
+  await page.locator('[data-view="research"]').click();
+  await expect(page.locator('.quick-prompts')).toContainText('按主题归类');
+  await expect(page.locator('.quick-prompts')).toContainText('列出需看正文确认的问题');
+  await expect(page.locator('.quick-prompts')).toContainText('对比方法');
+  await expect(page.locator('#agent-selection-count')).toHaveText('已选 0 / 10');
+  await page.locator('[data-quick="questions"]').click();
+  await expect(page.locator('#agent-prompt')).toHaveValue(/正文/);
+  await page.locator('#agent-prompt').fill('/');
+  await expect(page.locator('#agent-slash [data-id="11"]')).toContainText('Example, 2025');
+  await page.locator('#agent-slash [data-action="agent-add-paper"][data-id="11"]').click();
+  await expect(page.locator('.paper-chip[data-id="11"]')).toContainText('Example, 2025');
+  await expect(page.locator('#agent-selection-count')).toHaveText('已选 1 / 10');
+  await expect(page.locator('#agent-prompt')).toHaveValue('');
+  await page.locator('[data-action="agent-remove-paper"][data-id="11"]').click();
+  await expect(page.locator('.paper-chip')).toHaveCount(0);
+  await expect(page.locator('#agent-selection-count')).toHaveText('已选 0 / 10');
+  await openModelSettings(page);
+  await expect(page.locator('.settings-popover [data-action="view-settings"]')).toHaveText('配置模型 Key');
+  await expect(page.locator('#agent-max-tokens')).toBeVisible();
+  const color = await action(page, 'agent-prepare').evaluate((el) => getComputedStyle(el).backgroundColor);
+  const [red, green, blue] = color.match(/\d+/g).map(Number);
+  expect(red).toBeGreaterThan(green);
+  expect(green).toBeGreaterThan(blue);
+  expect((await snapshot(request)).agent_calls).toEqual([]);
+});
+
+test('research chat follows the page language', async ({ page }) => {
+  await openLibrary(page);
+  await page.evaluate(() => { document.documentElement.lang = 'en'; });
+  await page.locator('[data-view="research"]').click();
+  await expect(page.locator('.quick-prompts')).toContainText('Group by topic');
+  await expect(page.locator('.quick-prompts')).toContainText('Compare methods');
+  await expect(page.locator('#agent-selection-count')).toHaveText('Selected 0 / 10');
+  await expect(page.locator('#agent-prompt')).toHaveAttribute('placeholder', /Type \/ to add papers/);
+  await page.evaluate(() => { document.documentElement.lang = 'zh-CN'; });
+  await page.locator('[data-view="library"]').click();
+  await page.locator('[data-view="research"]').click();
+  await expect(page.locator('.quick-prompts')).toContainText('按主题归类');
+  await expect(page.locator('#agent-selection-count')).toHaveText('已选 0 / 10');
+});
+
+test('a library write card never changes the library, with or without confirmation', async ({ page, request }) => {
+  await page.goto('/#research');
+  await expect(page.locator('#agent-prompt')).toBeVisible();
+  const html = await page.evaluate(() => {
+    const step = {
+      id: 'w1', kind: 'library_write', status: 'done', summary: 'add tag',
+      diff: { before: 'tags: []', after: 'tags: [Topic]' }, confirmed: true,
+      args: { api_key: 'should-not-render', add: ['Topic'] },
+    };
+    return window.MdteroResearchChat.renderStepCard(step, 'zh', { open: true });
+  });
+  expect(html).toContain('data-action="agent-confirm-write"');
+  expect(html).toContain('tags: [Topic]');
+  expect(html).not.toContain('should-not-render');
+  expect(html).not.toContain('<img');
+  await page.evaluate((markup) => {
+    const host = document.createElement('div');
+    host.id = 'research-write-probe';
+    host.innerHTML = markup;
+    document.body.append(host);
+  }, html);
+  await page.locator('#research-write-probe [data-action="agent-confirm-write"]').click();
+  await expect(page.locator('#screen')).toContainText('文献库不会被修改');
+  expect((await snapshot(request)).calls.filter((call) => call.method !== 'GET')).toEqual([]);
 });
 
 test('an available bundled Relay still requires a local Mdtero account before UI startup', async ({ page, request }) => {
