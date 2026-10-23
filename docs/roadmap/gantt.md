@@ -10,6 +10,11 @@ gantt
     Mac 真机验收（Jianbin）               :a2, after a1, 1d
     Apple 开发者账号申请（Jianbin）       :a3, 2026-10-23, 3d
     Mac 签名与公证接入 CI                 :a4, after a3, 1d
+    section 最小闭环（最优先）
+    首次使用流程设计稿（设计师）           :m1, 2026-10-23, 3d
+    后端内置模型转发 gpt-6-luna 按账号限额  :m2, 2026-10-26, 1d
+    客户端全屏登录 空态输入框 阅读器 AI 总结 :m3, 2026-10-26, 2d
+    新安装包 + Jianbin 10 分钟闭环验收      :m4, after m3, 1d
     section 稳定性与基线
     合 #80 部署验证（Jianbin 在场）        :b1, 2026-10-26, 1d
     合 #82 埋点                           :b2, after b1, 1d
