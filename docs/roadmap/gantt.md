@@ -12,7 +12,10 @@ gantt
     Mac 签名与公证接入 CI                 :a4, after a3, 1d
     section 最小闭环（最优先）
     首次使用流程设计稿（设计师）           :m1, 2026-10-23, 3d
-    后端内置模型转发 gpt-6-luna 按账号限额  :m2, 2026-10-26, 1d
+    a1 凭据后台 + 用量记账（B1–B5，F1–F2）  :cred1, 2026-10-24, 5d
+    a1 首个 PR 合入（m2 依赖）             :milestone, cred1pr, 2026-10-27, 0d
+    后端内置模型转发 gpt-6-luna 按账号限额  :m2, after cred1pr, 1d
+    k1 积分换算表与余额显示（内部按 token 记账） :k1, after cred1, 2d
     客户端全屏登录 空态输入框 阅读器 mdtero AI 总结 :m3, 2026-10-26, 2d
     内部测试包 + Jianbin 10 分钟闭环验收（不对外发版，通过后再开小范围内测） :m4, after m3, 1d
     section 稳定性与基线
@@ -37,6 +40,7 @@ gantt
     扩展迁移横幅                          :c4, 2026-10-28, 2d
     研究模式 PR #16 评审与合并             :c3, after c1, 3d
     研究模式 默认案例 Markdown 渲染 侧边文档栏 :c8, after c3, 5d
+    r2 自动 RAG（Voyage 向量、段落引用、index_status，排在 m2 与最小闭环之后） :r2, 2026-11-03, 2026-11-07
     section 功能
     MCP 第一期收尾                         :d1, after b3, 5d
     OAuth 统一 授权页 已授权应用 客户端回跳 只读范围 :o1, after b3, 4d
