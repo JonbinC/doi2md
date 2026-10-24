@@ -1,8 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 
-const CONTROL = 'http://127.0.0.1:18742';
-const ORIGIN = 'http://127.0.0.1:18741';
+const CONTROL_PORT = Number(process.env.MDTERO_CONNECT_TEST_CONTROL_PORT || 18742);
+const ORIGIN_PORT = Number(process.env.MDTERO_CONNECT_TEST_ORIGIN_PORT || 18741);
+const CONTROL = `http://127.0.0.1:${CONTROL_PORT}`;
+const ORIGIN = `http://127.0.0.1:${ORIGIN_PORT}`;
 const action = (page, name) => page.locator(`[data-action="${name}"]`).first();
 const tagCalls = (state) => state.calls.filter((call) => call.path === '/api/v1/library/tags/batch');
 const paper = (state, id) => state.papers.find((item) => item.document_id === id);
@@ -354,7 +356,7 @@ test('bridge enforces Host, Origin and CSRF independently of browser UI', async 
   });
   expect(badOrigin.status()).toBe(403);
   expect((await badOrigin.json()).reason_code).toBe('origin_rejected');
-  const badHost = await request.get('/connect/v1/session', { headers: { Host: 'untrusted.invalid:18741' } });
+  const badHost = await request.get('/connect/v1/session', { headers: { Host: `untrusted.invalid:${ORIGIN_PORT}` } });
   expect(badHost.status()).toBe(403);
   expect((await badHost.json()).reason_code).toBe('host_rejected');
   const noOrigin = await request.post('/connect/v1/library/tags/batch', {
