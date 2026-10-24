@@ -730,6 +730,102 @@ test('uncertain-write retry reuses stable candidate request_id and avoids server
   expect(matching).toHaveLength(1);
 });
 
+test('cancel is disabled during in-flight confirmed write and prevents false zero-write claims', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  const bibtex = `@article{inflight1,
+  title={In Flight Write Paper},
+  author={Write Author},
+  year={2026}
+}`;
+
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'inflight.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from(bibtex),
+  });
+
+  await expect(page.locator('#import-panel .preview-table')).toBeVisible();
+
+  let releaseWrite;
+  const writePromise = new Promise((resolve) => {
+    releaseWrite = resolve;
+  });
+
+  await page.route('**/connect/v1/library/import', async (route) => {
+    const postData = route.request().postDataJSON();
+    if (postData && postData.dry_run === false) {
+      await writePromise;
+    }
+    await route.continue();
+  });
+
+  // User confirms import
+  await action(page, 'confirm-import').click();
+
+  // While write is in flight:
+  // 1. Notice displays in-flight status
+  await expect(page.locator('#import-panel')).toContainText('正在写入文献库，请勿关闭或刷新');
+
+  // 2. Cancel button is disabled
+  const cancelBtn = page.locator('#import-panel [data-action="cancel-import"]');
+  await expect(cancelBtn).toBeDisabled();
+
+  // 3. Releasing the write allows successful completion
+  releaseWrite();
+  await expect(page.locator('#screen')).toContainText('In Flight Write Paper');
+  await expect(page.locator('#screen')).not.toContainText('已取消导入，文献库未做任何写入');
+
+  // Verify write was committed once on server
+  const finalSnapshot = await snapshot(request);
+  const writeCalls = finalSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(1);
+});
+
+test('closing import panel after uncertain write indicates outcome unknown and does not claim zero writes', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  const bibtex = `@article{uncert1,
+  title={Uncertain Outcome Paper},
+  author={Uncertain Author},
+  year={2026}
+}`;
+
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'uncert.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from(bibtex),
+  });
+
+  await expect(page.locator('#import-panel .preview-table')).toBeVisible();
+
+  await page.route('**/connect/v1/library/import', async (route) => {
+    const postData = route.request().postDataJSON();
+    if (postData && postData.dry_run === false) {
+      // Server commits, but connection drops on client
+      await route.fetch();
+      await route.abort('timedout');
+      return;
+    }
+    await route.continue();
+  });
+
+  // User confirms import, which fails ambiguously on transport
+  await action(page, 'confirm-import').click();
+
+  // Verify uncertain warning appears
+  await expect(page.locator('#import-panel')).toContainText('导入请求未收到明确响应');
+
+  // User dismisses/closes the panel
+  await action(page, 'cancel-import').click();
+
+  // Crucial check: must NOT assert zero writes!
+  await expect(page.locator('#screen')).toContainText('由于此前网络响应中断，服务端可能已写入部分或全部条目');
+  await expect(page.locator('#screen')).not.toContainText('文献库未做任何写入');
+});
+
 for (const width of [375, 1440]) {
   test(`onboarding and operational views fit a ${width}px viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
