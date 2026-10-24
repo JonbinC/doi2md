@@ -358,8 +358,8 @@
       } catch (err) {
         state.importPhase = "write_uncertain";
         state.importError = t(
-          "导入请求未收到明确响应（网络超时或连接中断）。服务端可能已完成写入，请在文献库核对或重试；重试将使用相同请求编号，不会重复创建文献。",
-          "Import request ended with an uncertain outcome (network timeout or connection interruption). The server may have already imported the items. You can retry safely with the same request ID or verify your library."
+          "导入请求未收到明确响应（网络超时或连接中断）。服务端可能已完成写入，请先刷新文献库核对；若未导入可直接重试（使用相同请求编号，不会重复创建）。若已重启客户端，请先刷新文献库确认无重复条目后再重新选择文件导入。",
+          "Import request ended with an uncertain outcome (network timeout or connection interruption). The server may have committed the write. Please refresh your library to check; you can retry directly with the same request ID without duplicates. If the client was restarted, refresh your library first to verify before re-importing."
         );
         state.importErrorDetail = diagnosticText(err);
         throw err;
@@ -380,8 +380,8 @@
     state.importErrorDetail = "";
     if (wasUncertain) {
       state.notice = t(
-        "已关闭导入面板。由于此前网络响应中断，服务端可能已写入部分或全部条目，请在文献库核对。",
-        "Import panel closed. Because the earlier network response timed out, the server may have processed the items. Please check your library."
+        "已关闭导入面板。由于此前网络响应中断，服务端可能已写入部分或全部条目，请刷新文献库核对以防重复导入。",
+        "Import panel closed. Because the earlier network response timed out, the server may have processed items. Please refresh your library to verify and avoid duplicates."
       );
     } else {
       state.notice = t("已取消导入，文献库未做任何写入。", "Import cancelled. Zero changes made to your library.");
@@ -410,11 +410,12 @@
         '<div class="actions">' + b(t("正在导入…", "Importing…"), "confirm-import", "primary", true) +
         b(t("取消", "Cancel"), "cancel-import", "", true) + '</div>';
     } else if (state.importPhase === "write_uncertain") {
-      body = '<div class="notice warn" role="alert"><p>' + esc(state.importError || t("导入请求未收到明确响应。服务端可能已完成写入，请在文献库核对或重试。", "Import request outcome is uncertain. Server may have committed; verify library or retry.")) + '</p>' +
+      body = '<div class="notice warn" role="alert"><p>' + esc(state.importError || t("导入请求未收到明确响应。服务端可能已完成写入，请先刷新文献库核对避免重复导入。", "Import request outcome is uncertain. Server may have committed; please refresh your library to verify and avoid duplicates.")) + '</p>' +
         (state.importErrorDetail ? '<pre class="diagnostic">' + esc(state.importErrorDetail) + '</pre>' : '') +
         '<div class="actions">' +
-        b(t("重试导入", "Retry import"), "confirm-import", "primary") +
-        b(t("关闭面板并在文献库核对", "Close and check library"), "cancel-import") +
+        b(t("重试导入（相同编号）", "Retry import (same ID)"), "confirm-import", "primary") +
+        b(t("刷新文献库核对", "Refresh library to check"), "view-library") +
+        b(t("关闭面板", "Close panel"), "cancel-import") +
         '</div></div>';
     } else if (state.importError) {
       body = '<div class="notice error" role="alert"><p>' + esc(state.importError) + '</p>' +
