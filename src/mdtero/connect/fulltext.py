@@ -148,7 +148,11 @@ def _wait_user(page, *, timeout_s: float, poll_s: float, notify, sleep, clock) -
 
 def _open(page, url, res, *, timeout_ms, handoff_timeout_s, notify, sleep, clock) -> Optional[dict]:
     """Navigate, wait, hand challenges to the user. Returns final probe or None if still blocked."""
-    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    try:
+        status = int(response.status) if response is not None else 0
+    except Exception:  # noqa: BLE001
+        status = 0
     page.wait_for_timeout(3000)
     probe = probe_page(page)
     if classify_probe(probe) == "challenge":
@@ -161,10 +165,13 @@ def _open(page, url, res, *, timeout_ms, handoff_timeout_s, notify, sleep, clock
         probe = probe_page(page)
         if classify_probe(probe) == "challenge":
             return None
+        status = 200  # the person cleared the challenge in the visible browser
+    if probe:
+        probe["_http_status"] = status
     return probe
 
 
-def _try_ieee_pdf_fallback(page, doi: str, html: str, out_dir: Path, limiter: pa.RateLimiter,
+def _try_ieee_pdf_fallback(page, doi: str, html: str, http_status: int, out_dir: Path, limiter: pa.RateLimiter,
                            res: FullTextResult, *, parse: Callable[..., dict],
                            goto_timeout_ms: int, handoff_timeout_s: float,
                            notify: Optional[Callable[[str, str], None]]) -> None:
@@ -182,7 +189,7 @@ def _try_ieee_pdf_fallback(page, doi: str, html: str, out_dir: Path, limiter: pa
             notify=notify,
             prefer_html=False,
             rate_limit=False,
-            preloaded_page=(html, res.url),
+            preloaded_page=(html, res.url, http_status),
         )
     except Exception as exc:  # noqa: BLE001 - fallback must not hide the HTML result
         res.detail = (res.detail + f"; IEEE PDF fallback: {type(exc).__name__}: {exc}")[:600]
@@ -199,7 +206,11 @@ def _try_ieee_pdf_fallback(page, doi: str, html: str, out_dir: Path, limiter: pa
         return
 
     pdf_path = Path(fetched.path)
-    pdf_bytes = pdf_path.read_bytes()
+    try:
+        pdf_bytes = pdf_path.read_bytes()
+    except OSError as exc:
+        res.detail = (res.detail + f"; IEEE PDF read: {type(exc).__name__}: {exc}")[:600]
+        return
     res.raw_path = str(pdf_path)
     res.url = fetched.detail.rsplit(" [", 1)[0] if " [" in fetched.detail else fetched.detail
     try:
@@ -245,10 +256,10 @@ def fetch_fulltext(page, doi: str, out_dir: Path, limiter: pa.RateLimiter, *,
     except Exception as exc:  # noqa: BLE001
         res.detail = f"goto: {exc}"[:300]
         return res
-    res.url = getattr(page, "url", "")
     if probe is None:
         res.status, res.detail = "challenge", "verification not completed in the browser window; nothing was bypassed"
         return res
+    res.url = str(probe.get("url") or getattr(page, "url", ""))
     html = _rendered(page)
     raw = raw_dir / f"{stem}.html"
     raw.write_text(html, encoding="utf-8")
@@ -297,7 +308,7 @@ def fetch_fulltext(page, doi: str, out_dir: Path, limiter: pa.RateLimiter, *,
     # the downloaded bytes in-process, never through the backend worker.
     if pub.key == "ieee" and res.status == "paywall" and (parse_error is None or is_access_shell_error(parse_error)):
         _try_ieee_pdf_fallback(
-            page, doi, html, out_dir, limiter, res, parse=parse,
+            page, doi, html, int(probe.get("_http_status") or 200), out_dir, limiter, res, parse=parse,
             goto_timeout_ms=goto_timeout_ms, handoff_timeout_s=handoff_timeout_s, notify=notify,
         )
     _write_result(out_dir, stem, res)

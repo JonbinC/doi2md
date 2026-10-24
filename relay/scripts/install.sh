@@ -103,8 +103,10 @@ if [[ -d "$TMP_DIR/browser_worker" ]]; then
   mkdir -p "$WORKER_ROOT"
   rm -rf "$WORKER_ROOT/browser_worker"
   cp -R "$TMP_DIR/browser_worker" "$WORKER_ROOT/browser_worker"
-  chmod 700 "$WORKER_ROOT/browser_worker"
-  chmod 600 "$WORKER_ROOT/browser_worker"/*
+  # Shared policy modules live in a nested package directory. Keep every
+  # directory traversable by the owner while keeping worker sources private.
+  find "$WORKER_ROOT/browser_worker" -type d -exec chmod 700 {} +
+  find "$WORKER_ROOT/browser_worker" -type f -exec chmod 600 {} +
 fi
 rm -rf "$TMP_DIR" "$ARCHIVE"
 

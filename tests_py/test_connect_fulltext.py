@@ -58,6 +58,7 @@ class IEEEPage(Page):
     def __init__(self):
         super().__init__([OK], html="<html><body>Abstract only</body></html>")
         self.final_url = "https://ieeexplore.ieee.org/document/10005208"
+        self.landing_status = 200
         request = self
         self.context = type("Context", (), {"request": type("Request", (), {
             "get": lambda _self, url, **_kw: request._pdf_response(url),
@@ -67,6 +68,7 @@ class IEEEPage(Page):
     def goto(self, url, **kw):
         self.gotos.append(url)
         self.url = self.final_url
+        return type("LandingResponse", (), {"status": self.landing_status})()
 
     def _pdf_response(self, url):
         self.pdf_urls.append(url)
@@ -163,6 +165,32 @@ def test_ieee_pdf_fallback_is_downloaded_and_parsed_locally(tmp_path):
     assert [kw["content_type"] for _, kw in calls] == ["text/html", "application/pdf"]
     assert json.loads((tmp_path / "10.1109_tpami.2023.3237000.fulltext.json").read_text())["status"] == "fulltext"
     assert json.loads((tmp_path / "rate.json").read_text())["count"] == 1
+
+
+def test_ieee_pdf_fallback_preserves_landing_http_status(tmp_path, monkeypatch):
+    page = IEEEPage()
+    page.landing_status = 403
+    observed = []
+    detect_block = pa.detect_block
+
+    def record_status(html, status=200, url=""):
+        observed.append(status)
+        return detect_block(html, status, url)
+
+    monkeypatch.setattr(pa, "detect_block", record_status)
+
+    result = ft.fetch_fulltext(
+        page, IEEE_DOI, tmp_path, lim(tmp_path), handoff_timeout_s=0,
+        parse=lambda payload, **kw: (
+            {"markdown": "# IEEE full text\n", "metadata": {},
+             "signals": {"body_length": 9000, "section_count": 3}}
+            if kw["content_type"] == "application/pdf"
+            else (_ for _ in ()).throw(ValueError("access shell"))
+        ),
+    )
+
+    assert result.status == "fulltext"
+    assert 403 in observed
 
 
 def test_challenge_handed_to_user_then_cleared(tmp_path):
