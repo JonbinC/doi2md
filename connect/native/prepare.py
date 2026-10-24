@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,8 @@ import time
 import uuid
 from urllib.parse import urlparse
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
+
+from mdtero.connect.native_compat import PARSER_MINIMUM_PYTHON, parser_runtime_status
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = Path(__file__).resolve().parent
@@ -435,6 +438,13 @@ def prepare(target: str, edition: str) -> dict:
         raise ValueError('Choose the basic or full native debug edition.')
     if importlib.metadata.version('pyinstaller') != PYINSTALLER_VERSION:
         raise ValueError(f'Use PyInstaller {PYINSTALLER_VERSION} for this debug build.')
+    try:
+        parser_module_detected = importlib.util.find_spec('mdtero_parser') is not None
+    except (ImportError, ValueError):
+        parser_module_detected = False
+    python_version = platform.python_version()
+    python_parts = tuple(int(part) for part in python_version.split('.')[:3])
+    parser_status = parser_runtime_status(python_parts, parser_module_detected)
     # Full debug clients ship a supported OS keyring, not a silent session-only fallback.
     importlib.metadata.version('keyring')
     exe = '.exe' if platform.system() == 'Windows' else ''
@@ -489,6 +499,10 @@ def prepare(target: str, edition: str) -> dict:
     manifest = {
         'protocol': 1, 'product': 'mdtero-connect-desktop', 'target': target,
         'edition': edition, 'commit': commit, 'pyinstaller': PYINSTALLER_VERSION,
+        'python_version': python_version,
+        'local_fulltext_parser_minimum_python': '.'.join(map(str, PARSER_MINIMUM_PYTHON)),
+        'local_fulltext_parser_module_detected': parser_module_detected,
+        'local_fulltext_parser_status': parser_status,
         'node_version': node_version, 'pi_sdk_version': PI_SDK_VERSION if edition == 'full' else None,
         'relay_included': True, 'relay_auto_started': False,
         'signed_release': False, 'human_acceptance': 'pending', 'smoke': smoke,
