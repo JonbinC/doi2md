@@ -15,7 +15,7 @@
     agentPreview: null, agentRun: null, agentPollError: "",
     discoveryQuery: "", discoveryResults: null, discoveryOpen: false,
     importOpen: false, importFileName: "", importFileSize: 0,
-    importEpoch: 0, importCandidate: null,
+    importEpoch: 0, importCandidate: null, importPhase: "idle",
     importPreview: null, importError: "", importErrorDetail: "",
   };
   const $ = (id) => document.getElementById(id);
@@ -24,7 +24,8 @@
   const selectedIds = () => state.selected.filter((id) => state.papers.some((p) => p.id === id));
   const b = (name, action, kind = "tool", disabled = false) => {
     const isCancel = action === "cancel-import";
-    const isDisabled = (!isCancel && state.busy) || disabled;
+    const canCancelNow = isCancel && state.importPhase !== "write_in_flight";
+    const isDisabled = (state.busy && !canCancelNow) || disabled || (isCancel && state.importPhase === "write_in_flight");
     return '<button type="button" class="' + kind + '" data-action="' + action + '"' +
       (isDisabled ? " disabled" : "") + ">" + esc(name) + "</button>";
   };
@@ -217,6 +218,7 @@
   function handleImportFile(file) {
     if (!file || state.busy) return;
     const epoch = ++state.importEpoch;
+    state.importPhase = "reading_file";
     state.importCandidate = null;
     state.importPreview = null;
     state.importFileName = file.name || "export.bib";
@@ -225,6 +227,7 @@
     state.importErrorDetail = "";
 
     if (file.size > 1024 * 1024) {
+      state.importPhase = "idle";
       state.importError = t(
         "文件大小超过 1 MiB 上限（当前 " + Math.round(file.size / 1024) + " KB）。请分批导出或减小文件。",
         "File size exceeds 1 MiB limit (" + Math.round(file.size / 1024) + " KB). Please export a smaller batch."
@@ -235,6 +238,7 @@
 
     const lowerName = (file.name || "").toLowerCase();
     if (lowerName.endsWith(".rdf")) {
+      state.importPhase = "idle";
       state.importError = t(
         "Zotero RDF 暂不支持，请在 Zotero 中导出为 BibTeX 或 RIS。",
         "Zotero RDF is not supported. Please export as BibTeX or RIS."
@@ -253,6 +257,7 @@
       if (epoch !== state.importEpoch) return;
       const text = String(reader.result || "");
       if (!text.trim()) {
+        state.importPhase = "idle";
         state.importError = t("所选文件内容为空，请选择有效的书目文件。", "The selected file is empty. Choose a valid bibliography file.");
         draw();
         return;
@@ -261,6 +266,7 @@
     };
     reader.onerror = () => {
       if (epoch !== state.importEpoch) return;
+      state.importPhase = "idle";
       state.importError = t("读取文件失败，请重试。", "Failed to read file. Please try again.");
       draw();
     };
@@ -268,6 +274,7 @@
   }
 
   function requestImportPreview(content, format, fileName, epoch) {
+    state.importPhase = "preview_pending";
     withBusy(async () => {
       if (epoch !== state.importEpoch) return;
       state.importError = "";
@@ -284,6 +291,7 @@
         const items = result?.items || [];
         const summary = result?.summary || {};
         const importableCount = summary.importable ?? items.filter((i) => i.outcome === "will_import" || i.outcome === "imported").length;
+        state.importPhase = "preview_ready";
         state.importPreview = result;
         const candidateRequestId = "connect-import-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
         state.importCandidate = Object.freeze({
@@ -302,6 +310,7 @@
         }
       } catch (err) {
         if (epoch !== state.importEpoch) return;
+        state.importPhase = "idle";
         state.importPreview = null;
         state.importCandidate = null;
         const code = err?.payload?.reason_code || "";
@@ -325,28 +334,43 @@
   function confirmImport() {
     const candidate = state.importCandidate;
     if (!candidate || !state.importPreview || candidate.preview !== state.importPreview) return;
-    if (candidate.importableCount === 0) return;
+    if (candidate.importableCount === 0 || state.importPhase === "write_in_flight") return;
+    state.importPhase = "write_in_flight";
     withBusy(async () => {
-      const result = await api.importBibliography({
-        content: candidate.content,
-        format: candidate.format,
-        dry_run: false,
-        request_id: candidate.requestId,
-      });
-      state.importEpoch = (state.importEpoch || 0) + 1;
-      state.importOpen = false;
-      state.importPreview = null;
-      state.importCandidate = null;
-      state.importFileName = "";
-      const importedCount = result?.summary?.imported ?? result?.created_count ?? candidate.importableCount;
-      await loadLibrary();
-      state.view = "library";
-      history.replaceState(null, "", "#library");
-      state.notice = t("已成功导入 " + importedCount + " 篇文献到文献库。", "Successfully imported " + importedCount + " papers into library.");
+      try {
+        const result = await api.importBibliography({
+          content: candidate.content,
+          format: candidate.format,
+          dry_run: false,
+          request_id: candidate.requestId,
+        });
+        state.importPhase = "idle";
+        state.importEpoch = (state.importEpoch || 0) + 1;
+        state.importOpen = false;
+        state.importPreview = null;
+        state.importCandidate = null;
+        state.importFileName = "";
+        const importedCount = result?.summary?.imported ?? result?.created_count ?? candidate.importableCount;
+        await loadLibrary();
+        state.view = "library";
+        history.replaceState(null, "", "#library");
+        state.notice = t("已成功导入 " + importedCount + " 篇文献到文献库。", "Successfully imported " + importedCount + " papers into library.");
+      } catch (err) {
+        state.importPhase = "write_uncertain";
+        state.importError = t(
+          "导入请求未收到明确响应（网络超时或连接中断）。服务端可能已完成写入，请先刷新文献库核对；若未导入可直接重试（使用相同请求编号，不会重复创建）。若已重启客户端，请先刷新文献库确认无重复条目后再重新选择文件导入。",
+          "Import request ended with an uncertain outcome (network timeout or connection interruption). The server may have committed the write. Please refresh your library to check; you can retry directly with the same request ID without duplicates. If the client was restarted, refresh your library first to verify before re-importing."
+        );
+        state.importErrorDetail = diagnosticText(err);
+        throw err;
+      }
     });
   }
 
   function cancelImport() {
+    if (state.importPhase === "write_in_flight") return;
+    const wasUncertain = state.importPhase === "write_uncertain";
+    state.importPhase = "idle";
     state.importEpoch = (state.importEpoch || 0) + 1;
     state.importOpen = false;
     state.importPreview = null;
@@ -354,11 +378,20 @@
     state.importFileName = "";
     state.importError = "";
     state.importErrorDetail = "";
-    state.notice = t("已取消导入，文献库未做任何写入。", "Import cancelled. Zero changes made to your library.");
+    if (wasUncertain) {
+      state.notice = t(
+        "已关闭导入面板。由于此前网络响应中断，服务端可能已写入部分或全部条目，请刷新文献库核对以防重复导入。",
+        "Import panel closed. Because the earlier network response timed out, the server may have processed items. Please refresh your library to verify and avoid duplicates."
+      );
+    } else {
+      state.notice = t("已取消导入，文献库未做任何写入。", "Import cancelled. Zero changes made to your library.");
+    }
     draw();
   }
 
   function chooseEmptyLibrary() {
+    if (state.importPhase === "write_in_flight") return;
+    state.importPhase = "idle";
     state.importEpoch = (state.importEpoch || 0) + 1;
     state.importOpen = false;
     state.importPreview = null;
@@ -372,7 +405,19 @@
   function importPanel() {
     if (!state.importOpen) return "";
     let body = "";
-    if (state.importError) {
+    if (state.importPhase === "write_in_flight") {
+      body = '<div class="notice" role="status"><p>' + spinner + esc(t("正在写入文献库，请勿关闭或刷新…", "Writing to your library. Please do not close or refresh…")) + '</p></div>' +
+        '<div class="actions">' + b(t("正在导入…", "Importing…"), "confirm-import", "primary", true) +
+        b(t("取消", "Cancel"), "cancel-import", "", true) + '</div>';
+    } else if (state.importPhase === "write_uncertain") {
+      body = '<div class="notice warn" role="alert"><p>' + esc(state.importError || t("导入请求未收到明确响应。服务端可能已完成写入，请先刷新文献库核对避免重复导入。", "Import request outcome is uncertain. Server may have committed; please refresh your library to verify and avoid duplicates.")) + '</p>' +
+        (state.importErrorDetail ? '<pre class="diagnostic">' + esc(state.importErrorDetail) + '</pre>' : '') +
+        '<div class="actions">' +
+        b(t("重试导入（相同编号）", "Retry import (same ID)"), "confirm-import", "primary") +
+        b(t("刷新文献库核对", "Refresh library to check"), "view-library") +
+        b(t("关闭面板", "Close panel"), "cancel-import") +
+        '</div></div>';
+    } else if (state.importError) {
       body = '<div class="notice error" role="alert"><p>' + esc(state.importError) + '</p>' +
         (state.importErrorDetail ? '<pre class="diagnostic">' + esc(state.importErrorDetail) + '</pre>' : '') +
         '<div class="actions">' + b(t("换一个文件", "Choose another file"), "reset-import", "primary") +
@@ -879,7 +924,8 @@
   document.addEventListener("click", (ev) => {
     const el = ev.target.closest("button");
     const action = el?.dataset?.action || "";
-    if (!el || el.disabled || (state.busy && action !== "cancel-import")) return;
+    const canCancelNow = action === "cancel-import" && state.importPhase !== "write_in_flight";
+    if (!el || el.disabled || (state.busy && !canCancelNow)) return;
     if (el.dataset.view) { navigate(el.dataset.view); return; }
     if (el.hasAttribute("data-tag")) {
       state.tag = el.dataset.tag;
@@ -1077,6 +1123,8 @@
       return;
     }
     if (action === "reset-import") {
+      if (state.importPhase === "write_in_flight") return;
+      state.importPhase = "idle";
       state.importEpoch = (state.importEpoch || 0) + 1;
       state.importPreview = null;
       state.importCandidate = null;
