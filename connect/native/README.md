@@ -30,6 +30,8 @@ Mdtero account authentication uses existing CLI configuration/environment. Separ
 
 The Pi child is supervised, cancellable and limited to one approved metadata-only model request. It exposes no model-callable shell/filesystem tools. Those restrictions are not an OS sandbox and do not replace signing, dependency delivery or native lifecycle acceptance.
 
+Local HTML/PDF full-text parsing is a separate capability from the Pi full edition. The native bridge currently freezes Python 3.11, while the optional private `mdtero-parser` requires Python 3.12 or newer and is not part of the public `connect-full` extra. Native runtime manifests now record the frozen-build Python version, parser module detection and compatibility status; the artifact collector rejects missing or contradictory declarations. A compatible build environment is only a preflight signal, not proof that the parser is inside the frozen executable. Keep local full-text parsing release-gated until a frozen import smoke and authorized HTML/PDF fixtures pass.
+
 ## Native acceptance still required
 
 - macOS/Windows real-machine window, download, OAuth and lifecycle acceptance. Linux WebKit smoke does not certify them.

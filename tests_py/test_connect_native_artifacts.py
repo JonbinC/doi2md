@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
+from mdtero.connect.native_compat import parser_runtime_status, validate_parser_runtime
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "connect/native/collect_artifacts.py"
@@ -39,11 +40,45 @@ def _prepared_runtime(repository, target, edition="full"):
     manifest = {
         "protocol": 1, "product": "mdtero-connect-desktop", "target": target,
         "edition": edition, "commit": "a" * 40, "relay_included": True,
+        "python_version": "3.11.9", "local_fulltext_parser_module_detected": False,
+        "local_fulltext_parser_minimum_python": "3.12",
+        "local_fulltext_parser_status": "unsupported_python",
         "node_version": "22.19.0" if edition == "full" else None,
         "pi_sdk_version": "1.3.0" if edition == "full" else None,
     }
     (runtime / "manifest.json").write_text(json.dumps(manifest))
     return runtime
+
+
+@pytest.mark.parametrize(
+    "version,module_detected,expected",
+    [
+        ((3, 11, 9), True, "unsupported_python"),
+        ((3, 12, 0), False, "parser_not_installed"),
+        ((3, 12, 1), True, "python_supported_module_detected"),
+        ((3,), True, "invalid_python_version"),
+    ],
+)
+def test_parser_runtime_status_reports_python_and_module_separately(version, module_detected, expected):
+    assert parser_runtime_status(version, module_detected) == expected
+
+
+@pytest.mark.parametrize(
+    "version,module_detected,status",
+    [
+        ("3.11.9", True, "python_supported_module_detected"),
+        ("3.12.0", False, "python_supported_module_detected"),
+        ("3.12.0", True, "unsupported_python"),
+    ],
+)
+def test_native_manifest_rejects_false_parser_compatibility_claims(version, module_detected, status):
+    with pytest.raises(ValueError, match="does not match"):
+        validate_parser_runtime({
+            "python_version": version,
+            "local_fulltext_parser_module_detected": module_detected,
+            "local_fulltext_parser_minimum_python": "3.12",
+            "local_fulltext_parser_status": status,
+        })
 
 
 def test_mac_dmg_is_collected_and_records_payload(tmp_path, provenance):
@@ -81,7 +116,10 @@ def test_windows_collects_installer_without_mutating_it(tmp_path, provenance):
     assert not index["notarized"]
 
 
-@pytest.mark.parametrize("mutation", ["target", "edition", "commit", "node", "pi", "missing-worker", "missing-relay"])
+@pytest.mark.parametrize(
+    "mutation",
+    ["target", "edition", "commit", "node", "pi", "missing-worker", "missing-relay", "parser-status", "parser-version", "parser-minimum"],
+)
 def test_full_artifact_rejects_mismatched_or_incomplete_runtime(tmp_path, provenance, mutation):
     target = "x86_64-pc-windows-msvc"
     runtime = _prepared_runtime(tmp_path, target)
@@ -101,6 +139,12 @@ def test_full_artifact_rejects_mismatched_or_incomplete_runtime(tmp_path, proven
         (runtime / "agent/worker.mjs").unlink()
     elif mutation == "missing-relay":
         (runtime / "relay/mdtero-relay.exe").unlink()
+    elif mutation == "parser-status":
+        manifest["local_fulltext_parser_status"] = "python_supported_module_detected"
+    elif mutation == "parser-version":
+        manifest["python_version"] = "3.12.0"
+    elif mutation == "parser-minimum":
+        manifest["local_fulltext_parser_minimum_python"] = "3.11"
     manifest_path.write_text(json.dumps(manifest))
     bundle = tmp_path / "bundle"
     (bundle / "nsis").mkdir(parents=True)
