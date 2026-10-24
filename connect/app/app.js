@@ -160,7 +160,7 @@
   }
 
   function gate(mode) {
-    const brand = '<div class="gate-brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">mdtero<small>' + esc(t("客户端", "client")) + "</small></span></div>";
+    const brand = '<div class="gate-brand"><img class="brand-mark" src="brand-mark.svg" alt="" aria-hidden="true"><span class="brand-name">mdtero<small>' + esc(t("客户端", "client")) + "</small></span></div>";
     if (mode === "boot") return '<div class="gate-card center">' + brand + spinner + '<h1>' + esc(t("正在启动", "Starting")) + '</h1><p class="lead">' + esc(t("正在连接，通常只需几秒。", "Connecting. This usually takes a few seconds.")) + "</p></div>";
     if (mode === "error") {
       const sentence = state.error || t("连不上 mdtero。检查网络后重试。", "mdtero could not be reached. Check the network and try again.");

@@ -1,8 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 
-const CONTROL = 'http://127.0.0.1:18742';
-const ORIGIN = 'http://127.0.0.1:18741';
+const CONTROL_PORT = Number(process.env.MDTERO_CONNECT_TEST_CONTROL_PORT || 18742);
+const ORIGIN_PORT = Number(process.env.MDTERO_CONNECT_TEST_ORIGIN_PORT || 18741);
+const CONTROL = `http://127.0.0.1:${CONTROL_PORT}`;
+const ORIGIN = `http://127.0.0.1:${ORIGIN_PORT}`;
 const action = (page, name) => page.locator(`[data-action="${name}"]`).first();
 const tagCalls = (state) => state.calls.filter((call) => call.path === '/api/v1/library/tags/batch');
 const paper = (state, id) => state.papers.find((item) => item.document_id === id);
@@ -81,6 +83,37 @@ test.beforeEach(async ({ page, request }) => {
 
 test.afterEach(async ({ page }) => {
   expect(page.fixtureBrowserErrors, 'No uncaught JavaScript or CSP errors').toEqual([]);
+});
+
+test('official brand mark loads in the login gate and sidebar without external requests', async ({ page, request }) => {
+  const externalRequests = [];
+  await page.route('**/*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin !== ORIGIN) {
+      externalRequests.push(url.href);
+      await route.abort();
+      return;
+    }
+    await route.continue();
+  });
+
+  await reset(request, { authenticated: false });
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-mode', 'login');
+  const gateMark = page.locator('.gate-brand img.brand-mark');
+  await expect(gateMark).toBeVisible();
+  await expect(gateMark).toHaveAttribute('src', 'brand-mark.svg');
+  await expect.poll(() => gateMark.evaluate((image) => image.naturalWidth)).toBe(256);
+  await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute('content', /img-src 'self' data:/);
+
+  await reset(request, { authenticated: true });
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-mode', 'app');
+  const sidebarMark = page.locator('.sidebar img.brand-mark');
+  await expect(sidebarMark).toBeVisible();
+  await expect(sidebarMark).toHaveAttribute('src', 'brand-mark.svg');
+  await expect.poll(() => sidebarMark.evaluate((image) => image.naturalWidth)).toBe(256);
+  expect(externalRequests).toEqual([]);
 });
 
 test('missing local credentials show terminal login guidance without collecting a key', async ({ page, request }) => {
@@ -323,7 +356,7 @@ test('bridge enforces Host, Origin and CSRF independently of browser UI', async 
   });
   expect(badOrigin.status()).toBe(403);
   expect((await badOrigin.json()).reason_code).toBe('origin_rejected');
-  const badHost = await request.get('/connect/v1/session', { headers: { Host: 'untrusted.invalid:18741' } });
+  const badHost = await request.get('/connect/v1/session', { headers: { Host: `untrusted.invalid:${ORIGIN_PORT}` } });
   expect(badHost.status()).toBe(403);
   expect((await badHost.json()).reason_code).toBe('host_rejected');
   const noOrigin = await request.post('/connect/v1/library/tags/batch', {
