@@ -539,6 +539,197 @@ ER  -
   expect(writeCalls).toHaveLength(1);
 });
 
+test('competing file drop while preview is pending cannot corrupt candidate or cause unpreviewed write', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  let releasePreviewA;
+  const previewAPromise = new Promise((resolve) => {
+    releasePreviewA = resolve;
+  });
+
+  await page.route('**/connect/v1/library/import', async (route) => {
+    const postData = route.request().postDataJSON();
+    if (postData?.dry_run && postData?.content?.includes('File A Verified Content')) {
+      await previewAPromise;
+    }
+    await route.continue();
+  });
+
+  // 1. Initiate selection of File A
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'fileA.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from('@article{a,\n  title={File A Verified Content}\n}'),
+  });
+
+  // Verify busy state while preview A is awaiting
+  await expect(page.locator('.hint.busy')).toBeVisible();
+
+  // 2. Competing drop of File B while busy
+  await page.evaluate(() => {
+    const dropZone = document.getElementById('import-drop-zone');
+    const dt = new DataTransfer();
+    const fileB = new File(['@article{b,\n  title={File B Unpreviewed Content}\n}'], 'fileB.bib', { type: 'text/plain' });
+    dt.items.add(fileB);
+    dropZone.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+
+  // 3. Release Preview A
+  releasePreviewA();
+
+  // 4. Verify preview shows ONLY File A
+  const previewTable = page.locator('#import-panel .preview-table');
+  await expect(previewTable).toBeVisible();
+  await expect(previewTable).toContainText('File A Verified Content');
+  await expect(page.locator('#import-panel')).not.toContainText('File B Unpreviewed Content');
+
+  // 5. Confirm import
+  await action(page, 'confirm-import').click();
+  await expect(page.locator('#screen')).toContainText('File A Verified Content');
+
+  // 6. Verify backend received File A content, never File B
+  const finalSnapshot = await snapshot(request);
+  const writeCalls = finalSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(1);
+  expect(writeCalls[0].body.content).toContain('File A Verified Content');
+  expect(writeCalls[0].body.content).not.toContain('File B Unpreviewed Content');
+});
+
+test('cancelling or resetting during in-flight preview invalidates epoch and causes zero writes', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  let releasePreviewC;
+  const previewCPromise = new Promise((resolve) => {
+    releasePreviewC = resolve;
+  });
+
+  await page.route('**/connect/v1/library/import', async (route) => {
+    const postData = route.request().postDataJSON();
+    if (postData?.dry_run && postData?.content?.includes('File C Late Response')) {
+      await previewCPromise;
+    }
+    await route.continue();
+  });
+
+  // Initiate selection of File C
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'fileC.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from('@article{c, title={File C Late Response}}'),
+  });
+
+  await expect(page.locator('.hint.busy')).toBeVisible();
+
+  // Cancel while preview is in flight
+  await action(page, 'cancel-import').click();
+  await expect(page.locator('#import-panel')).toHaveCount(0);
+
+  // Now let preview C finish
+  releasePreviewC();
+
+  // Wait a moment and verify preview panel remains closed and zero writes occur
+  await page.waitForTimeout(300);
+  await expect(page.locator('#import-panel')).toHaveCount(0);
+
+  const finalSnapshot = await snapshot(request);
+  const writeCalls = finalSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(0);
+});
+
+test('zero importable items displays informative warning and disables confirm write', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  // Title matching existing synthetic fixture paper or containing 'existing'
+  const duplicateContent = `@article{dup1,
+  title={existing Duplicate Paper},
+  author={Duplicate Author},
+  year={2024}
+}`;
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'duplicate.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from(duplicateContent),
+  });
+
+  // Verify preview renders with 0 importable items
+  await expect(page.locator('#import-panel .preview-table')).toBeVisible();
+  await expect(page.locator('#import-panel')).toContainText('可导入: 0');
+  await expect(page.locator('#import-panel')).toContainText('没有可导入的新文献');
+
+  // Verify confirm button is not present
+  await expect(page.locator('[data-action="confirm-import"]')).toHaveCount(0);
+
+  // Choose another file works
+  await action(page, 'reset-import').click();
+  await expect(page.locator('#import-drop-zone')).toBeVisible();
+
+  // Verify zero writes
+  const currentSnapshot = await snapshot(request);
+  const writeCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(0);
+});
+
+test('uncertain-write retry reuses stable candidate request_id and avoids server duplicates', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  const bibtex = `@article{idemp1,
+  title={Idempotent Retry Paper},
+  author={Idempotent Author},
+  year={2026}
+}`;
+
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'idemp.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from(bibtex),
+  });
+
+  await expect(page.locator('#import-panel .preview-table')).toBeVisible();
+  await expect(page.locator('#import-panel .preview-table')).toContainText('Idempotent Retry Paper');
+
+  let writeAttempts = 0;
+  await page.route('**/connect/v1/library/import', async (route) => {
+    const postData = route.request().postDataJSON();
+    if (postData && postData.dry_run === false) {
+      writeAttempts++;
+      if (writeAttempts === 1) {
+        // Send request to server so it commits, but simulate client transport timeout/disconnection
+        const response = await route.fetch();
+        expect(response.status()).toBe(200);
+        await route.abort('timedout');
+        return;
+      }
+    }
+    await route.continue();
+  });
+
+  // First confirmation attempt fails on client due to simulated timeout
+  await action(page, 'confirm-import').click();
+  await expect(page.locator('.notice.error')).toBeVisible();
+
+  // The import panel and candidate remain intact; retry confirmation
+  await action(page, 'confirm-import').click();
+
+  // Second confirmation succeeds and library loads
+  await expect(page.locator('#screen')).toContainText('Idempotent Retry Paper');
+
+  // Verify server calls: both write requests carried the exact same request_id
+  const finalSnapshot = await snapshot(request);
+  const writeCalls = finalSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(2);
+  expect(writeCalls[0].body.request_id).toBeDefined();
+  expect(writeCalls[0].body.request_id).toMatch(/^connect-import-/);
+  expect(writeCalls[0].body.request_id).toBe(writeCalls[1].body.request_id);
+
+  // Verify that the paper was added exactly once (no duplicates)
+  const matching = finalSnapshot.papers.filter((p) => p.title.includes('Idempotent Retry Paper'));
+  expect(matching).toHaveLength(1);
+});
+
 for (const width of [375, 1440]) {
   test(`onboarding and operational views fit a ${width}px viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

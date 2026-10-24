@@ -14,16 +14,20 @@
     agentPrompt: "", agentProvider: "anthropic", agentModel: "", agentMaxTokens: 800,
     agentPreview: null, agentRun: null, agentPollError: "",
     discoveryQuery: "", discoveryResults: null, discoveryOpen: false,
-    importOpen: false, importFileName: "", importFileSize: 0, importContent: "",
-    importFormat: "auto", importPreview: null, importError: "", importErrorDetail: "",
+    importOpen: false, importFileName: "", importFileSize: 0,
+    importEpoch: 0, importCandidate: null,
+    importPreview: null, importError: "", importErrorDetail: "",
   };
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
   const configured = () => !!state.session?.authenticated;
   const selectedIds = () => state.selected.filter((id) => state.papers.some((p) => p.id === id));
-  const b = (name, action, kind = "tool", disabled = false) =>
-    '<button type="button" class="' + kind + '" data-action="' + action + '"' +
-    (state.busy || disabled ? " disabled" : "") + ">" + esc(name) + "</button>";
+  const b = (name, action, kind = "tool", disabled = false) => {
+    const isCancel = action === "cancel-import";
+    const isDisabled = (!isCancel && state.busy) || disabled;
+    return '<button type="button" class="' + kind + '" data-action="' + action + '"' +
+      (isDisabled ? " disabled" : "") + ">" + esc(name) + "</button>";
+  };
   const status = (label, good = false) =>
     '<div class="status ' + (good ? "ok" : "") + '"><span class="dot" aria-hidden="true"></span>' + esc(label) + "</div>";
   const h = (title, desc) => '<h1>' + esc(title) + '</h1><p class="lead">' + esc(desc) + "</p>" +
@@ -211,13 +215,14 @@
   }
 
   function handleImportFile(file) {
-    if (!file) return;
+    if (!file || state.busy) return;
+    const epoch = ++state.importEpoch;
+    state.importCandidate = null;
+    state.importPreview = null;
     state.importFileName = file.name || "export.bib";
     state.importFileSize = file.size || 0;
     state.importError = "";
     state.importErrorDetail = "";
-    state.importPreview = null;
-    state.importContent = "";
 
     if (file.size > 1024 * 1024) {
       state.importError = t(
@@ -242,41 +247,63 @@
     if (lowerName.endsWith(".bib")) fmt = "bibtex";
     else if (lowerName.endsWith(".ris")) fmt = "ris";
     else if (lowerName.endsWith(".json")) fmt = "auto";
-    state.importFormat = fmt;
 
     const reader = new FileReader();
     reader.onload = () => {
+      if (epoch !== state.importEpoch) return;
       const text = String(reader.result || "");
       if (!text.trim()) {
         state.importError = t("所选文件内容为空，请选择有效的书目文件。", "The selected file is empty. Choose a valid bibliography file.");
         draw();
         return;
       }
-      state.importContent = text;
-      requestImportPreview(text, fmt);
+      requestImportPreview(text, fmt, file.name || "export.bib", epoch);
     };
     reader.onerror = () => {
+      if (epoch !== state.importEpoch) return;
       state.importError = t("读取文件失败，请重试。", "Failed to read file. Please try again.");
       draw();
     };
     reader.readAsText(file);
   }
 
-  function requestImportPreview(content, format) {
+  function requestImportPreview(content, format, fileName, epoch) {
     withBusy(async () => {
+      if (epoch !== state.importEpoch) return;
       state.importError = "";
       state.importErrorDetail = "";
       state.importPreview = null;
+      state.importCandidate = null;
       try {
         const result = await api.importBibliography({
           content,
           format,
           dry_run: true,
         });
+        if (epoch !== state.importEpoch) return;
+        const items = result?.items || [];
+        const summary = result?.summary || {};
+        const importableCount = summary.importable ?? items.filter((i) => i.outcome === "will_import" || i.outcome === "imported").length;
         state.importPreview = result;
-        state.notice = t("书目预览已生成，尚未写入文献库。请核对后确认导入。", "Preview is ready. Nothing has been added to the library. Review and confirm.");
+        const candidateRequestId = "connect-import-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+        state.importCandidate = Object.freeze({
+          content,
+          format: result.format || format,
+          fileName,
+          epoch,
+          preview: result,
+          importableCount,
+          requestId: candidateRequestId,
+        });
+        if (importableCount === 0) {
+          state.notice = t("文件解析完成，但未包含可导入的新文献（均为已存在、重复或跳过条目）。", "File parsed, but contains 0 importable items (all are existing, duplicate, or skipped).");
+        } else {
+          state.notice = t("书目预览已生成，尚未写入文献库。请核对后确认导入。", "Preview is ready. Nothing has been added to the library. Review and confirm.");
+        }
       } catch (err) {
+        if (epoch !== state.importEpoch) return;
         state.importPreview = null;
+        state.importCandidate = null;
         const code = err?.payload?.reason_code || "";
         const hint = err?.payload?.action_hint || err?.message || "";
         if (code === "too_many_items") {
@@ -296,20 +323,22 @@
   }
 
   function confirmImport() {
-    if (!state.importContent || !state.importPreview) return;
+    const candidate = state.importCandidate;
+    if (!candidate || !state.importPreview || candidate.preview !== state.importPreview) return;
+    if (candidate.importableCount === 0) return;
     withBusy(async () => {
-      const reqId = "connect-import-" + Date.now();
       const result = await api.importBibliography({
-        content: state.importContent,
-        format: state.importFormat,
+        content: candidate.content,
+        format: candidate.format,
         dry_run: false,
-        request_id: reqId,
+        request_id: candidate.requestId,
       });
+      state.importEpoch = (state.importEpoch || 0) + 1;
       state.importOpen = false;
       state.importPreview = null;
-      state.importContent = "";
+      state.importCandidate = null;
       state.importFileName = "";
-      const importedCount = result?.summary?.imported ?? result?.created_count ?? state.importPreview?.items?.length ?? 0;
+      const importedCount = result?.summary?.imported ?? result?.created_count ?? candidate.importableCount;
       await loadLibrary();
       state.view = "library";
       history.replaceState(null, "", "#library");
@@ -318,9 +347,10 @@
   }
 
   function cancelImport() {
+    state.importEpoch = (state.importEpoch || 0) + 1;
     state.importOpen = false;
     state.importPreview = null;
-    state.importContent = "";
+    state.importCandidate = null;
     state.importFileName = "";
     state.importError = "";
     state.importErrorDetail = "";
@@ -329,8 +359,10 @@
   }
 
   function chooseEmptyLibrary() {
+    state.importEpoch = (state.importEpoch || 0) + 1;
     state.importOpen = false;
     state.importPreview = null;
+    state.importCandidate = null;
     state.view = "library";
     history.replaceState(null, "", "#library");
     state.notice = t("已选择空文献库。随时可以点击“导入文件”添加文献。", "Started with an empty library. You can click 'Import file' anytime.");
@@ -349,7 +381,7 @@
       const items = state.importPreview.items || [];
       const summary = state.importPreview.summary || {};
       const totalCount = summary.total ?? items.length;
-      const importableCount = summary.importable ?? items.length;
+      const importableCount = summary.importable ?? items.filter((i) => i.outcome === "will_import" || i.outcome === "imported").length;
       const previewItems = items.slice(0, 30);
       const tableRows = previewItems.map((item, idx) => {
         const meta = item.metadata || {};
@@ -364,10 +396,13 @@
           '<td><span class="tag-badge ' + badgeClass + '">' + esc(statusLabel) + '</span></td></tr>';
       }).join("");
 
+      const formatLabel = state.importPreview.format || state.importCandidate?.format || "auto";
+      const fileLabel = state.importCandidate?.fileName || state.importFileName || "";
+
       body = '<div class="preview-header"><h3>' + esc(t("导入预览（尚未写入文献库）", "Import Preview (not written to library yet)")) + '</h3>' +
-        '<p class="hint">' + esc(t("文件：", "File: ")) + esc(state.importFileName) + ' · ' +
+        '<p class="hint">' + esc(t("文件：", "File: ")) + esc(fileLabel) + ' · ' +
         esc(t("共 ", "Total: ")) + totalCount + esc(t(" 篇", " items")) +
-        ' · ' + esc(t("格式：", "Format: ")) + esc(state.importPreview.format || state.importFormat) + '</p></div>' +
+        ' · ' + esc(t("格式：", "Format: ")) + esc(formatLabel) + '</p></div>' +
         '<div class="chipset">' +
         '<span class="tag-badge ok">' + esc(t("可导入: ", "Importable: ")) + importableCount + '</span>' +
         (summary.existing ? '<span class="tag-badge warn">' + esc(t("已存在: ", "Existing: ")) + summary.existing + '</span>' : '') +
@@ -379,18 +414,20 @@
         esc(t("年份", "Year")) + '</th><th>' + esc(t("出版物", "Venue")) + '</th><th>' + esc(t("状态", "Status")) + '</th>' +
         '</tr></thead><tbody>' + tableRows + '</tbody></table></div>' +
         (totalCount > 30 ? '<p class="hint">' + esc(t("以上仅显示前 30 篇预览。确认后将导入全部条目。", "Showing preview for first 30 items. Confirming will import all items.")) + '</p>' : '') +
-        '<div class="status ok"><span class="dot" aria-hidden="true"></span>' +
-        esc(t("只导入题录信息，不会自动获取全文。确认后才会写入文献库。", "Metadata only. Full text is not automatically fetched. Nothing is written until confirmed.")) +
-        '</div>' +
+        (importableCount === 0
+          ? '<div class="notice warn" role="alert"><p>' + esc(t("文件中没有可导入的新文献（所有条目均为已存在、重复或跳过）。", "No importable items found (all items already exist, are duplicates, or were skipped).")) + '</p></div>'
+          : '<div class="status ok"><span class="dot" aria-hidden="true"></span>' +
+            esc(t("只导入题录信息，不会自动获取全文。确认后才会写入文献库。", "Metadata only. Full text is not automatically fetched. Nothing is written until confirmed.")) +
+            '</div>') +
         '<div class="actions">' +
-        b(t("确认导入到文献库 (" + importableCount + " 篇)", "Confirm import (" + importableCount + " items)"), "confirm-import", "primary") +
+        (importableCount > 0 ? b(t("确认导入到文献库 (" + importableCount + " 篇)", "Confirm import (" + importableCount + " items)"), "confirm-import", "primary", state.busy) : "") +
         b(t("取消", "Cancel"), "cancel-import") +
-        b(t("换一个文件", "Choose another file"), "reset-import") +
+        b(t("换一个文件", "Choose another file"), "reset-import", importableCount === 0 ? "primary" : "", state.busy) +
         '</div>';
     } else {
-      body = '<div class="drop-zone" id="import-drop-zone">' +
-        '<input type="file" id="import-file-input" class="hidden-file-input" accept=".bib,.ris,.json,.txt">' +
-        b(t("选择文件 (.bib, .ris, .json)", "Select file (.bib, .ris, .json)"), "pick-file", "primary") +
+      body = '<div class="drop-zone' + (state.busy ? ' disabled' : '') + '" id="import-drop-zone">' +
+        '<input type="file" id="import-file-input" class="hidden-file-input" accept=".bib,.ris,.json,.txt"' + (state.busy ? ' disabled' : '') + '>' +
+        b(t("选择文件 (.bib, .ris, .json)", "Select file (.bib, .ris, .json)"), "pick-file", "primary", state.busy) +
         '<span class="hint">' + esc(t("或将导出的文献文件拖放到此处（上限 1 MiB 或 500 篇）", "Or drag and drop an export file here (max 1 MiB or 500 items)")) + '</span>' +
         '</div>' +
         '<p class="hint">' + esc(t("支持格式：BibTeX (.bib)、RIS (.ris)、Zotero JSON、CSL JSON。单个文件不超过 1 MiB 或 500 篇。只导入题录，不会自动获取全文。", "Supported formats: BibTeX (.bib), RIS (.ris), Zotero JSON, CSL JSON. Max 1 MiB or 500 items. Metadata only; full text is not automatically fetched.")) + '</p>' +
@@ -833,7 +870,8 @@
 
   document.addEventListener("click", (ev) => {
     const el = ev.target.closest("button");
-    if (!el || el.disabled || state.busy) return;
+    const action = el?.dataset?.action || "";
+    if (!el || el.disabled || (state.busy && action !== "cancel-import")) return;
     if (el.dataset.view) { navigate(el.dataset.view); return; }
     if (el.hasAttribute("data-tag")) {
       state.tag = el.dataset.tag;
@@ -841,7 +879,6 @@
       draw();
       return;
     }
-    const action = el.dataset.action || "";
     if (action.startsWith("view-")) { navigate(action.slice(5)); return; }
     if (/^step-[123]$/.test(action)) { state.step = Number(action.slice(5)); draw(); return; }
     if (action === "refresh") { refreshAll(); return; }
@@ -1032,8 +1069,9 @@
       return;
     }
     if (action === "reset-import") {
+      state.importEpoch = (state.importEpoch || 0) + 1;
       state.importPreview = null;
-      state.importContent = "";
+      state.importCandidate = null;
       state.importError = "";
       state.importErrorDetail = "";
       draw();
@@ -1047,11 +1085,15 @@
 
   document.addEventListener("change", (ev) => {
     const el = ev.target;
-    if (state.busy) return;
     if (el.id === "import-file-input") {
-      handleImportFile(el.files?.[0]);
+      const file = el.files?.[0];
+      el.value = "";
+      if (!state.busy) {
+        handleImportFile(file);
+      }
       return;
     }
+    if (state.busy) return;
     if (el.id === "relay-consent") { state.relayConsent = el.checked; draw(); return; }
     if (el.id === "zotero-collection") { state.collectionKey = el.value; state.zoteroDetail = ""; draw(); return; }
     if (el.id === "provider-id") { state.providerId = el.value; draw(); return; }
@@ -1069,7 +1111,9 @@
     const dropZone = ev.target.closest("#import-drop-zone");
     if (dropZone) {
       ev.preventDefault();
-      dropZone.classList.add("dragover");
+      if (!state.busy) {
+        dropZone.classList.add("dragover");
+      }
     }
   });
   document.addEventListener("dragleave", (ev) => {
@@ -1083,6 +1127,7 @@
     if (dropZone) {
       ev.preventDefault();
       dropZone.classList.remove("dragover");
+      if (state.busy) return;
       handleImportFile(ev.dataTransfer?.files?.[0]);
     }
   });

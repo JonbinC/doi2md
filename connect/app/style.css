@@ -198,6 +198,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .header-actions > span { flex: 1; }
 .drop-zone { border: 2px dashed var(--border); border-radius: var(--r); padding: var(--s5); text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--s3); background: var(--surface-2); }
 .drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.drop-zone.disabled { opacity: 0.6; pointer-events: none; }
 .preview-header { margin-bottom: var(--s3); }
 .preview-table-wrap { overflow-x: auto; max-height: 380px; margin: var(--s3) 0; border: 1px solid var(--border); border-radius: var(--r-sm); }
 .preview-table { width: 100%; border-collapse: collapse; font-size: 12.5px; text-align: left; }
