@@ -11,6 +11,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from mdtero.connect.native_compat import validate_parser_runtime
+
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 TARGET_FORMATS = {
@@ -86,6 +88,7 @@ def validate_runtime(repository: Path, target: str, edition: str, commit: str) -
     }
     if not isinstance(manifest, dict) or any(manifest.get(key) != value for key, value in required.items()):
         raise ValueError("prepared runtime manifest does not match the artifact target, edition or commit")
+    validate_parser_runtime(manifest)
     exe = ".exe" if "windows" in target else ""
     required_files = [runtime / "relay" / f"mdtero-relay{exe}"]
     if edition == "full":
