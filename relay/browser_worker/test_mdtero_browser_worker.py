@@ -6,6 +6,9 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
+
 
 def _load_worker_module():
     # Candidate extraction is deliberately dependency-free. Stub Playwright so
@@ -64,7 +67,9 @@ class ArticlePdfCandidateTests(unittest.TestCase):
 
     def test_fetch_boundary_stays_publisher_allowlisted(self):
         self.assertTrue(self.worker.allowed_url("https://pubs.acs.org/doi/pdf/10.1021/example"))
+        self.assertFalse(self.worker.allowed_url("http://pubs.acs.org/doi/pdf/10.1021/example"))
         self.assertFalse(self.worker.allowed_url("https://example.invalid/paper.pdf"))
+        self.assertFalse(self.worker.allowed_url("https://127.0.0.1/private.pdf"))
 
     def test_derives_rsc_native_pdf_from_landing_page(self):
         self.assertEqual(
@@ -84,6 +89,14 @@ class ArticlePdfCandidateTests(unittest.TestCase):
                 "S036054422600294X/pdfft?isDTMRedir=true&download=true"
             ],
         )
+
+    def test_ieee_pdf_candidate_uses_shared_client_policy(self):
+        article = "https://ieeexplore.ieee.org/document/10005208"
+        candidate = "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=10005208"
+
+        self.assertEqual(self.worker._ieee_arnumber(article), "10005208")
+        self.assertEqual(self.worker._publisher_pdf_candidates(article), [candidate])
+        self.assertEqual(self.worker._publisher_pdf_candidates("https://evilieeexplore.ieee.org/document/10005208"), [])
 
     def test_classifies_challenge_frame_without_inspecting_its_document(self):
         self.assertEqual(

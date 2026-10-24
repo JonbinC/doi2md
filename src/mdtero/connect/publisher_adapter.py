@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import quote, urljoin, urlparse
 
+from ..publisher_policy import ieee_arnumber_from_url, ieee_stamp_pdf_url
+from ..relay_domains import relay_url_rejection_reason
+
 # Publishers reachable over plain HTTP are served by the backend, never here.
 HTTP_DIRECT_PREFIXES = {
     "10.3390": "mdpi", "10.3389": "frontiers", "10.1186": "springer_oa",
@@ -39,6 +42,7 @@ class Publisher:
     hosts: tuple[str, ...]
     landing_template: str
     pdf_templates: tuple[str, ...] = ()
+    pdf_hosts: tuple[str, ...] = ()  # optional publisher-owned PDF/CDN hosts
     needs_landing_page: bool = False  # PDF URL needs ids from the article page
     body_selectors: tuple[str, ...] = ()  # (tag.class | tag#id | tag) main body
     notes: str = ""
@@ -53,6 +57,7 @@ REGISTRY: dict[str, Publisher] = {p.key: p for p in [
               "https://onlinelibrary.wiley.com/doi/full/{doi}",
               ("https://onlinelibrary.wiley.com/doi/pdfdirect/{doi}",
                "https://onlinelibrary.wiley.com/doi/pdf/{doi}"),
+              pdf_hosts=("onlinelibrary.wiley.com", "api.wiley.com"),
               body_selectors=("section.article-section__full", "div.article__body")),
     Publisher("tandf", "Taylor & Francis", ("10.1080",), ("www.tandfonline.com",),
               "https://www.tandfonline.com/doi/full/{doi}",
@@ -61,11 +66,12 @@ REGISTRY: dict[str, Publisher] = {p.key: p for p in [
     Publisher("aip", "AIP", ("10.1063",), ("pubs.aip.org",),
               "https://pubs.aip.org/doi/{doi}",
               ("https://pubs.aip.org/doi/pdf/{doi}",),
+              pdf_hosts=("pubs.aip.org",),
               body_selectors=("div.article-body", "div#ContentTab"),
               notes="pdf may redirect to /article-pdf/... ; citation_pdf_url preferred"),
     Publisher("ieee", "IEEE", ("10.1109",), ("ieeexplore.ieee.org",),
               "https://doi.org/{doi}",
-              ("https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber={arnumber}",),
+              pdf_hosts=("ieeexplore.ieee.org", "ieee.org"),
               needs_landing_page=True,
               body_selectors=("div#article", "div.document-text"),
               notes="arnumber taken from the DOI redirect /document/{n}"),
@@ -78,12 +84,14 @@ REGISTRY: dict[str, Publisher] = {p.key: p for p in [
     Publisher("elsevier", "Elsevier", ("10.1016",), ("www.sciencedirect.com",),
               "https://doi.org/{doi}",
               ("https://www.sciencedirect.com/science/article/pii/{pii}/pdfft?isDTMRedir=true&download=true",),
+              pdf_hosts=("www.sciencedirect.com", "api.elsevier.com"),
               needs_landing_page=True,
               body_selectors=("div#body", "div.Body"),
               notes="PII from linkinghub redirect"),
     Publisher("springer", "Springer Nature", ("10.1007",), ("link.springer.com",),
               "https://link.springer.com/article/{doi}",
               ("https://link.springer.com/content/pdf/{doi}.pdf",),
+              pdf_hosts=("link.springer.com",),
               body_selectors=("div.c-article-body", "main"),
               notes="tables may live on /article/{doi}/tables/N companion pages"),
     Publisher("oup", "Oxford University Press", ("10.1093",), ("academic.oup.com",),
@@ -124,12 +132,9 @@ def landing_url(doi: str) -> str:
 def ids_from_url(url: str) -> dict[str, str]:
     """Extract publisher-internal ids from a resolved landing URL."""
     out: dict[str, str] = {}
-    m = re.search(r"ieeexplore\.ieee\.org/(?:abstract/)?document/(\d+)", url)
-    if m:
-        out["arnumber"] = m.group(1)
-    m = re.search(r"arnumber=(\d+)", url)
-    if m:
-        out.setdefault("arnumber", m.group(1))
+    arnumber = ieee_arnumber_from_url(url)
+    if arnumber:
+        out["arnumber"] = arnumber
     m = re.search(r"/content/article(?:landing|html|pdf)/(\d{4})/([a-z]+)/([a-z0-9]+)", url, re.I)
     if m:
         out.update(year=m.group(1), journal=m.group(2).lower(), article_id=m.group(3).lower())
@@ -185,12 +190,17 @@ def pdf_candidates(doi: str, resolved_url: str = "", html: str = "",
     id_sets = [ids]
     if pub.key == "rsc" and "article_id" not in ids:
         id_sets += [{**ids, **extra} for extra in rsc_ids_from_doi(doi, html)]
-    for tpl in pub.pdf_templates:
-        for idset in id_sets:
-            try:
-                cands.append(tpl.format(**idset))
-            except KeyError:
-                continue  # ids not yet known (needs landing page)
+    if pub.key == "ieee":
+        candidate = ieee_stamp_pdf_url(resolved_url)
+        if candidate:
+            cands.append(candidate)
+    else:
+        for tpl in pub.pdf_templates:
+            for idset in id_sets:
+                try:
+                    cands.append(tpl.format(**idset))
+                except KeyError:
+                    continue  # ids not yet known (needs landing page)
     seen: set[str] = set()
     return [c for c in cands if c.startswith("https://") and not (c in seen or seen.add(c))]
 
@@ -474,24 +484,130 @@ def _response_status(resp) -> int:
         return 0
 
 
+def publisher_pdf_url_rejection_reason(url: str, publisher: Optional[Publisher] = None) -> Optional[str]:
+    """Reject unsafe publisher PDF targets before sending browser cookies.
+
+    PDF links can come from publisher HTML or Zotero translator metadata, so
+    HTTPS alone is not enough. Reuse Relay's generated research-domain and
+    public-IP policy, then apply the stricter HTTPS/default-port rules needed
+    for browser-context requests.
+    """
+    try:
+        parsed = urlparse(str(url or "").strip())
+        if parsed.scheme.lower() != "https":
+            return "publisher_pdf_https_required"
+        if not parsed.hostname:
+            return "publisher_pdf_host_missing"
+        if parsed.username is not None or parsed.password is not None:
+            return "publisher_pdf_userinfo_blocked"
+        if parsed.port not in (None, 443):
+            return "publisher_pdf_port_blocked"
+    except ValueError:
+        return "publisher_pdf_url_invalid"
+    reason = relay_url_rejection_reason(url)
+    if publisher is not None:
+        host = parsed.hostname.lower().rstrip(".")
+        allowed_hosts = publisher.pdf_hosts or publisher.hosts
+        publisher_owned = any(host == allowed or host.endswith(f".{allowed}") for allowed in allowed_hosts)
+        if not publisher_owned:
+            return "publisher_pdf_publisher_host_blocked"
+        # A few first-party publishers have not yet entered the generated
+        # Relay suffix contract (currently AIP); retain their explicit local
+        # publisher host only when Relay's check did not find a private target.
+        if reason == "relay_url_domain_not_allowed":
+            return None
+    if reason:
+        return reason
+    return None
+
+
+_PDF_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_PDF_CANDIDATES = 12
+MAX_PDF_REDIRECTS = 10
+
+
+def _response_header(resp, name: str) -> str:
+    try:
+        headers = resp.headers or {}
+        return str(headers.get(name.lower()) or headers.get(name.title()) or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _request_with_safe_redirects(page, url: str, timeout_ms: int, publisher: Publisher):
+    """GET a PDF candidate with every redirect checked before its request."""
+    current = url
+    for redirect_count in range(MAX_PDF_REDIRECTS + 1):
+        reason = publisher_pdf_url_rejection_reason(current, publisher)
+        if reason:
+            return None, current, reason
+        try:
+            response = page.context.request.get(current, timeout=timeout_ms, max_redirects=0)
+        except Exception as exc:  # noqa: BLE001
+            return None, current, f"request_{type(exc).__name__}"
+        response_url = str(getattr(response, "url", "") or current)
+        response_reason = publisher_pdf_url_rejection_reason(response_url, publisher)
+        if response_reason:
+            return None, response_url, response_reason
+        status = _response_status(response)
+        location = _response_header(response, "location")
+        if status not in _PDF_REDIRECT_STATUSES or not location:
+            return response, response_url, None
+        if redirect_count >= MAX_PDF_REDIRECTS:
+            return None, current, "publisher_pdf_redirect_limit"
+        current = urljoin(response_url, location)
+    return None, current, "publisher_pdf_redirect_limit"
+
+
+class UnsafePublisherRedirect(RuntimeError):
+    """Raised when a visible PDF handoff attempts an unapproved navigation."""
+
+
+_CHALLENGE_ASSET_HOSTS = {
+    "challenges.cloudflare.com", "www.google.com", "www.recaptcha.net", "recaptcha.net",
+    "hcaptcha.com", "www.hcaptcha.com", "js.hcaptcha.com", "newassets.hcaptcha.com",
+}
+
+
+def _challenge_asset_url_allowed(url: str) -> bool:
+    try:
+        parsed = urlparse(str(url or "").strip())
+        if parsed.scheme.lower() != "https" or parsed.username is not None or parsed.password is not None:
+            return False
+        if not parsed.hostname or parsed.port not in (None, 443):
+            return False
+        host = parsed.hostname.lower().rstrip(".")
+    except ValueError:
+        return False
+    if host not in _CHALLENGE_ASSET_HOSTS:
+        return False
+    # The Relay checker reports private addresses before its general suffix
+    # policy. Challenge hosts are intentionally outside the publisher allowlist.
+    return relay_url_rejection_reason(url) != "relay_url_private_host_blocked"
+
+
 def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
                   wait_for_user: Optional[Callable[[object, str], bool]] = None,
                   goto_timeout_ms: int = 45_000, handoff_timeout_s: float = 300.0,
                   use_translators: bool = True, translator_runner: Optional[Callable] = None,
                   notify: Optional[Callable[[str, str], None]] = None,
-                  prefer_html: bool = True) -> FetchResult:
+                  prefer_html: bool = True, rate_limit: bool = True,
+                  preloaded_page: Optional[tuple[str, str] | tuple[str, str, int]] = None) -> FetchResult:
     """Fetch one article in an existing (headed, user-owned) Playwright page.
 
     Order: landing page -> (challenge/login hand-off) -> HTML body ->
     Zotero translator PDF -> citation_pdf_url -> built URLs.
     ``wait_for_user(page, kind)`` overrides the default hand-off; pass
-    ``handoff_timeout_s=0`` to report blocks immediately.
+    ``handoff_timeout_s=0`` to report blocks immediately. ``preloaded_page``
+    reuses rendered HTML, final URL and (when available) HTTP status from an
+    already opened article tab.
     """
     doi = normalize_doi(doi)
     pub = route(doi)
     if pub is None:
         return FetchResult(doi, "-", "error", detail="not a Connect publisher")
-    limiter.acquire()
+    if rate_limit:
+        limiter.acquire()
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r"[^\w.-]+", "_", doi)[:150]
     res = FetchResult(doi, pub.key, "not_found")
@@ -504,14 +620,23 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
             return bool(wait_for_user(page, kind))
         return wait_for_clearance(page, kind, timeout_s=handoff_timeout_s, notify=notify)
 
-    try:
-        resp = page.goto(landing_url(doi), wait_until="domcontentloaded", timeout=goto_timeout_ms)
-    except Exception as exc:  # noqa: BLE001
-        res.status, res.detail = "error", f"goto: {exc}"[:300]
-        return res
-    page.wait_for_timeout(3000)
-    html, status = safe_content(page), _response_status(resp)
-    block = detect_block(html, status, page.url)
+    if preloaded_page is not None:
+        html, landing = preloaded_page[:2]
+        status = int(preloaded_page[2]) if len(preloaded_page) > 2 else 200
+        current_page_url = str(getattr(page, "url", "") or "")
+        if current_page_url and current_page_url != landing:
+            res.status, res.detail = "error", "preloaded_page_url_mismatch"
+            return res
+    else:
+        try:
+            resp = page.goto(landing_url(doi), wait_until="domcontentloaded", timeout=goto_timeout_ms)
+        except Exception as exc:  # noqa: BLE001
+            res.status, res.detail = "error", f"goto: {exc}"[:300]
+            return res
+        page.wait_for_timeout(3000)
+        html, status = safe_content(page), _response_status(resp)
+        landing = page.url
+    block = detect_block(html, status, landing)
     if block == "login" and status < 400 and extract_fulltext(pub.key, html):
         block = None  # "Get access"/"Sign in" chrome on a page that does show full text
     if block and handoff(block):
@@ -520,7 +645,8 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
     if block == "challenge":
         res.status, res.detail = "challenge", f"http {status} {page.url}"
         return res
-    landing = page.url
+    if preloaded_page is None:
+        landing = page.url or landing
 
     if use_translators:
         runner = translator_runner
@@ -542,7 +668,7 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
         res.status, res.path, res.size, res.detail = "html", str(p), len(text.encode()), landing
         return res
 
-    queue = pdf_candidates(doi, landing, html, tr_pdfs)
+    queue = pdf_candidates(doi, landing, html, tr_pdfs)[:MAX_PDF_CANDIDATES]
     seen: set[str] = set()
     followups = 0
     pdf_handoffs = 0
@@ -559,11 +685,16 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
             continue
         seen.add(cand)
         res.tried.append(cand)
+        r, final, request_error = _request_with_safe_redirects(page, cand, goto_timeout_ms, pub)
+        if request_error:
+            res.detail = f"{cand}: {request_error}"
+            if request_error.startswith("publisher_pdf_") or request_error.startswith("relay_url_"):
+                res.status = "error"
+            continue
         try:
-            r = page.context.request.get(cand, timeout=goto_timeout_ms, max_redirects=10)
-            body, rstatus, ctype, final = r.body(), r.status, r.headers.get("content-type", ""), (r.url or cand)
+            body, rstatus, ctype = r.body(), _response_status(r), _response_header(r, "content-type")
         except Exception as exc:  # noqa: BLE001
-            res.detail = f"{cand}: {type(exc).__name__}"
+            res.detail = f"{cand}: response_{type(exc).__name__}"
             continue
         if is_pdf(body):
             return save(body, final, "request")
@@ -571,24 +702,27 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
         kind = detect_block(snippet, rstatus, final)
         res.detail = f"{cand}: http {rstatus} {ctype.split(';')[0]}"
         if kind == "challenge":
-            # The API request context does not share the browser's challenge
-            # clearance, so first try fetching from inside the page (same
-            # browser session the user cleared), then show the URL to the user.
-            body2 = fetch_in_page(page, cand)
-            if is_pdf(body2):
-                return save(body2, cand, "in-page fetch")
+            # The user clears the challenge in the visible tab. Retry through
+            # the cookie-sharing API context afterwards; redirects still pass
+            # through the same per-hop policy as the original request.
             if pdf_handoffs >= 1:
                 res.status = "challenge"
                 res.detail += " (already handed off once for a PDF; not repeating)"
                 return res
             pdf_handoffs += 1
-            got = open_pdf_with_handoff(page, cand, handoff, goto_timeout_ms)
+            try:
+                got = open_pdf_with_handoff(page, final, handoff, goto_timeout_ms, publisher=pub)
+            except UnsafePublisherRedirect as exc:
+                res.status, res.detail = "error", str(exc)[:300]
+                return res
             if got is not None:
                 return save(got[0], got[1], got[2])
             res.status = "challenge"
             return res
         if "html" in ctype and followups < 4:
             extra = [u for u in pdf_links_in_html(snippet, final) if u not in seen]
+            remaining = MAX_PDF_CANDIDATES - len(seen) - len(queue)
+            extra = extra[:max(0, remaining)]
             followups += len(extra) > 0
             queue[:0] = extra
     if block:
@@ -596,46 +730,63 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
     return res
 
 
-_FETCH_JS = """async (url) => {
-  const r = await fetch(url, {credentials: "include", redirect: "follow"});
-  const ct = r.headers.get("content-type") || "";
-  const buf = new Uint8Array(await r.arrayBuffer());
-  if (buf.length > 200 * 1024 * 1024) return {status: r.status, ct, b64: ""};
-  let s = ""; const n = 0x8000;
-  for (let i = 0; i < buf.length; i += n) s += String.fromCharCode.apply(null, buf.subarray(i, i + n));
-  return {status: r.status, ct, url: r.url, b64: btoa(s)};
-}"""
-
-
-def fetch_in_page(page, url: str) -> bytes:
-    """GET ``url`` with the page's own fetch (same cookies/session as the tab).
-
-    Only works same-origin (or CORS-permitted); failures return b"".
-    """
-    import base64  # noqa: PLC0415
-    try:
-        here, there = urlparse(page.url), urlparse(url)
-        if (here.scheme, here.hostname) != (there.scheme, there.hostname):
-            return b""
-        out = page.evaluate(_FETCH_JS, url)
-        return base64.b64decode(out.get("b64") or "")
-    except Exception:  # noqa: BLE001
-        return b""
-
-
-def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeout_ms: int):
+def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeout_ms: int,
+                          *, publisher: Optional[Publisher] = None):
     """Navigate the visible tab to a PDF URL, hand a challenge to the user, capture the PDF.
 
     Capture sources, in order: a PDF response seen on the tab (main-frame
-    navigation), a browser download, then an in-page fetch once the tab is on
-    the publisher origin with the cleared session. Returns (bytes, url, how)
-    or None. Hands off at most once.
+    navigation), a browser download, then a cookie-sharing API retry after
+    any user clearance. Returns (bytes, url, how) or None. Hands off at most
+    once.
     """
     seen_pdf: list = []
     downloads: list = []
+    blocked_navigation: list[str] = []
+
+    def guard_navigation(route):
+        request = route.request
+        try:
+            is_navigation = request.is_navigation_request()
+        except Exception:  # noqa: BLE001
+            blocked_navigation.append("publisher_pdf_navigation_unverified")
+            route.abort()
+            return
+        if not is_navigation:
+            reason = publisher_pdf_url_rejection_reason(request.url, publisher)
+            if reason and not _challenge_asset_url_allowed(request.url):
+                # Optional analytics/fonts/etc. may be blocked without making
+                # an otherwise safe main-frame PDF handoff fail.
+                route.abort()
+                return
+            route.continue_()
+            return
+        try:
+            is_main_frame = request.frame == page.main_frame
+        except Exception:  # noqa: BLE001 - fail closed for an uninspectable navigation
+            blocked_navigation.append("publisher_pdf_navigation_unverified")
+            route.abort()
+            return
+        if not is_main_frame:
+            reason = publisher_pdf_url_rejection_reason(request.url, publisher)
+            if reason and not _challenge_asset_url_allowed(request.url):
+                route.abort()
+                return
+            route.continue_()
+            return
+        reason = publisher_pdf_url_rejection_reason(request.url, publisher)
+        if reason:
+            blocked_navigation.append(reason)
+            route.abort()
+            return
+        route.continue_()
 
     def on_response(resp):
         try:
+            request = resp.request
+            if not request.is_navigation_request() or request.frame != page.main_frame:
+                return
+            if publisher_pdf_url_rejection_reason(resp.url, publisher):
+                return
             if "application/pdf" in (resp.headers.get("content-type") or "").lower():
                 seen_pdf.append(resp)
         except Exception:  # noqa: BLE001
@@ -647,7 +798,7 @@ def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeou
                 body = resp.body()
             except Exception:  # noqa: BLE001 - body may be unavailable for viewer loads
                 continue
-            if is_pdf(body):
+            if is_pdf(body) and not publisher_pdf_url_rejection_reason(resp.url, publisher):
                 return body, resp.url, "tab response"
         for dl in reversed(downloads):
             try:
@@ -655,19 +806,29 @@ def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeou
                 body = Path(path).read_bytes() if path else b""
             except Exception:  # noqa: BLE001
                 continue
-            if is_pdf(body):
+            if is_pdf(body) and not publisher_pdf_url_rejection_reason(dl.url, publisher):
                 return body, dl.url, "download"
         return None
 
-    def in_page():
-        target = page.url if ".pdf" in page.url.lower() or "pdf" in urlparse(page.url).path.lower() else url
-        target = re.sub(r"([?&])__cf_chl_[a-z_]+=[^&]*&?", r"\1", target).rstrip("?&")
-        body = fetch_in_page(page, target)
-        return (body, target, "in-page fetch") if is_pdf(body) else None
+    def checked_request():
+        response, final, reason = _request_with_safe_redirects(page, url, timeout_ms, publisher) if publisher else (None, url, "publisher_pdf_publisher_host_blocked")
+        if reason and (reason.startswith("publisher_pdf_") or reason.startswith("relay_url_")):
+            raise UnsafePublisherRedirect(f"publisher_pdf_redirect_blocked: {reason}")
+        if response is None:
+            return None
+        try:
+            body = response.body()
+        except Exception:  # noqa: BLE001
+            return None
+        return (body, final, "request after browser handoff") if is_pdf(body) else None
 
     def on_download(dl):
         downloads.append(dl)
 
+    try:
+        page.route("**/*", guard_navigation)
+    except Exception as exc:  # noqa: BLE001 - fail closed without redirect interception
+        raise UnsafePublisherRedirect("publisher_pdf_navigation_guard_unavailable") from exc
     page.on("response", on_response)
     page.on("download", on_download)
     try:
@@ -675,6 +836,8 @@ def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeou
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
         except Exception:  # noqa: BLE001 - PDF navigations may abort as downloads
             pass
+        if blocked_navigation:
+            raise UnsafePublisherRedirect(f"publisher_pdf_redirect_blocked: {blocked_navigation[0]}")
         page.wait_for_timeout(1500)
         got = captured()
         if got:
@@ -684,10 +847,14 @@ def open_pdf_with_handoff(page, url: str, handoff: Callable[[str], bool], timeou
             return captured()
         # cleared (or never blocked): give the viewer a moment to finish loading
         page.wait_for_timeout(2000)
-        return captured() or in_page()
+        return captured() or checked_request()
     finally:
         for ev, fn in (("response", on_response), ("download", on_download)):
             try:
                 page.remove_listener(ev, fn)
             except Exception:  # noqa: BLE001
                 pass
+        try:
+            page.unroute("**/*", guard_navigation)
+        except Exception:  # noqa: BLE001
+            pass

@@ -15,6 +15,8 @@ ARTICLE = (
 )
 OK = {"title": "Synthetic", "cf_iframe": False, "challenge_form": False, "body_chars": 9000}
 CF = {"title": "Just a moment...", "cf_iframe": True, "challenge_form": False, "body_chars": 40}
+IEEE_DOI = "10.1109/tpami.2023.3237000"
+PDF = b"%PDF-1.7\n" + b"x" * 20_000
 
 
 class Page:
@@ -40,6 +42,37 @@ class Page:
 
     def content(self):
         return self.html
+
+
+class PdfResponse:
+    def __init__(self, url):
+        self.url = url
+        self.status = 200
+        self.headers = {"content-type": "application/pdf"}
+
+    def body(self):
+        return PDF
+
+
+class IEEEPage(Page):
+    def __init__(self):
+        super().__init__([OK], html="<html><body>Abstract only</body></html>")
+        self.final_url = "https://ieeexplore.ieee.org/document/10005208"
+        self.landing_status = 200
+        request = self
+        self.context = type("Context", (), {"request": type("Request", (), {
+            "get": lambda _self, url, **_kw: request._pdf_response(url),
+        })()})()
+        self.pdf_urls = []
+
+    def goto(self, url, **kw):
+        self.gotos.append(url)
+        self.url = self.final_url
+        return type("LandingResponse", (), {"status": self.landing_status})()
+
+    def _pdf_response(self, url):
+        self.pdf_urls.append(url)
+        return PdfResponse(url)
 
 
 def lim(tmp_path):
@@ -107,6 +140,57 @@ def test_fulltext_paywall_reported(tmp_path):
                             parse=fake_parser(calls, {"body_length": 700, "section_count": 0}))
     assert res.status == "paywall" and res.markdown_path is None and "not bypassed" in res.detail
     assert calls[0][1]["companion_pages"] is None
+
+
+def test_ieee_pdf_fallback_is_downloaded_and_parsed_locally(tmp_path):
+    calls = []
+
+    def parse(payload, **kw):
+        calls.append((payload, kw))
+        if kw["content_type"] == "text/html":
+            raise ValueError("captured HTML is an access shell rather than article body")
+        return {"markdown": "# IEEE full text\n", "metadata": {"title": "IEEE sample"},
+                "signals": {"body_length": 9000, "section_count": 3}}
+
+    page = IEEEPage()
+    limiter = lim(tmp_path)
+    result = ft.fetch_fulltext(page, IEEE_DOI, tmp_path, limiter, parse=parse, sleep=lambda _s: None)
+
+    assert result.status == "fulltext"
+    assert result.markdown_path and open(result.markdown_path, encoding="utf-8").read() == "# IEEE full text\n"
+    assert result.raw_path and result.raw_path.endswith(".pdf")
+    assert open(result.raw_path, "rb").read() == PDF
+    assert page.gotos == ["https://doi.org/10.1109/tpami.2023.3237000"]
+    assert page.pdf_urls == ["https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=10005208"]
+    assert [kw["content_type"] for _, kw in calls] == ["text/html", "application/pdf"]
+    assert json.loads((tmp_path / "10.1109_tpami.2023.3237000.fulltext.json").read_text())["status"] == "fulltext"
+    assert json.loads((tmp_path / "rate.json").read_text())["count"] == 1
+
+
+def test_ieee_pdf_fallback_preserves_landing_http_status(tmp_path, monkeypatch):
+    page = IEEEPage()
+    page.landing_status = 403
+    observed = []
+    detect_block = pa.detect_block
+
+    def record_status(html, status=200, url=""):
+        observed.append(status)
+        return detect_block(html, status, url)
+
+    monkeypatch.setattr(pa, "detect_block", record_status)
+
+    result = ft.fetch_fulltext(
+        page, IEEE_DOI, tmp_path, lim(tmp_path), handoff_timeout_s=0,
+        parse=lambda payload, **kw: (
+            {"markdown": "# IEEE full text\n", "metadata": {},
+             "signals": {"body_length": 9000, "section_count": 3}}
+            if kw["content_type"] == "application/pdf"
+            else (_ for _ in ()).throw(ValueError("access shell"))
+        ),
+    )
+
+    assert result.status == "fulltext"
+    assert 403 in observed
 
 
 def test_challenge_handed_to_user_then_cleared(tmp_path):

@@ -12,6 +12,11 @@ on:
       - main
     paths:
       - relay/cmd/mdtero-relay/main.go
+      - relay/browser_worker/**
+      - relay/internal/browserworker/**
+      - src/mdtero/publisher_policy.py
+      - src/mdtero/relay_domains.py
+      - src/mdtero/relay_allowed_hosts_generated.py
     tags:
       - "relay/v*"
 
@@ -110,9 +115,10 @@ jobs:
           if [[ -z "${GOARM}" ]]; then
             unset GOARM
           fi
-          mkdir -p "dist/v${RELAY_VERSION}/browser_worker"
+          mkdir -p "dist/v${RELAY_VERSION}/browser_worker/mdtero"
           cp browser_worker/mdtero_browser_worker.py "dist/v${RELAY_VERSION}/browser_worker/"
           cp browser_worker/requirements.txt "dist/v${RELAY_VERSION}/browser_worker/"
+          cp ../src/mdtero/publisher_policy.py ../src/mdtero/relay_domains.py ../src/mdtero/relay_allowed_hosts_generated.py "dist/v${RELAY_VERSION}/browser_worker/mdtero/"
           output="dist/v${RELAY_VERSION}/mdtero-relay"
           archive_members=(mdtero-relay browser_worker)
           if [[ "$GOOS" == "windows" ]]; then
@@ -133,6 +139,9 @@ jobs:
           printf '%s\n' "$listing" | grep -qx "${archive_members[0]}"
           printf '%s\n' "$listing" | grep -qx 'browser_worker/mdtero_browser_worker.py'
           printf '%s\n' "$listing" | grep -qx 'browser_worker/requirements.txt'
+          printf '%s\n' "$listing" | grep -qx 'browser_worker/mdtero/publisher_policy.py'
+          printf '%s\n' "$listing" | grep -qx 'browser_worker/mdtero/relay_domains.py'
+          printf '%s\n' "$listing" | grep -qx 'browser_worker/mdtero/relay_allowed_hosts_generated.py'
           rm -rf "dist/v${RELAY_VERSION}/browser_worker" "$output"
       - uses: actions/upload-artifact@v4
         with:

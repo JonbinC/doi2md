@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from mdtero.connect import publisher_adapter as pa
+from mdtero.publisher_policy import ieee_arnumber_from_url, ieee_stamp_pdf_url
 
 FX = Path(__file__).parent / "fixtures" / "connect"
 
@@ -28,6 +29,14 @@ def test_landing_page_publishers():
     assert pa.pdf_candidates("10.1016/j.rineng.2023.100001", "https://www.sciencedirect.com/science/article/pii/S2590123023000014") == [
         "https://www.sciencedirect.com/science/article/pii/S2590123023000014/pdfft?isDTMRedir=true&download=true"]
     assert pa.pdf_candidates("10.1093/nar/gkac1231") == []
+
+
+def test_ieee_policy_is_shared_and_host_bound():
+    article = "https://ieeexplore.ieee.org/document/10005208"
+    assert ieee_arnumber_from_url(article) == "10005208"
+    assert ieee_stamp_pdf_url(article) == pa.pdf_candidates("10.1109/demo", article)[0]
+    assert ieee_arnumber_from_url("https://evilieeexplore.ieee.org/document/10005208") == ""
+    assert ieee_stamp_pdf_url("http://ieeexplore.ieee.org/document/10005208") == ""
 
 
 @pytest.mark.parametrize("doi", ["10.3390/ht9030016", "10.3389/fmats.2023.1", "10.1186/s1", "10.1371/journal.pone.1",

@@ -40,9 +40,10 @@ go mod tidy
 # Python source in its own small directory lets the CLI install Playwright
 # only on supported desktop machines; headless campus boards opt in with
 # --local-browser=headless and a system Chromium on ARMv7.
-mkdir -p "$OUT/browser_worker"
+mkdir -p "$OUT/browser_worker/mdtero"
 cp "$ROOT/browser_worker/mdtero_browser_worker.py" "$OUT/browser_worker/"
 cp "$ROOT/browser_worker/requirements.txt" "$OUT/browser_worker/"
+cp "$ROOT/../src/mdtero/publisher_policy.py" "$ROOT/../src/mdtero/relay_domains.py" "$ROOT/../src/mdtero/relay_allowed_hosts_generated.py" "$OUT/browser_worker/mdtero/"
 
 build_one darwin arm64 mdtero-relay-darwin-arm64
 build_one darwin amd64 mdtero-relay-darwin-amd64

@@ -10,6 +10,10 @@ func TestBundledWorkerFilesArePresent(t *testing.T) {
 	if !BundleFilesExist(root) {
 		t.Fatalf("browser worker bundle is missing from %s", root)
 	}
+	policy := filepath.Join("..", "..", "..", "src", "mdtero")
+	if !PolicyFilesExist(policy) {
+		t.Fatalf("shared publisher and Relay policy sources are missing from %s", policy)
+	}
 }
 
 func TestWorkerURLIsLoopback(t *testing.T) {
