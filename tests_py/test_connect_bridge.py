@@ -37,7 +37,7 @@ def _get(bridge: ConnectBridge, path: str, **kwargs):
     return httpx.get(bridge.base_url + path, headers={"Host": f"127.0.0.1:{bridge.bound_port}"}, **kwargs)
 
 
-def _post(bridge: ConnectBridge, path: str, payload: dict, *, csrf: str):
+def _post(bridge: ConnectBridge, path: str, payload: dict | None, *, csrf: str):
     return httpx.post(
         bridge.base_url + path,
         headers={
@@ -46,7 +46,7 @@ def _post(bridge: ConnectBridge, path: str, payload: dict, *, csrf: str):
             "X-Mdtero-CSRF": csrf,
             "Content-Type": "application/json",
         },
-        content=json.dumps(payload),
+        content=json.dumps(payload) if payload is not None else b"",
     )
 
 
@@ -92,7 +92,10 @@ def test_rejects_bad_host_and_csrf(bridge: ConnectBridge):
             "Origin": f"http://127.0.0.1:{bridge.bound_port}",
             "Content-Type": "application/json",
         },
-        content=json.dumps({"document_ids": [1], "add": ["x"], "dry_run": True}),
+        # CSRF is rejected before the bridge reads a request body. Keep this
+        # focused contract check bodyless; the body-bearing rejection and
+        # connection-close behavior is covered below.
+        content=b"",
     )
     assert missing.status_code == 403
     assert missing.json()["reason_code"] == "csrf_rejected"
@@ -100,10 +103,11 @@ def test_rejects_bad_host_and_csrf(bridge: ConnectBridge):
     wrong = _post(
         bridge,
         "/connect/v1/library/tags/batch",
-        {"document_ids": [1], "add": ["x"], "dry_run": True},
+        None,
         csrf="nope",
     )
     assert wrong.status_code == 403
+    assert wrong.json()["reason_code"] == "csrf_rejected"
     # Ensure valid csrf path reaches the library adapter.
     bridge.client._request.return_value = {"changed_count": 0, "document_ids": [1]}  # type: ignore[attr-defined]
     ok = _post(
