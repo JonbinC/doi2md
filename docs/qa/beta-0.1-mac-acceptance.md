@@ -1,6 +1,6 @@
 # Beta 0.1 internal RC install acceptance
 
-**State:** internal test checklist only. The earlier pre-fix PR #30 was closed. This checklist applies only to an integration candidate containing the verified #28 confirmed-write Cancel fix; passing CI does not clear publication or establish human platform acceptance. Any attached installers are short-lived, unsigned, unnotarized debug artifacts, not a release.
+**State:** internal test checklist only. This checklist applies only to the current integration candidate containing the verified #28 confirmed-write Cancel fix; passing CI does not clear publication or establish human platform acceptance. Any attached installers are short-lived, unsigned, unnotarized debug artifacts, not a release.
 
 ## Locate the candidate artifacts
 
@@ -49,4 +49,4 @@ Run Mac Apple Silicon and Mac Intel independently when both artifacts exist. Run
 - Human Mac and Windows acceptance is pending. A CI build or synthetic UI test does not establish installation, account login, credential-store, upgrade, or uninstall behavior.
 - Native jobs currently bundle Python 3.11, while the optional local full-text parser requires Python 3.12 or newer. The parser compatibility gate marks the current native Python as unsupported; do not claim local HTML/PDF parsing is supported or tested by this candidate.
 - The public Preview.3 release is a separate, older artifact. Candidate PR artifacts remain unverified until the human smoke above is completed.
-- Passing this checklist does not clear Beta go/no-go by itself. Keep RC publication blocked until the #28 confirmed-write Cancel P0 fix is included and verified; record that exact source SHA and the rerun focused test results before considering an artifact.
+- Passing this checklist does not clear Beta go/no-go by itself. Keep RC publication blocked until the current candidate CI and human Stage 1 acceptance pass; retain the exact #28 source SHA and rerun focused test results with the acceptance record.
