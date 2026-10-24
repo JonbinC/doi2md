@@ -66,7 +66,7 @@ def _parse_synthetic_import(content: str, fmt: str) -> list[dict[str, Any]]:
 
     items: list[dict[str, Any]] = []
     if fmt == "bibtex":
-        entry_pattern = re.compile(r"@(\w+)\s*\{\s*([^,]+),\s*(.*?)\n\}", re.DOTALL)
+        entry_pattern = re.compile(r"@(\w+)\s*\{\s*([^,]+),\s*(.*?)(?:\r?\n\s*\}|\}\s*$)", re.DOTALL)
         field_pattern = re.compile(r"(\w+)\s*=\s*[\"{](.*?)[\"}],?", re.DOTALL)
         matches = list(entry_pattern.finditer(content))
         if not matches:
@@ -232,6 +232,7 @@ class SyntheticClient(MdteroClient):
     def reset(self, settings: dict[str, Any] | None = None) -> None:
         with self.lock:
             self.papers = copy.deepcopy(INITIAL_PAPERS)
+            self.committed_imports: dict[str, dict[str, Any]] = {}
             self.calls: list[dict[str, Any]] = []
             self.provider_calls: list[dict[str, Any]] = []
             self.agent_calls: list[dict[str, Any]] = []
@@ -281,6 +282,9 @@ class SyntheticClient(MdteroClient):
                 body = kwargs["json"]
                 assert isinstance(body.get("dry_run"), bool), "dry_run must be explicit"
                 dry_run = body["dry_run"]
+                request_id = str(body.get("request_id") or "")
+                if not dry_run and request_id and request_id in self.committed_imports:
+                    return copy.deepcopy(self.committed_imports[request_id])
                 content = str(body.get("content") or "")
                 fmt = str(body.get("format") or "auto").lower()
 
@@ -322,22 +326,40 @@ class SyntheticClient(MdteroClient):
                         "action_hint": "Import up to 500 items at a time.",
                     })
 
+                existing_titles = {p["title"].strip().lower() for p in self.papers}
+                existing_count = 0
+                duplicate_count = 0
+                for item in parsed_items:
+                    item_title = item["metadata"]["title"].strip().lower()
+                    if item_title in existing_titles or "existing" in item_title:
+                        item["outcome"] = "existing"
+                        existing_count += 1
+                    elif "duplicate" in item_title:
+                        item["outcome"] = "duplicate"
+                        duplicate_count += 1
+                    else:
+                        item["outcome"] = "will_import" if dry_run else "imported"
+
+                importable_count = (len(parsed_items) - existing_count - duplicate_count) if dry_run else 0
+                imported_count = (len(parsed_items) - existing_count - duplicate_count) if not dry_run else 0
+
                 if not dry_run:
                     for item in parsed_items:
-                        doc_id = max([p["document_id"] for p in self.papers] or [100]) + 11
-                        new_paper = {
-                            "document_id": doc_id,
-                            "title": item["metadata"]["title"],
-                            "authors": item["metadata"]["authors"],
-                            "year": item["metadata"]["year"],
-                            "venue": item["metadata"]["venue"],
-                            "doi": item["metadata"]["doi"],
-                            "tags": ["Imported"],
-                            "has_saved_text": False,
-                        }
-                        self.papers.append(new_paper)
+                        if item["outcome"] == "imported":
+                            doc_id = max([p["document_id"] for p in self.papers] or [100]) + 11
+                            new_paper = {
+                                "document_id": doc_id,
+                                "title": item["metadata"]["title"],
+                                "authors": item["metadata"]["authors"],
+                                "year": item["metadata"]["year"],
+                                "venue": item["metadata"]["venue"],
+                                "doi": item["metadata"]["doi"],
+                                "tags": ["Imported"],
+                                "has_saved_text": False,
+                            }
+                            self.papers.append(new_paper)
 
-                return {
+                result = {
                     "schema_version": 1,
                     "format": fmt,
                     "dry_run": dry_run,
@@ -346,16 +368,19 @@ class SyntheticClient(MdteroClient):
                     "limits": {"max_bytes": 1048576, "max_items": 500},
                     "summary": {
                         "total": len(parsed_items),
-                        "importable": len(parsed_items) if dry_run else 0,
-                        "imported": 0 if dry_run else len(parsed_items),
-                        "existing": 0,
-                        "duplicates": 0,
+                        "importable": importable_count,
+                        "imported": imported_count,
+                        "existing": existing_count,
+                        "duplicates": duplicate_count,
                         "skipped": 0,
                         "attached": 0,
                     },
                     "items": parsed_items,
-                    "created_count": len(parsed_items),
+                    "created_count": imported_count,
                 }
+                if not dry_run and request_id:
+                    self.committed_imports[request_id] = copy.deepcopy(result)
+                return result
             raise AssertionError(f"Unexpected synthetic upstream request: {method} {path}")
 
     def _raw_request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
