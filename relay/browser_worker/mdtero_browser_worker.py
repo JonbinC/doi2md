@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
+from mdtero.publisher_policy import ieee_arnumber_from_url, ieee_stamp_pdf_url
+from mdtero.relay_domains import relay_url_allowed
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -133,19 +135,6 @@ else:
     HEADLESS = _headless_override.strip().lower() in {"1", "true", "yes"}
 MAX_ARTIFACT_BYTES = 30 * 1024 * 1024
 
-ALLOWED_SUFFIXES = (
-    "aacrjournals.org", "acm.org", "academic.oup.com", "ahajournals.org", "aiaa.org",
-    "annualreviews.org", "arvojournals.org", "ashpublications.org", "asm.org", "asme.org",
-    "aspetjournals.org", "atsjournals.org", "cambridge.org", "cancerbiomed.org", "cell.com",
-    "degruyter.com", "degruyterbrill.com", "diabetesjournals.org", "dl.acm.org", "elsevier.com",
-    "emerald.com", "frontiersin.org", "ieee.org", "ieeexplore.ieee.org", "ingentaconnect.com",
-    "jci.org", "journals.aps.org", "journals.uchicago.edu", "jstage.jst.go.jp", "jstor.org",
-    "karger.com", "liebertpub.com", "link.springer.com", "lww.com", "mdpi.com", "mdpi-res.com", "nature.com",
-    "nejm.org", "onlinelibrary.wiley.com", "optica.org", "oup.com", "plos.org", "pnas.org",
-    "pubs.acs.org", "pubs.rsc.org", "rupress.org", "sagepub.com", "science.org", "sciencedirect.com",
-    "sciendo.com", "siam.org", "spandidos-publications.com", "springer.com", "tandfonline.com",
-    "thieme-connect.com", "wiley.com", "worldscientific.com",
-)
 CHALLENGE_MARKERS = (
     "just a moment", "verify you are human", "checking if the site connection is secure",
     "cf-browser-verification", "challenge-platform", "captcha",
@@ -167,9 +156,14 @@ class WorkerFailure(RuntimeError):
 
 
 def allowed_url(value: str) -> bool:
-    parsed = urlparse(value)
-    host = (parsed.hostname or "").lower().rstrip(".")
-    return parsed.scheme == "https" and bool(host) and any(host == suffix or host.endswith(f".{suffix}") for suffix in ALLOWED_SUFFIXES)
+    # Shared Relay transport also accepts explicitly approved HTTP. Browser
+    # navigation and PDF capture retain their HTTPS-only requirement.
+    try:
+        if urlparse(value).scheme.lower() != "https":
+            return False
+    except (TypeError, ValueError):
+        return False
+    return relay_url_allowed(value)
 
 
 def text_looks_like_article(html: str) -> bool:
@@ -670,14 +664,7 @@ WORKER: BrowserWorker | None = None
 
 
 def _ieee_arnumber(url: str) -> str:
-    parsed = urlparse(url)
-    if not (parsed.hostname or "").lower().endswith("ieeexplore.ieee.org"):
-        return ""
-    for pattern in (r"/document/(\d+)", r"[?&]arnumber=(\d+)"):
-        match = re.search(pattern, url, flags=re.IGNORECASE)
-        if match:
-            return match.group(1)
-    return ""
+    return ieee_arnumber_from_url(url)
 
 
 def _article_doi(url: str) -> str:
@@ -746,11 +733,9 @@ def _publisher_pdf_candidates(article_url: str) -> list[str]:
             candidates.append(
                 f"https://www.sciencedirect.com/science/article/pii/{pii}/pdfft?isDTMRedir=true&download=true"
             )
-    ieee_arnumber = _ieee_arnumber(article_url)
-    if ieee_arnumber:
-        candidates.append(
-            "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=" + ieee_arnumber + "&ref="
-        )
+    ieee_pdf = ieee_stamp_pdf_url(article_url)
+    if ieee_pdf:
+        candidates.append(ieee_pdf)
     return candidates
 
 
