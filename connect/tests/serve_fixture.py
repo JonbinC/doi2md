@@ -291,9 +291,11 @@ if __name__ == "__main__":
     stopped = threading.Event()
     for event in (signal.SIGTERM, signal.SIGINT):
         signal.signal(event, lambda *_args: stopped.set())
-    control = ThreadingHTTPServer(("127.0.0.1", 18742), ControlHandler)
+    origin_port = int(os.environ.get("MDTERO_CONNECT_TEST_ORIGIN_PORT", "18741"))
+    control_port = int(os.environ.get("MDTERO_CONNECT_TEST_CONTROL_PORT", "18742"))
+    control = ThreadingHTTPServer(("127.0.0.1", control_port), ControlHandler)
     providers, runtime = local_services()
-    with ConnectBridge(host="127.0.0.1", port=18741, client=client, static_dir=APP_DIR,
+    with ConnectBridge(host="127.0.0.1", port=origin_port, client=client, static_dir=APP_DIR,
                        providers=providers, agent_runtime=runtime, relay_runtime=client.relay_runtime) as bridge:
         threading.Thread(target=control.serve_forever, daemon=True).start()
         print(f"Synthetic-only Connect fixture at {bridge.base_url}", flush=True)
