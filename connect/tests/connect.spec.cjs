@@ -201,6 +201,41 @@ test('three onboarding steps remain optional and lead to the working library', a
   await expect(page.locator('#screen')).toContainText('mdtero login');
 });
 
+test('empty verified library guides to Zotero preview while filtered results stay distinct', async ({ page }) => {
+  await page.route('**/connect/v1/library/documents', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [] }),
+  }));
+  await page.goto('/');
+  await expect(page.locator('#auth-badge')).toHaveText(/已核验/);
+  await page.locator('[data-view="library"]').click();
+
+  const emptyState = page.locator('#screen .library-empty');
+  await expect(emptyState).toContainText('文献库目前为空');
+  await expect(emptyState).toContainText('预览不会把条目加入文献库');
+  const zoteroLink = emptyState.locator('[data-action="view-connections"]');
+  await expect(zoteroLink).toHaveText('打开连接与 Zotero 预览');
+  await zoteroLink.click();
+  await expect(page.locator('#screen')).toContainText('Zotero 书目预览');
+
+  await page.evaluate(() => { document.documentElement.lang = 'en'; });
+  await page.locator('[data-view="library"]').click();
+  await expect(emptyState).toContainText('Your library is empty');
+  await expect(emptyState).toContainText('will not add items to your library');
+  await expect(emptyState.locator('[data-action="view-connections"]')).toHaveText('Open Connections for Zotero preview');
+  await emptyState.locator('[data-action="view-connections"]').click();
+  await expect(page.locator('#screen')).toContainText('Zotero preview');
+
+  await page.unroute('**/connect/v1/library/documents');
+  await page.goto('/');
+  await page.locator('[data-view="library"]').click();
+  await page.locator('#find-paper').fill('no paper matches this query');
+  await expect(page.locator('#screen .empty')).toContainText('没有匹配的文献。可清空搜索或选择全部标签。');
+  await expect(page.locator('#screen .library-empty')).toHaveCount(0);
+  await expect(page.locator('#screen [data-action="view-connections"]')).toHaveCount(0);
+});
+
 test('tag draft survives selection, navigation and preview; only apply writes', async ({ page, request }) => {
   await openLibrary(page);
   await select(page, 11);

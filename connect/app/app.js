@@ -270,6 +270,14 @@
         "</small><small>" + (tags ? kind + " · " + tags : kind) + "</small></span></label>";
     }).join("");
     const preview = state.tagPreview;
+    const emptyList = !state.libraryVerified
+      ? '<p class="empty">核验成功后显示账户文献。</p>'
+      : state.papers.length === 0
+        ? '<div class="empty library-empty"><p>' + esc(t(
+          "文献库目前为空。你可以前往连接状态检查本机 Zotero 并预览集合；预览不会把条目加入文献库。",
+          "Your library is empty. Open Connections to check Zotero on this computer and preview a collection; the preview will not add items to your library."
+        )) + '</p><div class="actions">' + b(t("打开连接与 Zotero 预览", "Open Connections for Zotero preview"), "view-connections", "primary") + "</div></div>"
+        : '<p class="empty">没有匹配的文献。可清空搜索或选择全部标签。</p>';
     return h("我的文献库", state.libraryVerified ? "筛选、标记和导出账户文献。批量操作仅针对当前勾选，最多 200 篇。" : "账户文献尚未核验。请先检查本机配置并刷新。") +
       (!state.libraryVerified ? setupHint + '<div class="actions">' + b("刷新账户与文献", "refresh", "primary") + b("打开三步引导", "view-start") + "</div>" : "") +
       '<div class="split"><section class="pane"><header>标签</header><div class="collection-list"><div class="chipset">' +
@@ -277,7 +285,7 @@
       allTags.map((t) => '<button type="button" data-tag="' + esc(t) + '" class="' + (state.tag === t ? "active" : "") + '"' + (state.busy ? " disabled" : "") + ">" + esc(t) + "</button>").join("") +
       '</div><p class="hint">标签目录：' + allTags.length + '</p></div></section><section class="pane"><header>文献 · 可见 ' + filtered.length + " / 已加载 " + state.papers.length +
       '</header><div class="searchbox"><label class="label" for="find-paper">标题、作者或 DOI</label><input type="search" id="find-paper" placeholder="搜索文献" value="' + esc(state.query) +
-      '"' + (state.busy ? " disabled" : "") + "></div>" + (list || '<p class="empty">' + (state.libraryVerified ? "没有匹配的文献。可清空搜索或选择全部标签。" : "核验成功后显示账户文献。") + "</p>") +
+      '"' + (state.busy ? " disabled" : "") + "></div>" + (list || emptyList) +
       '</section><section class="pane"><header>条目与操作</header><div class="details"><p class="hint">已选 ' + selection.length + ' 篇（当前勾选）。批量上限 200。</p>' +
       (selection.length > 200 ? '<div class="notice">请减少勾选至 200 篇以内。</div>' : "") +
       '<label class="label" for="new-tag">为选中条目添加标签</label><input id="new-tag" type="text" maxlength="80" placeholder="例如 Cycling stability" value="' + esc(state.tagDraft) + '"' + (state.busy ? " disabled" : "") + ">" +
