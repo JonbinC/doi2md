@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -71,17 +72,19 @@ def sanitize_discovery_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def rank_discovery_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    scored: list[tuple[int, int, dict[str, Any]]] = []
-    for index, raw in enumerate(items):
-        if not isinstance(raw, dict):
-            continue
-        item = sanitize_discovery_item(raw)
-        scored.append((_score(item), index, item))
-    scored.sort(key=lambda row: (-row[0], row[1]))
-    return [item for _, _, item in scored]
+    """Rank by query relevance, then acquisition and corroboration signals.
+
+    Stable sorting preserves input order when both keys tie. Missing relevance
+    scores are treated as unknown (zero), leaving the existing tie-break signals.
+    """
+    return sorted(
+        (sanitize_discovery_item(raw) for raw in items if isinstance(raw, dict)),
+        key=_score,
+        reverse=True,
+    )
 
 
-def _score(item: dict[str, Any]) -> int:
+def _score(item: dict[str, Any]) -> tuple[float, int]:
     score = 0
     readiness = str(item.get("parse_readiness") or "")
     doi = str(item.get("doi") or "")
@@ -91,6 +94,8 @@ def _score(item: dict[str, Any]) -> int:
     try:
         query_match = float(item.get("query_match_score") or 0)
     except (TypeError, ValueError):
+        query_match = 0.0
+    if not math.isfinite(query_match):
         query_match = 0.0
 
     if item.get("doi_quality") == "supplementary":
@@ -103,17 +108,12 @@ def _score(item: dict[str, Any]) -> int:
         score += 50
     if item.get("parse_preference") == "open_access_pdf":
         score += 40
-    # Multi-source corroboration beats a single weak preprint hit.
+    # Corroboration and citations only break ties in query relevance.
     if source_count >= 2:
         score += 25 + min(35, (source_count - 2) * 10)
-    # Citation signal (log-ish) so landmark papers outrank random arXiv matches.
     cite = max(int(item.get("citation_count") or 0), 0)
     if cite > 0:
         score += min(55, 8 + int(cite ** 0.5))
-    # Query relevance is first-class; low overlap should not win via PDF bonus alone.
-    score += int(query_match * 45)
-    if query_match < 0.2:
-        score -= 35
     # Mild arXiv preference only when the query actually matches.
     if (
         source == "arxiv"
@@ -129,7 +129,7 @@ def _score(item: dict[str, Any]) -> int:
         score -= 250
     if item.get("abstract_preview"):
         score += 5
-    return score
+    return query_match, score
 
 
 def _arxiv_id_from(value: Any) -> str | None:
