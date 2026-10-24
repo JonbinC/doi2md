@@ -479,19 +479,22 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
                   goto_timeout_ms: int = 45_000, handoff_timeout_s: float = 300.0,
                   use_translators: bool = True, translator_runner: Optional[Callable] = None,
                   notify: Optional[Callable[[str, str], None]] = None,
-                  prefer_html: bool = True) -> FetchResult:
+                  prefer_html: bool = True, rate_limit: bool = True,
+                  preloaded_page: Optional[tuple[str, str]] = None) -> FetchResult:
     """Fetch one article in an existing (headed, user-owned) Playwright page.
 
     Order: landing page -> (challenge/login hand-off) -> HTML body ->
     Zotero translator PDF -> citation_pdf_url -> built URLs.
     ``wait_for_user(page, kind)`` overrides the default hand-off; pass
-    ``handoff_timeout_s=0`` to report blocks immediately.
+    ``handoff_timeout_s=0`` to report blocks immediately. ``preloaded_page``
+    reuses rendered HTML and its final URL from an already opened article tab.
     """
     doi = normalize_doi(doi)
     pub = route(doi)
     if pub is None:
         return FetchResult(doi, "-", "error", detail="not a Connect publisher")
-    limiter.acquire()
+    if rate_limit:
+        limiter.acquire()
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r"[^\w.-]+", "_", doi)[:150]
     res = FetchResult(doi, pub.key, "not_found")
@@ -504,14 +507,19 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
             return bool(wait_for_user(page, kind))
         return wait_for_clearance(page, kind, timeout_s=handoff_timeout_s, notify=notify)
 
-    try:
-        resp = page.goto(landing_url(doi), wait_until="domcontentloaded", timeout=goto_timeout_ms)
-    except Exception as exc:  # noqa: BLE001
-        res.status, res.detail = "error", f"goto: {exc}"[:300]
-        return res
-    page.wait_for_timeout(3000)
-    html, status = safe_content(page), _response_status(resp)
-    block = detect_block(html, status, page.url)
+    if preloaded_page is not None:
+        html, landing = preloaded_page
+        status = 200
+    else:
+        try:
+            resp = page.goto(landing_url(doi), wait_until="domcontentloaded", timeout=goto_timeout_ms)
+        except Exception as exc:  # noqa: BLE001
+            res.status, res.detail = "error", f"goto: {exc}"[:300]
+            return res
+        page.wait_for_timeout(3000)
+        html, status = safe_content(page), _response_status(resp)
+        landing = page.url
+    block = detect_block(html, status, landing)
     if block == "login" and status < 400 and extract_fulltext(pub.key, html):
         block = None  # "Get access"/"Sign in" chrome on a page that does show full text
     if block and handoff(block):
@@ -520,7 +528,7 @@ def fetch_article(page, doi: str, out_dir: Path, limiter: RateLimiter,
     if block == "challenge":
         res.status, res.detail = "challenge", f"http {status} {page.url}"
         return res
-    landing = page.url
+    landing = page.url or landing
 
     if use_translators:
         runner = translator_runner

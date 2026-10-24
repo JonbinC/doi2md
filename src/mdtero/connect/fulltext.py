@@ -1,10 +1,10 @@
-"""Connect full-text pipeline: user's Chrome -> local raw HTML -> local parser.
+"""Connect full-text pipeline: user's browser -> local article -> local parser.
 
 * The article is opened in the user's own Chrome tab (CDP / Playwright page).
 * Challenges are detected from the live DOM (title, Cloudflare iframe,
   challenge forms, short body text) and handed to the user to click. Nothing
   here solves, bypasses or disguises anything.
-* The rendered HTML is stored on the local disk only.
+* Rendered HTML and verified publisher PDFs are stored on the local disk only.
 * Conversion is an in-process call to ``mdtero_parser.parse_client_document``;
   no HTTP, and the content is never sent to any server.
 * Full text vs paywall is decided from the parser's signals plus the DOM probe
@@ -164,6 +164,65 @@ def _open(page, url, res, *, timeout_ms, handoff_timeout_s, notify, sleep, clock
     return probe
 
 
+def _try_ieee_pdf_fallback(page, doi: str, html: str, out_dir: Path, limiter: pa.RateLimiter,
+                           res: FullTextResult, *, parse: Callable[..., dict],
+                           goto_timeout_ms: int, handoff_timeout_s: float,
+                           notify: Optional[Callable[[str, str], None]]) -> None:
+    """Use Connect's visible-browser IEEE PDF route, then parse it locally.
+
+    The caller already acquired the per-article rate-limit slot. The result is
+    updated in place; a missing/blocked PDF leaves the HTML/paywall result.
+    """
+    try:
+        fetched = pa.fetch_article(
+            page, doi, Path(out_dir), limiter,
+            goto_timeout_ms=goto_timeout_ms,
+            handoff_timeout_s=handoff_timeout_s,
+            use_translators=False,
+            notify=notify,
+            prefer_html=False,
+            rate_limit=False,
+            preloaded_page=(html, res.url),
+        )
+    except Exception as exc:  # noqa: BLE001 - fallback must not hide the HTML result
+        res.detail = (res.detail + f"; IEEE PDF fallback: {type(exc).__name__}: {exc}")[:600]
+        return
+
+    res.handoffs += fetched.handoffs
+    if fetched.status == "challenge":
+        res.status = "challenge"
+        res.detail = "IEEE PDF verification was not completed in the visible browser; nothing was bypassed"
+        return
+    if fetched.status != "pdf" or not fetched.path:
+        if fetched.detail:
+            res.detail = (res.detail + f"; IEEE PDF fallback: {fetched.status} ({fetched.detail})")[:600]
+        return
+
+    pdf_path = Path(fetched.path)
+    pdf_bytes = pdf_path.read_bytes()
+    res.raw_path = str(pdf_path)
+    res.url = fetched.detail.rsplit(" [", 1)[0] if " [" in fetched.detail else fetched.detail
+    try:
+        parsed = parse(pdf_bytes, doi=doi, publisher_hint="ieee", filename=pdf_path.name,
+                       content_type="application/pdf")
+    except Exception as exc:  # noqa: BLE001 - report local parser failures
+        res.status = "error"
+        res.detail = f"IEEE PDF local parse: {type(exc).__name__}: {exc}"[:300]
+        return
+
+    res.signals = dict(parsed.get("signals") or {})
+    res.metadata = dict(parsed.get("metadata") or res.metadata or {})
+    res.status = verdict(res.signals)
+    if res.status == "fulltext":
+        stem = re.sub(r"[^\w.-]+", "_", doi)[:150]
+        md = Path(out_dir) / f"{stem}.md"
+        md.write_text(parsed.get("markdown") or "", encoding="utf-8")
+        res.markdown_path = str(md)
+        res.detail = "IEEE publisher PDF fetched in the visible browser and parsed locally"
+    else:
+        res.detail = "IEEE publisher PDF was fetched locally, but the parser did not confirm full text"
+
+
 def fetch_fulltext(page, doi: str, out_dir: Path, limiter: pa.RateLimiter, *,
                    parse: Callable[..., dict] = local_parse,
                    companion_interval_s: float = 15.0,
@@ -212,25 +271,35 @@ def fetch_fulltext(page, doi: str, out_dir: Path, limiter: pa.RateLimiter, *,
             companions[url] = body
             res.companion_pages.append(url)
 
+    parse_error: Optional[BaseException] = None
     try:
         parsed = parse(html.encode("utf-8"), doi=doi, publisher_hint=pub.key, filename=raw.name,
                        content_type="text/html", companion_pages=companions or None)
     except Exception as exc:  # noqa: BLE001 - parser failure is reported, not raised
+        parse_error = exc
         res.detail = f"parse: {type(exc).__name__}: {exc}"[:300]
         if is_access_shell_error(exc):
             res.status = "paywall"
             res.detail += "; page has no full text (paywall/abstract only); reported, not bypassed"
-        _write_result(out_dir, stem, res)
-        return res
-    res.signals = dict(parsed.get("signals") or {})
-    res.metadata = dict(parsed.get("metadata") or {})
-    res.status = verdict(res.signals, probe)
-    if res.status == "fulltext":
-        md = Path(out_dir) / f"{stem}.md"
-        md.write_text(parsed.get("markdown") or "", encoding="utf-8")
-        res.markdown_path = str(md)
     else:
-        res.detail = (res.detail + " page has no full text (paywall/abstract only); reported, not bypassed").strip()
+        res.signals = dict(parsed.get("signals") or {})
+        res.metadata = dict(parsed.get("metadata") or {})
+        res.status = verdict(res.signals, probe)
+        if res.status == "fulltext":
+            md = Path(out_dir) / f"{stem}.md"
+            md.write_text(parsed.get("markdown") or "", encoding="utf-8")
+            res.markdown_path = str(md)
+        else:
+            res.detail = (res.detail + " page has no full text (paywall/abstract only); reported, not bypassed").strip()
+
+    # IEEE OA PDFs can be available even when the landing page exposes only an
+    # abstract. Keep that acquisition on the user's visible browser and parse
+    # the downloaded bytes in-process, never through the backend worker.
+    if pub.key == "ieee" and res.status == "paywall" and (parse_error is None or is_access_shell_error(parse_error)):
+        _try_ieee_pdf_fallback(
+            page, doi, html, out_dir, limiter, res, parse=parse,
+            goto_timeout_ms=goto_timeout_ms, handoff_timeout_s=handoff_timeout_s, notify=notify,
+        )
     _write_result(out_dir, stem, res)
     return res
 
