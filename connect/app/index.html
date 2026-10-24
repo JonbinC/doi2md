@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'none'; base-uri 'none'">
   <title>mdtero 客户端</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -13,7 +13,7 @@
 <section id="gate" class="gate" aria-live="polite"></section>
 <div class="shell">
   <aside class="sidebar" aria-label="主导航">
-    <a href="#library" class="brand"><span class="brand-icon" aria-hidden="true">M</span><span class="brand-name">mdtero<small>客户端</small></span></a>
+    <a href="#library" class="brand"><img class="brand-mark" src="brand-mark.svg" alt="" aria-hidden="true"><span class="brand-name">mdtero<small>客户端</small></span></a>
     <nav class="navigation">
       <button type="button" data-view="start"><span class="nav-icon" aria-hidden="true">◎</span>开始使用</button>
       <button type="button" data-view="library"><span class="nav-icon" aria-hidden="true">▤</span>我的文献库</button>

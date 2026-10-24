@@ -83,6 +83,37 @@ test.afterEach(async ({ page }) => {
   expect(page.fixtureBrowserErrors, 'No uncaught JavaScript or CSP errors').toEqual([]);
 });
 
+test('official brand mark loads in the login gate and sidebar without external requests', async ({ page, request }) => {
+  const externalRequests = [];
+  await page.route('**/*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin !== ORIGIN) {
+      externalRequests.push(url.href);
+      await route.abort();
+      return;
+    }
+    await route.continue();
+  });
+
+  await reset(request, { authenticated: false });
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-mode', 'login');
+  const gateMark = page.locator('.gate-brand img.brand-mark');
+  await expect(gateMark).toBeVisible();
+  await expect(gateMark).toHaveAttribute('src', 'brand-mark.svg');
+  await expect.poll(() => gateMark.evaluate((image) => image.naturalWidth)).toBe(256);
+  await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute('content', /img-src 'self' data:/);
+
+  await reset(request, { authenticated: true });
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-mode', 'app');
+  const sidebarMark = page.locator('.sidebar img.brand-mark');
+  await expect(sidebarMark).toBeVisible();
+  await expect(sidebarMark).toHaveAttribute('src', 'brand-mark.svg');
+  await expect.poll(() => sidebarMark.evaluate((image) => image.naturalWidth)).toBe(256);
+  expect(externalRequests).toEqual([]);
+});
+
 test('missing local credentials show terminal login guidance without collecting a key', async ({ page, request }) => {
   await reset(request, { authenticated: false });
   await page.goto('/');
