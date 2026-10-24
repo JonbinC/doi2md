@@ -2,7 +2,7 @@
 
 **State:** internal test checklist only. The earlier pre-fix PR #30 was closed. This checklist applies only to an integration candidate containing the verified #28 confirmed-write Cancel fix; passing CI does not clear publication or establish human platform acceptance. Any attached installers are short-lived, unsigned, unnotarized debug artifacts, not a release.
 
-## Locate artifacts only if a candidate is authorized later
+## Locate the candidate artifacts
 
 Use the current internal integration Draft PR and its exact head SHA, not the public Connect Preview.3 release. On that PR page, open **Checks**, select the **Connect native debug artifacts** run for that PR head, then open that run's **Artifacts** section. The expected artifact names are:
 
@@ -10,7 +10,7 @@ Use the current internal integration Draft PR and its exact head SHA, not the pu
 - `mdtero-connect-debug-macos-x64-<head-sha>`
 - `mdtero-connect-debug-windows-x64-<head-sha>`
 
-The same run is available from the repository's **Actions → Connect native debug artifacts** workflow history; verify its head SHA matches the PR before downloading. These workflow artifacts expire after one day. Inspect the artifact contents and recorded checksum before installing; this checklist does not assert that any particular artifact is present or valid.
+The same run is available from the repository's **Actions → Connect native debug artifacts** workflow history; verify its head SHA matches the PR before downloading. The unmerged RC feature branch sets this workflow's per-artifact retention to **7 days** for new uploads, to support next-day testing. This does not change repository-wide retention settings or extend artifacts from earlier runs; those retain their original expiry. Inspect the artifact contents and recorded checksum before installing; this checklist does not assert that any particular artifact is present or valid.
 
 The existing [Connect Preview.3 release](https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.3) was built from an earlier source commit and does not contain this candidate's Beta integration changes. Do not use it as evidence for this candidate.
 
