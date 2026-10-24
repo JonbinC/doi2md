@@ -92,6 +92,13 @@
         body: JSON.stringify({ collection_key, dry_run, request_id }),
       });
     },
+    importBibliography({ content, format = "auto", dry_run, request_id, project_id }) {
+      return api("/connect/v1/library/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...jsonHeaders() },
+        body: JSON.stringify({ content, format, dry_run, request_id, project_id }),
+      });
+    },
     fetchFulltext(doi) {
       return api("/connect/v1/fulltext/fetch", {
         method: "POST",
