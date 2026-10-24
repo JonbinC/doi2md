@@ -263,3 +263,101 @@ def test_rejected_body_framing_closes_without_dispatching_pipelined_bytes(
     assert response.count(b"HTTP/1.1 ") == 1
     assert json.loads(response.split(b"\r\n\r\n", 1)[1])["reason_code"] == reason_code
     bridge.client._request.assert_not_called()  # type: ignore[attr-defined]
+
+
+def test_library_import_preview_and_confirm(bridge: ConnectBridge):
+    session = _get(bridge, "/connect/v1/session").json()
+    bridge.client._request.return_value = {  # type: ignore[attr-defined]
+        "schema_version": 1,
+        "format": "bibtex",
+        "dry_run": True,
+        "summary": {"total": 1, "importable": 1},
+        "items": [{"index": 1, "outcome": "will_import", "metadata": {"title": "Test Paper"}}],
+    }
+    preview = _post(
+        bridge,
+        "/connect/v1/library/import",
+        {"content": "@article{test, title={Test Paper}}", "format": "bibtex", "dry_run": True},
+        csrf=session["csrf"],
+    )
+    assert preview.status_code == 200
+    assert preview.json()["summary"]["importable"] == 1
+    call_kwargs = bridge.client._request.call_args.kwargs  # type: ignore[attr-defined]
+    assert call_kwargs["json"]["dry_run"] is True
+    assert call_kwargs["json"]["format"] == "bibtex"
+
+    bridge.client._request.return_value = {  # type: ignore[attr-defined]
+        "schema_version": 1,
+        "format": "bibtex",
+        "dry_run": False,
+        "summary": {"total": 1, "imported": 1},
+        "items": [{"index": 1, "outcome": "imported", "metadata": {"title": "Test Paper"}}],
+    }
+    confirmed = _post(
+        bridge,
+        "/connect/v1/library/import",
+        {"content": "@article{test, title={Test Paper}}", "format": "bibtex", "dry_run": False, "request_id": "req-12345678"},
+        csrf=session["csrf"],
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["summary"]["imported"] == 1
+    confirm_kwargs = bridge.client._request.call_args.kwargs  # type: ignore[attr-defined]
+    assert confirm_kwargs["json"]["dry_run"] is False
+    assert confirm_kwargs["json"]["request_id"] == "req-12345678"
+
+
+def test_library_import_guards(bridge: ConnectBridge):
+    session = _get(bridge, "/connect/v1/session").json()
+
+    # dry_run required
+    missing_dry_run = _post(
+        bridge,
+        "/connect/v1/library/import",
+        {"content": "@article{test, title={Test}}"},
+        csrf=session["csrf"],
+    )
+    assert missing_dry_run.status_code == 400
+    assert missing_dry_run.json()["reason_code"] == "dry_run_required"
+
+    # Empty content rejected
+    empty = _post(
+        bridge,
+        "/connect/v1/library/import",
+        {"content": "   ", "dry_run": True},
+        csrf=session["csrf"],
+    )
+    assert empty.status_code == 400
+    assert empty.json()["reason_code"] == "empty_import"
+
+    # Unsupported format (e.g. rdf) rejected
+    rdf = _post(
+        bridge,
+        "/connect/v1/library/import",
+        {"content": "<rdf:RDF></rdf:RDF>", "format": "rdf", "dry_run": True},
+        csrf=session["csrf"],
+    )
+    assert rdf.status_code == 400
+    assert rdf.json()["reason_code"] == "unsupported_format"
+
+    # Oversized content (> 1 MiB) rejected
+    oversized = _post(
+        bridge,
+        "/connect/v1/library/import",
+        {"content": "x" * (1024 * 1024 + 1), "dry_run": True},
+        csrf=session["csrf"],
+    )
+    assert oversized.status_code == 413
+    assert oversized.json()["reason_code"] == "import_too_large"
+
+    # CSRF enforced
+    no_csrf = httpx.post(
+        bridge.base_url + "/connect/v1/library/import",
+        headers={
+            "Host": f"127.0.0.1:{bridge.bound_port}",
+            "Origin": f"http://127.0.0.1:{bridge.bound_port}",
+            "Content-Type": "application/json",
+        },
+        content=json.dumps({"content": "@article{t,}", "dry_run": True}),
+    )
+    assert no_csrf.status_code == 403
+    assert no_csrf.json()["reason_code"] == "csrf_rejected"

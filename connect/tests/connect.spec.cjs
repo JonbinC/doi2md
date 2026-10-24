@@ -367,6 +367,178 @@ test('Zotero import preview remains metadata-only and explicitly dry-run', async
   expect(calls[0].body.content).toContain('Synthetic import');
 });
 
+test('verified user can choose Zotero file import, preview records with dry-run, confirm write, and see refreshed library', async ({ page, request }) => {
+  await page.goto('/');
+  await expect(page.locator('#auth-badge')).toHaveText(/已核验/);
+  await expect(page.locator('#screen')).toContainText('从 Zotero 导入文件');
+  await expect(page.locator('#screen')).toContainText('新建空文献库');
+
+  // Open import panel
+  await action(page, 'open-import').click();
+  await expect(page.locator('#import-panel')).toBeVisible();
+
+  // Select a synthetic BibTeX file
+  const bibtexContent = `@article{newton1687,
+  title={Mathematical Principles of Natural Philosophy},
+  author={Isaac Newton},
+  year={1687},
+  journal={Royal Society},
+  doi={10.1098/prin.1687}
+}`;
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'newton.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from(bibtexContent),
+  });
+
+  // Verify preview is rendered
+  const previewTable = page.locator('#import-panel .preview-table');
+  await expect(previewTable).toBeVisible();
+  await expect(previewTable).toContainText('Mathematical Principles of Natural Philosophy');
+  await expect(page.locator('#import-panel')).toContainText('导入预览（尚未写入文献库）');
+  await expect(page.locator('#import-panel')).toContainText('只导入题录信息，不会自动获取全文');
+
+  // Verify that ONLY dry_run: true was sent to backend (zero writes)
+  const previewSnapshot = await snapshot(request);
+  const importCalls = previewSnapshot.calls.filter((c) => c.path === '/api/v1/library/import');
+  expect(importCalls).toHaveLength(1);
+  expect(importCalls[0].body.dry_run).toBe(true);
+  expect(importCalls[0].body.format).toBe('bibtex');
+  expect(previewSnapshot.papers.some((p) => p.title.includes('Mathematical Principles'))).toBe(false);
+
+  // Now explicitly confirm import
+  await action(page, 'confirm-import').click();
+
+  // Verify library refresh and newly imported paper is present in library
+  await expect(page.locator('#screen')).toContainText('Mathematical Principles of Natural Philosophy');
+  await expect(page.locator('#breadcrumb')).toHaveText(/我的文献库/);
+
+  // Verify that dry_run: false was called exactly once, followed by documents refresh
+  const finalSnapshot = await snapshot(request);
+  const writeCalls = finalSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(1);
+  expect(writeCalls[0].body.request_id).toMatch(/^connect-import-/);
+  expect(finalSnapshot.papers.some((p) => p.title.includes('Mathematical Principles'))).toBe(true);
+});
+
+test('cancelling file import causes zero server writes and preserves original library', async ({ page, request }) => {
+  await page.goto('/');
+  await expect(page.locator('#auth-badge')).toHaveText(/已核验/);
+  await action(page, 'open-import').click();
+
+  const bibtexContent = `@article{einstein1905,
+  title={On the Electrodynamics of Moving Bodies},
+  author={Albert Einstein},
+  year={1905}
+}`;
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'einstein.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: Buffer.from(bibtexContent),
+  });
+
+  await expect(page.locator('#import-panel .preview-table')).toBeVisible();
+
+  // Cancel import
+  await action(page, 'cancel-import').click();
+  await expect(page.locator('#import-panel')).toHaveCount(0);
+  await expect(page.locator('#screen')).toContainText('已取消导入，文献库未做任何写入。');
+
+  // Verify zero write calls were made
+  const currentSnapshot = await snapshot(request);
+  const writeCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(0);
+  expect(currentSnapshot.papers.some((p) => p.title.includes('Electrodynamics'))).toBe(false);
+});
+
+test('invalid or oversized inputs and unsupported formats display informative failures with zero library writes', async ({ page, request }) => {
+  await page.goto('/');
+  await action(page, 'open-import').click();
+
+  // 1. Zotero RDF (unsupported format)
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'zotero-export.rdf',
+    mimeType: 'application/rdf+xml',
+    buffer: Buffer.from('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>'),
+  });
+  await expect(page.locator('#import-panel')).toContainText('Zotero RDF 暂不支持，请在 Zotero 中导出为 BibTeX 或 RIS。');
+
+  // Verify zero server calls
+  let currentSnapshot = await snapshot(request);
+  let importCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import');
+  expect(importCalls).toHaveLength(0);
+
+  // 2. Oversized file (> 1 MiB)
+  await action(page, 'reset-import').click();
+  const oversizedData = Buffer.alloc(1024 * 1024 + 1024, 'a');
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'huge.bib',
+    mimeType: 'application/x-bibtex',
+    buffer: oversizedData,
+  });
+  await expect(page.locator('#import-panel')).toContainText('文件大小超过 1 MiB 上限');
+
+  // Verify zero server calls
+  currentSnapshot = await snapshot(request);
+  importCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import');
+  expect(importCalls).toHaveLength(0);
+});
+
+test('verified user can choose empty library with zero server import writes', async ({ page, request }) => {
+  await page.goto('/');
+  await expect(page.locator('#auth-badge')).toHaveText(/已核验/);
+  await action(page, 'choose-empty-library').click();
+
+  await expect(page.locator('#breadcrumb')).toHaveText(/我的文献库/);
+  await expect(page.locator('#screen')).toContainText('已选择空文献库');
+
+  // Zero import calls of any kind
+  const currentSnapshot = await snapshot(request);
+  const importCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import');
+  expect(importCalls).toHaveLength(0);
+});
+
+test('RIS file import preview and confirmation works end-to-end', async ({ page, request }) => {
+  await page.goto('/');
+  await page.locator('[data-view="library"]').click();
+  await action(page, 'open-import').click();
+
+  const risContent = `TY  - JOUR
+TI  - Deep Residual Learning for Image Recognition
+AU  - Kaiming He
+AU  - Xiangyu Zhang
+PY  - 2016
+JO  - CVPR
+DO  - 10.1109/CVPR.2016.90
+ER  -
+`;
+  await page.locator('#import-file-input').setInputFiles({
+    name: 'resnet.ris',
+    mimeType: 'application/x-research-info-systems',
+    buffer: Buffer.from(risContent),
+  });
+
+  const previewTable = page.locator('#import-panel .preview-table');
+  await expect(previewTable).toBeVisible();
+  await expect(previewTable).toContainText('Deep Residual Learning for Image Recognition');
+
+  // Verify only preview dry_run: true occurred
+  let currentSnapshot = await snapshot(request);
+  let importCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import');
+  expect(importCalls).toHaveLength(1);
+  expect(importCalls[0].body.dry_run).toBe(true);
+  expect(importCalls[0].body.format).toBe('ris');
+
+  // Confirm import
+  await action(page, 'confirm-import').click();
+  await expect(page.locator('#screen')).toContainText('Deep Residual Learning for Image Recognition');
+
+  // Verify write was executed
+  currentSnapshot = await snapshot(request);
+  const writeCalls = currentSnapshot.calls.filter((c) => c.path === '/api/v1/library/import' && c.body.dry_run === false);
+  expect(writeCalls).toHaveLength(1);
+});
+
 for (const width of [375, 1440]) {
   test(`onboarding and operational views fit a ${width}px viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
