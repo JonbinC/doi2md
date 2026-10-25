@@ -10,6 +10,7 @@ import json
 import mimetypes
 import socket
 import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -329,6 +330,70 @@ def _make_handler(bridge: ConnectBridge) -> type[BaseHTTPRequestHandler]:
                 if method == "GET" and path.startswith("/connect/v1/zotero/collections/") and path.endswith("/items"):
                     key = path[len("/connect/v1/zotero/collections/") : -len("/items")]
                     self._json(HTTPStatus.OK, collection_items_preview(key))
+                    return
+                if method == "POST" and path == "/connect/v1/library/import":
+                    # Bounded metadata-only bibliography file import (BibTeX, RIS, CSL/Zotero JSON).
+                    if "dry_run" not in body or not isinstance(body.get("dry_run"), bool):
+                        self._json(
+                            HTTPStatus.BAD_REQUEST,
+                            {
+                                "reason_code": "dry_run_required",
+                                "action_hint": "Send dry_run true for preview or false to confirm import.",
+                            },
+                        )
+                        return
+                    content = body.get("content")
+                    if not isinstance(content, str) or not content.strip():
+                        self._json(
+                            HTTPStatus.BAD_REQUEST,
+                            {
+                                "reason_code": "empty_import",
+                                "action_hint": "Provide a nonempty bibliography file or text.",
+                            },
+                        )
+                        return
+                    content_bytes = content.encode("utf-8")
+                    if len(content_bytes) > 1024 * 1024:
+                        self._json(
+                            HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                            {
+                                "reason_code": "import_too_large",
+                                "action_hint": "Bibliography file exceeds the 1 MiB limit.",
+                            },
+                        )
+                        return
+                    fmt = str(body.get("format") or "auto").lower().strip()
+                    if fmt in {"rdf", "zotero_rdf"}:
+                        self._json(
+                            HTTPStatus.BAD_REQUEST,
+                            {
+                                "reason_code": "unsupported_format",
+                                "action_hint": "Zotero RDF is not supported. Please export as BibTeX, RIS, or CSL JSON.",
+                            },
+                        )
+                        return
+                    if fmt not in {"auto", "bibtex", "ris", "zotero_json", "csl_json"}:
+                        self._json(
+                            HTTPStatus.BAD_REQUEST,
+                            {
+                                "reason_code": "unsupported_format",
+                                "action_hint": "Unsupported format. Use BibTeX (.bib), RIS (.ris), or JSON (.json).",
+                            },
+                        )
+                        return
+                    request_id = str(body.get("request_id") or "") if body.get("request_id") else None
+                    if not body["dry_run"] and not request_id:
+                        request_id = f"connect-import-{int(time.time() * 1000)}"
+                    project_id = int(body["project_id"]) if body.get("project_id") is not None else None
+
+                    result = bridge.library.import_bibliography(
+                        content=content,
+                        format=fmt,
+                        dry_run=bool(body["dry_run"]),
+                        request_id=request_id,
+                        project_id=project_id,
+                    )
+                    self._json(HTTPStatus.OK, result)
                     return
                 if method == "POST" and path == "/connect/v1/zotero/import":
                     # Metadata-only import through backend #43 import contract.
