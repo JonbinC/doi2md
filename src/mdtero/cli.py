@@ -541,6 +541,7 @@ def build_parser() -> argparse.ArgumentParser:
     relay_serve.add_argument("--json", action="store_true", help="Print machine-readable relay lifecycle events.")
     relay_status = _cmd(relay_sub, "status", "Show whether your campus relay is connected.", cmd_relay_status)
     relay_status.add_argument("--json", action="store_true")
+    relay_status.add_argument("--outlet", help="Optional specific outlet label to query.")
     relay_check = _cmd(
         relay_sub,
         "check",
@@ -548,6 +549,7 @@ def build_parser() -> argparse.ArgumentParser:
         cmd_relay_check,
     )
     relay_check.add_argument("--json", action="store_true", help="Print the raw entitlement-check response.")
+    relay_check.add_argument("--outlet", help="Optional specific outlet label to evaluate.")
     relay_check.add_argument(
         "--no-confirm-fulltext",
         dest="confirm_fulltext",
@@ -4864,8 +4866,10 @@ def cmd_relay_status(args: argparse.Namespace) -> int:
             Console().print(payload["action_hint"])
         return 1
 
+    target_outlet = str(getattr(args, "outlet", "") or "").strip() or None
+    status_path = f"/api/v1/relay/status?outlet={quote(target_outlet)}" if target_outlet else "/api/v1/relay/status"
     try:
-        payload = MdteroClient(config=cfg, timeout=20.0)._request("GET", "/api/v1/relay/status")
+        payload = MdteroClient(config=cfg, timeout=20.0)._request("GET", status_path)
     except (MdteroApiError, httpx.HTTPError) as exc:
         failure = _relay_failure_payload(exc)
         if args.json:
@@ -4887,6 +4891,14 @@ def cmd_relay_status(args: argparse.Namespace) -> int:
             console.print(f"Label: {label}")
         city = str(outlet.get("city") or "").strip()
         console.print(f"Network: {city}" if city else "Network: campus outlet detected")
+        outlets = payload.get("outlets") if isinstance(payload.get("outlets"), list) else []
+        if len(outlets) > 1:
+            console.print(f"Connected outlets ({len(outlets)}):")
+            for o in outlets:
+                if isinstance(o, dict):
+                    star = "*" if o.get("is_active") else " "
+                    lbl = o.get("label") or o.get("relay_id") or "unlabeled"
+                    console.print(f" {star} {lbl} (id: {o.get('relay_id')})")
         browser = payload.get("browser") if isinstance(payload.get("browser"), dict) else {}
         if browser.get("fulltext"):
             console.print("Browser capture: ready")
@@ -4925,6 +4937,8 @@ def cmd_relay_check(args: argparse.Namespace) -> int:
     body: dict[str, Any] = {}
     if not getattr(args, "confirm_fulltext", True):
         body["confirm_fulltext"] = False
+    if getattr(args, "outlet", None):
+        body["outlet"] = str(args.outlet).strip()
     try:
         payload = MdteroClient(config=cfg, timeout=120.0)._request(
             "POST", "/api/v1/relay/entitlement-check", json=body
