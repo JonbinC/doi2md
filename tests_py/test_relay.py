@@ -286,3 +286,53 @@ def test_relay_check_json_prints_raw_response(monkeypatch, capsys):
     args = build_parser().parse_args(["relay", "check", "--json"])
     assert cmd_relay_check(args) == 0
     assert json.loads(capsys.readouterr().out) == response
+
+
+def test_relay_status_and_check_multi_outlet_cli(monkeypatch, capsys):
+    from mdtero.cli import cmd_relay_check, cmd_relay_status
+
+    requested_paths: list[str] = []
+    requested_bodies: list[dict] = []
+
+    status_response = {
+        "connected": True,
+        "relay_id": "r-mac",
+        "label": "mac-campus",
+        "active_outlet": "mac-campus",
+        "outlets_count": 2,
+        "outlets": [
+            {"relay_id": "r-pi3", "label": "pi3-campus", "is_active": False},
+            {"relay_id": "r-mac", "label": "mac-campus", "is_active": True},
+        ],
+        "browser": {"enabled": True, "fulltext": False},
+    }
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def _request(self, method, path, json=None, **kwargs):
+            requested_paths.append(path)
+            if json is not None:
+                requested_bodies.append(json)
+            if "status" in path:
+                return status_response
+            return {"verdict": "entitled", "effective": True, "cli": {"human_lines": ["ok"]}}
+
+    monkeypatch.setattr("mdtero.cli.load_config", lambda: type("Cfg", (), {"is_authenticated": True})())
+    monkeypatch.setattr("mdtero.cli.MdteroClient", FakeClient)
+
+    # Status with --outlet
+    parser = build_parser()
+    args = parser.parse_args(["relay", "status", "--outlet", "pi3-campus"])
+    assert cmd_relay_status(args) == 0
+    out = capsys.readouterr().out
+    assert "Connected outlets (2):" in out
+    assert "pi3-campus" in out
+    assert "mac-campus" in out
+    assert any("outlet=pi3-campus" in p for p in requested_paths)
+
+    # Check with --outlet
+    check_args = parser.parse_args(["relay", "check", "--outlet", "mac-campus", "--json"])
+    assert cmd_relay_check(check_args) == 0
+    assert requested_bodies[-1].get("outlet") == "mac-campus"
