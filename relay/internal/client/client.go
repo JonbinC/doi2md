@@ -362,10 +362,17 @@ func isStop(err error) bool {
 }
 
 func FetchStatus(cfg config.Config) (map[string]any, error) {
+	return FetchStatusWithOutlet(cfg, "")
+}
+
+func FetchStatusWithOutlet(cfg config.Config, outlet string) (map[string]any, error) {
 	if !cfg.Authenticated() {
 		return nil, fmt.Errorf("API key is missing")
 	}
 	url := strings.TrimRight(cfg.APIBaseURL, "/") + "/api/v1/relay/status"
+	if strings.TrimSpace(outlet) != "" {
+		url += "?outlet=" + strings.TrimSpace(outlet)
+	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

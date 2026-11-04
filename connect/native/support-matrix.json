@@ -66,6 +66,13 @@
     "zotero": "metadata-preview-apply-no-checkpoints",
     "carsi": "institutional-acceptance-pending"
   },
+  "local_fulltext_parser": {
+    "status": "release-gate-pending",
+    "minimum_python": "3.12",
+    "current_native_python": "3.11",
+    "frozen_import_verified": false,
+    "authorized_html_pdf_fixtures_verified": false
+  },
   "acceptance_required_per_native_target": [
     "fresh-machine-launch-without-python-node-go",
     "system-browser-account-login-callback-cancel-timeout-reopen",

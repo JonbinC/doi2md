@@ -181,7 +181,7 @@ func sourcePresent() bool {
 			return false
 		}
 	}
-	return true
+	return PolicyFilesExist(filepath.Join(bundle, "mdtero"))
 }
 
 func loadConfig() (localConfig, error) {
@@ -412,6 +412,18 @@ func (h *Handle) Stop() {
 // BundleFilesExist is used by packaging tests and avoids exposing local paths.
 func BundleFilesExist(root string) bool {
 	for _, name := range []string{"mdtero_browser_worker.py", "requirements.txt"} {
+		info, err := os.Stat(filepath.Join(root, name))
+		if err != nil || info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+// PolicyFilesExist confirms that the sidecar has the same pure URL policy
+// modules used by the Python client and Relay transport.
+func PolicyFilesExist(root string) bool {
+	for _, name := range []string{"publisher_policy.py", "relay_domains.py", "relay_allowed_hosts_generated.py"} {
 		info, err := os.Stat(filepath.Join(root, name))
 		if err != nil || info.IsDir() {
 			return false

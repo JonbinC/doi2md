@@ -8,6 +8,8 @@ The Apple Silicon tag-release job requires a dedicated repository runner labeled
 
 Use the matching operating system and architecture for every build; `prepare.py` rejects cross-compiling frozen Python resources. Install Python 3.11 with uv, Go 1.22+, Rust stable, and Node 22.19+. Dependency versions come from `uv.lock`, the npm lockfiles and `src-tauri/Cargo.lock`; the freezer is pinned to PyInstaller 6.19.0. Tauri additionally needs the platform build tools (Xcode command line tools on macOS, MSVC on Windows, GTK 3/WebKitGTK 4.1 development packages on Linux).
 
+The native bridge bundles the Python version used by `prepare.py`; current native jobs use Python 3.11. The private local parser requires Python 3.12+, so the generated manifest records `python_version`, `local_fulltext_parser_minimum_python`, whether `mdtero_parser` was detected in the build environment, and the derived status. Collection rejects missing or inconsistent values. These fields do not certify that PyInstaller included the parser or that it parses real HTML/PDF. Do not treat the installer as a local full-text release until the frozen parser import and authorized fixtures are verified on the target platforms.
+
 From the repository root:
 
 ```sh

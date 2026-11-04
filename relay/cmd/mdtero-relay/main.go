@@ -135,6 +135,7 @@ func runServe(args []string) int {
 func runStatus(args []string) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	jsonOutput := fs.Bool("json", false, "Print a machine-readable status object")
+	outletTarget := fs.String("outlet", "", "Optional outlet label to query")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -167,7 +168,7 @@ func runStatus(args []string) int {
 		printLocalBrowserStatus(browserStatus)
 		return 1
 	}
-	payload, err := client.FetchStatus(cfg)
+	payload, err := client.FetchStatusWithOutlet(cfg, *outletTarget)
 	if err != nil {
 		if *jsonOutput {
 			printJSON(map[string]any{
@@ -199,6 +200,24 @@ func runStatus(args []string) int {
 				fmt.Println("Network:", city)
 			} else {
 				fmt.Println("Network: campus outlet detected")
+			}
+		}
+		if outlets, ok := payload["outlets"].([]any); ok && len(outlets) > 1 {
+			fmt.Printf("Connected outlets (%d):\n", len(outlets))
+			for _, item := range outlets {
+				if o, ok := item.(map[string]any); ok {
+					lbl, _ := o["label"].(string)
+					rid, _ := o["relay_id"].(string)
+					isAct, _ := o["is_active"].(bool)
+					star := " "
+					if isAct {
+						star = "*"
+					}
+					if lbl == "" {
+						lbl = "unlabeled"
+					}
+					fmt.Printf(" %s %s (%s)\n", star, lbl, rid)
+				}
 			}
 		}
 		printLocalBrowserStatus(browserStatus)

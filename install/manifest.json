@@ -179,6 +179,16 @@
           "trae",
           "workbuddy"
         ]
+      },
+      "desktopClient": {
+        "version": "0.1.0-preview.3",
+        "releaseTag": "connect-v0.1.0-preview.3",
+        "channel": "debug-preview",
+        "minimumOsVerified": null,
+        "humanAcceptance": "pending",
+        "manifestUrl": "https://mdtero.com/releases/client/manifest.json",
+        "releaseUrl": "https://github.com/JonbinC/doi2md/releases/tag/connect-v0.1.0-preview.3",
+        "checksumsUrl": "https://github.com/JonbinC/doi2md/releases/download/connect-v0.1.0-preview.3/SHA256SUMS"
       }
     }
   }

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
+import pytest
+
 from mdtero.discovery_rank import is_supplementary_doi, rank_discovery_items, sanitize_discovery_item
+from mdtero.discovery_relevance import score_query_match
 
 
 def test_is_supplementary_doi():
@@ -99,3 +104,79 @@ def test_rank_prefers_multi_source_and_citations_over_weak_arxiv():
         ]
     )
     assert ranked[0]["title"] == "Landmark deep learning"
+
+
+@pytest.mark.parametrize("mode", ["baseline", "denoise"])
+def test_rank_relevant_metadata_beats_off_topic_oa_and_citations(mode):
+    items = [
+        {
+            "title": "Soil remediation and oil removal",
+            "source": "zenodo",
+            "sources": ["zenodo", "openalex", "crossref"],
+            "doi": "10.5281/zenodo.1",
+            "open_access_pdf_url": "https://example.org/soil.pdf",
+            "parse_readiness": "ready_via_doi",
+            "year": 2015,
+            "citation_count": 70000,
+            "abstract_preview": "Petroleum hydrocarbon cleanup.",
+        },
+        {
+            "title": "Liquid cooling for data centers",
+            "source": "openalex",
+            "parse_readiness": "metadata_only",
+            "year": 2026,
+            "citation_count": 0,
+        },
+    ]
+    for item in items:
+        item.update(score_query_match(item, query="liquid cooling for data center", mode=mode))
+    original = deepcopy(items)
+
+    ranked = rank_discovery_items(items)
+
+    assert ranked[0]["title"] == "Liquid cooling for data centers"
+    assert ranked[0]["citation_count"] == 0
+    assert ranked[0]["parse_readiness"] == "metadata_only"
+    assert ranked[1]["parse_input_value"] == "https://example.org/soil.pdf"
+    assert items == original
+
+
+def test_rank_acquisition_only_breaks_relevance_ties():
+    items = [
+        {"title": "Metadata", "query_match_score": 0.5},
+        {
+            "title": "Downloadable",
+            "query_match_score": 0.5,
+            "parse_readiness": "ready_via_doi",
+            "open_access_pdf_url": "https://example.org/paper.pdf",
+        },
+        {"title": "Closer metadata match", "query_match_score": 0.5001},
+        {"title": "Equally close metadata match", "query_match_score": 0.5001},
+    ]
+
+    assert [item["title"] for item in rank_discovery_items(items)] == [
+        "Closer metadata match",
+        "Equally close metadata match",
+        "Downloadable",
+        "Metadata",
+    ]
+
+
+@pytest.mark.parametrize("score", [None, "", "invalid", float("nan"), float("inf"), float("-inf")])
+def test_rank_missing_or_invalid_relevance_and_missing_metadata(score):
+    relevant = {"title": "Relevant sparse record", "query_match_score": 0.6}
+    unknown = {
+        "title": None,
+        "abstract_preview": None,
+        "venue": None,
+        "year": None,
+        "citation_count": None,
+        "query_match_score": score,
+        "open_access_pdf_url": "https://example.org/unknown.pdf",
+    }
+
+    ranked = rank_discovery_items([unknown, {}, relevant])
+
+    assert ranked[0] == relevant
+    assert len(ranked) == 3
+    assert ranked[-1] == {}

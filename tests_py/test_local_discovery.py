@@ -116,6 +116,45 @@ def test_search_local_discovery_merges_and_dedupes(monkeypatch):
     assert result["discovery_diagnostics"]["scihub_enabled_for_search"] is False
 
 
+def test_default_discovery_ranks_relevant_metadata_before_off_topic_pdf(monkeypatch):
+    def fake_openalex(query, **_):
+        assert query == "solid state battery recycling"
+        return {
+            "items": [
+                {
+                    "title": "Soil remediation",
+                    "doi": "10.1000/soil",
+                    "open_access_pdf_url": "https://example.org/soil.pdf",
+                    "parse_readiness": "ready_via_doi",
+                    "citation_count": 70000,
+                    "year": 2015,
+                },
+                {
+                    "title": "Solid state battery recycling",
+                    "parse_readiness": "metadata_only",
+                    "citation_count": 0,
+                    "year": 2026,
+                },
+            ],
+        }
+
+    monkeypatch.setitem(
+        __import__("mdtero.discovery_providers", fromlist=["PROVIDER_SEARCHERS"]).PROVIDER_SEARCHERS,
+        "openalex",
+        fake_openalex,
+    )
+
+    result = search_local_discovery("solid state battery recycling", limit=1, enrich="none")
+
+    assert len(result["items"]) == 1
+    item = result["items"][0]
+    assert item["title"] == "Solid state battery recycling"
+    assert item["query_match_score"] == 1.0
+    assert item["parse_readiness"] == "metadata_only"
+    assert item["citation_count"] == 0
+    assert result["meta"]["relevance_mode"] == "baseline"
+
+
 def test_search_local_discovery_fails_when_all_providers_fail(monkeypatch):
     def boom(*args: Any, **kwargs: Any):
         raise LocalDiscoveryError("rate limited", reason_code="provider_rate_limited")
@@ -332,6 +371,35 @@ def test_client_discover_source_server_uses_api(monkeypatch):
         "params": {"query": "rag", "limit": 1, "page": 2},
     }
     assert result["discovery_diagnostics"]["server_openalex_attempted"] is True
+
+
+@pytest.mark.parametrize("sort", ["publication_date", "citation_count"])
+def test_client_discover_preserves_server_sorted_results(monkeypatch, sort):
+    recent = {
+        "title": "Recent zero-citation paper",
+        "publication_date": "2026-10-01",
+        "citation_count": 0,
+        "query_match_score": 0.2 if sort == "publication_date" else 0.9,
+    }
+    classic = {
+        "title": "Highly cited classic",
+        "publication_date": "2015-01-01",
+        "citation_count": 70000,
+        "query_match_score": 0.9 if sort == "publication_date" else 0.2,
+    }
+    ordered = [recent, classic] if sort == "publication_date" else [classic, recent]
+
+    def fake_request(self, method, path, **kwargs):
+        assert method == "GET"
+        assert path == "/api/v1/discovery/search"
+        return {"items": ordered, "meta": {"sort": sort}}
+
+    monkeypatch.setattr(MdteroClient, "_request", fake_request)
+
+    result = MdteroClient(config=MdteroConfig(api_key="key")).discover("paper", source="server")
+
+    assert result["items"] == ordered
+    assert result["meta"]["sort"] == sort
 
 
 def test_scihub_disabled_by_default(tmp_path):
