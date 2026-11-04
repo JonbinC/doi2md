@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -327,9 +328,11 @@ def test_relay_status_and_check_multi_outlet_cli(monkeypatch, capsys):
     args = parser.parse_args(["relay", "status", "--outlet", "pi3-campus"])
     assert cmd_relay_status(args) == 0
     out = capsys.readouterr().out
-    assert "Connected outlets (2):" in out
-    assert "pi3-campus" in out
-    assert "mac-campus" in out
+    # Rich highlights counts when FORCE_COLOR is set. Compare the visible text.
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", out)
+    assert "Connected outlets (2):" in plain
+    assert "pi3-campus" in plain
+    assert "mac-campus" in plain
     assert any("outlet=pi3-campus" in p for p in requested_paths)
 
     # Check with --outlet
